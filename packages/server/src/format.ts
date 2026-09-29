@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent } from '@harnessboard/shared';
-import type { TaskView } from './views.js';
+import type { AgentEvent, TaskView } from '@harnessboard/shared';
 
 const STATUS_WIDTH = 13;
 

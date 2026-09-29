@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import type { WorktreeDiff } from '@harnessboard/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -65,13 +66,6 @@ export async function addWorktree(
 /** Removes the worktree directory but keeps its branch, so the work can still be merged. */
 export async function removeWorktree(repo: string, dir: string): Promise<void> {
   await git(repo, ['worktree', 'remove', '--force', dir]);
-}
-
-export interface WorktreeDiff {
-  /** Unified diff of commits plus uncommitted edits to tracked files. */
-  diff: string;
-  /** New files git does not track yet; not part of `diff`. */
-  untracked: string[];
 }
 
 /** Everything the task changed relative to its base. Read-only: never touches the index. */

@@ -4,12 +4,14 @@ import path from 'node:path';
 import { contextPct, definedOnly, resolveThresholds } from '@harnessboard/shared';
 import type {
   AgentEvent,
+  CreateTaskInput,
   HarnessEvent,
+  HarnessStatus,
   QuotaInfo,
   Session,
   Task,
-  TaskSize,
   TaskStatus,
+  WorktreeDiff,
 } from '@harnessboard/shared';
 import type { AgentAdapter } from './agent.js';
 import { loadProjectConfig } from './config.js';
@@ -26,7 +28,6 @@ import {
   worktreeDiff,
   worktreePath,
 } from './worktree.js';
-import type { WorktreeDiff } from './worktree.js';
 
 /** Git commands a task may run without `skipPermissions`, so it can commit its own work. */
 export const DEFAULT_ALLOWED_TOOLS = [
@@ -37,29 +38,6 @@ export const DEFAULT_ALLOWED_TOOLS = [
   'Bash(git add *)',
   'Bash(git commit *)',
 ];
-
-export interface CreateTaskInput {
-  prompt: string;
-  /** Any directory inside the target repository. */
-  repo: string;
-  title?: string;
-  baseRef?: string;
-  size?: TaskSize;
-  softPct?: number;
-  hardPct?: number;
-  allowedTools?: string[];
-  skipPermissions?: boolean;
-  /** Queue immediately instead of leaving the task in the backlog. */
-  queue?: boolean;
-}
-
-export interface HarnessStatus {
-  running: number[];
-  quota: QuotaInfo | null;
-  /** True while the scheduler holds back new sessions because of quota. */
-  quotaPaused: boolean;
-  maxConcurrent: number;
-}
 
 /** How the next session of a task starts. */
 type SessionPlan = { resumeId: string | null; prompt: string };

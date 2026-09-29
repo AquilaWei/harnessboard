@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { CreateTaskInput, StoredEvent, WorktreeDiff } from '@harnessboard/core';
-import type { Session, Task } from '@harnessboard/shared';
+import type {
+  CreateTaskInput,
+  StoredEvent,
+  Task,
+  TaskDetail,
+  TaskView,
+  WorktreeDiff,
+} from '@harnessboard/shared';
 import { CLIENT_HEADER } from './api.js';
-import type { TaskView } from './views.js';
 
 export class ServerUnavailableError extends Error {}
 
@@ -12,7 +17,7 @@ export class ApiClient {
 
   status = () => this.get<Record<string, unknown>>('/status');
   listTasks = () => this.get<TaskView[]>('/tasks');
-  getTask = (id: number) => this.get<TaskView & { sessions: Session[] }>(`/tasks/${id}`);
+  getTask = (id: number) => this.get<TaskDetail>(`/tasks/${id}`);
   createTask = (input: CreateTaskInput) => this.post<TaskView>('/tasks', input);
   queueTask = (id: number) => this.post<Task>(`/tasks/${id}/queue`);
   stopTask = (id: number) => this.post<Task>(`/tasks/${id}/stop`);

@@ -7,6 +7,7 @@ import type {
   PermissionPolicy,
   Session,
   SessionEndReason,
+  StoredEvent,
   Task,
   TaskStatus,
 } from '@harnessboard/shared';
@@ -18,15 +19,6 @@ export interface NewTask {
   baseRef: string;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
-}
-
-export interface StoredEvent {
-  id: number;
-  taskId: number;
-  sessionId: string | null;
-  ts: number;
-  kind: string;
-  data: unknown;
 }
 
 // Each entry upgrades the schema by one version; never edit a shipped entry.

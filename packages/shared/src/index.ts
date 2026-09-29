@@ -4,3 +4,4 @@ export * from './context.js';
 export * from './events.js';
 export * from './task.js';
 export * from './util.js';
+export * from './views.js';

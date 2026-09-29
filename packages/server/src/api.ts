@@ -2,8 +2,8 @@
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import type { CreateTaskInput, Harness } from '@harnessboard/core';
-import type { HarnessEvent } from '@harnessboard/shared';
+import type { Harness } from '@harnessboard/core';
+import type { CreateTaskInput, HarnessEvent } from '@harnessboard/shared';
 import { taskView } from './views.js';
 
 /** Header every state-changing request must carry; see {@link localOnly}. */
