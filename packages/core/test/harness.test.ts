@@ -259,6 +259,28 @@ describe('createTask', () => {
   });
 });
 
+describe('updateSettings', () => {
+  it('applies a new concurrency limit', () => {
+    harness.updateSettings({ maxConcurrent: 3 });
+    expect(harness.status().maxConcurrent).toBe(3);
+  });
+
+  it('rejects keys that are not editable', () => {
+    expect(() => harness.updateSettings({ port: 1 } as never)).toThrow(/unknown settings: port/);
+  });
+
+  it('leaves settings unchanged when a value is invalid', () => {
+    expect(() => harness.updateSettings({ maxConcurrent: 3, quotaPauseUtilization: 2 })).toThrow();
+    expect(harness.settings().maxConcurrent).toBe(1);
+  });
+
+  it('uses the default context policy for new tasks', async () => {
+    harness.updateSettings({ defaultContextPolicy: { size: 'large' } });
+    const task = await harness.createTask({ prompt: 'x', repo });
+    expect(task.contextPolicy).toEqual({ size: 'large' });
+  });
+});
+
 describe('retrying a session that never reached the model', () => {
   it('starts a fresh session instead of resuming one that does not exist', async () => {
     scenario([[exitWith(1, 'No conversation found')]], [[init(), result('done')]]);

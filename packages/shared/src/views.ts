@@ -30,6 +30,12 @@ export interface HarnessStatus {
   maxConcurrent: number;
 }
 
+export interface Settings {
+  maxConcurrent: number;
+  quotaPauseUtilization: number;
+  defaultContextPolicy: ContextPolicy;
+}
+
 /** Body of `POST /api/tasks`. */
 export interface CreateTaskInput {
   prompt: string;

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadConfig, loadProjectConfig } from '../src/config.js';
+import { loadConfig, loadProjectConfig, saveUserConfig } from '../src/config.js';
 import { tempDir } from './helpers.js';
 
 const missing = path.join(tempDir('cfg'), 'none.json');
@@ -53,5 +53,17 @@ describe('loadProjectConfig', () => {
     const repo = tempDir('proj');
     writeFileSync(path.join(repo, '.harnessboard.json'), JSON.stringify({ baseRef: 'develop' }));
     expect(loadProjectConfig(repo)).toEqual({ baseRef: 'develop' });
+  });
+});
+
+describe('saveUserConfig', () => {
+  it('keeps keys the patch does not mention', () => {
+    const file = path.join(tempDir('cfg'), 'nested', 'config.json');
+    saveUserConfig({ maxConcurrent: 2 }, file);
+    saveUserConfig({ quotaPauseUtilization: 0.9 }, file);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
+      maxConcurrent: 2,
+      quotaPauseUtilization: 0.9,
+    });
   });
 });

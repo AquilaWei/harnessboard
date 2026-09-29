@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import type { Harness } from '@harnessboard/core';
+import type { EditableSettings, Harness } from '@harnessboard/core';
 import type { CreateTaskInput, HarnessEvent } from '@harnessboard/shared';
 import { taskView } from './views.js';
 
@@ -38,6 +38,11 @@ export function createApi(harness: Harness): Hono {
   app.onError((err, c) => c.json({ error: err.message }, 400));
 
   app.get('/status', (c) => c.json(harness.status()));
+
+  app.get('/settings', (c) => c.json(harness.settings()));
+  app.put('/settings', async (c) =>
+    c.json(harness.updateSettings(await c.req.json<Partial<EditableSettings>>())),
+  );
 
   app.get('/tasks', (c) =>
     c.json(harness.store.listTasks().map((t) => taskView(t, harness.store, fallback))),

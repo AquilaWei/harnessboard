@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { ClaudeCodeAdapter, Harness, probe } from '@harnessboard/core';
+import { ClaudeCodeAdapter, Harness, probe, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import { createApi, localOnly } from './api.js';
 
@@ -22,7 +22,7 @@ export async function startServer(config: HarnessConfig): Promise<RunningServer>
     (version) => ({ ok: true as const, version }),
     (err: Error) => ({ ok: false as const, error: err.message }),
   );
-  const harness = Harness.open(config, adapter);
+  const harness = Harness.open(config, adapter, userConfigFile());
   const app = new Hono();
   app.use('*', localOnly(config.port));
   app.route('/api', createApi(harness));

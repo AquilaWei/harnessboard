@@ -14,8 +14,8 @@ import type {
   WorktreeDiff,
 } from '@harnessboard/shared';
 import type { AgentAdapter } from './agent.js';
-import { loadProjectConfig } from './config.js';
-import type { HarnessConfig } from './config.js';
+import { EDITABLE_SETTINGS, loadProjectConfig, saveUserConfig, validate } from './config.js';
+import type { EditableSettings, HarnessConfig } from './config.js';
 import { QUOTA_RESUME_PROMPT, continuationPrompt } from './prompts.js';
 import { isQuotaLimited, runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
@@ -59,6 +59,8 @@ export class Harness {
     readonly config: HarnessConfig,
     readonly store: Store,
     private readonly adapter: AgentAdapter,
+    /** Where runtime setting changes are saved; `null` keeps them in memory (tests). */
+    private readonly settingsFile: string | null = null,
   ) {
     // Restore the last known quota so a restart does not forget a nearly used-up window.
     const last = store.lastEventOfKind('quota')?.data as { quota?: QuotaInfo } | undefined;
@@ -66,8 +68,34 @@ export class Harness {
   }
 
   /** Opens the default database under the configured data directory. */
-  static open(config: HarnessConfig, adapter: AgentAdapter): Harness {
-    return new Harness(config, new Store(path.join(config.dataDir, 'harness.db')), adapter);
+  static open(
+    config: HarnessConfig,
+    adapter: AgentAdapter,
+    settingsFile: string | null = null,
+  ): Harness {
+    const store = new Store(path.join(config.dataDir, 'harness.db'));
+    return new Harness(config, store, adapter, settingsFile);
+  }
+
+  settings(): EditableSettings {
+    const { maxConcurrent, quotaPauseUtilization, defaultContextPolicy } = this.config;
+    return { maxConcurrent, quotaPauseUtilization, defaultContextPolicy };
+  }
+
+  /**
+   * Applies and saves setting changes. Throws on unknown keys or invalid values,
+   * leaving the current settings untouched.
+   */
+  updateSettings(patch: Partial<EditableSettings>): EditableSettings {
+    const unknown = Object.keys(patch).filter(
+      (k) => !(EDITABLE_SETTINGS as readonly string[]).includes(k),
+    );
+    if (unknown.length > 0) throw new Error(`unknown settings: ${unknown.join(', ')}`);
+    validate({ ...this.config, ...patch });
+    Object.assign(this.config, patch);
+    if (this.settingsFile) saveUserConfig(patch, this.settingsFile);
+    this.tick(); // a higher concurrency limit may let queued tasks start now
+    return this.settings();
   }
 
   /**
@@ -104,6 +132,7 @@ export class Harness {
     const repoPath = await repoRoot(path.resolve(input.repo));
     const project = loadProjectConfig(repoPath);
     const contextPolicy = {
+      ...this.config.defaultContextPolicy,
       ...project.contextPolicy,
       ...definedOnly({ size: input.size, softPct: input.softPct, hardPct: input.hardPct }),
     };

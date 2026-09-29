@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
-import { APP_NAME, ENV_PREFIX, PROJECT_CONFIG_FILE } from '@harnessboard/shared';
+import { APP_NAME, ENV_PREFIX, PROJECT_CONFIG_FILE, resolveThresholds } from '@harnessboard/shared';
 import type { ContextPolicy } from '@harnessboard/shared';
 
 export interface HarnessConfig {
@@ -22,7 +22,20 @@ export interface HarnessConfig {
   quotaRetryMinutes: number;
   /** Upper bound on automatic session handoffs per task, to stop runaway loops. */
   maxHandoffs: number;
+  /** Applied to new tasks before project and per-task settings. */
+  defaultContextPolicy: ContextPolicy;
 }
+
+/** Settings the web UI may change at runtime; they are saved to the user config file. */
+export type EditableSettings = Pick<
+  HarnessConfig,
+  'maxConcurrent' | 'quotaPauseUtilization' | 'defaultContextPolicy'
+>;
+export const EDITABLE_SETTINGS = [
+  'maxConcurrent',
+  'quotaPauseUtilization',
+  'defaultContextPolicy',
+] as const;
 
 /** Defaults a repository can set in its `.harnessboard.json`. */
 export interface ProjectConfig {
@@ -45,6 +58,7 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     fallbackContextWindow: 200_000,
     quotaRetryMinutes: 15,
     maxHandoffs: 20,
+    defaultContextPolicy: { size: 'medium' },
   };
 }
 
@@ -79,6 +93,16 @@ export function loadProjectConfig(repoPath: string): ProjectConfig {
   return (readJsonIfExists(path.join(repoPath, PROJECT_CONFIG_FILE)) as ProjectConfig) ?? {};
 }
 
+/**
+ * Merges `patch` into the user config file, keeping keys it does not mention.
+ * Environment variables still take precedence on the next start.
+ */
+export function saveUserConfig(patch: Partial<HarnessConfig>, file = userConfigFile()): void {
+  const current = (readJsonIfExists(file) as Partial<HarnessConfig> | undefined) ?? {};
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify({ ...current, ...patch }, null, 2) + '\n');
+}
+
 function fromEnv(env: Env): Partial<HarnessConfig> {
   const out: Partial<HarnessConfig> = {};
   const get = (name: string) => env[`${ENV_PREFIX}${name}`];
@@ -93,7 +117,8 @@ function fromEnv(env: Env): Partial<HarnessConfig> {
   return out;
 }
 
-function validate(config: HarnessConfig): void {
+/** Throws when a value is out of range; used for loaded config and runtime edits alike. */
+export function validate(config: HarnessConfig): void {
   const positiveInts: (keyof HarnessConfig)[] = [
     'port',
     'maxConcurrent',
@@ -110,6 +135,7 @@ function validate(config: HarnessConfig): void {
   if (!(config.quotaPauseUtilization > 0 && config.quotaPauseUtilization <= 1)) {
     throw new Error('config quotaPauseUtilization must be in (0, 1]');
   }
+  resolveThresholds(config.defaultContextPolicy);
 }
 
 function readJsonIfExists(file: string): unknown {
