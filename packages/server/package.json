@@ -22,7 +22,7 @@
     "kanban"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node -e \"require('node:fs').cpSync('../web/dist','dist/web',{recursive:true})\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -36,6 +36,7 @@
   "devDependencies": {
     "@harnessboard/core": "workspace:*",
     "@harnessboard/shared": "workspace:*",
+    "@harnessboard/web": "workspace:*",
     "@types/cross-spawn": "^6.0.6"
   }
 }

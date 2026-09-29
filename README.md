@@ -4,8 +4,8 @@
 `claude` in its own git worktree. Harnessboard keeps every session's context small by handing
 work off to a fresh session, and it pauses when your subscription quota runs low.
 
-> **Status: early development (0.0.x).** The runner and the `hb` CLI work; the web UI and
-> the autonomous Loop mode are next.
+> **Status: early development (0.0.x).** The runner, the `hb` CLI and the web board work;
+> the autonomous Loop mode is next.
 
 ## Why
 
@@ -32,7 +32,8 @@ work off to a fresh session, and it pauses when your subscription quota runs low
 pnpm install && pnpm build           # from a clone; npm package coming later
 alias hb="node $PWD/packages/server/dist/cli.js"
 
-hb serve                             # terminal 1: scheduler + local API on 127.0.0.1:4317
+hb serve                             # terminal 1: scheduler, API and web board
+                                     # → open http://127.0.0.1:4317
 cd ~/my-project                      # terminal 2: any git repository
 hb add "Fix the flaky date test"     # queue a task (runs in its own worktree)
 hb ls                                # status and context % of every task
@@ -49,6 +50,27 @@ hb done 1                            # mark it reviewed
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
+
+## Web board
+
+`hb serve` also serves the board at **http://127.0.0.1:4317**:
+
+- **Columns per status:** Backlog, Queued, Running, Waiting for quota, Review, Done, and
+  Stopped / failed. Drag a card to queue it, stop it or mark it done. Moves that are not
+  real transitions are refused.
+- **Context meter on every card:** blue while under budget, amber past the soft threshold,
+  red past the hard one. Ticks mark both thresholds.
+- **Quota meters** for the 5-hour and 7-day windows, with the pause threshold marked.
+- **Task panel:** live log, diff against the base branch, session history, and buttons
+  for resume, stop and done. It also copies the `hb open <id>` command, so you can take
+  over in Claude Code.
+- **Settings:** concurrency, quota pause level and default task size. Saved to your user
+  config file.
+- **Languages:** English and 繁體中文; it follows the browser language and can be switched
+  in the header.
+
+The API accepts only loopback `Host` headers, and it requires a custom header on every
+write. A web page you visit cannot drive your agents through the browser.
 
 ## How the context budget works
 
@@ -82,6 +104,7 @@ corepack enable        # provides the pinned pnpm version
 pnpm install
 pnpm test              # uses a fake claude CLI; no account needed
 pnpm lint && pnpm typecheck
+pnpm --filter @harnessboard/web dev   # UI with hot reload; proxies /api to a running `hb serve`
 ```
 
 Notes on the Claude Code output format that Harnessboard relies on are in

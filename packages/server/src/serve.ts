@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { ClaudeCodeAdapter, Harness, probe, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import { createApi, localOnly } from './api.js';
+import { serveWeb } from './static.js';
+
+// The bundled CLI lives in dist/; the web build is copied next to it in dist/web.
+const WEB_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'web');
 
 export interface RunningServer {
   url: string;
@@ -26,6 +32,7 @@ export async function startServer(config: HarnessConfig): Promise<RunningServer>
   const app = new Hono();
   app.use('*', localOnly(config.port));
   app.route('/api', createApi(harness));
+  app.get('*', serveWeb(WEB_ROOT));
 
   const server = await new Promise<ReturnType<typeof serve>>((resolve, reject) => {
     const s = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: config.port }, () =>
