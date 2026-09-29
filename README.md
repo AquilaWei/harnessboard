@@ -42,21 +42,21 @@ hb open 1                            # continue the session interactively in Cla
 hb done 1                            # mark it reviewed
 ```
 
-| Command | What it does |
-|---|---|
-| `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task |
-| `hb ls` / `hb show <id>` | List tasks / show sessions and context usage |
-| `hb logs <id> [-f]` | Print or follow the log |
-| `hb stop <id>` / `hb resume <id>` | Stop, or queue again |
-| `hb diff <id>` / `hb open <id>` / `hb done <id>` | Review, take over interactively, finish |
+| Command                                                                               | What it does                                 |
+| ------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                      |
+| `hb ls` / `hb show <id>`                                                              | List tasks / show sessions and context usage |
+| `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
+| `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
+| `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
 
 ## How the context budget works
 
-| Task size | Soft threshold: ask the agent to commit and write a handoff note | Hard threshold: end the session |
-|---|---|---|
-| `small` | 30 % | 40 % |
-| `medium` (default) | 40 % | 50 % |
-| `large` | 50 % | 60 % |
+| Task size          | Soft threshold: ask the agent to commit and write a handoff note | Hard threshold: end the session |
+| ------------------ | ---------------------------------------------------------------- | ------------------------------- |
+| `small`            | 30 %                                                             | 40 %                            |
+| `medium` (default) | 40 %                                                             | 50 %                            |
+| `large`            | 50 %                                                             | 60 %                            |
 
 The next session starts fresh with the original task and the handoff note. Percentages are of
 the model's context window, which the CLI reports.
