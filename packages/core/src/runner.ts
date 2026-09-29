@@ -3,7 +3,7 @@ import { contextPct } from '@harnessboard/shared';
 import type { AgentEvent, QuotaInfo, SessionEndReason, Thresholds } from '@harnessboard/shared';
 import type { AgentAdapter, SessionSpec } from './agent.js';
 import { spawnLines } from './process.js';
-import { wrapUpPrompt } from './prompts.js';
+import { reportsDone, wrapUpPrompt } from './prompts.js';
 
 export interface SessionOutcome {
   reason: SessionEndReason;
@@ -106,7 +106,8 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
     const limited = final.apiErrorStatus === 429 || isQuotaLimited(quota);
     return outcome(limited ? 'quota' : 'error', final.text || null);
   }
-  return outcome(wrapSent ? 'handoff' : 'completed');
+  // A wrap-up reply may report the task finished; then there is nothing to hand off.
+  return outcome(wrapSent && !reportsDone(final.text) ? 'handoff' : 'completed');
 
   function outcome(reason: SessionEndReason, detail: string | null = null): SessionOutcome {
     const final = result as Extract<AgentEvent, { kind: 'result' }> | null;

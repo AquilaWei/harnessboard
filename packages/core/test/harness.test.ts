@@ -144,6 +144,24 @@ describe('a session that crosses the soft threshold', () => {
   });
 });
 
+describe('a wrap-up reply that reports the task done', () => {
+  it('moves the task to review instead of handing off', async () => {
+    scenario([
+      [init(), assistantText('working', 45_000)],
+      [assistantText('STATUS: DONE', 46_000), result('STATUS: DONE\nAll steps finished.')],
+    ]);
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      softPct: 30,
+      hardPct: 60,
+      queue: true,
+    });
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.status).toBe('review');
+  });
+});
+
 describe('a session that crosses the hard threshold', () => {
   it('is killed and ends with context_hard_limit', async () => {
     scenario([[init(), assistantText('huge', 70_000), hang]]);

@@ -8,7 +8,17 @@ export function wrapUpPrompt(pct: number): string {
     '1. Commit your changes with a clear message (work in progress is fine).',
     '2. Reply with a handoff note for the next session: what is done, what remains,',
     '   and anything non-obvious you learned. Keep it under 300 words.',
+    `3. Make the first line of your reply exactly \`${STATUS_DONE}\` if the whole task is`,
+    `   finished, or \`${STATUS_CONTINUE}\` if work remains.`,
   ].join('\n');
+}
+
+export const STATUS_DONE = 'STATUS: DONE';
+export const STATUS_CONTINUE = 'STATUS: CONTINUE';
+
+/** True when a wrap-up reply says the whole task is already finished. */
+export function reportsDone(reply: string): boolean {
+  return reply.trimStart().startsWith(STATUS_DONE);
 }
 
 /**
