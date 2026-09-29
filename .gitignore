@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+# Local harness data (when HARNESSBOARD_HOME points inside the repo)
+.harnessboard/
+# Personal / agent files
+CLAUDE.md
+.claude/
+notes/
