@@ -43,3 +43,28 @@ export function spawnLines(
     exited,
   };
 }
+
+/**
+ * Runs `command args` and resolves with its first output line, or rejects when it cannot
+ * be started, exits non-zero, or takes longer than `timeoutMs`.
+ */
+export function probe(command: string, args: string[], timeoutMs = 15_000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`${command} did not answer within ${timeoutMs} ms`));
+    }, timeoutMs);
+    child.stdout!.on('data', (chunk: Buffer) => (out += chunk.toString()));
+    child.once('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(out.trim().split('\n')[0] ?? '');
+      else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+    });
+  });
+}

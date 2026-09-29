@@ -7,6 +7,8 @@ import type { AgentAdapter, SessionSpec } from './agent.js';
  * re-check them there when Claude Code changes its output.
  */
 export class ClaudeCodeAdapter implements AgentAdapter {
+  readonly versionArgs = ['--version'];
+
   constructor(readonly command: string) {}
 
   buildArgs(spec: SessionSpec): string[] {

@@ -31,7 +31,13 @@ program
   .command('serve')
   .description('start the scheduler and the local API')
   .action(async () => {
-    const server = await startServer(config());
+    const cfg = config();
+    const server = await startServer(cfg);
+    if (server.agent.ok) {
+      console.log(t('agentFound', { command: cfg.claudePath, version: server.agent.version }));
+    } else {
+      console.warn(t('agentMissing', { command: cfg.claudePath, error: server.agent.error }));
+    }
     console.log(t('serverStarted', { url: server.url }));
     const shutdown = () => void server.close().then(() => process.exit(0));
     process.once('SIGINT', shutdown);

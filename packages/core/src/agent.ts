@@ -22,4 +22,6 @@ export interface AgentAdapter {
   encodeMessage(text: string): string;
   /** Normalises one stdout line; unknown or irrelevant lines yield no events. */
   parseLine(line: string): AgentEvent[];
+  /** Arguments that print the CLI version; used to check the CLI is installed. */
+  readonly versionArgs: string[];
 }
