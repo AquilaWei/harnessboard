@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { contextPct, resolveThresholds } from '@harnessboard/shared';
+import { contextPct, definedOnly, resolveThresholds } from '@harnessboard/shared';
 import type {
   AgentEvent,
   HarnessEvent,
@@ -395,8 +395,4 @@ export class Harness {
 function firstLine(text: string): string {
   const line = text.trim().split('\n')[0] ?? '';
   return line.length > 80 ? `${line.slice(0, 77)}...` : line;
-}
-
-function definedOnly<T extends Record<string, unknown>>(obj: T): Partial<T> {
-  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>;
 }
