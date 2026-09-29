@@ -1,0 +1,72 @@
+# Claude Code stream-json notes
+
+Observed with Claude Code 2.1.284 (`claude -p --output-format stream-json --verbose`),
+subscription (OAuth) login, no API key. Re-verify when upgrading Claude Code.
+
+## Authentication
+
+- Headless `-p` works with a subscription login. `system/init.apiKeySource` is `"none"`.
+- `--bare` must not be used: it only reads `ANTHROPIC_API_KEY`.
+
+## Event types seen
+
+| type               | subtype            | notes                                                                                                              |
+| ------------------ | ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `system`           | `init`             | `session_id`, `model`, `permissionMode`, `claude_code_version`; emitted again after each turn and after compaction |
+| `system`           | `thinking_tokens`  | progress estimate, safe to ignore                                                                                  |
+| `system`           | `status`           | `{"status":"compacting"}` then `{"status":null}`                                                                   |
+| `system`           | `compact_boundary` | `compact_metadata: {trigger, pre_tokens, post_tokens, duration_ms}`                                                |
+| `assistant`        | –                  | `message.usage` per API call; `message.content[]` blocks (`thinking`, `text`, `tool_use`)                          |
+| `user`             | –                  | tool results and replayed messages                                                                                 |
+| `rate_limit_event` | –                  | subscription quota, see below                                                                                      |
+| `result`           | `success` / error  | end of one turn; `usage`, `modelUsage`, `is_error`, `api_error_status`, `result`                                   |
+
+## Context size
+
+- Current context = `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`
+  from the latest `assistant.message.usage`.
+- Window size: `result.modelUsage[<model>].contextWindow` (1,000,000 for the default model
+  on this account). Only available after the first turn, so the window must be configurable
+  and cached per model.
+- A fresh session already uses ~20–25k tokens (system prompt, tools, CLAUDE.md, skills).
+
+## Subscription quota
+
+`rate_limit_event.rate_limit_info`:
+
+```json
+{
+  "status": "allowed",
+  "resetsAt": 1790718000,
+  "rateLimitType": "five_hour",
+  "unifiedWindows": {
+    "five_hour": { "utilization": 0.5, "resetsAt": 1790718000 },
+    "seven_day": { "utilization": 0.63, "resetsAt": 1790812800 }
+  }
+}
+```
+
+- `utilization` and `resetsAt` (unix seconds) allow pausing _before_ the limit is hit.
+- Not yet observed: the payload when the limit is reached. Assumed: `status` other than
+  `"allowed"` and/or `result.is_error` with `api_error_status` 429. Detection must accept both
+  and fall back to polling every 15 minutes.
+
+## Multi-turn input (`--input-format stream-json`)
+
+- One JSON line per user message on stdin:
+  `{"type":"user","message":{"role":"user","content":"..."}}`
+- Each message produces its own `result`. The process exits when stdin closes.
+- Sending `/compact <instructions>` as a message works: `status: compacting`,
+  then `compact_boundary` (manual trigger; 21,686 → 2,693 tokens in the test).
+
+## Session identity
+
+- `--session-id <uuid>` fixes the id up front.
+- `--resume <uuid>` keeps the same id and the full history.
+
+## Messages sent during a turn
+
+A user message written to stdin while a turn is still running is injected into that turn:
+the agent sees it at the next tool-result boundary and acts on it (the test asked it to stop
+after the current command, and it did, producing a single `result`). This is how the soft
+context threshold asks the agent to wrap up without waiting for the turn to end.
