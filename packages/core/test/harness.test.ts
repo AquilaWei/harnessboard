@@ -10,6 +10,7 @@ import {
   FAKE_CLAUDE,
   assistantText,
   errorResult,
+  exitWith,
   hang,
   init,
   makeRepo,
@@ -241,5 +242,40 @@ describe('createTask', () => {
     await expect(
       harness.createTask({ prompt: 'x', repo, softPct: 60, hardPct: 50 }),
     ).rejects.toThrow(RangeError);
+  });
+});
+
+describe('retrying a session that never reached the model', () => {
+  it('starts a fresh session instead of resuming one that does not exist', async () => {
+    scenario([[exitWith(1, 'No conversation found')]], [[init(), result('done')]]);
+    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    await harness.waitForIdle();
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]!.args).not.toContain('--resume');
+  });
+});
+
+describe('an agent that exits before producing a result', () => {
+  it('reports its stderr in the session notice', async () => {
+    scenario([[exitWith(1, 'No conversation found')]]);
+    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    await harness.waitForIdle();
+    const notice = harness.store.lastEvent(task.id, 'notice')!.data as { message: string };
+    expect(notice.message).toContain('No conversation found');
+  });
+});
+
+describe('an agent CLI that cannot be found', () => {
+  it('fails the task with a hint about HARNESSBOARD_CLAUDE_PATH', async () => {
+    const missing = new Harness(
+      harness.config,
+      harness.store,
+      new ClaudeCodeAdapter(path.join(dir, 'no-such-claude')),
+    );
+    const task = await missing.createTask({ prompt: 'x', repo, queue: true });
+    await missing.waitForIdle();
+    const notices = missing.store.listEvents(task.id).map((e) => JSON.stringify(e.data));
+    expect(notices.some((n) => n.includes('HARNESSBOARD_CLAUDE_PATH'))).toBe(true);
   });
 });

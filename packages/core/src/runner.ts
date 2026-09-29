@@ -5,6 +5,8 @@ import type { AgentAdapter, SessionSpec } from './agent.js';
 import { spawnLines } from './process.js';
 import { reportsDone, wrapUpPrompt } from './prompts.js';
 
+const STDERR_TAIL_LINES = 5;
+
 export interface SessionOutcome {
   reason: SessionEndReason;
   /** The agent's last reply; after a wrap-up this is the handoff note. */
@@ -45,6 +47,8 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   let stopped = false;
   let quota: QuotaInfo | null = null;
   let result: Extract<AgentEvent, { kind: 'result' }> | null = null;
+  // Kept to explain an exit without a result; the CLI reports such failures on stderr.
+  const stderrTail: string[] = [];
 
   const child = spawnLines(
     adapter.command,
@@ -53,7 +57,11 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
     (line) => {
       for (const event of adapter.parseLine(line)) handle(event);
     },
-    options.onStderr,
+    (line) => {
+      stderrTail.push(line);
+      if (stderrTail.length > STDERR_TAIL_LINES) stderrTail.shift();
+      options.onStderr(line);
+    },
   );
 
   function handle(event: AgentEvent): void {
@@ -93,7 +101,9 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   try {
     exitCode = await child.exited;
   } catch (err) {
-    return outcome('error', `failed to start ${adapter.command}: ${(err as Error).message}`);
+    const e = err as NodeJS.ErrnoException;
+    const hint = e.code === 'ENOENT' ? ' (not found; set HARNESSBOARD_CLAUDE_PATH)' : '';
+    return outcome('error', `failed to start ${adapter.command}${hint}: ${e.message}`);
   } finally {
     signal.removeEventListener('abort', onAbort);
   }
@@ -101,10 +111,13 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   if (stopped) return outcome('stopped');
   if (hardHit) return outcome('context_hard_limit');
   const final = result as Extract<AgentEvent, { kind: 'result' }> | null;
-  if (!final) return outcome('error', `agent exited with code ${exitCode} before a result`);
+  if (!final) {
+    const stderr = stderrTail.length > 0 ? `: ${stderrTail.join(' / ')}` : '';
+    return outcome('error', `agent exited with code ${exitCode} before a result${stderr}`);
+  }
   if (final.isError) {
     const limited = final.apiErrorStatus === 429 || isQuotaLimited(quota);
-    return outcome(limited ? 'quota' : 'error', final.text || null);
+    return outcome(limited ? 'quota' : 'error', final.text || stderrTail.join(' / ') || null);
   }
   // A wrap-up reply may report the task finished; then there is nothing to hand off.
   return outcome(wrapSent && !reportsDone(final.text) ? 'handoff' : 'completed');

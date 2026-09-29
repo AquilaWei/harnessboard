@@ -57,6 +57,8 @@ export const errorResult = (status: number) => ({
 
 export const hang = { __hang: true };
 
+export const exitWith = (code: number, stderr?: string) => ({ __exit: code, __stderr: stderr });
+
 export function tempDir(prefix: string): string {
   return mkdtempSync(path.join(tmpdir(), `hb-${prefix}-`));
 }

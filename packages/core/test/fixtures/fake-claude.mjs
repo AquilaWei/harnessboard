@@ -3,7 +3,8 @@
 // Stand-in for `claude -p --input-format stream-json` in tests.
 // FAKE_CLAUDE_SCENARIO: JSON file { "sessions": [{ "turns": [[...lines], ...] }, ...] }.
 // The n-th run of the fake plays sessions[n] (counted in a sibling `.count` file); within it,
-// the i-th user message on stdin emits turns[i]. A line {"__hang": true} waits until killed.
+// the i-th user message on stdin emits turns[i]. A line {"__hang": true} waits until killed;
+// {"__exit": code} writes {"__stderr"}'s text (if any) to stderr and exits with that code.
 // FAKE_CLAUDE_LOG: file that receives one JSON line per run with the args and messages.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -39,6 +40,11 @@ process.stdin.on('end', () =>
 
 async function emit(lines) {
   for (const line of lines) {
+    if (line.__exit !== undefined) {
+      if (line.__stderr) process.stderr.write(line.__stderr + '\n');
+      log();
+      process.exit(line.__exit);
+    }
     if (line.__hang) {
       log();
       await new Promise(() => {});

@@ -264,9 +264,9 @@ export class Harness {
     if (last.endReason === 'handoff' || last.endReason === 'context_hard_limit') {
       return continuation();
     }
-    return this.hasBudget(task, last)
-      ? { resumeId: last.id, prompt: QUOTA_RESUME_PROMPT }
-      : continuation();
+    // A session that never reached the model was never saved by the CLI, so it can't be resumed.
+    const resumable = last.contextTokens > 0 && this.hasBudget(task, last);
+    return resumable ? { resumeId: last.id, prompt: QUOTA_RESUME_PROMPT } : continuation();
   }
 
   private hasBudget(task: Task, session: Session): boolean {
