@@ -1,0 +1,21 @@
+{
+  "name": "@harnessboard/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@harnessboard/shared": "workspace:*",
+    "cross-spawn": "^7.0.6",
+    "env-paths": "^4.0.0",
+    "tree-kill": "^1.2.2"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6"
+  }
+}

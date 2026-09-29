@@ -1,0 +1,83 @@
+// SPDX-License-Identifier: Apache-2.0
+// Synthetic stream-json lines shaped like real Claude Code output (docs/stream-json-notes.md).
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export const FAKE_CLAUDE = fileURLToPath(new URL('./fixtures/fake-claude.mjs', import.meta.url));
+
+export const init = (sessionId = 'sess') => ({
+  type: 'system',
+  subtype: 'init',
+  session_id: sessionId,
+  model: 'test-model',
+});
+
+export const assistantText = (text: string, contextTokens: number) => ({
+  type: 'assistant',
+  parent_tool_use_id: null,
+  message: {
+    content: [{ type: 'text', text }],
+    usage: {
+      input_tokens: 2,
+      cache_read_input_tokens: contextTokens - 2,
+      cache_creation_input_tokens: 0,
+    },
+  },
+});
+
+export const rateLimit = (status: string, fiveHour: number, resetsAtSec: number) => ({
+  type: 'rate_limit_event',
+  rate_limit_info: {
+    status,
+    resetsAt: resetsAtSec,
+    unifiedWindows: { five_hour: { utilization: fiveHour, resetsAt: resetsAtSec } },
+  },
+});
+
+export const result = (text: string, contextWindow = 100_000) => ({
+  type: 'result',
+  subtype: 'success',
+  is_error: false,
+  result: text,
+  api_error_status: null,
+  modelUsage: { 'test-model': { contextWindow } },
+});
+
+export const errorResult = (status: number) => ({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'usage limit reached',
+  api_error_status: status,
+  modelUsage: {},
+});
+
+export const hang = { __hang: true };
+
+export function tempDir(prefix: string): string {
+  return mkdtempSync(path.join(tmpdir(), `hb-${prefix}-`));
+}
+
+/** A git repository with one commit on `main`. */
+export function makeRepo(): string {
+  const repo = tempDir('repo');
+  const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'pipe' });
+  git('init', '-q', '-b', 'main');
+  git('config', 'user.email', 'test@example.com');
+  git('config', 'user.name', 'Test');
+  writeFileSync(path.join(repo, 'README.md'), 'hello\n');
+  git('add', '.');
+  git('commit', '-q', '-m', 'init');
+  return repo;
+}
+
+/** Writes a fake-claude scenario (one entry of turns per session run) and returns its path. */
+export function writeScenario(dir: string, sessions: unknown[][][]): string {
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'scenario.json');
+  writeFileSync(file, JSON.stringify({ sessions: sessions.map((turns) => ({ turns })) }));
+  return file;
+}
