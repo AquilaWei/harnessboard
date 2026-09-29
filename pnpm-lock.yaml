@@ -213,6 +213,37 @@ importers:
         specifier: ^6.0.6
         version: 6.0.6
 
+  packages/server:
+    dependencies:
+      '@hono/node-server':
+        specifier: ^2.0.0
+        version: 2.1.1(hono@4.13.10)
+      commander:
+        specifier: ^15.0.0
+        version: 15.0.0
+      cross-spawn:
+        specifier: ^7.0.6
+        version: 7.0.6
+      env-paths:
+        specifier: ^4.0.0
+        version: 4.0.0
+      hono:
+        specifier: ^4.12.0
+        version: 4.13.10
+      tree-kill:
+        specifier: ^1.2.2
+        version: 1.2.2
+    devDependencies:
+      '@harnessboard/core':
+        specifier: workspace:*
+        version: link:../core
+      '@harnessboard/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@types/cross-spawn':
+        specifier: ^6.0.6
+        version: 6.0.6
+
   packages/shared: {}
 
 packages:
@@ -410,6 +441,12 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@hono/node-server@2.1.1':
+    resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -874,6 +911,10 @@ packages:
   color-name@1.1.4:
     resolution: {integrity: sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==}
 
+  commander@15.0.0:
+    resolution: {integrity: sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==}
+    engines: {node: '>=22.12.0'}
+
   commander@4.1.1:
     resolution: {integrity: sha512-NOKm8xhkzAjzFx8B2v5OAHT+u5pRQc2UCa2Vq9jYL/31o2wi9mxBA7LIFs3sV5VSC49z6pEhfbMULvShKj26WA==}
     engines: {node: '>= 6'}
@@ -1037,6 +1078,10 @@ packages:
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
+
+  hono@4.13.10:
+    resolution: {integrity: sha512-dQuLsa5oO+47QVMVMaaD9cIv8ctmVtK1iRvwWngkfloFJMeFeuoUFDswIqZGxmGX3hrRzREgEArjkK9OgsQEhA==}
+    engines: {node: '>=16.9.0'}
 
   ignore@5.3.2:
     resolution: {integrity: sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==}
@@ -1671,6 +1716,10 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
+  '@hono/node-server@2.1.1(hono@4.13.10)':
+    dependencies:
+      hono: 4.13.10
+
   '@humanfs/core@0.19.2':
     dependencies:
       '@humanfs/types': 0.15.0
@@ -2043,6 +2092,8 @@ snapshots:
 
   color-name@1.1.4: {}
 
+  commander@15.0.0: {}
+
   commander@4.1.1: {}
 
   concat-map@0.0.1: {}
@@ -2224,6 +2275,8 @@ snapshots:
   globals@17.12.0: {}
 
   has-flag@4.0.0: {}
+
+  hono@4.13.10: {}
 
   ignore@5.3.2: {}
 

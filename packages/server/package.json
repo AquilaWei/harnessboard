@@ -1,0 +1,41 @@
+{
+  "name": "harnessboard",
+  "version": "0.0.1",
+  "description": "Local harness and task board for running Claude Code agents in git worktrees",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "harnessboard": "dist/cli.js",
+    "hb": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "keywords": [
+    "claude-code",
+    "agent",
+    "harness",
+    "worktree",
+    "kanban"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.0",
+    "commander": "^15.0.0",
+    "cross-spawn": "^7.0.6",
+    "env-paths": "^4.0.0",
+    "hono": "^4.12.0",
+    "tree-kill": "^1.2.2"
+  },
+  "devDependencies": {
+    "@harnessboard/core": "workspace:*",
+    "@harnessboard/shared": "workspace:*",
+    "@types/cross-spawn": "^6.0.6"
+  }
+}
