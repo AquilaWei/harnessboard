@@ -192,6 +192,14 @@ export class Store {
     return row ? toEvent(row) : undefined;
   }
 
+  /** Most recent event of one kind across all tasks, e.g. the last quota snapshot. */
+  lastEventOfKind(kind: string): StoredEvent | undefined {
+    const row = this.db
+      .prepare('SELECT * FROM events WHERE kind = ? ORDER BY id DESC LIMIT 1')
+      .get(kind);
+    return row ? toEvent(row) : undefined;
+  }
+
   /** Context window most recently reported by the agent, if any session got that far. */
   lastKnownContextWindow(): number | null {
     const row = this.db

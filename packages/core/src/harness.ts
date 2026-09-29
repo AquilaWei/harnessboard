@@ -81,7 +81,11 @@ export class Harness {
     readonly config: HarnessConfig,
     readonly store: Store,
     private readonly adapter: AgentAdapter,
-  ) {}
+  ) {
+    // Restore the last known quota so a restart does not forget a nearly used-up window.
+    const last = store.lastEventOfKind('quota')?.data as { quota?: QuotaInfo } | undefined;
+    this.quota = last?.quota ?? null;
+  }
 
   /** Opens the default database under the configured data directory. */
   static open(config: HarnessConfig, adapter: AgentAdapter): Harness {

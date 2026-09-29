@@ -220,6 +220,20 @@ describe('quota utilisation above the pause threshold', () => {
   });
 });
 
+describe('restarting the harness', () => {
+  it('restores the last reported quota', async () => {
+    scenario([[init(), rateLimit('allowed', 0.4, FUTURE_SEC), result('done')]]);
+    await harness.createTask({ prompt: 'First', repo, queue: true });
+    await harness.waitForIdle();
+    const restarted = new Harness(
+      harness.config,
+      harness.store,
+      new ClaudeCodeAdapter(FAKE_CLAUDE),
+    );
+    expect(restarted.status().quota?.fiveHourUtilization).toBe(0.4);
+  });
+});
+
 describe('stopping a running task', () => {
   it('kills the agent and marks the task stopped', async () => {
     scenario([[init(), hang]]);
