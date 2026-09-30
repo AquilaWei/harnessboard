@@ -2,7 +2,14 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { FEATURE_LIST_FILE, contextPct, resolveThresholds } from '@harnessboard/shared';
-import type { Feature, FeatureSnapshot, Session, Task, TaskStatus } from '@harnessboard/shared';
+import type {
+  AgentRole,
+  Feature,
+  FeatureSnapshot,
+  Session,
+  Task,
+  TaskStatus,
+} from '@harnessboard/shared';
 import type { HarnessConfig } from './config.js';
 import { missingFeatures, readFeatureList, runVerify } from './loop.js';
 import {
@@ -14,8 +21,14 @@ import {
 import type { SessionOutcome } from './runner.js';
 import type { Store } from './store.js';
 
-/** How the next session of a task starts. */
-export type SessionPlan = { resumeId: string | null; prompt: string };
+/** Who runs the next session of a task, what it is asked, and whether it resumes one. */
+export interface SessionPlan {
+  role: AgentRole;
+  agentId: string;
+  /** Session to continue; `null` starts a new one. */
+  resume: Session | null;
+  prompt: string;
+}
 
 /** What the workflow needs from the harness: persistence and status changes that notify. */
 export interface WorkflowHost {
@@ -39,16 +52,29 @@ export class Workflow {
    */
   plan(task: Task): SessionPlan {
     const last = this.host.store.listSessions(task.id).at(-1);
-    if (!last) return { resumeId: null, prompt: this.firstPrompt(task) };
+    if (!last) return this.implement(task, this.firstPrompt(task));
     if (last.endReason === 'handoff' || last.endReason === 'context_hard_limit') {
       return this.continuation(task, this.handoffNote(task));
     }
     // Each loop feature starts from a clean context; its state lives in the worktree files.
     const loopStepDone = task.mode === 'loop' && last.endReason === 'completed';
     // A session that never reached the model was never saved by the CLI, so it can't be resumed.
-    const resumable = !loopStepDone && last.contextTokens > 0 && this.hasBudget(task, last);
-    if (resumable) return { resumeId: last.id, prompt: QUOTA_RESUME_PROMPT };
+    const resumable =
+      !loopStepDone &&
+      last.agentSessionId !== null &&
+      last.contextTokens > 0 &&
+      this.hasBudget(task, last);
+    if (resumable) return this.implement(task, QUOTA_RESUME_PROMPT, last);
     return this.continuation(task, task.mode === 'single' ? this.handoffNote(task) : null);
+  }
+
+  /** Agent profile of the task's next session, for per-provider quota checks. */
+  nextAgentId(task: Task): string {
+    return task.agents.implementer;
+  }
+
+  private implement(task: Task, prompt: string, resume: Session | null = null): SessionPlan {
+    return { role: 'implementer', agentId: task.agents.implementer, resume, prompt };
   }
 
   private firstPrompt(task: Task): string {
@@ -57,18 +83,15 @@ export class Workflow {
 
   private continuation(task: Task, note: string | null): SessionPlan {
     if (task.mode === 'single') {
-      return { resumeId: null, prompt: continuationPrompt(task.prompt, note) };
+      return this.implement(task, continuationPrompt(task.prompt, note));
     }
     // The initializer was cut off before it wrote the feature list; let it finish planning.
     if (!existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE))) {
-      return { resumeId: null, prompt: continuationPrompt(this.firstPrompt(task), note) };
+      return this.implement(task, continuationPrompt(this.firstPrompt(task), note));
     }
     const verify = this.snapshots(task.id).at(-1)?.verify;
     const failed = verify && !verify.ok ? verify : null;
-    return {
-      resumeId: null,
-      prompt: loopSessionPrompt(task.prompt, task.verifyCommand!, failed, note),
-    };
+    return this.implement(task, loopSessionPrompt(task.prompt, task.verifyCommand!, failed, note));
   }
 
   private handoffNote(task: Task): string | null {
@@ -82,14 +105,19 @@ export class Workflow {
   }
 
   private hasBudget(task: Task, session: Session): boolean {
-    const window = session.contextWindow ?? this.contextWindow();
+    const window = session.contextWindow ?? this.contextWindow(session.agentId);
     return (
       contextPct(session.contextTokens, window) < resolveThresholds(task.contextPolicy).softPct
     );
   }
 
-  contextWindow(): number {
-    return this.host.store.lastKnownContextWindow() ?? this.host.config.fallbackContextWindow;
+  /** Best known window for an agent profile: last reported, then configured, then fallback. */
+  contextWindow(agentId: string): number {
+    return (
+      this.host.store.lastKnownContextWindow(agentId) ??
+      this.host.config.agents[agentId]?.contextWindow ??
+      this.host.config.fallbackContextWindow
+    );
   }
 
   async finish(task: Task, outcome: SessionOutcome, signal: AbortSignal): Promise<void> {

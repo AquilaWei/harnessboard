@@ -88,7 +88,9 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
     cwd: '/w',
     sessionId: 'id-1',
     resume: false,
+    prompt: 'do it',
     model: null,
+    access: 'edit' as const,
     allowedTools: ['Bash(git add *)'],
     skipPermissions: false,
   };
@@ -125,6 +127,27 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
       '--session-id',
       'id-1',
       '--dangerously-skip-permissions',
+    ]);
+  });
+
+  it('limits a read-only session to inspection tools, ignoring skipPermissions', () => {
+    expect(adapter.buildArgs({ ...spec, access: 'readOnly', skipPermissions: true })).toEqual([
+      '-p',
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--session-id',
+      'id-1',
+      '--allowedTools',
+      'Read',
+      'Grep',
+      'Glob',
+      'Bash(git diff *)',
+      'Bash(git log *)',
+      'Bash(git show *)',
+      'Bash(git status)',
     ]);
   });
 });

@@ -3,12 +3,14 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
+  AgentRole,
   ContextPolicy,
   PermissionPolicy,
   Session,
   SessionEndReason,
   StoredEvent,
   Task,
+  TaskAgents,
   TaskMode,
   TaskStatus,
 } from '@harnessboard/shared';
@@ -22,6 +24,7 @@ export interface NewTask {
   verifyCommand: string | null;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
+  agents: TaskAgents;
 }
 
 // Each entry upgrades the schema by one version; never edit a shipped entry.
@@ -61,6 +64,12 @@ const MIGRATIONS = [
    CREATE INDEX events_task ON events(task_id, id);`,
   `ALTER TABLE tasks ADD COLUMN mode TEXT NOT NULL DEFAULT 'single';
    ALTER TABLE tasks ADD COLUMN verify_command TEXT;`,
+  `ALTER TABLE tasks ADD COLUMN agents TEXT NOT NULL
+     DEFAULT '{"implementer":"claude","reviewer":null,"maxReviewRounds":2}';
+   ALTER TABLE sessions ADD COLUMN role TEXT NOT NULL DEFAULT 'implementer';
+   ALTER TABLE sessions ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'claude';
+   ALTER TABLE sessions ADD COLUMN agent_session_id TEXT;
+   UPDATE sessions SET agent_session_id = id;`,
 ];
 
 /**
@@ -87,8 +96,8 @@ export class Store {
     const result = this.db
       .prepare(
         `INSERT INTO tasks (title, prompt, repo_path, base_ref, mode, verify_command, status,
-                            context_policy, permission, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?)`,
+                            context_policy, permission, agents, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
       )
       .run(
         input.title,
@@ -99,6 +108,7 @@ export class Store {
         input.verifyCommand,
         JSON.stringify(input.contextPolicy),
         JSON.stringify(input.permission),
+        JSON.stringify(input.agents),
         now,
         now,
       );
@@ -135,10 +145,27 @@ export class Store {
     return task;
   }
 
-  startSession(id: string, taskId: number, now = Date.now()): void {
+  startSession(
+    id: string,
+    taskId: number,
+    role: AgentRole,
+    agentId: string,
+    agentSessionId: string | null,
+    now = Date.now(),
+  ): void {
     this.db
-      .prepare('INSERT INTO sessions (id, task_id, started_at) VALUES (?, ?, ?)')
-      .run(id, taskId, now);
+      .prepare(
+        `INSERT INTO sessions (id, task_id, role, agent_id, agent_session_id, started_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(id, taskId, role, agentId, agentSessionId, now);
+  }
+
+  /** Records the id a CLI assigned to a session once it reports it. */
+  setAgentSessionId(id: string, agentSessionId: string): void {
+    this.db
+      .prepare('UPDATE sessions SET agent_session_id = ? WHERE id = ?')
+      .run(agentSessionId, id);
   }
 
   updateSessionContext(id: string, tokens: number, window: number | null): void {
@@ -199,21 +226,30 @@ export class Store {
       .map(toEvent);
   }
 
-  /** Most recent event of one kind across all tasks, e.g. the last quota snapshot. */
-  lastEventOfKind(kind: string): StoredEvent | undefined {
+  /**
+   * Most recent event of one kind from sessions run by any of `agentIds`, across all tasks;
+   * e.g. the last quota snapshot a provider reported.
+   */
+  lastAgentEvent(kind: string, agentIds: string[]): StoredEvent | undefined {
+    if (agentIds.length === 0) return undefined;
+    const placeholders = agentIds.map(() => '?').join(', ');
     const row = this.db
-      .prepare('SELECT * FROM events WHERE kind = ? ORDER BY id DESC LIMIT 1')
-      .get(kind);
+      .prepare(
+        `SELECT e.* FROM events e JOIN sessions s ON s.id = e.session_id
+         WHERE e.kind = ? AND s.agent_id IN (${placeholders}) ORDER BY e.id DESC LIMIT 1`,
+      )
+      .get(kind, ...agentIds);
     return row ? toEvent(row) : undefined;
   }
 
-  /** Context window most recently reported by the agent, if any session got that far. */
-  lastKnownContextWindow(): number | null {
+  /** Context window most recently reported for an agent profile, if a session got that far. */
+  lastKnownContextWindow(agentId: string): number | null {
     const row = this.db
       .prepare(
-        'SELECT context_window FROM sessions WHERE context_window IS NOT NULL ORDER BY started_at DESC LIMIT 1',
+        `SELECT context_window FROM sessions WHERE context_window IS NOT NULL AND agent_id = ?
+         ORDER BY started_at DESC LIMIT 1`,
       )
-      .get();
+      .get(agentId);
     return row ? Number(row.context_window) : null;
   }
 
@@ -251,6 +287,7 @@ function toTask(row: Row): Task {
     verifyCommand: (row.verify_command as string | null) ?? null,
     contextPolicy: JSON.parse(String(row.context_policy)) as ContextPolicy,
     permission: JSON.parse(String(row.permission)) as PermissionPolicy,
+    agents: JSON.parse(String(row.agents)) as TaskAgents,
     resumeAt: row.resume_at == null ? null : Number(row.resume_at),
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
@@ -261,6 +298,9 @@ function toSession(row: Row): Session {
   return {
     id: String(row.id),
     taskId: Number(row.task_id),
+    role: row.role as AgentRole,
+    agentId: String(row.agent_id),
+    agentSessionId: (row.agent_session_id as string | null) ?? null,
     startedAt: Number(row.started_at),
     endedAt: row.ended_at == null ? null : Number(row.ended_at),
     endReason: (row.end_reason as SessionEndReason | null) ?? null,

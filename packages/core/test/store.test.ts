@@ -12,6 +12,7 @@ const newTask = {
   baseRef: 'main',
   mode: 'single' as const,
   verifyCommand: null,
+  agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
   contextPolicy: { size: 'small' as const },
   permission: { allowedTools: [], skipPermissions: false },
 };
@@ -54,9 +55,9 @@ describe('Store', () => {
   it('remembers the latest reported context window', () => {
     const store = new Store(':memory:');
     const { id } = store.createTask(newTask);
-    store.startSession('s1', id);
+    store.startSession('s1', id, 'implementer', 'claude', 's1');
     store.updateSessionContext('s1', 100, 1_000_000);
-    expect(store.lastKnownContextWindow()).toBe(1_000_000);
+    expect(store.lastKnownContextWindow('claude')).toBe(1_000_000);
   });
 
   it('stores the mode and verify command of a loop task', () => {
@@ -74,6 +75,9 @@ describe('Store', () => {
        repo_path TEXT NOT NULL, base_ref TEXT NOT NULL, branch TEXT, worktree_path TEXT,
        status TEXT NOT NULL, context_policy TEXT NOT NULL, permission TEXT NOT NULL,
        resume_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+     CREATE TABLE sessions (id TEXT PRIMARY KEY, task_id INTEGER NOT NULL, started_at INTEGER NOT NULL,
+       ended_at INTEGER, end_reason TEXT, context_tokens INTEGER NOT NULL DEFAULT 0,
+       context_window INTEGER);
      INSERT INTO tasks VALUES (1, 't', 'p', '/r', 'main', NULL, NULL, 'done', '{}',
        '{"allowedTools":[],"skipPermissions":false}', NULL, 0, 0);
      PRAGMA user_version = 1;`);
@@ -88,5 +92,30 @@ describe('Store', () => {
     store.appendEvent(id, null, 'notice', { message: 'x' });
     store.appendEvent(id, null, 'features', { n: 2 });
     expect(store.eventsOfKind(id, 'features').map((e) => e.data)).toEqual([{ n: 1 }, { n: 2 }]);
+  });
+
+  it('upgrades sessions from before agent profiles to claude implementer sessions', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const old = new DatabaseSync(file);
+    old.exec(`CREATE TABLE tasks (
+       id INTEGER PRIMARY KEY, title TEXT NOT NULL, prompt TEXT NOT NULL,
+       repo_path TEXT NOT NULL, base_ref TEXT NOT NULL, branch TEXT, worktree_path TEXT,
+       status TEXT NOT NULL, context_policy TEXT NOT NULL, permission TEXT NOT NULL,
+       resume_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+       mode TEXT NOT NULL DEFAULT 'single', verify_command TEXT);
+     CREATE TABLE sessions (id TEXT PRIMARY KEY, task_id INTEGER NOT NULL, started_at INTEGER NOT NULL,
+       ended_at INTEGER, end_reason TEXT, context_tokens INTEGER NOT NULL DEFAULT 0,
+       context_window INTEGER);
+     INSERT INTO tasks VALUES (1, 't', 'p', '/r', 'main', NULL, NULL, 'done', '{}',
+       '{"allowedTools":[],"skipPermissions":false}', NULL, 0, 0, 'single', NULL);
+     INSERT INTO sessions VALUES ('s1', 1, 0, 1, 'completed', 10, NULL);
+     PRAGMA user_version = 2;`);
+    old.close();
+    const [session] = new Store(file).listSessions(1);
+    expect([session!.role, session!.agentId, session!.agentSessionId]).toEqual([
+      'implementer',
+      'claude',
+      's1',
+    ]);
   });
 });

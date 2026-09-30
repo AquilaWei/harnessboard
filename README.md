@@ -120,10 +120,26 @@ Settings are layered, and later layers win: built-in defaults < user config file
 environment < CLI flags.
 
 - **User config:** `config.json` in the platform config directory (`~/.config/harnessboard` on Linux).
-- **Environment:** `HARNESSBOARD_HOME` (data directory), `HARNESSBOARD_PORT`, `HARNESSBOARD_CLAUDE_PATH`,
-  `HARNESSBOARD_MODEL`, `HARNESSBOARD_MAX_CONCURRENT`, `HARNESSBOARD_LANG` (`en`, `zh-TW`).
+- **Environment:** `HARNESSBOARD_HOME` (data directory), `HARNESSBOARD_PORT`,
+  `HARNESSBOARD_MAX_CONCURRENT`, `HARNESSBOARD_LANG` (`en`, `zh-TW`), and
+  `HARNESSBOARD_CLAUDE_PATH` / `HARNESSBOARD_MODEL`, which apply to the `claude` agent profile.
 - **Per repository:** `.harnessboard.json` with `baseRef`, `allowedTools`, `contextPolicy` and
   `verifyCommand`.
+
+**Agent profiles:** each profile names an agent CLI and how to run it. `claude` always exists;
+add more in `config.json`, for example a second Claude with another model:
+
+```json
+{
+  "agents": {
+    "claude": { "provider": "claude-code", "command": "claude", "model": null },
+    "opus": { "provider": "claude-code", "command": "claude", "model": "opus" }
+  }
+}
+```
+
+Supported providers: `claude-code`. The design for adding other CLIs, such as Codex or
+Gemini, is in [docs/architecture.md](docs/architecture.md).
 
 **Permissions:** tasks run with `--permission-mode acceptEdits`, plus a small allow-list of git
 commands so the agent can commit. Add more rules with `--allow`. `--skip-permissions` removes

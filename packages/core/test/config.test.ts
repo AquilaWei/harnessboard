@@ -37,6 +37,34 @@ describe('loadConfig', () => {
     );
   });
 
+  it('applies HARNESSBOARD_CLAUDE_PATH to the claude profile', () => {
+    const env = { HARNESSBOARD_CLAUDE_PATH: '/opt/claude' };
+    expect(loadConfig({ env, configFile: missing }).agents.claude!.command).toBe('/opt/claude');
+  });
+
+  it('keeps the default claude profile when the file adds another', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const reviewer = { provider: 'claude-code', command: 'claude', model: 'opus' };
+    writeFileSync(file, JSON.stringify({ agents: { reviewer } }));
+    expect(Object.keys(loadConfig({ env: {}, configFile: file }).agents)).toEqual([
+      'claude',
+      'reviewer',
+    ]);
+  });
+
+  it('rejects an agent profile with an unknown provider', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const bad = { provider: 'nope', command: 'x', model: null };
+    writeFileSync(file, JSON.stringify({ agents: { bad } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(/agents.bad.provider/);
+  });
+
+  it('rejects a default reviewer that is not a profile', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ defaultReviewer: 'ghost' }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(/defaultReviewer "ghost"/);
+  });
+
   it('reports which config file has invalid JSON', () => {
     const file = path.join(tempDir('cfg'), 'config.json');
     writeFileSync(file, '{ nope');

@@ -6,6 +6,8 @@
 // the i-th user message on stdin emits turns[i]. A line {"__hang": true} waits until killed;
 // {"__exit": code} writes {"__stderr"}'s text (if any) to stderr and exits with that code.
 // {"__write": {"path", "content"}} writes a file relative to the working directory.
+// With `--prompt <text>` it acts like a CLI without stdin input: it answers that one prompt
+// with turns[0] and exits (`--resume <id>` is only logged).
 // FAKE_CLAUDE_LOG: file that receives one JSON line per run with the args and messages.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -24,6 +26,14 @@ const log = () => {
     );
   }
 };
+
+const promptAt = process.argv.indexOf('--prompt');
+if (promptAt !== -1) {
+  received.push(process.argv[promptAt + 1]);
+  await emit(scenario.turns[0] ?? []);
+  log();
+  process.exit(0);
+}
 
 let turn = 0;
 let queue = Promise.resolve();

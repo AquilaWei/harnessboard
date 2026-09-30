@@ -5,6 +5,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { AgentAdapter, AgentCapabilities, SessionSpec } from '../src/agent.js';
+import { ClaudeCodeAdapter } from '../src/claude-code.js';
 
 export const FAKE_CLAUDE = fileURLToPath(new URL('./fixtures/fake-claude.mjs', import.meta.url));
 
@@ -99,4 +101,34 @@ export function writeScenario(dir: string, sessions: unknown[][][]): string {
   const file = path.join(dir, 'scenario.json');
   writeFileSync(file, JSON.stringify({ sessions: sessions.map((turns) => ({ turns })) }));
   return file;
+}
+
+/**
+ * Stands in for CLIs like `codex exec` or `gemini -p`: the prompt is an argument, stdin is
+ * not read, and the CLI picks the session id. Output is parsed as Claude stream-json.
+ */
+export class PromptArgAdapter implements AgentAdapter {
+  readonly provider = 'claude-code';
+  readonly versionArgs = ['--version'];
+  readonly capabilities: AgentCapabilities = { midTurnInput: false, sessionIds: 'agent' };
+  private readonly parser = new ClaudeCodeAdapter(FAKE_CLAUDE);
+
+  constructor(readonly command: string) {}
+
+  buildArgs(spec: SessionSpec): string[] {
+    const resume = spec.resume && spec.sessionId ? ['--resume', spec.sessionId] : [];
+    return [...resume, '--prompt', spec.prompt];
+  }
+
+  encodeMessage(): string {
+    throw new Error('this CLI takes no stdin input');
+  }
+
+  parseLine(line: string) {
+    return this.parser.parseLine(line);
+  }
+
+  interactiveResumeArgs(id: string): string[] {
+    return ['--resume', id];
+  }
 }

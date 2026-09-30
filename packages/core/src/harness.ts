@@ -1,20 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { definedOnly, resolveThresholds } from '@harnessboard/shared';
+import { AGENT_PROVIDERS, definedOnly, resolveThresholds } from '@harnessboard/shared';
 import type {
   AgentEvent,
+  AgentInfo,
+  AgentProvider,
   CreateTaskInput,
   HarnessEvent,
   HarnessStatus,
   QuotaInfo,
   Task,
+  TaskAgents,
   TaskStatus,
   WorktreeDiff,
 } from '@harnessboard/shared';
 import type { AgentAdapter } from './agent.js';
-import { EDITABLE_SETTINGS, loadProjectConfig, saveUserConfig, validate } from './config.js';
+import {
+  DEFAULT_AGENT,
+  EDITABLE_SETTINGS,
+  loadProjectConfig,
+  saveUserConfig,
+  validate,
+} from './config.js';
 import type { EditableSettings, HarnessConfig } from './config.js';
+import { probe } from './process.js';
+import { createAdapter } from './providers.js';
+import type { AdapterFactory } from './providers.js';
 import { runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
 import { dueForRetry, quotaBlocks, startable } from './scheduler.js';
@@ -41,6 +53,14 @@ export const DEFAULT_ALLOWED_TOOLS = [
 ];
 
 const TICK_MS = 5_000;
+const DEFAULT_REVIEW_ROUNDS = 2;
+
+export interface HarnessOptions {
+  /** Where runtime setting changes are saved; omitted keeps them in memory (tests). */
+  settingsFile?: string | null;
+  /** Builds agent adapters from profiles; tests substitute fake CLIs. */
+  adapterFactory?: AdapterFactory;
+}
 const STARTABLE: TaskStatus[] = ['backlog', 'stopped', 'failed', 'review', 'waiting_quota'];
 
 /**
@@ -50,41 +70,71 @@ const STARTABLE: TaskStatus[] = ['backlog', 'stopped', 'failed', 'review', 'wait
 export class Harness {
   private readonly running = new Map<number, AbortController>();
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
-  private quota: QuotaInfo | null = null;
+  private readonly quotas = new Map<AgentProvider, QuotaInfo>();
+  private readonly adapters = new Map<string, AgentAdapter>();
   private timer: NodeJS.Timeout | null = null;
   private readonly workflow: Workflow;
+  private readonly settingsFile: string | null;
+  private readonly adapterFactory: AdapterFactory;
 
   constructor(
     readonly config: HarnessConfig,
     readonly store: Store,
-    private readonly adapter: AgentAdapter,
-    /** Where runtime setting changes are saved; `null` keeps them in memory (tests). */
-    private readonly settingsFile: string | null = null,
+    options: HarnessOptions = {},
   ) {
+    this.settingsFile = options.settingsFile ?? null;
+    this.adapterFactory = options.adapterFactory ?? createAdapter;
     this.workflow = new Workflow({
       store,
       config,
       setStatus: (id, status, extra) => this.setStatus(id, status, extra),
       notice: (taskId, message, sessionId) => this.notice(taskId, message, sessionId),
     });
-    // Restore the last known quota so a restart does not forget a nearly used-up window.
-    const last = store.lastEventOfKind('quota')?.data as { quota?: QuotaInfo } | undefined;
-    this.quota = last?.quota ?? null;
+    // Restore the last known quotas so a restart does not forget a nearly used-up window.
+    for (const provider of AGENT_PROVIDERS) {
+      const event = store.lastAgentEvent('quota', this.profilesOf(provider));
+      const quota = (event?.data as { quota?: QuotaInfo } | undefined)?.quota;
+      if (quota) this.quotas.set(provider, quota);
+    }
   }
 
   /** Opens the default database under the configured data directory. */
-  static open(
-    config: HarnessConfig,
-    adapter: AgentAdapter,
-    settingsFile: string | null = null,
-  ): Harness {
+  static open(config: HarnessConfig, options: HarnessOptions = {}): Harness {
     const store = new Store(path.join(config.dataDir, 'harness.db'));
-    return new Harness(config, store, adapter, settingsFile);
+    return new Harness(config, store, options);
+  }
+
+  /** The adapter for an agent profile. Throws when the profile is not configured. */
+  adapterFor(agentId: string): AgentAdapter {
+    let adapter = this.adapters.get(agentId);
+    if (!adapter) {
+      const profile = this.config.agents[agentId];
+      if (!profile) throw new Error(`agent profile "${agentId}" is not configured`);
+      adapter = this.adapterFactory(profile);
+      this.adapters.set(agentId, adapter);
+    }
+    return adapter;
+  }
+
+  /** Runs every profile's version command; a profile whose CLI fails is reported, not thrown. */
+  async probeAgents(): Promise<AgentInfo[]> {
+    return Promise.all(
+      Object.entries(this.config.agents).map(async ([id, profile]) => {
+        const adapter = this.adapterFor(id);
+        try {
+          const version = await probe(adapter.command, adapter.versionArgs);
+          return { id, profile, ok: true, version, error: null };
+        } catch (err) {
+          return { id, profile, ok: false, version: null, error: (err as Error).message };
+        }
+      }),
+    );
   }
 
   settings(): EditableSettings {
-    const { maxConcurrent, quotaPauseUtilization, defaultContextPolicy } = this.config;
-    return { maxConcurrent, quotaPauseUtilization, defaultContextPolicy };
+    const { maxConcurrent, quotaPauseUtilization, defaultContextPolicy, defaultReviewer } =
+      this.config;
+    return { maxConcurrent, quotaPauseUtilization, defaultContextPolicy, defaultReviewer };
   }
 
   /**
@@ -149,6 +199,16 @@ export class Harness {
       throw new Error('a loop task needs a verify command, e.g. "npm test"');
     }
     const allowedTools = input.allowedTools ?? project.allowedTools ?? DEFAULT_ALLOWED_TOOLS;
+    const agents: TaskAgents = {
+      implementer: input.implementer ?? DEFAULT_AGENT,
+      reviewer: input.reviewer === undefined ? this.config.defaultReviewer : input.reviewer,
+      maxReviewRounds: DEFAULT_REVIEW_ROUNDS,
+    };
+    for (const id of [agents.implementer, agents.reviewer]) {
+      if (id !== null && !this.config.agents[id]) {
+        throw new Error(`agent profile "${id}" is not configured`);
+      }
+    }
     const task = this.store.createTask({
       title: input.title ?? firstLine(input.prompt),
       prompt: input.prompt,
@@ -163,6 +223,7 @@ export class Harness {
           mode === 'loop' ? withTool(allowedTools, `Bash(${verifyCommand})`) : allowedTools,
         skipPermissions: input.skipPermissions ?? false,
       },
+      agents,
     });
     this.emit({ type: 'task', taskId: task.id, status: task.status });
     if (input.queue) return this.queueTask(task.id);
@@ -210,8 +271,8 @@ export class Harness {
   status(): HarnessStatus {
     return {
       running: [...this.running.keys()],
-      quota: this.quota,
-      quotaPaused: this.quotaBlocked(Date.now()),
+      quotas: Object.fromEntries(this.quotas),
+      quotaPaused: AGENT_PROVIDERS.filter((p) => this.quotaBlocked(p, Date.now())),
       maxConcurrent: this.config.maxConcurrent,
     };
   }
@@ -228,13 +289,28 @@ export class Harness {
     for (const task of dueForRetry(this.store.listTasks(), now)) {
       this.setStatus(task.id, 'queued', { resumeAt: null });
     }
-    if (this.quotaBlocked(now)) return;
-    const next = startable(this.store.listTasks(), this.running, this.config.maxConcurrent);
+    // A task waits only when the provider of its next session is short of quota.
+    const ready = this.store
+      .listTasks()
+      .filter((t) => t.status !== 'queued' || !this.nextSessionBlocked(t, now));
+    const next = startable(ready, this.running, this.config.maxConcurrent);
     for (const task of next) void this.runTask(task);
   }
 
-  private quotaBlocked(now: number): boolean {
-    return quotaBlocks(this.quota, now, this.config.quotaPauseUtilization);
+  private nextSessionBlocked(task: Task, now: number): boolean {
+    const profile = this.config.agents[this.workflow.nextAgentId(task)];
+    return profile !== undefined && this.quotaBlocked(profile.provider, now);
+  }
+
+  private quotaBlocked(provider: AgentProvider, now: number): boolean {
+    const quota = this.quotas.get(provider) ?? null;
+    return quotaBlocks(quota, now, this.config.quotaPauseUtilization);
+  }
+
+  private profilesOf(provider: AgentProvider): string[] {
+    return Object.entries(this.config.agents)
+      .filter(([, profile]) => profile.provider === provider)
+      .map(([id]) => id);
   }
 
   private async runTask(task: Task): Promise<void> {
@@ -243,10 +319,15 @@ export class Harness {
     try {
       const ready = await this.ensureWorktree(task);
       const plan = this.workflow.plan(ready);
-      const sessionId = plan.resumeId ?? randomUUID();
-      if (!plan.resumeId) this.store.startSession(sessionId, task.id);
+      const adapter = this.adapterFor(plan.agentId);
+      const sessionId = plan.resume?.id ?? randomUUID();
+      if (!plan.resume) {
+        // CLIs that assign their own ids report them in `init`; see runOne.
+        const agentSessionId = adapter.capabilities.sessionIds === 'harness' ? sessionId : null;
+        this.store.startSession(sessionId, task.id, plan.role, plan.agentId, agentSessionId);
+      }
       this.setStatus(task.id, 'running');
-      const outcome = await this.runOne(ready, sessionId, plan, controller.signal);
+      const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal);
       this.store.endSession(sessionId, outcome.reason);
       await this.workflow.finish(ready, outcome, controller.signal);
     } catch (err) {
@@ -270,25 +351,35 @@ export class Harness {
     task: Task,
     sessionId: string,
     plan: SessionPlan,
+    adapter: AgentAdapter,
     signal: AbortSignal,
   ): Promise<SessionOutcome> {
-    const window = this.workflow.contextWindow();
+    const window = this.workflow.contextWindow(plan.agentId);
+    const provider = adapter.provider;
     let tokens = 0;
     return runSession({
-      adapter: this.adapter,
+      adapter,
       spec: {
         cwd: task.worktreePath!,
-        sessionId,
-        resume: plan.resumeId !== null,
-        model: this.config.model,
+        sessionId: plan.resume
+          ? plan.resume.agentSessionId
+          : adapter.capabilities.sessionIds === 'harness'
+            ? sessionId
+            : null,
+        resume: plan.resume !== null,
+        prompt: plan.prompt,
+        model: this.config.agents[plan.agentId]!.model,
+        access: plan.role === 'reviewer' ? 'readOnly' : 'edit',
         allowedTools: task.permission.allowedTools,
         skipPermissions: task.permission.skipPermissions,
       },
-      prompt: plan.prompt,
       thresholds: resolveThresholds(task.contextPolicy),
       contextWindow: window,
       signal,
       onEvent: (event) => {
+        if (event.kind === 'init' && event.sessionId) {
+          this.store.setAgentSessionId(sessionId, event.sessionId);
+        }
         if (event.kind === 'context') {
           tokens = event.tokens;
           this.store.updateSessionContext(sessionId, tokens, null);
@@ -297,16 +388,21 @@ export class Harness {
         if (event.kind === 'result' && event.contextWindow) {
           this.store.updateSessionContext(sessionId, tokens, event.contextWindow);
         }
-        this.recordAgentEvent(task.id, sessionId, event);
+        this.recordAgentEvent(task.id, sessionId, provider, event);
       },
       onNotice: (message) => this.notice(task.id, message, sessionId),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
   }
 
-  private recordAgentEvent(taskId: number, sessionId: string, event: AgentEvent): void {
+  private recordAgentEvent(
+    taskId: number,
+    sessionId: string,
+    provider: AgentProvider,
+    event: AgentEvent,
+  ): void {
     this.store.appendEvent(taskId, sessionId, event.kind, event);
-    if (event.kind === 'quota') this.quota = event.quota;
+    if (event.kind === 'quota') this.quotas.set(provider, event.quota);
     this.emit({ type: 'agent', taskId, sessionId, event });
   }
 

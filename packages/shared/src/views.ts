@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { ContextPolicy, Session, Task, TaskMode } from './task.js';
 import type { Feature, LoopProgress } from './loop.js';
+import type { AgentProvider } from './agents.js';
 import type { QuotaInfo } from './events.js';
 
 /** Context usage of a task's latest session, as shown in the CLI and web UI. */
@@ -29,9 +30,10 @@ export interface TaskDetail extends TaskView {
 
 export interface HarnessStatus {
   running: number[];
-  quota: QuotaInfo | null;
-  /** True while the scheduler holds back new sessions because of quota. */
-  quotaPaused: boolean;
+  /** Latest quota snapshot per provider that has reported one. */
+  quotas: Partial<Record<AgentProvider, QuotaInfo>>;
+  /** Providers whose quota currently holds back new sessions. */
+  quotaPaused: AgentProvider[];
   maxConcurrent: number;
 }
 
@@ -39,6 +41,8 @@ export interface Settings {
   maxConcurrent: number;
   quotaPauseUtilization: number;
   defaultContextPolicy: ContextPolicy;
+  /** Reviewer profile for new tasks; `null` for no review. */
+  defaultReviewer: string | null;
 }
 
 /** Body of `POST /api/tasks`. */
@@ -49,6 +53,10 @@ export interface CreateTaskInput {
   title?: string;
   baseRef?: string;
   mode?: TaskMode;
+  /** Agent profile ids; default to `claude` and the configured default reviewer. */
+  implementer?: string;
+  /** `null` turns review off even when a default reviewer is configured. */
+  reviewer?: string | null;
   /** Required for loop tasks unless the project's `.harnessboard.json` sets one. */
   verifyCommand?: string;
   size?: ContextPolicy['size'];

@@ -7,6 +7,8 @@ import { reportsDone, wrapUpPrompt } from './prompts.js';
 
 const STDERR_TAIL_LINES = 5;
 
+type ResultEvent = Extract<AgentEvent, { kind: 'result' }>;
+
 export interface SessionOutcome {
   reason: SessionEndReason;
   /** The agent's last reply; after a wrap-up this is the handoff note. */
@@ -20,9 +22,11 @@ export interface SessionOutcome {
 
 export interface RunSessionOptions {
   adapter: AgentAdapter;
+  /** `spec.prompt` is the first message. */
   spec: SessionSpec;
-  prompt: string;
   thresholds: Thresholds;
+  /** `false` never asks for a wrap-up (reviewers have nothing to commit); hard still applies. */
+  wrapUp?: boolean;
   /** Best known window for the model; replaced once the agent reports the real one. */
   contextWindow: number;
   /** Aborting stops the session and kills the agent's process tree. */
@@ -35,74 +39,54 @@ export interface RunSessionOptions {
 /**
  * Runs one agent session for a single prompt and reports why it ended.
  *
- * Context budget: crossing the soft threshold injects a wrap-up request mid-turn (the agent
- * picks it up at its next tool boundary); crossing the hard threshold kills the session.
+ * Context budget: crossing the soft threshold asks the agent to wrap up. A CLI that reads
+ * stdin mid-turn gets the request right away (at its next tool boundary); for any other CLI
+ * the request is sent as a resumed turn once the current one finishes. Crossing the hard
+ * threshold kills the session.
  * Never rejects: spawn failures come back as an `error` outcome.
  */
 export async function runSession(options: RunSessionOptions): Promise<SessionOutcome> {
   const { adapter, spec, thresholds, signal } = options;
+  const streaming = adapter.capabilities.midTurnInput;
   let window = options.contextWindow;
+  let agentSessionId = spec.sessionId;
+  let wrapPct = null as number | null; // set when the soft threshold is crossed
   let wrapSent = false;
   let hardHit = false;
   let stopped = false;
   let quota: QuotaInfo | null = null;
-  let result: Extract<AgentEvent, { kind: 'result' }> | null = null;
+  let result: ResultEvent | null = null;
   // Kept to explain an exit without a result; the CLI reports such failures on stderr.
   const stderrTail: string[] = [];
-
-  const child = spawnLines(
-    adapter.command,
-    adapter.buildArgs(spec),
-    spec.cwd,
-    (line) => {
-      for (const event of adapter.parseLine(line)) handle(event);
-    },
-    (line) => {
-      stderrTail.push(line);
-      if (stderrTail.length > STDERR_TAIL_LINES) stderrTail.shift();
-      options.onStderr(line);
-    },
-  );
-
-  function handle(event: AgentEvent): void {
-    options.onEvent(event);
-    if (event.kind === 'quota') quota = event.quota;
-    if (event.kind === 'context') checkBudget(event.tokens);
-    if (event.kind === 'result') {
-      result = event;
-      if (event.contextWindow) window = event.contextWindow;
-      child.closeInput();
-    }
-  }
-
-  function checkBudget(tokens: number): void {
-    const pct = contextPct(tokens, window);
-    if (!wrapSent && pct >= thresholds.softPct) {
-      wrapSent = true;
-      options.onNotice(`context ${pct}% ≥ soft ${thresholds.softPct}%: asking agent to wrap up`);
-      child.write(adapter.encodeMessage(wrapUpPrompt(pct)));
-    }
-    if (!hardHit && pct >= thresholds.hardPct) {
-      hardHit = true;
-      options.onNotice(`context ${pct}% ≥ hard ${thresholds.hardPct}%: ending session`);
-      child.kill();
-    }
-  }
+  let kill = () => {};
 
   const onAbort = () => {
     stopped = true;
-    child.kill();
+    kill();
   };
-  if (signal.aborted) onAbort();
+  if (signal.aborted) stopped = true;
   else signal.addEventListener('abort', onAbort, { once: true });
 
-  child.write(adapter.encodeMessage(options.prompt));
-  let exitCode: number | null;
+  let turn: SessionSpec = spec;
+  let exitCode: number | null = null;
   try {
-    exitCode = await child.exited;
+    while (!stopped) {
+      result = null;
+      exitCode = await runTurn(turn);
+      // Deferred wrap-up for CLIs without mid-turn input: resume with the request.
+      const pct = wrapPct;
+      const deferred = !streaming && pct !== null && !wrapSent;
+      if (!deferred || stopped || hardHit || !result || (result as ResultEvent).isError) break;
+      if (!agentSessionId) break; // nothing to resume; the session ends as completed
+      wrapSent = true;
+      turn = { ...spec, sessionId: agentSessionId, resume: true, prompt: wrapUpPrompt(pct) };
+    }
   } catch (err) {
     const e = err as NodeJS.ErrnoException;
-    const hint = e.code === 'ENOENT' ? ' (not found; set HARNESSBOARD_CLAUDE_PATH)' : '';
+    const hint =
+      e.code === 'ENOENT'
+        ? " (not found; check the agent profile's command, or set HARNESSBOARD_CLAUDE_PATH for claude)"
+        : '';
     return outcome('error', `failed to start ${adapter.command}${hint}: ${e.message}`);
   } finally {
     signal.removeEventListener('abort', onAbort);
@@ -110,7 +94,7 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
 
   if (stopped) return outcome('stopped');
   if (hardHit) return outcome('context_hard_limit');
-  const final = result as Extract<AgentEvent, { kind: 'result' }> | null;
+  const final = result as ResultEvent | null;
   if (!final) {
     const stderr = stderrTail.length > 0 ? `: ${stderrTail.join(' / ')}` : '';
     return outcome('error', `agent exited with code ${exitCode} before a result${stderr}`);
@@ -122,8 +106,62 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   // A wrap-up reply may report the task finished; then there is nothing to hand off.
   return outcome(wrapSent && !reportsDone(final.text) ? 'handoff' : 'completed');
 
+  /** Runs one CLI process until it exits; rejects only when it cannot be started. */
+  function runTurn(turnSpec: SessionSpec): Promise<number | null> {
+    const child = spawnLines(
+      adapter.command,
+      adapter.buildArgs(turnSpec),
+      turnSpec.cwd,
+      (line) => {
+        for (const event of adapter.parseLine(line)) handle(event);
+      },
+      (line) => {
+        stderrTail.push(line);
+        if (stderrTail.length > STDERR_TAIL_LINES) stderrTail.shift();
+        options.onStderr(line);
+      },
+    );
+    kill = child.kill;
+    if (streaming) child.write(adapter.encodeMessage(turnSpec.prompt));
+    else child.closeInput(); // the prompt went in as an argument
+
+    function handle(event: AgentEvent): void {
+      options.onEvent(event);
+      if (event.kind === 'init' && event.sessionId) agentSessionId = event.sessionId;
+      if (event.kind === 'quota') quota = event.quota;
+      if (event.kind === 'context') checkBudget(event.tokens);
+      if (event.kind === 'result') {
+        result = event;
+        if (event.contextWindow) window = event.contextWindow;
+        child.closeInput();
+      }
+    }
+
+    function checkBudget(tokens: number): void {
+      const pct = contextPct(tokens, window);
+      if (options.wrapUp !== false && wrapPct === null && pct >= thresholds.softPct) {
+        wrapPct = pct;
+        const when = streaming
+          ? 'asking agent to wrap up'
+          : 'will ask for a wrap-up after this turn';
+        options.onNotice(`context ${pct}% ≥ soft ${thresholds.softPct}%: ${when}`);
+        if (streaming) {
+          wrapSent = true;
+          child.write(adapter.encodeMessage(wrapUpPrompt(pct)));
+        }
+      }
+      if (!hardHit && pct >= thresholds.hardPct) {
+        hardHit = true;
+        options.onNotice(`context ${pct}% ≥ hard ${thresholds.hardPct}%: ending session`);
+        child.kill();
+      }
+    }
+
+    return child.exited;
+  }
+
   function outcome(reason: SessionEndReason, detail: string | null = null): SessionOutcome {
-    const final = result as Extract<AgentEvent, { kind: 'result' }> | null;
+    const final = result as ResultEvent | null;
     return {
       reason,
       finalText: final?.text ?? '',

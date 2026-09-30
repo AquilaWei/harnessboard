@@ -3,7 +3,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ClaudeCodeAdapter } from '../src/claude-code.js';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
@@ -38,10 +37,10 @@ beforeEach(() => {
   const config = {
     ...defaultConfig({}),
     dataDir: path.join(dir, 'data'),
-    claudePath: FAKE_CLAUDE,
+    agents: { claude: { provider: 'claude-code' as const, command: FAKE_CLAUDE, model: null } },
     fallbackContextWindow: 100_000,
   };
-  harness = Harness.open(config, new ClaudeCodeAdapter(FAKE_CLAUDE));
+  harness = Harness.open(config);
 });
 
 afterEach(async () => {
@@ -100,7 +99,7 @@ describe('a task whose session completes', () => {
   it('records the context window the agent reported', async () => {
     await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
     await harness.waitForIdle();
-    expect(harness.store.lastKnownContextWindow()).toBe(100_000);
+    expect(harness.store.lastKnownContextWindow('claude')).toBe(100_000);
   });
 });
 
@@ -225,12 +224,8 @@ describe('restarting the harness', () => {
     scenario([[init(), rateLimit('allowed', 0.4, FUTURE_SEC), result('done')]]);
     await harness.createTask({ prompt: 'First', repo, queue: true });
     await harness.waitForIdle();
-    const restarted = new Harness(
-      harness.config,
-      harness.store,
-      new ClaudeCodeAdapter(FAKE_CLAUDE),
-    );
-    expect(restarted.status().quota?.fiveHourUtilization).toBe(0.4);
+    const restarted = new Harness(harness.config, harness.store);
+    expect(restarted.status().quotas['claude-code']?.fiveHourUtilization).toBe(0.4);
   });
 });
 
@@ -304,11 +299,17 @@ describe('an agent that exits before producing a result', () => {
 
 describe('an agent CLI that cannot be found', () => {
   it('fails the task with a hint about HARNESSBOARD_CLAUDE_PATH', async () => {
-    const missing = new Harness(
-      harness.config,
-      harness.store,
-      new ClaudeCodeAdapter(path.join(dir, 'no-such-claude')),
-    );
+    const config = {
+      ...harness.config,
+      agents: {
+        claude: {
+          provider: 'claude-code' as const,
+          command: path.join(dir, 'no-such-claude'),
+          model: null,
+        },
+      },
+    };
+    const missing = new Harness(config, harness.store);
     const task = await missing.createTask({ prompt: 'x', repo, queue: true });
     await missing.waitForIdle();
     const notices = missing.store.listEvents(task.id).map((e) => JSON.stringify(e.data));

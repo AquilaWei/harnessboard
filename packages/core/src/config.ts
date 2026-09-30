@@ -2,16 +2,22 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import envPaths from 'env-paths';
-import { APP_NAME, ENV_PREFIX, PROJECT_CONFIG_FILE, resolveThresholds } from '@harnessboard/shared';
-import type { ContextPolicy } from '@harnessboard/shared';
+import {
+  AGENT_PROVIDERS,
+  APP_NAME,
+  ENV_PREFIX,
+  PROJECT_CONFIG_FILE,
+  resolveThresholds,
+} from '@harnessboard/shared';
+import type { AgentProfile, ContextPolicy } from '@harnessboard/shared';
 
 export interface HarnessConfig {
   /** Holds the database and task worktrees. */
   dataDir: string;
-  /** Agent CLI command or absolute path; resolved through PATH. */
-  claudePath: string;
-  /** Model passed to `--model`; `null` keeps the CLI default. */
-  model: string | null;
+  /** Agent profiles by id. `claude` always exists and implements tasks by default. */
+  agents: Record<string, AgentProfile>;
+  /** Profile id that reviews new tasks' work; `null` for no review. */
+  defaultReviewer: string | null;
   port: number;
   maxConcurrent: number;
   /** 0–1; no new session starts while five-hour usage is at or above this. */
@@ -33,13 +39,17 @@ export interface HarnessConfig {
 /** Settings the web UI may change at runtime; they are saved to the user config file. */
 export type EditableSettings = Pick<
   HarnessConfig,
-  'maxConcurrent' | 'quotaPauseUtilization' | 'defaultContextPolicy'
+  'maxConcurrent' | 'quotaPauseUtilization' | 'defaultContextPolicy' | 'defaultReviewer'
 >;
 export const EDITABLE_SETTINGS = [
   'maxConcurrent',
   'quotaPauseUtilization',
   'defaultContextPolicy',
+  'defaultReviewer',
 ] as const;
+
+/** Profile every config has; tasks use it unless they name another implementer. */
+export const DEFAULT_AGENT = 'claude';
 
 /** Defaults a repository can set in its `.harnessboard.json`. */
 export interface ProjectConfig {
@@ -56,8 +66,8 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
   const paths = envPaths(APP_NAME, { suffix: '' });
   return {
     dataDir: env[`${ENV_PREFIX}HOME`] ?? paths.data,
-    claudePath: 'claude',
-    model: null,
+    agents: { [DEFAULT_AGENT]: { provider: 'claude-code', command: 'claude', model: null } },
+    defaultReviewer: null,
     port: 4317,
     maxConcurrent: 1,
     quotaPauseUtilization: 0.95,
@@ -86,11 +96,18 @@ export function loadConfig(
   const env = options.env ?? process.env;
   const fromFile = readJsonIfExists(options.configFile ?? userConfigFile()) as
     Partial<HarnessConfig> | undefined;
-  const merged: HarnessConfig = {
-    ...defaultConfig(env),
+  const defaults = defaultConfig(env);
+  // Profiles merge by id so a file that only adds a reviewer keeps the default `claude`.
+  const fromUser: HarnessConfig = {
+    ...defaults,
     ...fromFile,
-    ...fromEnv(env),
+    agents: { ...defaults.agents, ...fromFile?.agents },
+  };
+  applyEnv(fromUser, env);
+  const merged: HarnessConfig = {
+    ...fromUser,
     ...options.overrides,
+    agents: { ...fromUser.agents, ...options.overrides?.agents },
   };
   validate(merged);
   return merged;
@@ -111,18 +128,23 @@ export function saveUserConfig(patch: Partial<HarnessConfig>, file = userConfigF
   writeFileSync(file, JSON.stringify({ ...current, ...patch }, null, 2) + '\n');
 }
 
-function fromEnv(env: Env): Partial<HarnessConfig> {
-  const out: Partial<HarnessConfig> = {};
+/** Environment variables override the file; `CLAUDE_PATH` and `MODEL` apply to `claude`. */
+function applyEnv(config: HarnessConfig, env: Env): void {
   const get = (name: string) => env[`${ENV_PREFIX}${name}`];
-  const claudePath = get('CLAUDE_PATH');
-  if (claudePath) out.claudePath = claudePath;
+  const claude = config.agents[DEFAULT_AGENT];
+  const command = get('CLAUDE_PATH');
   const model = get('MODEL');
-  if (model) out.model = model;
+  if (claude && (command || model)) {
+    config.agents[DEFAULT_AGENT] = {
+      ...claude,
+      ...(command ? { command } : {}),
+      ...(model ? { model } : {}),
+    };
+  }
   const port = get('PORT');
-  if (port) out.port = Number(port);
+  if (port) config.port = Number(port);
   const maxConcurrent = get('MAX_CONCURRENT');
-  if (maxConcurrent) out.maxConcurrent = Number(maxConcurrent);
-  return out;
+  if (maxConcurrent) config.maxConcurrent = Number(maxConcurrent);
 }
 
 /** Throws when a value is out of range; used for loaded config and runtime edits alike. */
@@ -146,6 +168,22 @@ export function validate(config: HarnessConfig): void {
     throw new Error('config quotaPauseUtilization must be in (0, 1]');
   }
   resolveThresholds(config.defaultContextPolicy);
+  if (!config.agents[DEFAULT_AGENT]) {
+    throw new Error(`config agents must include "${DEFAULT_AGENT}"`);
+  }
+  for (const [id, profile] of Object.entries(config.agents)) {
+    if (!(AGENT_PROVIDERS as readonly string[]).includes(profile.provider)) {
+      throw new Error(
+        `config agents.${id}.provider must be one of ${AGENT_PROVIDERS.join(', ')}, got ${String(profile.provider)}`,
+      );
+    }
+    if (typeof profile.command !== 'string' || profile.command === '') {
+      throw new Error(`config agents.${id}.command must be a non-empty string`);
+    }
+  }
+  if (config.defaultReviewer !== null && !config.agents[config.defaultReviewer]) {
+    throw new Error(`config defaultReviewer "${config.defaultReviewer}" is not an agent profile`);
+  }
 }
 
 function readJsonIfExists(file: string): unknown {

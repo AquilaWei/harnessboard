@@ -107,10 +107,26 @@ API 只接受 loopback 的 `Host` 標頭，而且每個寫入請求都必須帶�
 設定分層，後面的覆蓋前面的：內建預設值 < 使用者設定檔 < 環境變數 < CLI 參數。
 
 - **使用者設定檔**：平台設定目錄下的 `config.json`（Linux 為 `~/.config/harnessboard`）。
-- **環境變數**：`HARNESSBOARD_HOME`（資料目錄）、`HARNESSBOARD_PORT`、`HARNESSBOARD_CLAUDE_PATH`、
-  `HARNESSBOARD_MODEL`、`HARNESSBOARD_MAX_CONCURRENT`、`HARNESSBOARD_LANG`（`en`、`zh-TW`）。
+- **環境變數**：`HARNESSBOARD_HOME`（資料目錄）、`HARNESSBOARD_PORT`、`HARNESSBOARD_MAX_CONCURRENT`、
+  `HARNESSBOARD_LANG`（`en`、`zh-TW`），以及套用到 `claude` 這個 agent 設定檔的
+  `HARNESSBOARD_CLAUDE_PATH`／`HARNESSBOARD_MODEL`。
 - **每個 repository**：`.harnessboard.json`，可設定 `baseRef`、`allowedTools`、`contextPolicy` 和
   `verifyCommand`。
+
+**Agent 設定檔**：每個設定檔指定一個 agent CLI 以及執行方式。`claude` 一定存在；
+其他設定檔可以加在 `config.json`，例如再設定一個使用不同模型的 Claude：
+
+```json
+{
+  "agents": {
+    "claude": { "provider": "claude-code", "command": "claude", "model": null },
+    "opus": { "provider": "claude-code", "command": "claude", "model": "opus" }
+  }
+}
+```
+
+目前支援的 provider：`claude-code`。之後要加入 Codex、Gemini 等其他 CLI 的設計，寫在
+[docs/architecture.md](docs/architecture.md)。
 
 **權限**：任務以 `--permission-mode acceptEdits` 執行，另外允許幾個 git 指令，讓 agent 可以
 commit。要允許更多指令用 `--allow`。`--skip-permissions` 會關閉所有檢查，只能在沙盒環境使用。

@@ -14,7 +14,7 @@ interface Props {
 
 export function Header({ status, settings, onNewTask, onSettings }: Props) {
   const { t, i18n } = useTranslation();
-  const quota = status?.quota;
+  const quota = status?.quotas['claude-code'];
   const pauseAt = settings?.quotaPauseUtilization ?? 0.95;
   return (
     <header className="header">
@@ -28,7 +28,9 @@ export function Header({ status, settings, onNewTask, onSettings }: Props) {
             {t('running', { n: status.running.length, max: status.maxConcurrent })}
           </span>
         )}
-        {status?.quotaPaused && <span className="pill alert">⏸ {t('quotaPaused')}</span>}
+        {status && status.quotaPaused.length > 0 && (
+          <span className="pill alert">⏸ {t('quotaPaused')}</span>
+        )}
         {quota?.fiveHourUtilization != null ? (
           <QuotaMeter
             label={t('quota5h')}

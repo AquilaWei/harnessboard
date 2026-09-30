@@ -1,17 +1,32 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { AgentEvent, QuotaInfo } from '@harnessboard/shared';
-import type { AgentAdapter, SessionSpec } from './agent.js';
+import type { AgentAdapter, AgentCapabilities, SessionSpec } from './agent.js';
+
+/** What a reviewer may use: read files and inspect history, nothing that changes them. */
+export const READ_ONLY_TOOLS = [
+  'Read',
+  'Grep',
+  'Glob',
+  'Bash(git diff *)',
+  'Bash(git log *)',
+  'Bash(git show *)',
+  'Bash(git status)',
+];
 
 /**
  * Drives `claude -p` in stream-json mode. Field names follow docs/stream-json-notes.md;
  * re-check them there when Claude Code changes its output.
  */
 export class ClaudeCodeAdapter implements AgentAdapter {
+  readonly provider = 'claude-code';
   readonly versionArgs = ['--version'];
+  readonly capabilities: AgentCapabilities = { midTurnInput: true, sessionIds: 'harness' };
 
   constructor(readonly command: string) {}
 
+  /** Throws when `sessionId` is missing: this CLI always gets its id from the harness. */
   buildArgs(spec: SessionSpec): string[] {
+    if (!spec.sessionId) throw new Error('Claude Code sessions need a harness-chosen id');
     const args = [
       '-p',
       '--input-format',
@@ -23,13 +38,20 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       spec.sessionId,
     ];
     if (spec.model) args.push('--model', spec.model);
-    if (spec.skipPermissions) {
+    if (spec.access === 'readOnly') {
+      // Default permission mode: in print mode every tool not listed here is refused.
+      args.push('--allowedTools', ...READ_ONLY_TOOLS);
+    } else if (spec.skipPermissions) {
       args.push('--dangerously-skip-permissions');
     } else {
       args.push('--permission-mode', 'acceptEdits');
       if (spec.allowedTools.length > 0) args.push('--allowedTools', ...spec.allowedTools);
     }
     return args;
+  }
+
+  interactiveResumeArgs(agentSessionId: string): string[] {
+    return ['--resume', agentSessionId];
   }
 
   encodeMessage(text: string): string {

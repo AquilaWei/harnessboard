@@ -29,15 +29,16 @@ export function localOnly(port: number): MiddlewareHandler {
 
 export function createApi(harness: Harness): Hono {
   const app = new Hono();
-  const fallback = harness.config.fallbackContextWindow;
   const view = (id: number) => {
     const task = harness.store.getTask(id);
-    return task ? taskView(task, harness.store, fallback) : undefined;
+    return task ? taskView(task, harness.store, harness.config) : undefined;
   };
 
   app.onError((err, c) => c.json({ error: err.message }, 400));
 
   app.get('/status', (c) => c.json(harness.status()));
+
+  app.get('/agents', async (c) => c.json(await harness.probeAgents()));
 
   app.get('/settings', (c) => c.json(harness.settings()));
   app.put('/settings', async (c) =>
@@ -45,7 +46,7 @@ export function createApi(harness: Harness): Hono {
   );
 
   app.get('/tasks', (c) =>
-    c.json(harness.store.listTasks().map((t) => taskView(t, harness.store, fallback))),
+    c.json(harness.store.listTasks().map((t) => taskView(t, harness.store, harness.config))),
   );
 
   app.post('/tasks', async (c) => {

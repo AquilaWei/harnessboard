@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ClaudeCodeAdapter, Harness, defaultConfig } from '@harnessboard/core';
+import { Harness, defaultConfig } from '@harnessboard/core';
 import { CLIENT_HEADER, createApi, localOnly } from '../src/api.js';
 
 const PORT = 4999;
@@ -31,7 +31,7 @@ beforeEach(() => {
     'init',
   ]);
   const config = { ...defaultConfig({}), dataDir: path.join(dir, 'data'), port: PORT };
-  harness = Harness.open(config, new ClaudeCodeAdapter('claude-not-used'));
+  harness = Harness.open(config);
   app = new Hono();
   app.use('*', localOnly(PORT));
   app.route('/api', createApi(harness));

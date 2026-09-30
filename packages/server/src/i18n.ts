@@ -18,9 +18,10 @@ const en = {
   loopLine: 'features {verified}/{total} verified',
   verifyPassed: '(last check `{command}` passed)',
   verifyFailed: '(last check `{command}` failed)',
-  agentFound: 'Using {command} {version}',
+  agentFound: 'Agent {id}: {command} {version}',
   agentMissing:
-    'Warning: cannot run {command} ({error}). Tasks will fail until it works; set HARNESSBOARD_CLAUDE_PATH if it is installed elsewhere.',
+    'Warning: agent {id} cannot run {command} ({error}). Its tasks will fail until it works; fix agents.{id}.command in {file} (or HARNESSBOARD_CLAUDE_PATH for claude).',
+  unknownAgent: 'Agent profile "{agent}" is not in your config.',
 };
 
 type Messages = typeof en;
@@ -42,9 +43,10 @@ const zhTW: Messages = {
   loopLine: 'feature 已驗證 {verified}/{total}',
   verifyPassed: '（上次驗證 `{command}` 通過）',
   verifyFailed: '（上次驗證 `{command}` 失敗）',
-  agentFound: '使用 {command} {version}',
+  agentFound: 'Agent {id}：{command} {version}',
   agentMissing:
-    '警告：無法執行 {command}（{error}）。修好之前任務都會失敗；如果裝在別的位置，請設定 HARNESSBOARD_CLAUDE_PATH。',
+    '警告：agent {id} 無法執行 {command}（{error}）。修好之前它的任務都會失敗；請修改 {file} 裡的 agents.{id}.command（claude 也可以設定 HARNESSBOARD_CLAUDE_PATH）。',
+  unknownAgent: '設定檔裡沒有名為「{agent}」的 agent。',
 };
 
 function detectLocale(env: NodeJS.ProcessEnv): Messages {

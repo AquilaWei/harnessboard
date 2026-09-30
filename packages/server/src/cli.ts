@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import spawn from 'cross-spawn';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { loadConfig } from '@harnessboard/core';
+import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import { APP_NAME, definedOnly } from '@harnessboard/shared';
 import type { TaskSize } from '@harnessboard/shared';
@@ -33,10 +33,10 @@ program
   .action(async () => {
     const cfg = config();
     const server = await startServer(cfg);
-    if (server.agent.ok) {
-      console.log(t('agentFound', { command: cfg.claudePath, version: server.agent.version }));
-    } else {
-      console.warn(t('agentMissing', { command: cfg.claudePath, error: server.agent.error }));
+    for (const agent of server.agents) {
+      const vars = { id: agent.id, command: agent.profile.command, file: userConfigFile() };
+      if (agent.ok) console.log(t('agentFound', { ...vars, version: agent.version ?? '' }));
+      else console.warn(t('agentMissing', { ...vars, error: agent.error ?? '' }));
     }
     console.log(t('serverStarted', { url: server.url }));
     const shutdown = () => void server.close().then(() => process.exit(0));
@@ -210,9 +210,14 @@ program
   .action(async (id: number) => {
     const task = await client().getTask(id);
     if (task.status === 'running') throw new Error(t('openWhileRunning', { id }));
-    if (!task.latestSessionId || !task.worktreePath) throw new Error(t('noSession', { id }));
-    console.log(t('opening', { session: task.latestSessionId, dir: task.worktreePath }));
-    const child = spawn(config().claudePath, ['--resume', task.latestSessionId], {
+    // Reviewer sessions are read-only; taking over means continuing the implementer's work.
+    const session = task.sessions.findLast((s) => s.role === 'implementer' && s.agentSessionId);
+    if (!session?.agentSessionId || !task.worktreePath) throw new Error(t('noSession', { id }));
+    const profile = config().agents[session.agentId];
+    if (!profile) throw new Error(t('unknownAgent', { agent: session.agentId }));
+    const adapter = createAdapter(profile);
+    console.log(t('opening', { session: session.agentSessionId, dir: task.worktreePath }));
+    const child = spawn(adapter.command, adapter.interactiveResumeArgs(session.agentSessionId), {
       cwd: task.worktreePath,
       stdio: 'inherit',
     });

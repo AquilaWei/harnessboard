@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { AgentRole, TaskAgents } from './agents.js';
 
 export const TASK_STATUSES = [
   'backlog',
@@ -55,6 +56,7 @@ export interface Task {
   verifyCommand: string | null;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
+  agents: TaskAgents;
   /** Unix ms; set while `status` is `waiting_quota`. */
   resumeAt: number | null;
   createdAt: number;
@@ -67,6 +69,11 @@ export type SessionEndReason =
 export interface Session {
   id: string;
   taskId: number;
+  role: AgentRole;
+  /** Agent profile id the session ran with. */
+  agentId: string;
+  /** The agent CLI's own id for the session, used to resume it; `null` until it reports one. */
+  agentSessionId: string | null;
   startedAt: number;
   endedAt: number | null;
   endReason: SessionEndReason | null;

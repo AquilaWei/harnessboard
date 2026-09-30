@@ -3,7 +3,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ClaudeCodeAdapter } from '../src/claude-code.js';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
@@ -37,11 +36,11 @@ beforeEach(() => {
   const config = {
     ...defaultConfig({}),
     dataDir: path.join(dir, 'data'),
-    claudePath: FAKE_CLAUDE,
+    agents: { claude: { provider: 'claude-code' as const, command: FAKE_CLAUDE, model: null } },
     fallbackContextWindow: 100_000,
     loopStallSessions: 2,
   };
-  harness = Harness.open(config, new ClaudeCodeAdapter(FAKE_CLAUDE));
+  harness = Harness.open(config);
 });
 
 afterEach(async () => {
