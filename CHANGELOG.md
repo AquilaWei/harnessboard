@@ -5,6 +5,35 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Reviewer role:** `--reviewer <agent>` (or a default reviewer in settings) has a second
+  agent check every finished step. A step is a single task or a verified Loop feature.
+  - The reviewer runs read-only. Its requested changes go back to the implementer.
+  - After 2 rounds, a reply without a verdict, or a reviewer that edits files, the task goes
+    to you.
+- **Agent profiles:** name several ways to run agents in `config.json`, for example a second
+  Claude with another model. `hb agents` lists them and checks that each CLI runs.
+- **Redesigned web board:**
+  - Four stages instead of seven columns.
+  - A one-sentence status and a next-step button on every card.
+  - A task panel that leads with what to do, and a timeline of sessions, verification and
+    reviews.
+  - Light and dark themes.
+  - Works at phone width.
+
+### Changed
+
+- `HARNESSBOARD_CLAUDE_PATH` and `HARNESSBOARD_MODEL` now configure the `claude` agent
+  profile. The old `claudePath` and `model` config keys are replaced by `agents`.
+- Quota is tracked per provider, so a limit on one agent CLI only pauses tasks that use it.
+
+### For contributors
+
+- Agent CLIs plug in through `AgentAdapter` capabilities: prompt on stdin or as an argument,
+  and harness- or CLI-assigned session ids. This is groundwork for Codex and Gemini; see
+  `docs/architecture.md`.
+
 ## 0.0.1 - 2026-09-29
 
 First test version.

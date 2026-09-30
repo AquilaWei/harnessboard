@@ -109,21 +109,39 @@ other.
 
 `hb serve` also serves the board at **http://127.0.0.1:4317**:
 
-- **Columns per status:** Backlog, Queued, Running, Waiting for quota, Review, Done, and
-  Stopped / failed. Drag a card to queue it, stop it or mark it done. Moves that are not
-  real transitions are refused.
-- **Context meter on every card:** blue while under budget, amber past the soft threshold,
-  red past the hard one. Ticks mark both thresholds.
-- **Loop tasks** show verified feature progress on the card, plus a Features tab with each
-  feature and the output of the last failed check.
-- **Quota meters** for the 5-hour and 7-day windows, with the pause threshold marked.
-- **Task panel:** live log, diff against the base branch, session history, and buttons
-  for resume, stop and done. It also copies the `hb open <id>` command, so you can take
-  over in Claude Code.
-- **Settings:** concurrency, quota pause level and default task size. Saved to your user
-  config file.
-- **Languages:** English and 繁體中文; it follows the browser language and can be switched
-  in the header.
+- **Four stages that fit one screen:**
+  - **Draft**
+  - **In progress:** queued, running, or waiting for quota
+  - **Needs you:** ready for review, failed, or stopped
+  - **Done**
+
+  Each card shows its exact state as a labelled chip.
+
+- **Every card says what is happening** in one sentence, for example "claude is building
+  feature 2 of 3", "reviewer is reviewing the latest step", or "Paused for quota; continues
+  at 20:40".
+- **Every card has one button** for the next step: Start, Stop, Review or Retry. Dragging
+  between stages still works and follows the same rules.
+- **Task panel:**
+  - At the top, the current situation and what you can do about it (for example Mark done
+    or Run again).
+  - **Timeline:** each session with its role and agent, handoffs, verification results,
+    and reviews with their findings.
+  - **Changes:** the diff against the base branch.
+  - **Log:** the live log.
+  - **Details:** paths, agents and budget.
+  - It can also copy `hb open <id>`, so you can take over in Claude Code.
+- **Context meter** while a session runs. It is blue under budget, amber past the wrap-up
+  point and red past the limit, with ticks at both. Loop tasks also show verified feature
+  progress.
+- **Quota:** the header shows the 5-hour usage; click it for both windows and the pause
+  level.
+- **Settings:**
+  - Concurrency, quota pause level, default task size and default reviewer. These are saved
+    to your user config file.
+  - The agent profiles and whether each CLI runs.
+  - Language (English, 繁體中文) and theme (system, light, dark), which apply to this browser
+    only.
 
 The API accepts only loopback `Host` headers, and it requires a custom header on every
 write. A web page you visit cannot drive your agents through the browser.
