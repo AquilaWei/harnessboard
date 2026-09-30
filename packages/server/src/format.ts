@@ -1,11 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent, TaskView } from '@harnessboard/shared';
+import type { AgentEvent, Feature, TaskView } from '@harnessboard/shared';
 
 const STATUS_WIDTH = 13;
 
 export function formatTaskRow(task: TaskView): string {
   const ctx = task.context ? `${task.context.pct.toFixed(1)}%`.padStart(6) : '     -';
-  return `${String(task.id).padStart(4)}  ${task.status.padEnd(STATUS_WIDTH)} ${ctx}  ${task.title}`;
+  const loop = task.loop ? `  [${task.loop.verified}/${task.loop.total}]` : '';
+  return `${String(task.id).padStart(4)}  ${task.status.padEnd(STATUS_WIDTH)} ${ctx}  ${task.title}${loop}`;
+}
+
+/** One line per feature: a checkmark only when the agent marked it passing. */
+export function formatFeature(feature: Feature): string {
+  return `  ${feature.passes ? '✓' : '·'} ${feature.id}  ${feature.description}`;
 }
 
 export function formatTokens(tokens: number): string {

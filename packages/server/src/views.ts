@@ -32,8 +32,13 @@ function contextView(task: Task, session: Session, store: Store, fallback: numbe
   };
 }
 
+/** Latest feature list the harness recorded for a loop task. */
+export function latestSnapshot(store: Store, taskId: number): FeatureSnapshot | null {
+  return (store.lastEvent(taskId, 'features')?.data as FeatureSnapshot | undefined) ?? null;
+}
+
 function loopProgress(task: Task, store: Store): LoopProgress | null {
-  const snapshot = store.lastEvent(task.id, 'features')?.data as FeatureSnapshot | undefined;
+  const snapshot = latestSnapshot(store, task.id);
   if (!snapshot) return null;
   return {
     total: snapshot.features.length,

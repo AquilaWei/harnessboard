@@ -15,6 +15,9 @@ const en = {
   emptyDiff: 'No changes yet.',
   untracked: 'Untracked files:',
   contextLine: 'context {pct}% of {window} (soft {soft}%, hard {hard}%)',
+  loopLine: 'features {verified}/{total} verified',
+  verifyPassed: '(last check `{command}` passed)',
+  verifyFailed: '(last check `{command}` failed)',
   agentFound: 'Using {command} {version}',
   agentMissing:
     'Warning: cannot run {command} ({error}). Tasks will fail until it works; set HARNESSBOARD_CLAUDE_PATH if it is installed elsewhere.',
@@ -36,6 +39,9 @@ const zhTW: Messages = {
   emptyDiff: '目前沒有變更。',
   untracked: '未追蹤的檔案：',
   contextLine: '上下文 {pct}%／{window}（收尾 {soft}%，強制 {hard}%）',
+  loopLine: 'feature 已驗證 {verified}/{total}',
+  verifyPassed: '（上次驗證 `{command}` 通過）',
+  verifyFailed: '（上次驗證 `{command}` 失敗）',
   agentFound: '使用 {command} {version}',
   agentMissing:
     '警告：無法執行 {command}（{error}）。修好之前任務都會失敗；如果裝在別的位置，請設定 HARNESSBOARD_CLAUDE_PATH。',

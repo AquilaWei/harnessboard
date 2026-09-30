@@ -6,7 +6,7 @@ import type { HarnessConfig } from '@harnessboard/core';
 import { APP_NAME, definedOnly } from '@harnessboard/shared';
 import type { TaskSize } from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
-import { createEventFormatter, formatTaskRow, formatTokens } from './format.js';
+import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
 import { t } from './i18n.js';
 import { startServer } from './serve.js';
 import pkg from '../package.json' with { type: 'json' };
@@ -44,42 +44,61 @@ program
     process.once('SIGTERM', shutdown);
   });
 
-program
-  .command('add')
-  .description('create a task and queue it')
-  .argument('<prompt...>', 'what the agent should do')
-  .option('-C, --repo <dir>', 'repository to work in', process.cwd())
-  .option('--title <title>', 'short title (defaults to the first line of the prompt)')
-  .option('--base <ref>', 'git ref to branch from (defaults to the current branch)')
-  .addOption(
-    new Option('--size <size>', 'task size; sets the soft context threshold').choices([
-      'small',
-      'medium',
-      'large',
-    ]),
-  )
-  .option('--soft <pct>', 'soft context threshold in percent', parseInteger)
-  .option('--hard <pct>', 'hard context threshold in percent', parseInteger)
-  .option('--allow <rules...>', 'tool rules the agent may use without asking')
-  .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
-  .option('--no-queue', 'leave the task in the backlog')
-  .action(async (words: string[], o: AddOptions) => {
-    const task = await client().createTask(
-      definedOnly({
-        prompt: words.join(' '),
-        repo: o.repo,
-        title: o.title,
-        baseRef: o.base,
-        size: o.size,
-        softPct: o.soft,
-        hardPct: o.hard,
-        allowedTools: o.allow,
-        skipPermissions: o.skipPermissions,
-        queue: o.queue,
-      }),
-    );
-    console.log(t('taskCreated', { id: task.id, status: task.status }));
-  });
+/** Options shared by `add` and `loop`. */
+function withTaskOptions(command: Command): Command {
+  return command
+    .option('-C, --repo <dir>', 'repository to work in', process.cwd())
+    .option('--title <title>', 'short title (defaults to the first line of the prompt)')
+    .option('--base <ref>', 'git ref to branch from (defaults to the current branch)')
+    .addOption(
+      new Option('--size <size>', 'task size; sets the soft context threshold').choices([
+        'small',
+        'medium',
+        'large',
+      ]),
+    )
+    .option('--soft <pct>', 'soft context threshold in percent', parseInteger)
+    .option('--hard <pct>', 'hard context threshold in percent', parseInteger)
+    .option('--allow <rules...>', 'tool rules the agent may use without asking')
+    .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
+    .option('--no-queue', 'leave the task in the backlog');
+}
+
+async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): Promise<void> {
+  const task = await client().createTask(
+    definedOnly({
+      prompt,
+      ...loop,
+      repo: o.repo,
+      title: o.title,
+      baseRef: o.base,
+      size: o.size,
+      softPct: o.soft,
+      hardPct: o.hard,
+      allowedTools: o.allow,
+      skipPermissions: o.skipPermissions,
+      queue: o.queue,
+    }),
+  );
+  console.log(t('taskCreated', { id: task.id, status: task.status }));
+}
+
+withTaskOptions(
+  program
+    .command('add')
+    .description('create a task and queue it')
+    .argument('<prompt...>', 'what the agent should do'),
+).action((words: string[], o: AddOptions) => createTask(words.join(' '), o));
+
+withTaskOptions(
+  program
+    .command('loop')
+    .description('plan a goal as a feature list, then build and verify one feature per session')
+    .argument('<goal...>', 'what the finished project should do')
+    .option('--verify <command>', 'command the harness runs to check each feature'),
+).action((words: string[], o: AddOptions & { verify?: string }) =>
+  createTask(words.join(' '), o, definedOnly({ mode: 'loop' as const, verifyCommand: o.verify })),
+);
 
 program
   .command('ls')
@@ -109,6 +128,14 @@ program
       });
       console.log(`  ${line}`);
     }
+    if (task.loop) {
+      const v = task.loop.lastVerify;
+      const verify = v ? t(v.ok ? 'verifyPassed' : 'verifyFailed', { command: v.command }) : '';
+      console.log(
+        `  ${t('loopLine', { verified: task.loop.verified, total: task.loop.total })} ${verify}`,
+      );
+    }
+    for (const feature of task.features ?? []) console.log(formatFeature(feature));
     for (const s of task.sessions) {
       console.log(
         `  session ${s.id}  ${s.endReason ?? 'active'}  ${formatTokens(s.contextTokens)}`,
@@ -191,6 +218,11 @@ program
     });
     await new Promise<void>((resolve) => child.once('close', () => resolve()));
   });
+
+interface LoopInput {
+  mode?: 'loop';
+  verifyCommand?: string;
+}
 
 interface AddOptions {
   repo: string;

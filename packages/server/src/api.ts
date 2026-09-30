@@ -4,7 +4,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { EditableSettings, Harness } from '@harnessboard/core';
 import type { CreateTaskInput, HarnessEvent } from '@harnessboard/shared';
-import { taskView } from './views.js';
+import { latestSnapshot, taskView } from './views.js';
 
 /** Header every state-changing request must carry; see {@link localOnly}. */
 export const CLIENT_HEADER = 'x-harnessboard-client';
@@ -57,7 +57,11 @@ export function createApi(harness: Harness): Hono {
     const id = taskId(c);
     const task = view(id);
     if (!task) return c.json({ error: `task ${id} not found` }, 404);
-    return c.json({ ...task, sessions: harness.store.listSessions(id) });
+    return c.json({
+      ...task,
+      sessions: harness.store.listSessions(id),
+      features: latestSnapshot(harness.store, id)?.features ?? null,
+    });
   });
 
   app.post('/tasks/:id/queue', (c) => c.json(harness.queueTask(taskId(c))));

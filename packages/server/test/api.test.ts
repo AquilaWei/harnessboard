@@ -86,4 +86,47 @@ describe('tasks API', () => {
     const res = await app.request('/api/tasks/99', { headers: local });
     expect(res.status).toBe(404);
   });
+
+  it('creates a loop task with its verify command', async () => {
+    const res = await post(
+      '/api/tasks',
+      { prompt: 'Build it', repo, mode: 'loop', verifyCommand: 'npm test' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const task = (await res.json()) as { mode: string; verifyCommand: string };
+    expect([task.mode, task.verifyCommand]).toEqual(['loop', 'npm test']);
+  });
+});
+
+describe('loop progress', () => {
+  const features = [
+    { id: 'F1', description: 'a', passes: true },
+    { id: 'F2', description: 'b', passes: true },
+    { id: 'F3', description: 'c', passes: false },
+  ];
+  const verify = { command: 'npm test', ok: false, exitCode: 1, timedOut: false, output: 'x' };
+
+  async function loopTaskWithSnapshot(): Promise<number> {
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      mode: 'loop',
+      verifyCommand: 'npm test',
+    });
+    harness.store.appendEvent(task.id, null, 'features', { features, verify, verifiedPassing: 1 });
+    return task.id;
+  }
+
+  it('reports claimed and verified features in the task list', async () => {
+    await loopTaskWithSnapshot();
+    const res = await app.request('/api/tasks', { headers: local });
+    const [task] = (await res.json()) as { loop: unknown }[];
+    expect(task!.loop).toEqual({ total: 3, claimed: 2, verified: 1, lastVerify: verify });
+  });
+
+  it('includes the latest feature list in the task detail', async () => {
+    const id = await loopTaskWithSnapshot();
+    const res = await app.request(`/api/tasks/${id}`, { headers: local });
+    expect(((await res.json()) as { features: unknown }).features).toEqual(features);
+  });
 });

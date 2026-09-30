@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { ContextPolicy, Session, Task, TaskMode } from './task.js';
-import type { LoopProgress } from './loop.js';
+import type { Feature, LoopProgress } from './loop.js';
 import type { QuotaInfo } from './events.js';
 
 /** Context usage of a task's latest session, as shown in the CLI and web UI. */
@@ -23,6 +23,8 @@ export interface TaskView extends Task {
 
 export interface TaskDetail extends TaskView {
   sessions: Session[];
+  /** Latest feature list of a loop task, as the harness last read it. */
+  features: Feature[] | null;
 }
 
 export interface HarnessStatus {

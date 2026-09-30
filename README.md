@@ -4,8 +4,8 @@
 `claude` in its own git worktree. Harnessboard keeps every session's context small by handing
 work off to a fresh session, and it pauses when your subscription quota runs low.
 
-> **Status: early development (0.0.x).** The runner, the `hb` CLI and the web board work;
-> the autonomous Loop mode is next.
+> **Status: early development (0.0.x).** The runner, the `hb` CLI, the web board and the
+> autonomous Loop mode work; Windows and macOS have not been tested on real machines yet.
 
 ## Why
 
@@ -46,10 +46,37 @@ hb done 1                            # mark it reviewed
 | Command                                                                               | What it does                                 |
 | ------------------------------------------------------------------------------------- | -------------------------------------------- |
 | `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                      |
+| `hb loop <goal> --verify <command>` [same options as `add`]                           | Start a Loop task (see below)                |
 | `hb ls` / `hb show <id>`                                                              | List tasks / show sessions and context usage |
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
+
+## Loop mode
+
+For goals too big for one session, `hb loop` works the way Anthropic describes for
+long-running agents:
+
+```bash
+hb loop "A CLI calculator with add, subtract, multiply and divide" --verify "npm test"
+```
+
+1. **Initializer session:** the agent splits the goal into small features, writes
+   `feature_list.json` and `progress.md`, and commits them. It implements nothing yet.
+2. **One feature per session:** every later session starts with a fresh context. It reads
+   the progress notes, builds the next open feature, runs the verify command, marks the
+   feature as passing and commits.
+3. **Harness checks the work itself:** after each session Harnessboard runs `--verify` in the
+   worktree. A feature counts only when that command succeeds. When it fails, the output is
+   passed to the next session.
+4. **Finish or stop for review:** the task moves to Review when every feature passes and
+   verification succeeds. It stops as failed if features are removed from the list, or if
+   there is no verified progress for `loopStallSessions` (default 3) sessions in a row.
+
+The verify command is required. It can also be set per repository as `verifyCommand` in
+`.harnessboard.json`. The command comes from you, not from the agent, and it runs through
+your shell (`sh` or `cmd.exe`) with a 10-minute timeout (`verifyTimeoutMinutes`).
+The agent is allowed to run exactly that command.
 
 ## Web board
 
@@ -91,7 +118,8 @@ environment < CLI flags.
 - **User config:** `config.json` in the platform config directory (`~/.config/harnessboard` on Linux).
 - **Environment:** `HARNESSBOARD_HOME` (data directory), `HARNESSBOARD_PORT`, `HARNESSBOARD_CLAUDE_PATH`,
   `HARNESSBOARD_MODEL`, `HARNESSBOARD_MAX_CONCURRENT`, `HARNESSBOARD_LANG` (`en`, `zh-TW`).
-- **Per repository:** `.harnessboard.json` with `baseRef`, `allowedTools` and `contextPolicy`.
+- **Per repository:** `.harnessboard.json` with `baseRef`, `allowedTools`, `contextPolicy` and
+  `verifyCommand`.
 
 **Permissions:** tasks run with `--permission-mode acceptEdits`, plus a small allow-list of git
 commands so the agent can commit. Add more rules with `--allow`. `--skip-permissions` removes
