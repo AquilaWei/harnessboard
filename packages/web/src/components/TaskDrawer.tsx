@@ -127,7 +127,8 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                 <span className="card-id">#{task.id}</span>
               </div>
               <Description task={task} />
-              {task.mode === 'loop' && task.sessionCount > 0 && (
+              {/* A proposed plan is shown on the Plan tab; progress starts after approval. */}
+              {task.mode === 'loop' && task.sessionCount > 0 && !task.plan && (
                 <FeatureProgress loop={task.loop} />
               )}
               <div className="actions">

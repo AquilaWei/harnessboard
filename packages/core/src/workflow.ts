@@ -111,8 +111,10 @@ export class Workflow {
   /** The phase a planned session works in. */
   phaseOf(task: Task, plan: SessionPlan): TaskActivity {
     if (plan.role === 'reviewer') return { phase: 'reviewing', agentId: plan.agentId };
+    // Planning lasts until the plan is approved, including revisions after feedback.
     const planning =
-      task.mode === 'loop' && !existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE));
+      this.inPlanning(task) ||
+      (task.mode === 'loop' && !existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE)));
     return { phase: planning ? 'planning' : 'implementing', agentId: plan.agentId };
   }
 

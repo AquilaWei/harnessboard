@@ -9,6 +9,7 @@ import {
   FAKE_CLAUDE,
   assistantText,
   featureList,
+  hang,
   init,
   makeRepo,
   result,
@@ -199,5 +200,17 @@ describe('approving a plan', () => {
     harness.approvePlan(task.id, VERIFY_OK);
     await harness.waitForIdle();
     expect(fakeRuns()[1]!.received[0]).toContain('Pick the first feature with "passes": false');
+  });
+});
+
+describe('a planner revising its plan', () => {
+  it('is shown as planning, not implementing', async () => {
+    scenario(session('Plan: F1.', proposal(['F1'])), [[init(), hang]]);
+    const task = await createPlanned();
+    harness.planFeedback(task.id, 'Split F1.');
+    while (harness.activity(task.id) === null) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(harness.activity(task.id)!.phase).toBe('planning');
   });
 });

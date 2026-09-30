@@ -1348,6 +1348,10 @@ th {
   font-size: 13px;
 }
 
+.plan-section > .btn {
+  justify-self: start;
+}
+
 .plan-questions ul {
   margin: 0;
   padding: 10px 12px;
