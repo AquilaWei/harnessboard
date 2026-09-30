@@ -17,6 +17,7 @@ import { DiffView } from './DiffView';
 import { FeatureList } from './FeatureList';
 import { LogView } from './LogView';
 import { FeatureProgress } from './Meter';
+import { PlanReview } from './PlanReview';
 import { Timeline } from './Timeline';
 
 export type DrawerTab = 'timeline' | 'changes' | 'log' | 'features' | 'details';
@@ -145,6 +146,11 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                     </button>
                   </>
                 )}
+                {s === 'awaiting_approval' && tab !== 'features' && (
+                  <button type="button" className="btn primary" onClick={() => setTab('features')}>
+                    {t('actions.approvePlan')}
+                  </button>
+                )}
                 {s === 'backlog' && (
                   <button type="button" className="btn primary" onClick={() => act('queue')}>
                     {t('actions.start')}
@@ -185,9 +191,19 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
         </div>
         <div className="drawer-body">
           {tab === 'timeline' && <Timeline entries={timeline} />}
-          {tab === 'features' && task && (
-            <FeatureList features={task.features} lastVerify={task.loop?.lastVerify ?? null} />
-          )}
+          {tab === 'features' &&
+            task &&
+            // Until the plan is approved this tab is where it is discussed and approved.
+            (task.plan ? (
+              <PlanReview
+                task={task}
+                version={task.updatedAt}
+                onDone={() => void loadTask()}
+                onError={onError}
+              />
+            ) : (
+              <FeatureList features={task.features} lastVerify={task.loop?.lastVerify ?? null} />
+            ))}
           {tab === 'changes' && <DiffView diff={diff} />}
           {tab === 'log' && <LogView events={events} window={task?.context?.window ?? 1_000_000} />}
           {tab === 'details' && task && <Details task={task} />}

@@ -12,7 +12,8 @@ export function Timeline({ entries }: { entries: TimelineEntry[] | null }) {
   const { t } = useTranslation();
   if (!entries) return null;
   if (entries.length === 0) return <p className="empty">{t('timeline.empty')}</p>;
-  let seenFeatures = false;
+  // With plan approval the first snapshot is the approved plan, shown by its own step.
+  let seenFeatures = entries.some((e) => e.kind === 'plan_approved');
   return (
     <ol className="timeline">
       {entries.map((entry, i) => {
@@ -116,6 +117,41 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
         </li>
       );
     }
+    case 'plan': {
+      const p = entry.proposal;
+      return (
+        <li className="step">
+          <StepHead
+            icon="🗂"
+            title={t('timeline.plan', { total: p.features.length, questions: p.questions.length })}
+            meta={time}
+          />
+          {p.reply && (
+            <details>
+              <summary>{t('timeline.reply')}</summary>
+              <Markdown className="reply" text={p.reply} />
+            </details>
+          )}
+        </li>
+      );
+    }
+    case 'plan_feedback':
+      return (
+        <li className="step step-user">
+          <StepHead icon="💬" title={t('timeline.planFeedback')} meta={time} />
+          <Markdown className="reply" text={entry.message} />
+        </li>
+      );
+    case 'plan_approved':
+      return (
+        <li className="step step-good">
+          <StepHead
+            icon="✓"
+            title={t('timeline.planApproved', { total: entry.approval.features.length })}
+            meta={`${entry.approval.verifyCommand} · ${time}`}
+          />
+        </li>
+      );
     case 'handoff':
       return (
         <li className="step">

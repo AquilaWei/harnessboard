@@ -1331,3 +1331,68 @@ th {
 .markdown a {
   color: var(--accent);
 }
+
+/* ---------- plan review ---------- */
+
+.plan-review {
+  display: grid;
+  gap: 18px;
+}
+
+.plan-section {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-section h3 {
+  font-size: 13px;
+}
+
+.plan-questions ul {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--warning-soft);
+  list-style: none;
+}
+
+.plan-questions li + li {
+  margin-top: 6px;
+}
+
+.plan-features {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.acceptance {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  list-style: none;
+}
+
+.status-chip.awaiting_approval {
+  background: var(--warning-soft);
+  color: var(--warning-ink);
+}
+
+.status-dot.awaiting_approval {
+  background: var(--warning);
+}
+
+.status-box.awaiting_approval {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+  background: var(--warning-soft);
+}
+
+.step-user .step-icon {
+  background: var(--accent-soft);
+}
+
+.check .hint {
+  display: block;
+}

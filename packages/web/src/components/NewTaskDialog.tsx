@@ -53,6 +53,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   const [allow, setAllow] = useState('');
   const [skip, setSkip] = useState(false);
   const [queue, setQueue] = useState(true);
+  const [confirmPlan, setConfirmPlan] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -75,6 +76,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           repo: repo.trim(),
           mode,
           verifyCommand: mode === 'loop' ? verify.trim() || undefined : undefined,
+          confirmPlan: mode === 'loop' ? confirmPlan : undefined,
           reviewer: reviewer === '' ? null : reviewer,
           title: title.trim() || undefined,
           baseRef: base.trim() || undefined,
@@ -144,10 +146,13 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
             <input
               className="mono"
               value={verify}
-              placeholder="npm test"
+              required={!confirmPlan}
+              placeholder={confirmPlan ? t('form.verifyOptional') : 'npm test'}
               onChange={(e) => setVerify(e.target.value)}
             />
-            <small className="hint">{t('form.verifyHint')}</small>
+            <small className="hint">
+              {t(confirmPlan ? 'form.verifyHintPlan' : 'form.verifyHint')}
+            </small>
           </label>
         )}
 
@@ -239,6 +244,19 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
               {skip && <span className="warn-text">⚠ {t('form.skipWarn')}</span>}
             </span>
           </label>
+          {mode === 'loop' && (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={confirmPlan}
+                onChange={(e) => setConfirmPlan(e.target.checked)}
+              />
+              <span>
+                {t('form.confirmPlan')}
+                <small className="hint">{t('form.confirmPlanHint')}</small>
+              </span>
+            </label>
+          )}
           <label className="check">
             <input type="checkbox" checked={queue} onChange={(e) => setQueue(e.target.checked)} />
             <span>{t('form.queueNow')}</span>
