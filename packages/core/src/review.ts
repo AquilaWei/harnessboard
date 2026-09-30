@@ -1,35 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { VerifyResult } from '@harnessboard/shared';
+import type { ReviewRecord, ReviewRequest, Verdict, VerifyResult } from '@harnessboard/shared';
 
 export const VERDICT_APPROVE = 'VERDICT: APPROVE';
 export const VERDICT_CHANGES = 'VERDICT: CHANGES';
-
-export type Verdict = 'approve' | 'changes';
-
-/**
- * Stored as the `review_request` event when an implementer step is ready for review.
- * `head` and `status` record the worktree the reviewer is given, so any change it makes
- * can be detected.
- */
-export interface ReviewRequest {
-  round: number;
-  /** Commit the reviewer diffs against: the last approved head, or the task's base. */
-  since: string;
-  head: string;
-  /** `git status --porcelain` output at request time. */
-  status: string;
-}
-
-/** Stored as the `review` event after a reviewer session. */
-export interface ReviewRecord {
-  round: number;
-  agentId: string;
-  /** `null` when the reply had no verdict line; the task then goes to a human. */
-  verdict: Verdict | null;
-  /** The reviewer's reply without the verdict line. */
-  findings: string;
-  head: string;
-}
 
 /** Reads the verdict from the first line of a reviewer's reply; `null` when there is none. */
 export function parseVerdict(reply: string): { verdict: Verdict | null; findings: string } {

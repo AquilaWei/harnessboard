@@ -49,6 +49,8 @@ hb done 1                            # mark it reviewed
 | ------------------------------------------------------------------------------------- | -------------------------------------------- |
 | `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                      |
 | `hb loop <goal> --verify <command>` [same options as `add`]                           | Start a Loop task (see below)                |
+| `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)  |
+| `hb agents`                                                                           | List agent profiles and whether they run     |
 | `hb ls` / `hb show <id>`                                                              | List tasks / show sessions and context usage |
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
@@ -79,6 +81,29 @@ The verify command is required. It can also be set per repository as `verifyComm
 `.harnessboard.json`. The command comes from you, not from the agent, and it runs through
 your shell (`sh` or `cmd.exe`) with a 10-minute timeout (`verifyTimeoutMinutes`).
 The agent is allowed to run exactly that command.
+
+## Reviewer: agents checking each other
+
+Give a task a reviewer, and every finished step is checked by a second agent before the task
+moves on. A step is a finished single task, or a verified Loop feature.
+
+```bash
+hb add "Add input validation to the signup form" --reviewer opus
+```
+
+- **Read-only:** the reviewer runs in the same worktree but can only read files and run
+  `git diff`, `git log` and `git show`. If it changes anything anyway, the task stops for
+  you.
+- **Verdict:** the reviewer answers `VERDICT: APPROVE` or `VERDICT: CHANGES` followed by
+  what to fix. Requested changes go to the implementer's next session.
+- **Bounded:** after `maxReviewRounds` (2) rounds of requested changes, or a reply without
+  a verdict, the task goes to Review for you to decide.
+- **Default reviewer:** `defaultReviewer` in the config (or the web settings) applies to
+  new tasks. `--reviewer none` turns review off for one task.
+
+Today the reviewer can be any Claude Code profile, for example with a different model.
+Codex and Gemini are planned as further providers, so different vendors can check each
+other.
 
 ## Web board
 

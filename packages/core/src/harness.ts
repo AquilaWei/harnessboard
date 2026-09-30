@@ -10,7 +10,9 @@ import type {
   HarnessEvent,
   HarnessStatus,
   QuotaInfo,
+  ReviewRequest,
   Task,
+  TaskActivity,
   TaskAgents,
   TaskStatus,
   WorktreeDiff,
@@ -72,6 +74,7 @@ export class Harness {
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   private readonly adapters = new Map<string, AgentAdapter>();
+  private readonly activities = new Map<number, TaskActivity>();
   private timer: NodeJS.Timeout | null = null;
   private readonly workflow: Workflow;
   private readonly settingsFile: string | null;
@@ -89,6 +92,7 @@ export class Harness {
       config,
       setStatus: (id, status, extra) => this.setStatus(id, status, extra),
       notice: (taskId, message, sessionId) => this.notice(taskId, message, sessionId),
+      setActivity: (taskId, activity) => this.setActivity(taskId, activity),
     });
     // Restore the last known quotas so a restart does not forget a nearly used-up window.
     for (const provider of AGENT_PROVIDERS) {
@@ -129,6 +133,16 @@ export class Harness {
         }
       }),
     );
+  }
+
+  /** What a running task is doing right now; `null` when it is not running. */
+  activity(taskId: number): TaskActivity | null {
+    return this.activities.get(taskId) ?? null;
+  }
+
+  /** The review a task is waiting for, if its latest step has not been reviewed yet. */
+  pendingReview(taskId: number): ReviewRequest | null {
+    return this.workflow.pendingReview(taskId);
   }
 
   settings(): EditableSettings {
@@ -326,6 +340,7 @@ export class Harness {
         const agentSessionId = adapter.capabilities.sessionIds === 'harness' ? sessionId : null;
         this.store.startSession(sessionId, task.id, plan.role, plan.agentId, agentSessionId);
       }
+      this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
       this.setStatus(task.id, 'running');
       const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal);
       this.store.endSession(sessionId, outcome.reason);
@@ -335,6 +350,7 @@ export class Harness {
       this.setStatus(task.id, 'failed');
     } finally {
       this.running.delete(task.id);
+      this.activities.delete(task.id);
       if (this.timer) this.tick();
     }
   }
@@ -422,6 +438,11 @@ export class Harness {
     const task = this.store.updateTask(id, { status, ...extra });
     this.emit({ type: 'task', taskId: id, status });
     return task;
+  }
+
+  private setActivity(taskId: number, activity: TaskActivity): void {
+    this.activities.set(taskId, activity);
+    this.emit({ type: 'task', taskId, status: 'running' });
   }
 
   private notice(taskId: number, message: string, sessionId: string | null = null): void {

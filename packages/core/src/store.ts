@@ -218,6 +218,14 @@ export class Store {
     return row ? toEvent(row) : undefined;
   }
 
+  /** Most recent event of one kind within a session, e.g. its final result. */
+  lastSessionEvent(sessionId: string, kind: string): StoredEvent | undefined {
+    const row = this.db
+      .prepare('SELECT * FROM events WHERE session_id = ? AND kind = ? ORDER BY id DESC LIMIT 1')
+      .get(sessionId, kind);
+    return row ? toEvent(row) : undefined;
+  }
+
   /** All events of one kind for a task, oldest first. */
   eventsOfKind(taskId: number, kind: string): StoredEvent[] {
     return this.db

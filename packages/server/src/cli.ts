@@ -61,6 +61,7 @@ function withTaskOptions(command: Command): Command {
     .option('--hard <pct>', 'hard context threshold in percent', parseInteger)
     .option('--allow <rules...>', 'tool rules the agent may use without asking')
     .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
+    .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--no-queue', 'leave the task in the backlog');
 }
 
@@ -77,6 +78,7 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       hardPct: o.hard,
       allowedTools: o.allow,
       skipPermissions: o.skipPermissions,
+      reviewer: o.reviewer === 'none' ? null : o.reviewer,
       queue: o.queue,
     }),
   );
@@ -99,6 +101,19 @@ withTaskOptions(
 ).action((words: string[], o: AddOptions & { verify?: string }) =>
   createTask(words.join(' '), o, definedOnly({ mode: 'loop' as const, verifyCommand: o.verify })),
 );
+
+program
+  .command('agents')
+  .description('list agent profiles and whether their CLIs run')
+  .action(async () => {
+    for (const a of await client().agents()) {
+      const state = a.ok ? `✓ ${a.version ?? ''}` : `✗ ${a.error ?? ''}`;
+      const model = a.profile.model ?? t('defaultModel');
+      console.log(
+        `${a.id.padEnd(12)} ${a.profile.provider.padEnd(12)} ${model.padEnd(14)} ${state}`,
+      );
+    }
+  });
 
 program
   .command('ls')
@@ -137,9 +152,16 @@ program
     }
     for (const feature of task.features ?? []) console.log(formatFeature(feature));
     for (const s of task.sessions) {
+      const who = `${s.role}/${s.agentId}`.padEnd(22);
       console.log(
-        `  session ${s.id}  ${s.endReason ?? 'active'}  ${formatTokens(s.contextTokens)}`,
+        `  session ${s.id}  ${who} ${s.endReason ?? 'active'}  ${formatTokens(s.contextTokens)}`,
       );
+    }
+    const review = task.lastReview;
+    if (review) {
+      const verdict = review.verdict ?? t('noVerdict');
+      console.log(`  ${t('reviewLine', { agent: review.agentId, round: review.round, verdict })}`);
+      if (review.findings) console.log(indent(review.findings));
     }
   });
 
@@ -238,7 +260,15 @@ interface AddOptions {
   hard?: number;
   allow?: string[];
   skipPermissions?: boolean;
+  reviewer?: string;
   queue: boolean;
+}
+
+function indent(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => `    ${line}`)
+    .join('\n');
 }
 
 function parseInteger(value: string): number {

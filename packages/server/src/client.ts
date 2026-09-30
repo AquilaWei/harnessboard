@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  AgentInfo,
   CreateTaskInput,
   StoredEvent,
   Task,
   TaskDetail,
   TaskView,
+  TimelineEntry,
   WorktreeDiff,
 } from '@harnessboard/shared';
 import { CLIENT_HEADER } from './api.js';
@@ -16,6 +18,8 @@ export class ApiClient {
   constructor(private readonly base: string) {}
 
   status = () => this.get<Record<string, unknown>>('/status');
+  agents = () => this.get<AgentInfo[]>('/agents');
+  timeline = (id: number) => this.get<TimelineEntry[]>(`/tasks/${id}/timeline`);
   listTasks = () => this.get<TaskView[]>('/tasks');
   getTask = (id: number) => this.get<TaskDetail>(`/tasks/${id}`);
   createTask = (input: CreateTaskInput) => this.post<TaskView>('/tasks', input);

@@ -6,8 +6,11 @@ import type {
   AgentRole,
   Feature,
   FeatureSnapshot,
+  ReviewRecord,
+  ReviewRequest,
   Session,
   Task,
+  TaskActivity,
   TaskStatus,
 } from '@harnessboard/shared';
 import type { HarnessConfig } from './config.js';
@@ -19,7 +22,6 @@ import {
   loopSessionPrompt,
 } from './prompts.js';
 import { parseVerdict, reviewFeedback, reviewPrompt } from './review.js';
-import type { ReviewRecord, ReviewRequest } from './review.js';
 import type { SessionOutcome } from './runner.js';
 import type { Store } from './store.js';
 import { headCommit, mergeBase, porcelainStatus } from './worktree.js';
@@ -39,6 +41,8 @@ export interface WorkflowHost {
   readonly config: HarnessConfig;
   setStatus(id: number, status: TaskStatus, extra?: { resumeAt?: number | null }): Task;
   notice(taskId: number, message: string, sessionId?: string | null): void;
+  /** Reports what a running task is doing, for display only. */
+  setActivity(taskId: number, activity: TaskActivity): void;
 }
 
 /**
@@ -101,8 +105,16 @@ export class Workflow {
     };
   }
 
+  /** The phase a planned session works in. */
+  phaseOf(task: Task, plan: SessionPlan): TaskActivity {
+    if (plan.role === 'reviewer') return { phase: 'reviewing', agentId: plan.agentId };
+    const planning =
+      task.mode === 'loop' && !existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE));
+    return { phase: planning ? 'planning' : 'implementing', agentId: plan.agentId };
+  }
+
   /** The review waiting to run, if the latest step was sent for review and not yet reviewed. */
-  private pendingReview(taskId: number): ReviewRequest | null {
+  pendingReview(taskId: number): ReviewRequest | null {
     const request = this.host.store.lastEvent(taskId, 'review_request');
     const review = this.host.store.lastEvent(taskId, 'review');
     if (!request || (review && review.id > request.id)) return null;
@@ -351,6 +363,7 @@ export class Workflow {
 
     const addressingReview = this.openFeedback(task.id) !== null;
     this.host.notice(task.id, `verifying: ${task.verifyCommand}`);
+    this.host.setActivity(task.id, { phase: 'verifying', agentId: null });
     const timeoutMs = this.host.config.verifyTimeoutMinutes * 60_000;
     const verify = await runVerify(task.verifyCommand!, task.worktreePath!, signal, timeoutMs);
     if (signal.aborted) {

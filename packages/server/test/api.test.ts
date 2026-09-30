@@ -30,7 +30,15 @@ beforeEach(() => {
     '-qm',
     'init',
   ]);
-  const config = { ...defaultConfig({}), dataDir: path.join(dir, 'data'), port: PORT };
+  const config = {
+    ...defaultConfig({}),
+    dataDir: path.join(dir, 'data'),
+    port: PORT,
+    agents: {
+      claude: { provider: 'claude-code' as const, command: 'claude-not-used', model: null },
+      checker: { provider: 'claude-code' as const, command: 'node', model: 'opus' },
+    },
+  };
   harness = Harness.open(config);
   app = new Hono();
   app.use('*', localOnly(PORT));
@@ -128,5 +136,64 @@ describe('loop progress', () => {
     const id = await loopTaskWithSnapshot();
     const res = await app.request(`/api/tasks/${id}`, { headers: local });
     expect(((await res.json()) as { features: unknown }).features).toEqual(features);
+  });
+});
+
+describe('agents API', () => {
+  it('reports which agent CLIs run', async () => {
+    const res = await app.request('/api/agents', { headers: local });
+    const agents = (await res.json()) as { id: string; ok: boolean }[];
+    expect(agents.map((a) => [a.id, a.ok])).toEqual([
+      ['claude', false],
+      ['checker', true],
+    ]);
+  });
+});
+
+describe('reviewed tasks', () => {
+  it('creates a task with the chosen reviewer', async () => {
+    const res = await post(
+      '/api/tasks',
+      { prompt: 'Build it', repo, reviewer: 'checker' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const task = (await res.json()) as { agents: { reviewer: string } };
+    expect(task.agents.reviewer).toBe('checker');
+  });
+
+  it('rejects a reviewer that is not a profile', async () => {
+    const res = await post(
+      '/api/tasks',
+      { prompt: 'Build it', repo, reviewer: 'ghost' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/"ghost" is not configured/);
+  });
+
+  it('lists review steps in the timeline', async () => {
+    const task = await harness.createTask({ prompt: 'Build it', repo, reviewer: 'checker' });
+    const request = { round: 1, since: 'a', head: 'b', status: '' };
+    const review = {
+      round: 1,
+      agentId: 'checker',
+      verdict: 'changes',
+      findings: '- add a test',
+      head: 'b',
+    };
+    harness.store.appendEvent(task.id, null, 'review_request', request, 1000);
+    harness.store.appendEvent(task.id, null, 'review', review, 2000);
+    const res = await app.request(`/api/tasks/${task.id}/timeline`, { headers: local });
+    expect(await res.json()).toEqual([
+      { kind: 'review_request', ts: 1000, request },
+      { kind: 'review', ts: 2000, review },
+    ]);
+  });
+
+  it('shows the latest review on the task', async () => {
+    const task = await harness.createTask({ prompt: 'Build it', repo, reviewer: 'checker' });
+    const review = { round: 1, agentId: 'checker', verdict: 'approve', findings: '', head: 'b' };
+    harness.store.appendEvent(task.id, null, 'review', review);
+    const res = await app.request(`/api/tasks/${task.id}`, { headers: local });
+    expect(((await res.json()) as { lastReview: unknown }).lastReview).toEqual(review);
   });
 });

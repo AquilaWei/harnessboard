@@ -4,7 +4,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import type { EditableSettings, Harness } from '@harnessboard/core';
 import type { CreateTaskInput, HarnessEvent } from '@harnessboard/shared';
-import { latestSnapshot, taskView } from './views.js';
+import { latestSnapshot, taskView, timeline } from './views.js';
 
 /** Header every state-changing request must carry; see {@link localOnly}. */
 export const CLIENT_HEADER = 'x-harnessboard-client';
@@ -31,7 +31,7 @@ export function createApi(harness: Harness): Hono {
   const app = new Hono();
   const view = (id: number) => {
     const task = harness.store.getTask(id);
-    return task ? taskView(task, harness.store, harness.config) : undefined;
+    return task ? taskView(task, harness) : undefined;
   };
 
   app.onError((err, c) => c.json({ error: err.message }, 400));
@@ -45,9 +45,7 @@ export function createApi(harness: Harness): Hono {
     c.json(harness.updateSettings(await c.req.json<Partial<EditableSettings>>())),
   );
 
-  app.get('/tasks', (c) =>
-    c.json(harness.store.listTasks().map((t) => taskView(t, harness.store, harness.config))),
-  );
+  app.get('/tasks', (c) => c.json(harness.store.listTasks().map((t) => taskView(t, harness))));
 
   app.post('/tasks', async (c) => {
     const task = await harness.createTask(await c.req.json<CreateTaskInput>());
@@ -73,6 +71,8 @@ export function createApi(harness: Harness): Hono {
     const after = Number(c.req.query('after') ?? 0);
     return c.json(harness.store.listEvents(taskId(c), after));
   });
+
+  app.get('/tasks/:id/timeline', (c) => c.json(timeline(taskId(c), harness.store)));
 
   app.get('/tasks/:id/diff', async (c) => c.json(await harness.diff(taskId(c))));
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { ContextPolicy, Session, Task, TaskMode } from './task.js';
 import type { Feature, LoopProgress } from './loop.js';
+import type { ReviewRecord, TaskActivity } from './review.js';
 import type { AgentProvider } from './agents.js';
 import type { QuotaInfo } from './events.js';
 
@@ -20,6 +21,12 @@ export interface TaskView extends Task {
   context: ContextView | null;
   /** Feature progress of a loop task, once its feature list exists. */
   loop: LoopProgress | null;
+  /** What the running session is doing; `null` when the task is not running. */
+  activity: TaskActivity | null;
+  /** Latest reviewer verdict, when the task has a reviewer and one has run. */
+  lastReview: ReviewRecord | null;
+  /** True while a finished step waits for its reviewer. */
+  reviewPending: boolean;
 }
 
 export interface TaskDetail extends TaskView {

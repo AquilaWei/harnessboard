@@ -45,6 +45,8 @@ hb done 1                            # 標記為已審核完成
 | ----------------------------------------------------------------------------------- | ----------------------------------- |
 | `hb add <提示> [--size small\|medium\|large] [--soft N --hard N] [--allow 規則...]` | 建立並排入任務                      |
 | `hb loop <目標> --verify <指令>`（其餘選項與 `add` 相同）                           | 建立 Loop 任務（見下方）            |
+| `add`／`loop` 加上 `--reviewer <agent>`                                             | 由另一個 agent 審查每一步（見下方） |
+| `hb agents`                                                                         | 列出 agent 設定檔與是否能執行       |
 | `hb ls` / `hb show <id>`                                                            | 列出任務／顯示 session 與上下文用量 |
 | `hb logs <id> [-f]`                                                                 | 印出或持續追蹤紀錄                  |
 | `hb stop <id>` / `hb resume <id>`                                                   | 停止，或重新排入                    |
@@ -71,6 +73,27 @@ hb loop "A CLI calculator with add, subtract, multiply and divide" --verify "npm
 驗證指令是必填的，也可以在 repository 的 `.harnessboard.json` 用 `verifyCommand` 設定。
 這個指令由你提供，不是由 agent 決定。它透過系統 shell（`sh` 或 `cmd.exe`）執行，
 逾時上限 10 分鐘（`verifyTimeoutMinutes`）。agent 只被允許執行這一個指令。
+
+## 審查者：讓 agent 互相監督
+
+幫任務指定審查者後，每完成一步，都會先交給第二個 agent 檢查，通過後任務才繼續。
+「一步」指的是完成一個單一任務，或 Loop 中一項 feature 通過驗證。
+
+```bash
+hb add "Add input validation to the signup form" --reviewer opus
+```
+
+- **唯讀**：審查者在同一個 worktree 裡執行，但只能讀檔案和執行 `git diff`、`git log`、
+  `git show`。萬一它還是改了東西，任務會停下來交給你處理。
+- **結論**：審查者回覆的開頭必須是 `VERDICT: APPROVE` 或 `VERDICT: CHANGES`，
+  後面接要修改的內容。要求修改的內容會交給實作者的下一個 session。
+- **有上限**：要求修改超過 `maxReviewRounds`（2）輪，或回覆裡沒有結論時，
+  任務會進入「待審核」，由你決定。
+- **預設審查者**：設定裡的 `defaultReviewer`（網頁設定也能改）會套用到新任務；
+  單一任務可以用 `--reviewer none` 關閉審查。
+
+目前審查者可以是任何 Claude Code 設定檔，例如使用不同模型的設定檔。之後計畫加入 Codex、
+Gemini 等 provider，就能讓不同廠商的 agent 互相檢查。
 
 ## 網頁看板
 
