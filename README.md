@@ -1,5 +1,7 @@
 # Harnessboard
 
+**English** · [繁體中文](README.zh-TW.md)
+
 **A local harness and task board for running Claude Code agents.** Each task runs headless
 `claude` in its own git worktree. Harnessboard keeps every session's context small by handing
 work off to a fresh session, and it pauses when your subscription quota runs low.
@@ -137,7 +139,9 @@ pnpm lint && pnpm typecheck
 pnpm --filter @harnessboard/web dev   # UI with hot reload; proxies /api to a running `hb serve`
 ```
 
-Notes on the Claude Code output format that Harnessboard relies on are in
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes and
+[CHANGELOG.md](CHANGELOG.md) for what changed in each version. Notes on the Claude Code
+output format that Harnessboard relies on are in
 [docs/stream-json-notes.md](docs/stream-json-notes.md).
 
 ## License
