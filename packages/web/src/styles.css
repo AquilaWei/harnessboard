@@ -1242,3 +1242,92 @@ th {
   gap: 8px;
   font-size: 12.5px;
 }
+
+/* ---------- markdown replies ---------- */
+
+.markdown,
+.markdown.reply,
+.markdown.log-text {
+  white-space: normal;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.markdown.reply {
+  max-height: 420px;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown table,
+.markdown blockquote {
+  margin: 0 0 8px;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 12px 0 6px;
+  font-size: 14px;
+}
+
+.markdown h1 {
+  font-size: 16px;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 22px;
+}
+
+.markdown li + li {
+  margin-top: 2px;
+}
+
+.markdown code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-3, var(--border));
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.markdown pre {
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: 6px;
+  background: var(--page);
+  white-space: pre;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.markdown blockquote {
+  padding-left: 10px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--ink-2);
+}
+
+.markdown table {
+  width: auto;
+  font-size: 12.5px;
+}
+
+.markdown a {
+  color: var(--accent);
+}

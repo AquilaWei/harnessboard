@@ -2,6 +2,7 @@
 import { useTranslation } from 'react-i18next';
 import type { TimelineEntry } from '@harnessboard/shared';
 import { formatTokens } from '../live';
+import { Markdown } from './Markdown';
 
 /**
  * The task's history as steps, so the harness's decisions are visible: who worked, when
@@ -44,7 +45,7 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           {entry.summary && (
             <details>
               <summary>{t('timeline.reply')}</summary>
-              <pre className="reply">{entry.summary}</pre>
+              <Markdown className="reply" text={entry.summary} />
             </details>
           )}
         </li>
@@ -109,7 +110,7 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           {r.findings && (
             <details open={r.verdict !== 'approve'}>
               <summary>{t('timeline.reply')}</summary>
-              <pre className="reply">{r.findings}</pre>
+              <Markdown className="reply" text={r.findings} />
             </details>
           )}
         </li>
@@ -122,7 +123,7 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           {entry.note && (
             <details>
               <summary>{t('timeline.note')}</summary>
-              <pre className="reply">{entry.note}</pre>
+              <Markdown className="reply" text={entry.note} />
             </details>
           )}
         </li>

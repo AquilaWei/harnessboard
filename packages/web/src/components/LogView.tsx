@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentEvent, StoredEvent } from '@harnessboard/shared';
 import { formatTokens } from '../live';
+import { Markdown } from './Markdown';
 
 /**
  * Renders the event log. Context updates arrive on every model call, so only
@@ -43,9 +44,11 @@ export function LogView({ events, window }: { events: StoredEvent[]; window: num
         );
       case 'text':
         return (
-          <div key={e.id} className="log-text">
-            {(e.data as Extract<AgentEvent, { kind: 'text' }>).text}
-          </div>
+          <Markdown
+            key={e.id}
+            className="log-text"
+            text={(e.data as Extract<AgentEvent, { kind: 'text' }>).text}
+          />
         );
       case 'tool_use': {
         const d = e.data as Extract<AgentEvent, { kind: 'tool_use' }>;

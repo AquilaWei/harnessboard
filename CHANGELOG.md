@@ -9,6 +9,9 @@ are test versions that have not been accepted on real machines yet.
 
 - **Folder picker in the New task dialog:** browse your folders with git repositories marked,
   and see right away whether a path can be used.
+- **Formatted agent replies:** replies, review findings and handoff notes in the timeline,
+  and agent text in the log, are rendered as markdown (lists, code, tables). Raw HTML,
+  images and unsafe links in agent output are not rendered.
 
 ### Fixed
 
