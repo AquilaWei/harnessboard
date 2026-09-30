@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { definedOnly } from '@harnessboard/shared';
-import type { TaskSize } from '@harnessboard/shared';
+import type { TaskMode, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
 
 const REPO_KEY = 'harnessboard.lastRepo';
@@ -24,6 +24,8 @@ interface Props {
 
 export function NewTaskDialog({ defaultSize, onClose, onCreated }: Props) {
   const { t } = useTranslation();
+  const [mode, setMode] = useState<TaskMode>('single');
+  const [verify, setVerify] = useState('');
   const [prompt, setPrompt] = useState('');
   const [repo, setRepo] = useState(lastRepo);
   const [title, setTitle] = useState('');
@@ -50,6 +52,8 @@ export function NewTaskDialog({ defaultSize, onClose, onCreated }: Props) {
       const task = await api.createTask(
         definedOnly({
           prompt,
+          mode,
+          verifyCommand: mode === 'loop' ? verify.trim() || undefined : undefined,
           repo: repo.trim(),
           title: title.trim() || undefined,
           baseRef: base.trim() || undefined,
@@ -85,8 +89,24 @@ export function NewTaskDialog({ defaultSize, onClose, onCreated }: Props) {
       >
         <h2 id="new-task">{t('newTask')}</h2>
         {error && <div className="error">{error}</div>}
+        <fieldset className="segmented">
+          <legend>{t('form.mode')}</legend>
+          {(['single', 'loop'] as const).map((m) => (
+            <label key={m} className="check">
+              <input
+                type="radio"
+                name="mode"
+                value={m}
+                checked={mode === m}
+                onChange={() => setMode(m)}
+              />
+              <span>{t(`form.modes.${m}`)}</span>
+            </label>
+          ))}
+          {mode === 'loop' && <small className="hint">{t('form.modeHint')}</small>}
+        </fieldset>
         <label className="field">
-          <span>{t('form.prompt')}</span>
+          <span>{t(mode === 'loop' ? 'form.goal' : 'form.prompt')}</span>
           <textarea
             required
             rows={5}
@@ -100,6 +120,18 @@ export function NewTaskDialog({ defaultSize, onClose, onCreated }: Props) {
           <input required className="mono" value={repo} onChange={(e) => setRepo(e.target.value)} />
           <small className="hint">{t('form.repoHint')}</small>
         </label>
+        {mode === 'loop' && (
+          <label className="field">
+            <span>{t('form.verify')}</span>
+            <input
+              className="mono"
+              value={verify}
+              placeholder="npm test"
+              onChange={(e) => setVerify(e.target.value)}
+            />
+            <small className="hint">{t('form.verifyHint')}</small>
+          </label>
+        )}
         <div className="row">
           <label className="field">
             <span>{t('form.title')}</span>

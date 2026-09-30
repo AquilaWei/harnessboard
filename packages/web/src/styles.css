@@ -665,3 +665,62 @@ th.num {
     min-width: 120px;
   }
 }
+
+/* ---------- loop mode ---------- */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+.segmented legend {
+  width: 100%;
+  margin-bottom: 4px;
+  font-weight: 550;
+}
+
+.segmented .check {
+  margin-bottom: 0;
+}
+
+.segmented .hint {
+  width: 100%;
+}
+
+.badge {
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.verify {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.verify.failed {
+  background: var(--diff-del);
+  color: var(--critical-ink);
+}
+
+.verify pre {
+  margin: 8px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}

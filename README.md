@@ -87,6 +87,8 @@ The agent is allowed to run exactly that command.
   real transitions are refused.
 - **Context meter on every card:** blue while under budget, amber past the soft threshold,
   red past the hard one. Ticks mark both thresholds.
+- **Loop tasks** show verified feature progress on the card, plus a Features tab with each
+  feature and the output of the last failed check.
 - **Quota meters** for the 5-hour and 7-day windows, with the pause threshold marked.
 - **Task panel:** live log, diff against the base branch, session history, and buttons
   for resume, stop and done. It also copies the `hb open <id>` command, so you can take

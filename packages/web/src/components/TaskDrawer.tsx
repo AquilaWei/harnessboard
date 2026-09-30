@@ -6,9 +6,10 @@ import { api } from '../api';
 import { formatTokens, useLiveEvents, useThrottled } from '../live';
 import { DiffView } from './DiffView';
 import { LogView } from './LogView';
-import { ContextMeter } from './Meter';
+import { ContextMeter, FeatureProgress } from './Meter';
+import { FeatureList } from './FeatureList';
 
-type Tab = 'log' | 'diff' | 'sessions';
+type Tab = 'log' | 'diff' | 'sessions' | 'features';
 
 interface Props {
   taskId: number;
@@ -103,6 +104,15 @@ export function TaskDrawer({ taskId, onClose, onError }: Props) {
                 <dt>{t('fields.worktree')}</dt>
                 <dd className="mono">{task.worktreePath ?? '-'}</dd>
               </dl>
+              {task.mode === 'loop' && task.verifyCommand && (
+                <dl className="facts">
+                  <dt>{t('loop.verifyCommand')}</dt>
+                  <dd className="mono">{task.verifyCommand}</dd>
+                </dl>
+              )}
+              {task.mode === 'loop' && task.sessionCount > 0 && (
+                <FeatureProgress loop={task.loop} />
+              )}
               {task.sessionCount > 0 && <ContextMeter context={task.context} />}
               <div className="actions">
                 <span className="pill">
@@ -134,7 +144,7 @@ export function TaskDrawer({ taskId, onClose, onError }: Props) {
           )}
         </div>
         <div className="tabs" role="tablist">
-          {(['log', 'diff', 'sessions'] as const).map((id) => (
+          {tabsFor(task).map((id) => (
             <button
               key={id}
               type="button"
@@ -150,6 +160,9 @@ export function TaskDrawer({ taskId, onClose, onError }: Props) {
         <div className="drawer-body">
           {tab === 'log' && <LogView events={events} window={task?.context?.window ?? 1_000_000} />}
           {tab === 'diff' && <DiffView diff={diff} />}
+          {tab === 'features' && task && (
+            <FeatureList features={task.features} lastVerify={task.loop?.lastVerify ?? null} />
+          )}
           {tab === 'sessions' && task && (
             <table>
               <thead>
@@ -180,4 +193,10 @@ export function TaskDrawer({ taskId, onClose, onError }: Props) {
       </aside>
     </>
   );
+}
+
+function tabsFor(task: TaskDetail | null): Tab[] {
+  return task?.mode === 'loop'
+    ? ['features', 'log', 'diff', 'sessions']
+    : ['log', 'diff', 'sessions'];
 }

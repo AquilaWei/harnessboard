@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useTranslation } from 'react-i18next';
 import type { TaskView } from '@harnessboard/shared';
-import { ContextMeter } from './Meter';
+import { ContextMeter, FeatureProgress } from './Meter';
 
 interface Props {
   task: TaskView;
@@ -29,7 +29,9 @@ export function TaskCard({ task, onOpen, onDragStart, onDragEnd, dragging }: Pro
       <div className="card-top">
         <span className="card-id">#{task.id}</span>
         <span className="card-title">{task.title}</span>
+        {task.mode === 'loop' && <span className="badge">{t('loop.badge')}</span>}
       </div>
+      {task.mode === 'loop' && task.sessionCount > 0 && <FeatureProgress loop={task.loop} />}
       {task.sessionCount > 0 && <ContextMeter context={task.context} />}
       <div className="card-meta">
         <span>

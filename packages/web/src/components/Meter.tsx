@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useTranslation } from 'react-i18next';
-import type { ContextView } from '@harnessboard/shared';
+import type { ContextView, LoopProgress } from '@harnessboard/shared';
 import { formatTokens } from '../live';
 
 type Severity = 'normal' | 'warning' | 'critical';
@@ -63,6 +63,29 @@ export function ContextMeter({ context }: { context: ContextView | null }) {
             ⚠ {t(severity === 'critical' ? 'overHard' : 'overSoft')}
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Loop feature progress: the fill counts only features the harness verified.
+ * A failed last verification is flagged in text, not only by colour.
+ */
+export function FeatureProgress({ loop }: { loop: LoopProgress | null }) {
+  const { t } = useTranslation();
+  if (!loop) return <div className="meter-caption">{t('loop.planning')}</div>;
+  const failed = loop.lastVerify !== null && !loop.lastVerify.ok;
+  return (
+    <div>
+      <MeterBar
+        pct={(loop.verified / loop.total) * 100}
+        severity={failed ? 'warning' : 'normal'}
+        label={t('loop.features')}
+      />
+      <div className="meter-caption">
+        <span>{t('loop.verified', { verified: loop.verified, total: loop.total })}</span>
+        {failed && <span className="flag warning">⚠ {t('loop.verifyFailed')}</span>}
       </div>
     </div>
   );
