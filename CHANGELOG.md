@@ -13,6 +13,13 @@ are test versions that have not been accepted on real machines yet.
   and agent text in the log, are rendered as markdown (lists, code, tables). Raw HTML,
   images and unsafe links in agent output are not rendered.
 
+- **Agree on the plan before a Loop builds anything:**
+  - The planner proposes features with acceptance criteria, a verify command and open
+    questions.
+  - The task then waits for you: reply as many times as needed (on the Plan tab or with
+    `hb feedback`), then approve with the verify command you confirm (`hb approve`).
+  - The verify command is now optional when creating a Loop task.
+
 ### Fixed
 
 - Creating a task in a folder outside a git repository showed git's raw error. It now says

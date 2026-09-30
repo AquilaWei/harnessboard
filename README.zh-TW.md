@@ -44,7 +44,8 @@ hb done 1                            # 標記為已審核完成
 | 指令                                                                                | 用途                                |
 | ----------------------------------------------------------------------------------- | ----------------------------------- |
 | `hb add <提示> [--size small\|medium\|large] [--soft N --hard N] [--allow 規則...]` | 建立並排入任務                      |
-| `hb loop <目標> --verify <指令>`（其餘選項與 `add` 相同）                           | 建立 Loop 任務（見下方）            |
+| `hb loop <目標> [--verify <指令>]`（其餘選項與 `add` 相同）                         | 建立 Loop 任務（見下方）            |
+| `hb plan <id>`／`hb feedback <id> <意見>`／`hb approve <id> --verify <指令>`        | 檢視、討論、確認 Loop 規格          |
 | `add`／`loop` 加上 `--reviewer <agent>`                                             | 由另一個 agent 審查每一步（見下方） |
 | `hb agents`                                                                         | 列出 agent 設定檔與是否能執行       |
 | `hb ls` / `hb show <id>`                                                            | 列出任務／顯示 session 與上下文用量 |
@@ -54,25 +55,36 @@ hb done 1                            # 標記為已審核完成
 
 ## Loop 模式
 
-一個 session 做不完的目標，可以用 `hb loop`。做法參考 Anthropic 對長時間執行 agent 的建議：
+一個 session 做不完的目標，可以用 `hb loop`。做法參考 Anthropic 對長時間執行 agent 的建議；
+而且在開工之前，會先跟 Claude 確認好規格。
 
 ```bash
-hb loop "A CLI calculator with add, subtract, multiply and divide" --verify "npm test"
+hb loop "A CLI calculator with add, subtract, multiply and divide"
 ```
 
-1. **初始 session**：agent 把目標拆成小的 feature，寫出 `feature_list.json` 和
-   `progress.md` 並 commit。這一輪不實作任何功能。
-2. **每個 session 做一項 feature**：之後每個 session 都從乾淨的上下文開始，先讀進度筆記，
-   再實作下一項未完成的 feature、執行驗證指令、標記為通過並 commit。
-3. **harness 自己檢查**：每個 session 結束後，Harnessboard 會在 worktree 裡自己執行一次
-   `--verify`。只有這個指令成功，feature 才算完成；失敗時，輸出會交給下一個 session。
-4. **完成或停下來等審核**：所有 feature 都通過且驗證成功時，任務移到「待審核」。
+1. **規劃 session**：agent 把目標拆成小的 feature，每項都附上驗收標準，寫進
+   `feature_list.json` 和 `progress.md`。
+   - 它也會提出建議的驗證指令（例如 `npm test`），並列出需要你決定的問題。
+   - 這一輪不實作任何功能。
+2. **你確認規格**：任務會停在「需要你處理」。打開任務的「規格」分頁（或執行
+   `hb plan <id>`），可以看到 feature、驗收標準、問題和建議的指令。接著二選一：
+   - **回覆意見**（`hb feedback <id> "..."`）：規劃者接續同一段對話修改規劃，再請你確認，
+     可以來回很多輪。想即時討論，可以用 `hb open <id>` 在 Claude Code 裡開啟同一個 session。
+   - **確認開工**（`hb approve <id> --verify "<指令>"`）：確認或修改驗證指令，
+     然後以當下的規劃開始實作。
+3. **每個 session 做一項 feature**：之後每個 session 都從乾淨的上下文開始，先讀進度筆記，
+   再照驗收標準實作下一項未完成的 feature、執行驗證指令、標記為通過並 commit。
+4. **harness 自己檢查**：每個 session 結束後，Harnessboard 會在 worktree 裡自己執行一次
+   驗證指令。只有這個指令成功，feature 才算完成；失敗時，輸出會交給下一個 session。
+5. **完成或停下來等審核**：所有 feature 都通過且驗證成功時，任務移到「待審核」。
    如果清單裡的 feature 被刪掉，或連續 `loopStallSessions`（預設 3）個 session 都沒有通過
    驗證的進度，任務會以失敗狀態停下。
 
-驗證指令是必填的，也可以在 repository 的 `.harnessboard.json` 用 `verifyCommand` 設定。
-這個指令由你提供，不是由 agent 決定。它透過系統 shell（`sh` 或 `cmd.exe`）執行，
-逾時上限 10 分鐘（`verifyTimeoutMinutes`）。agent 只被允許執行這一個指令。
+驗證指令一定由你決定。規劃者的建議要等你確認開工才生效，agent 也只被允許執行你確認的
+那一個指令。它透過系統 shell（`sh` 或 `cmd.exe`）執行，逾時上限 10 分鐘
+（`verifyTimeoutMinutes`）。也可以一開始就指定，用 `--verify`，或在 `.harnessboard.json`
+設定 `verifyCommand`。
+加上 `--no-confirm-plan` 可以跳過確認，規劃完就直接開工；這時必須提供驗證指令。
 
 ## 審查者：讓 agent 互相監督
 
