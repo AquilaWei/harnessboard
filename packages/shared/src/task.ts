@@ -12,6 +12,13 @@ export const TASK_STATUSES = [
 ] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
+/**
+ * `single`: one prompt, handed off across sessions until the agent finishes.
+ * `loop`: an initializer session writes a feature list, then each session implements one
+ * feature and the harness runs the task's verify command itself before counting it.
+ */
+export type TaskMode = 'single' | 'loop';
+
 /** Rough task size; selects the default soft context threshold. */
 export type TaskSize = 'small' | 'medium' | 'large';
 
@@ -43,6 +50,9 @@ export interface Task {
   branch: string | null;
   worktreePath: string | null;
   status: TaskStatus;
+  mode: TaskMode;
+  /** Shell command the harness runs to check the work; required in loop mode. */
+  verifyCommand: string | null;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
   /** Unix ms; set while `status` is `waiting_quota`. */

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { ContextPolicy, Session, Task } from './task.js';
+import type { ContextPolicy, Session, Task, TaskMode } from './task.js';
+import type { LoopProgress } from './loop.js';
 import type { QuotaInfo } from './events.js';
 
 /** Context usage of a task's latest session, as shown in the CLI and web UI. */
@@ -16,6 +17,8 @@ export interface TaskView extends Task {
   sessionCount: number;
   latestSessionId: string | null;
   context: ContextView | null;
+  /** Feature progress of a loop task, once its feature list exists. */
+  loop: LoopProgress | null;
 }
 
 export interface TaskDetail extends TaskView {
@@ -43,6 +46,9 @@ export interface CreateTaskInput {
   repo: string;
   title?: string;
   baseRef?: string;
+  mode?: TaskMode;
+  /** Required for loop tasks unless the project's `.harnessboard.json` sets one. */
+  verifyCommand?: string;
   size?: ContextPolicy['size'];
   softPct?: number;
   hardPct?: number;

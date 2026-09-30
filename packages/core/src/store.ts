@@ -9,6 +9,7 @@ import type {
   SessionEndReason,
   StoredEvent,
   Task,
+  TaskMode,
   TaskStatus,
 } from '@harnessboard/shared';
 
@@ -17,6 +18,8 @@ export interface NewTask {
   prompt: string;
   repoPath: string;
   baseRef: string;
+  mode: TaskMode;
+  verifyCommand: string | null;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
 }
@@ -56,6 +59,8 @@ const MIGRATIONS = [
      data TEXT NOT NULL
    );
    CREATE INDEX events_task ON events(task_id, id);`,
+  `ALTER TABLE tasks ADD COLUMN mode TEXT NOT NULL DEFAULT 'single';
+   ALTER TABLE tasks ADD COLUMN verify_command TEXT;`,
 ];
 
 /**
@@ -81,15 +86,17 @@ export class Store {
   createTask(input: NewTask, now = Date.now()): Task {
     const result = this.db
       .prepare(
-        `INSERT INTO tasks (title, prompt, repo_path, base_ref, status, context_policy,
-                            permission, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'backlog', ?, ?, ?, ?)`,
+        `INSERT INTO tasks (title, prompt, repo_path, base_ref, mode, verify_command, status,
+                            context_policy, permission, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?)`,
       )
       .run(
         input.title,
         input.prompt,
         input.repoPath,
         input.baseRef,
+        input.mode,
+        input.verifyCommand,
         JSON.stringify(input.contextPolicy),
         JSON.stringify(input.permission),
         now,
@@ -184,6 +191,14 @@ export class Store {
     return row ? toEvent(row) : undefined;
   }
 
+  /** All events of one kind for a task, oldest first. */
+  eventsOfKind(taskId: number, kind: string): StoredEvent[] {
+    return this.db
+      .prepare('SELECT * FROM events WHERE task_id = ? AND kind = ? ORDER BY id')
+      .all(taskId, kind)
+      .map(toEvent);
+  }
+
   /** Most recent event of one kind across all tasks, e.g. the last quota snapshot. */
   lastEventOfKind(kind: string): StoredEvent | undefined {
     const row = this.db
@@ -232,6 +247,8 @@ function toTask(row: Row): Task {
     branch: (row.branch as string | null) ?? null,
     worktreePath: (row.worktree_path as string | null) ?? null,
     status: row.status as TaskStatus,
+    mode: row.mode as TaskMode,
+    verifyCommand: (row.verify_command as string | null) ?? null,
     contextPolicy: JSON.parse(String(row.context_policy)) as ContextPolicy,
     permission: JSON.parse(String(row.permission)) as PermissionPolicy,
     resumeAt: row.resume_at == null ? null : Number(row.resume_at),

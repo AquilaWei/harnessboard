@@ -5,6 +5,7 @@
 // The n-th run of the fake plays sessions[n] (counted in a sibling `.count` file); within it,
 // the i-th user message on stdin emits turns[i]. A line {"__hang": true} waits until killed;
 // {"__exit": code} writes {"__stderr"}'s text (if any) to stderr and exits with that code.
+// {"__write": {"path", "content"}} writes a file relative to the working directory.
 // FAKE_CLAUDE_LOG: file that receives one JSON line per run with the args and messages.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -44,6 +45,10 @@ async function emit(lines) {
       if (line.__stderr) process.stderr.write(line.__stderr + '\n');
       log();
       process.exit(line.__exit);
+    }
+    if (line.__write) {
+      writeFileSync(line.__write.path, line.__write.content);
+      continue;
     }
     if (line.__hang) {
       log();

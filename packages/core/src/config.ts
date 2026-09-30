@@ -22,6 +22,10 @@ export interface HarnessConfig {
   quotaRetryMinutes: number;
   /** Upper bound on automatic session handoffs per task, to stop runaway loops. */
   maxHandoffs: number;
+  /** A verify run that takes longer is killed and counts as failed. */
+  verifyTimeoutMinutes: number;
+  /** A loop task stops for review after this many sessions without verified progress. */
+  loopStallSessions: number;
   /** Applied to new tasks before project and per-task settings. */
   defaultContextPolicy: ContextPolicy;
 }
@@ -42,6 +46,8 @@ export interface ProjectConfig {
   baseRef?: string;
   allowedTools?: string[];
   contextPolicy?: ContextPolicy;
+  /** Default verify command for loop tasks in this repository. */
+  verifyCommand?: string;
 }
 
 type Env = Record<string, string | undefined>;
@@ -58,6 +64,8 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     fallbackContextWindow: 200_000,
     quotaRetryMinutes: 15,
     maxHandoffs: 20,
+    verifyTimeoutMinutes: 10,
+    loopStallSessions: 3,
     defaultContextPolicy: { size: 'medium' },
   };
 }
@@ -125,6 +133,8 @@ export function validate(config: HarnessConfig): void {
     'fallbackContextWindow',
     'quotaRetryMinutes',
     'maxHandoffs',
+    'verifyTimeoutMinutes',
+    'loopStallSessions',
   ];
   for (const key of positiveInts) {
     const value = config[key];

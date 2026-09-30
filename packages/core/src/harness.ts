@@ -1,10 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { contextPct, definedOnly, resolveThresholds } from '@harnessboard/shared';
+import {
+  FEATURE_LIST_FILE,
+  contextPct,
+  definedOnly,
+  resolveThresholds,
+} from '@harnessboard/shared';
 import type {
   AgentEvent,
   CreateTaskInput,
+  Feature,
+  FeatureSnapshot,
   HarnessEvent,
   HarnessStatus,
   QuotaInfo,
@@ -16,7 +24,13 @@ import type {
 import type { AgentAdapter } from './agent.js';
 import { EDITABLE_SETTINGS, loadProjectConfig, saveUserConfig, validate } from './config.js';
 import type { EditableSettings, HarnessConfig } from './config.js';
-import { QUOTA_RESUME_PROMPT, continuationPrompt } from './prompts.js';
+import { missingFeatures, readFeatureList, runVerify } from './loop.js';
+import {
+  QUOTA_RESUME_PROMPT,
+  continuationPrompt,
+  initializerPrompt,
+  loopSessionPrompt,
+} from './prompts.js';
 import { isQuotaLimited, runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
 import { Store } from './store.js';
@@ -126,7 +140,8 @@ export class Harness {
 
   /**
    * Validates the repository and thresholds, then records the task.
-   * Throws when `repo` is not inside a git repository or the context policy is invalid.
+   * Throws when `repo` is not inside a git repository, the context policy is invalid, or a
+   * loop task has no verify command (from the input or the project's config file).
    */
   async createTask(input: CreateTaskInput): Promise<Task> {
     const repoPath = await repoRoot(path.resolve(input.repo));
@@ -137,14 +152,24 @@ export class Harness {
       ...definedOnly({ size: input.size, softPct: input.softPct, hardPct: input.hardPct }),
     };
     resolveThresholds(contextPolicy);
+    const mode = input.mode ?? 'single';
+    const verifyCommand = input.verifyCommand?.trim() || project.verifyCommand || null;
+    if (mode === 'loop' && !verifyCommand) {
+      throw new Error('a loop task needs a verify command, e.g. "npm test"');
+    }
+    const allowedTools = input.allowedTools ?? project.allowedTools ?? DEFAULT_ALLOWED_TOOLS;
     const task = this.store.createTask({
       title: input.title ?? firstLine(input.prompt),
       prompt: input.prompt,
       repoPath,
       baseRef: input.baseRef ?? project.baseRef ?? (await currentRef(repoPath)),
+      mode,
+      verifyCommand: mode === 'loop' ? verifyCommand : null,
       contextPolicy,
       permission: {
-        allowedTools: input.allowedTools ?? project.allowedTools ?? DEFAULT_ALLOWED_TOOLS,
+        // A loop session is told to run the verify command, so it must be allowed to.
+        allowedTools:
+          mode === 'loop' ? withTool(allowedTools, `Bash(${verifyCommand})`) : allowedTools,
         skipPermissions: input.skipPermissions ?? false,
       },
     });
@@ -243,7 +268,7 @@ export class Harness {
       this.setStatus(task.id, 'running');
       const outcome = await this.runOne(ready, sessionId, plan, controller.signal);
       this.store.endSession(sessionId, outcome.reason);
-      this.applyOutcome(ready, outcome);
+      await this.applyOutcome(ready, outcome, controller.signal);
     } catch (err) {
       this.notice(task.id, `task failed: ${(err as Error).message}`);
       this.setStatus(task.id, 'failed');
@@ -262,22 +287,51 @@ export class Harness {
   }
 
   /**
-   * Fresh session for a new task or after a handoff; `--resume` of the previous session
-   * after a quota pause, stop or error, but only while that session still has budget.
+   * Fresh session for a new task, after a handoff, or for the next loop feature; `--resume`
+   * of the previous session after a quota pause, stop or error, but only while that session
+   * still has budget.
    */
   private planSession(task: Task): SessionPlan {
     const last = this.store.listSessions(task.id).at(-1);
-    if (!last) return { resumeId: null, prompt: task.prompt };
-    const continuation = () => {
-      const note = this.store.lastEvent(task.id, 'handoff')?.data as { note?: string } | undefined;
-      return { resumeId: null, prompt: continuationPrompt(task.prompt, note?.note ?? null) };
-    };
+    if (!last) return { resumeId: null, prompt: this.firstPrompt(task) };
     if (last.endReason === 'handoff' || last.endReason === 'context_hard_limit') {
-      return continuation();
+      return this.continuation(task, this.handoffNote(task));
     }
+    // Each loop feature starts from a clean context; its state lives in the worktree files.
+    const loopStepDone = task.mode === 'loop' && last.endReason === 'completed';
     // A session that never reached the model was never saved by the CLI, so it can't be resumed.
-    const resumable = last.contextTokens > 0 && this.hasBudget(task, last);
-    return resumable ? { resumeId: last.id, prompt: QUOTA_RESUME_PROMPT } : continuation();
+    const resumable = !loopStepDone && last.contextTokens > 0 && this.hasBudget(task, last);
+    if (resumable) return { resumeId: last.id, prompt: QUOTA_RESUME_PROMPT };
+    return this.continuation(task, task.mode === 'single' ? this.handoffNote(task) : null);
+  }
+
+  private firstPrompt(task: Task): string {
+    return task.mode === 'loop' ? initializerPrompt(task.prompt, task.verifyCommand!) : task.prompt;
+  }
+
+  private continuation(task: Task, note: string | null): SessionPlan {
+    if (task.mode === 'single') {
+      return { resumeId: null, prompt: continuationPrompt(task.prompt, note) };
+    }
+    // The initializer was cut off before it wrote the feature list; let it finish planning.
+    if (!existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE))) {
+      return { resumeId: null, prompt: continuationPrompt(this.firstPrompt(task), note) };
+    }
+    const verify = this.snapshots(task.id).at(-1)?.verify;
+    const failed = verify && !verify.ok ? verify : null;
+    return {
+      resumeId: null,
+      prompt: loopSessionPrompt(task.prompt, task.verifyCommand!, failed, note),
+    };
+  }
+
+  private handoffNote(task: Task): string | null {
+    const data = this.store.lastEvent(task.id, 'handoff')?.data as { note?: string } | undefined;
+    return data?.note ?? null;
+  }
+
+  private snapshots(taskId: number): FeatureSnapshot[] {
+    return this.store.eventsOfKind(taskId, 'features').map((e) => e.data as FeatureSnapshot);
   }
 
   private hasBudget(task: Task, session: Session): boolean {
@@ -335,14 +389,19 @@ export class Harness {
     this.emit({ type: 'agent', taskId, sessionId, event });
   }
 
-  private applyOutcome(task: Task, outcome: SessionOutcome): void {
+  private async applyOutcome(
+    task: Task,
+    outcome: SessionOutcome,
+    signal: AbortSignal,
+  ): Promise<void> {
     this.notice(
       task.id,
       `session ended: ${outcome.reason}${outcome.detail ? ` (${outcome.detail})` : ''}`,
     );
     switch (outcome.reason) {
       case 'completed':
-        this.setStatus(task.id, 'review');
+        if (task.mode === 'loop') await this.finishLoopStep(task, signal);
+        else this.setStatus(task.id, 'review');
         return;
       case 'handoff':
       case 'context_hard_limit':
@@ -363,12 +422,84 @@ export class Harness {
     }
   }
 
+  /**
+   * After a loop session: checks the feature list, runs the verify command independently of
+   * what the agent reported, and decides whether to continue, finish, or stop for review.
+   */
+  private async finishLoopStep(task: Task, signal: AbortSignal): Promise<void> {
+    let features: Feature[];
+    try {
+      features = readFeatureList(task.worktreePath!);
+    } catch (err) {
+      this.notice(task.id, (err as Error).message);
+      this.setStatus(task.id, 'failed');
+      return;
+    }
+    const snapshots = this.snapshots(task.id);
+    const baseline = snapshots[0];
+    if (!baseline) {
+      // The initializer only plans; there is nothing to verify yet.
+      this.recordSnapshot(task.id, { features, verify: null, verifiedPassing: 0 });
+      this.notice(task.id, `feature list created: ${features.length} features`);
+      this.setStatus(task.id, 'queued');
+      return;
+    }
+    const missing = missingFeatures(baseline.features, features);
+    if (missing.length > 0) {
+      this.notice(task.id, `features removed from ${FEATURE_LIST_FILE}: ${missing.join(', ')}`);
+      this.setStatus(task.id, 'failed');
+      return;
+    }
+
+    this.notice(task.id, `verifying: ${task.verifyCommand}`);
+    const timeoutMs = this.config.verifyTimeoutMinutes * 60_000;
+    const verify = await runVerify(task.verifyCommand!, task.worktreePath!, signal, timeoutMs);
+    if (signal.aborted) {
+      this.setStatus(task.id, 'stopped');
+      return;
+    }
+    const claimed = features.filter((f) => f.passes).length;
+    // Claims made while verification fails are not credited.
+    const verifiedPassing = verify.ok ? claimed : snapshots.at(-1)!.verifiedPassing;
+    this.recordSnapshot(task.id, { features, verify, verifiedPassing });
+    this.notice(
+      task.id,
+      verify.ok
+        ? `verify passed: ${claimed}/${features.length} features done`
+        : `verify failed (${verify.timedOut ? 'timed out' : `exit ${verify.exitCode}`})`,
+    );
+
+    if (verify.ok && claimed === features.length) {
+      this.setStatus(task.id, 'review');
+      return;
+    }
+    const limit = this.config.loopStallSessions;
+    const recent = [...snapshots.map((s) => s.verifiedPassing), verifiedPassing].slice(
+      -(limit + 1),
+    );
+    if (recent.length === limit + 1 && recent.every((n) => n === recent[0])) {
+      this.notice(task.id, `no verified progress in ${limit} sessions; stopping for review`);
+      this.setStatus(task.id, 'failed');
+      return;
+    }
+    this.setStatus(task.id, 'queued');
+  }
+
+  private recordSnapshot(taskId: number, snapshot: FeatureSnapshot): void {
+    this.store.appendEvent(taskId, null, 'features', snapshot);
+  }
+
   private handOff(task: Task, outcome: SessionOutcome): void {
     const note = outcome.reason === 'handoff' && outcome.finalText ? outcome.finalText : null;
     this.store.appendEvent(task.id, null, 'handoff', { note });
-    const handoffs = this.store
-      .listSessions(task.id)
-      .filter((s) => s.endReason === 'handoff' || s.endReason === 'context_hard_limit').length;
+    // Counted since the last completed session, so a long loop of features is not capped.
+    const sessions = this.store.listSessions(task.id);
+    const sinceCompleted = sessions.slice(
+      sessions.findLastIndex((s) => s.endReason === 'completed') + 1,
+    );
+    const handoffs = sinceCompleted.filter(
+      (s) => s.endReason === 'handoff' || s.endReason === 'context_hard_limit',
+    ).length;
     if (handoffs >= this.config.maxHandoffs) {
       this.notice(task.id, `reached ${handoffs} handoffs (maxHandoffs); stopping for review`);
       this.setStatus(task.id, 'failed');
@@ -401,6 +532,10 @@ export class Harness {
   private emit(event: HarnessEvent): void {
     for (const listener of this.listeners) listener(event);
   }
+}
+
+function withTool(tools: string[], rule: string): string[] {
+  return tools.includes(rule) ? tools : [...tools, rule];
 }
 
 function firstLine(text: string): string {

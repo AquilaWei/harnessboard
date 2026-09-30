@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { Store } from '../src/store.js';
 import { tempDir } from './helpers.js';
@@ -9,6 +10,8 @@ const newTask = {
   prompt: 'do it',
   repoPath: '/repo',
   baseRef: 'main',
+  mode: 'single' as const,
+  verifyCommand: null,
   contextPolicy: { size: 'small' as const },
   permission: { allowedTools: [], skipPermissions: false },
 };
@@ -54,5 +57,36 @@ describe('Store', () => {
     store.startSession('s1', id);
     store.updateSessionContext('s1', 100, 1_000_000);
     expect(store.lastKnownContextWindow()).toBe(1_000_000);
+  });
+
+  it('stores the mode and verify command of a loop task', () => {
+    const store = new Store(':memory:');
+    const { id } = store.createTask({ ...newTask, mode: 'loop', verifyCommand: 'npm test' });
+    const task = store.getTask(id)!;
+    expect([task.mode, task.verifyCommand]).toEqual(['loop', 'npm test']);
+  });
+
+  it('upgrades a database from before loop mode, keeping its tasks as single', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const old = new DatabaseSync(file);
+    old.exec(`CREATE TABLE tasks (
+       id INTEGER PRIMARY KEY, title TEXT NOT NULL, prompt TEXT NOT NULL,
+       repo_path TEXT NOT NULL, base_ref TEXT NOT NULL, branch TEXT, worktree_path TEXT,
+       status TEXT NOT NULL, context_policy TEXT NOT NULL, permission TEXT NOT NULL,
+       resume_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+     INSERT INTO tasks VALUES (1, 't', 'p', '/r', 'main', NULL, NULL, 'done', '{}',
+       '{"allowedTools":[],"skipPermissions":false}', NULL, 0, 0);
+     PRAGMA user_version = 1;`);
+    old.close();
+    expect(new Store(file).getTask(1)!.mode).toBe('single');
+  });
+
+  it('lists every event of one kind in order', () => {
+    const store = new Store(':memory:');
+    const { id } = store.createTask(newTask);
+    store.appendEvent(id, null, 'features', { n: 1 });
+    store.appendEvent(id, null, 'notice', { message: 'x' });
+    store.appendEvent(id, null, 'features', { n: 2 });
+    expect(store.eventsOfKind(id, 'features').map((e) => e.data)).toEqual([{ n: 1 }, { n: 2 }]);
   });
 });

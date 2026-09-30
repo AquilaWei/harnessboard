@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { contextPct, resolveThresholds } from '@harnessboard/shared';
-import type { ContextView, Session, Task, TaskView } from '@harnessboard/shared';
+import type {
+  ContextView,
+  FeatureSnapshot,
+  LoopProgress,
+  Session,
+  Task,
+  TaskView,
+} from '@harnessboard/shared';
 import type { Store } from '@harnessboard/core';
 
 export function taskView(task: Task, store: Store, fallbackWindow: number): TaskView {
@@ -11,6 +18,7 @@ export function taskView(task: Task, store: Store, fallbackWindow: number): Task
     sessionCount: sessions.length,
     latestSessionId: latest?.id ?? null,
     context: latest ? contextView(task, latest, store, fallbackWindow) : null,
+    loop: task.mode === 'loop' ? loopProgress(task, store) : null,
   };
 }
 
@@ -21,5 +29,16 @@ function contextView(task: Task, session: Session, store: Store, fallback: numbe
     window,
     pct: contextPct(session.contextTokens, window),
     ...resolveThresholds(task.contextPolicy),
+  };
+}
+
+function loopProgress(task: Task, store: Store): LoopProgress | null {
+  const snapshot = store.lastEvent(task.id, 'features')?.data as FeatureSnapshot | undefined;
+  if (!snapshot) return null;
+  return {
+    total: snapshot.features.length,
+    claimed: snapshot.features.filter((f) => f.passes).length,
+    verified: snapshot.verifiedPassing,
+    lastVerify: snapshot.verify,
   };
 }

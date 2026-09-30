@@ -59,6 +59,23 @@ export const hang = { __hang: true };
 
 export const exitWith = (code: number, stderr?: string) => ({ __exit: code, __stderr: stderr });
 
+export const writeFile = (filePath: string, content: string) => ({
+  __write: { path: filePath, content },
+});
+
+/** A `feature_list.json` write with one entry per `passes` flag, ids F1, F2, ... */
+export const featureList = (...passes: boolean[]) =>
+  writeFile(
+    'feature_list.json',
+    JSON.stringify({
+      features: passes.map((p, i) => ({
+        id: `F${i + 1}`,
+        description: `feature ${i + 1}`,
+        passes: p,
+      })),
+    }),
+  );
+
 export function tempDir(prefix: string): string {
   return mkdtempSync(path.join(tmpdir(), `hb-${prefix}-`));
 }
