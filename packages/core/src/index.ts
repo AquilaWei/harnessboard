@@ -7,5 +7,7 @@ export * from './loop.js';
 export * from './process.js';
 export * from './prompts.js';
 export * from './runner.js';
+export * from './scheduler.js';
 export * from './store.js';
+export * from './workflow.js';
 export * from './worktree.js';
