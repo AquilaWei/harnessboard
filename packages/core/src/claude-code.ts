@@ -40,7 +40,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     if (spec.model) args.push('--model', spec.model);
     if (spec.access === 'readOnly') {
       // Default permission mode: in print mode every tool not listed here is refused.
-      args.push('--allowedTools', ...READ_ONLY_TOOLS);
+      args.push('--allowedTools', ...READ_ONLY_TOOLS, ...spec.allowedTools);
     } else if (spec.skipPermissions) {
       args.push('--dangerously-skip-permissions');
     } else {

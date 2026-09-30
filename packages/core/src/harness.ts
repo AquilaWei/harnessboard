@@ -386,7 +386,13 @@ export class Harness {
         prompt: plan.prompt,
         model: this.config.agents[plan.agentId]!.model,
         access: plan.role === 'reviewer' ? 'readOnly' : 'edit',
-        allowedTools: task.permission.allowedTools,
+        // A reviewer may run the task's own check, but nothing that edits.
+        allowedTools:
+          plan.role === 'reviewer'
+            ? task.verifyCommand
+              ? [`Bash(${task.verifyCommand})`]
+              : []
+            : task.permission.allowedTools,
         skipPermissions: task.permission.skipPermissions,
       },
       thresholds: resolveThresholds(task.contextPolicy),

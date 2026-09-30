@@ -17,7 +17,10 @@ export interface SessionSpec {
   prompt: string;
   model: string | null;
   access: SessionAccess;
-  /** Extra tool rules for `edit` sessions. */
+  /**
+   * Extra tool rules: the task's list for `edit` sessions; for `readOnly` sessions only
+   * checks that do not change files, such as the task's verify command.
+   */
   allowedTools: string[];
   /** Turns off the CLI's permission checks; only honoured for `edit` sessions. */
   skipPermissions: boolean;

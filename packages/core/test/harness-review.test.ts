@@ -134,6 +134,20 @@ describe('a reviewer that requests changes', () => {
   });
 });
 
+describe('a reviewer of a loop task', () => {
+  it('may run the verify command', async () => {
+    scenario(
+      session('planned', featureList(false, false)),
+      session('F1 done', featureList(true, false)),
+      session('VERDICT: APPROVE'),
+    );
+    await createReviewed('loop');
+    await runQueued();
+    await runQueued();
+    expect(fakeRuns()[2]!.args).toContain('Bash(node -e "process.exit(0)")');
+  });
+});
+
 describe('a reviewer reply without a verdict line', () => {
   it('goes to a human', async () => {
     scenario(session('done', writeFile('hello.txt', 'hi')), session('Seems fine to me.'));

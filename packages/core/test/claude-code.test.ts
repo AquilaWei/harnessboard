@@ -131,7 +131,8 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
   });
 
   it('limits a read-only session to inspection tools, ignoring skipPermissions', () => {
-    expect(adapter.buildArgs({ ...spec, access: 'readOnly', skipPermissions: true })).toEqual([
+    const readOnly = { ...spec, access: 'readOnly' as const, allowedTools: [] };
+    expect(adapter.buildArgs({ ...readOnly, skipPermissions: true })).toEqual([
       '-p',
       '--input-format',
       'stream-json',
@@ -149,5 +150,10 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
       'Bash(git show *)',
       'Bash(git status)',
     ]);
+  });
+
+  it('adds extra checks for a read-only session after the inspection tools', () => {
+    const readOnly = { ...spec, access: 'readOnly' as const, allowedTools: ['Bash(npm test)'] };
+    expect(adapter.buildArgs(readOnly).at(-1)).toBe('Bash(npm test)');
   });
 });
