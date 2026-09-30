@@ -1,33 +1,54 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { HarnessEvent, StoredEvent, TaskDetail, WorktreeDiff } from '@harnessboard/shared';
+import type {
+  HarnessEvent,
+  StoredEvent,
+  TaskDetail,
+  TimelineEntry,
+  WorktreeDiff,
+} from '@harnessboard/shared';
 import { api } from '../api';
-import { formatTokens, useLiveEvents, useThrottled } from '../live';
+import type { TaskAction } from '../board';
+import { useLiveEvents, useThrottled } from '../live';
+import { Description } from './Description';
+import { Details } from './Details';
 import { DiffView } from './DiffView';
-import { LogView } from './LogView';
-import { ContextMeter, FeatureProgress } from './Meter';
 import { FeatureList } from './FeatureList';
+import { LogView } from './LogView';
+import { FeatureProgress } from './Meter';
+import { Timeline } from './Timeline';
 
-type Tab = 'log' | 'diff' | 'sessions' | 'features';
+export type DrawerTab = 'timeline' | 'changes' | 'log' | 'features' | 'details';
 
 interface Props {
   taskId: number;
+  initialTab: DrawerTab;
+  onAction: (task: TaskDetail, action: TaskAction) => Promise<unknown>;
   onClose: () => void;
   onError: (message: string) => void;
 }
 
-export function TaskDrawer({ taskId, onClose, onError }: Props) {
-  const { t, i18n } = useTranslation();
+/** Task panel: what is happening and what you can do first, then the history and details. */
+export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: Props) {
+  const { t } = useTranslation();
   const [task, setTask] = useState<TaskDetail | null>(null);
+  const [timeline, setTimeline] = useState<TimelineEntry[] | null>(null);
   const [events, setEvents] = useState<StoredEvent[]>([]);
   const [diff, setDiff] = useState<WorktreeDiff | null>(null);
-  const [tab, setTab] = useState<Tab>('log');
+  const [tab, setTab] = useState<DrawerTab>(initialTab);
   const [copied, setCopied] = useState(false);
   const lastId = useRef(0);
 
   const loadTask = useCallback(
-    () => api.task(taskId).then(setTask, (e: Error) => onError(e.message)),
+    () =>
+      Promise.all([api.task(taskId), api.timeline(taskId)]).then(
+        ([detail, steps]) => {
+          setTask(detail);
+          setTimeline(steps);
+        },
+        (e: Error) => onError(e.message),
+      ),
     [taskId, onError],
   );
 
@@ -40,15 +61,12 @@ export function TaskDrawer({ taskId, onClose, onError }: Props) {
   }, [taskId]);
 
   useEffect(() => {
-    lastId.current = 0;
-    setEvents([]);
-    setDiff(null);
     void loadTask();
     void loadEvents();
-  }, [taskId, loadTask, loadEvents]);
+  }, [loadTask, loadEvents]);
 
   useEffect(() => {
-    if (tab === 'diff') api.diff(taskId).then(setDiff, (e: Error) => onError(e.message));
+    if (tab === 'changes') api.diff(taskId).then(setDiff, (e: Error) => onError(e.message));
   }, [tab, taskId, task?.status, onError]);
 
   const refresh = useThrottled(() => {
@@ -65,8 +83,7 @@ export function TaskDrawer({ taskId, onClose, onError }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const act = (fn: (id: number) => Promise<unknown>) =>
-    fn(taskId).then(loadTask, (e: Error) => onError(e.message));
+  const act = (action: TaskAction) => task && void onAction(task, action).then(loadTask);
 
   const copyOpen = async () => {
     try {
@@ -79,72 +96,81 @@ export function TaskDrawer({ taskId, onClose, onError }: Props) {
   };
 
   const s = task?.status;
+  const tabs: DrawerTab[] =
+    task?.mode === 'loop'
+      ? ['timeline', 'features', 'changes', 'log', 'details']
+      : ['timeline', 'changes', 'log', 'details'];
+
   return (
     <>
       <div className="scrim" onClick={onClose} />
       <aside className="drawer" role="dialog" aria-modal="true" aria-label={task?.title ?? ''}>
         <div className="drawer-head">
           <div className="drawer-title">
-            <h2>
-              #{taskId} {task?.title}
-            </h2>
-            <button type="button" className="btn" onClick={onClose} aria-label={t('actions.close')}>
+            <h2>{task?.title}</h2>
+            <button
+              type="button"
+              className="btn icon"
+              onClick={onClose}
+              aria-label={t('actions.close')}
+            >
               ✕
             </button>
           </div>
           {task && (
-            <>
-              <dl className="facts">
-                <dt>{t('fields.repo')}</dt>
-                <dd className="mono">{task.repoPath}</dd>
-                <dt>{t('fields.base')}</dt>
-                <dd className="mono">{task.baseRef}</dd>
-                <dt>{t('fields.branch')}</dt>
-                <dd className="mono">{task.branch ?? '-'}</dd>
-                <dt>{t('fields.worktree')}</dt>
-                <dd className="mono">{task.worktreePath ?? '-'}</dd>
-              </dl>
-              {task.mode === 'loop' && task.verifyCommand && (
-                <dl className="facts">
-                  <dt>{t('loop.verifyCommand')}</dt>
-                  <dd className="mono">{task.verifyCommand}</dd>
-                </dl>
-              )}
+            <div className={`status-box ${s}`}>
+              <div className="status-line">
+                <span className={`status-chip ${s}`}>
+                  <span className={`status-dot ${s}`} aria-hidden /> {t(`status.${task.status}`)}
+                </span>
+                <span className="card-id">#{task.id}</span>
+              </div>
+              <Description task={task} />
               {task.mode === 'loop' && task.sessionCount > 0 && (
                 <FeatureProgress loop={task.loop} />
               )}
-              {task.sessionCount > 0 && <ContextMeter context={task.context} />}
               <div className="actions">
-                <span className="pill">
-                  <span className={`status-dot ${task.status}`} aria-hidden />{' '}
-                  {t(`status.${task.status}`)}
-                </span>
-                {(s === 'backlog' || s === 'stopped' || s === 'failed' || s === 'review') && (
-                  <button type="button" className="btn primary" onClick={() => act(api.queue)}>
-                    {t(s === 'backlog' ? 'actions.queue' : 'actions.resume')}
+                {s === 'review' && (
+                  <>
+                    <button type="button" className="btn primary" onClick={() => act('complete')}>
+                      {t('actions.markDone')}
+                    </button>
+                    {tab !== 'changes' && (
+                      <button type="button" className="btn" onClick={() => setTab('changes')}>
+                        {t('tabs.changes')}
+                      </button>
+                    )}
+                    <button type="button" className="btn" onClick={() => act('queue')}>
+                      {t('actions.sendBack')}
+                    </button>
+                  </>
+                )}
+                {s === 'backlog' && (
+                  <button type="button" className="btn primary" onClick={() => act('queue')}>
+                    {t('actions.start')}
+                  </button>
+                )}
+                {(s === 'failed' || s === 'stopped') && (
+                  <button type="button" className="btn primary" onClick={() => act('queue')}>
+                    {t('actions.retry')}
                   </button>
                 )}
                 {(s === 'running' || s === 'queued' || s === 'waiting_quota') && (
-                  <button type="button" className="btn danger" onClick={() => act(api.stop)}>
+                  <button type="button" className="btn danger" onClick={() => act('stop')}>
                     {t('actions.stop')}
                   </button>
                 )}
-                {s === 'review' && (
-                  <button type="button" className="btn" onClick={() => act(api.complete)}>
-                    {t('actions.done')}
-                  </button>
-                )}
                 {task.latestSessionId && s !== 'running' && (
-                  <button type="button" className="btn" onClick={copyOpen}>
+                  <button type="button" className="btn ghost" onClick={copyOpen}>
                     {copied ? t('actions.copied') : t('actions.copyOpen')}
                   </button>
                 )}
               </div>
-            </>
+            </div>
           )}
         </div>
         <div className="tabs" role="tablist">
-          {tabsFor(task).map((id) => (
+          {tabs.map((id) => (
             <button
               key={id}
               type="button"
@@ -158,45 +184,15 @@ export function TaskDrawer({ taskId, onClose, onError }: Props) {
           ))}
         </div>
         <div className="drawer-body">
-          {tab === 'log' && <LogView events={events} window={task?.context?.window ?? 1_000_000} />}
-          {tab === 'diff' && <DiffView diff={diff} />}
+          {tab === 'timeline' && <Timeline entries={timeline} />}
           {tab === 'features' && task && (
             <FeatureList features={task.features} lastVerify={task.loop?.lastVerify ?? null} />
           )}
-          {tab === 'sessions' && task && (
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('sessionTable.id')}</th>
-                  <th>{t('sessionTable.started')}</th>
-                  <th>{t('sessionTable.reason')}</th>
-                  <th className="num">{t('sessionTable.context')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {task.sessions.map((session) => (
-                  <tr key={session.id}>
-                    <td className="mono">{session.id.slice(0, 8)}</td>
-                    <td>{new Date(session.startedAt).toLocaleString(i18n.language)}</td>
-                    <td>
-                      {session.endReason
-                        ? t(`endReason.${session.endReason}`)
-                        : t('sessionTable.active')}
-                    </td>
-                    <td className="num">{formatTokens(session.contextTokens)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {tab === 'changes' && <DiffView diff={diff} />}
+          {tab === 'log' && <LogView events={events} window={task?.context?.window ?? 1_000_000} />}
+          {tab === 'details' && task && <Details task={task} />}
         </div>
       </aside>
     </>
   );
-}
-
-function tabsFor(task: TaskDetail | null): Tab[] {
-  return task?.mode === 'loop'
-    ? ['features', 'log', 'diff', 'sessions']
-    : ['log', 'diff', 'sessions'];
 }

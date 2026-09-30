@@ -27,6 +27,8 @@ export interface TaskView extends Task {
   lastReview: ReviewRecord | null;
   /** True while a finished step waits for its reviewer. */
   reviewPending: boolean;
+  /** The harness's latest message about the task, e.g. why it failed. */
+  lastNotice: string | null;
 }
 
 export interface TaskDetail extends TaskView {
@@ -42,6 +44,8 @@ export interface HarnessStatus {
   /** Providers whose quota currently holds back new sessions. */
   quotaPaused: AgentProvider[];
   maxConcurrent: number;
+  /** User config file that holds agent profiles; `null` when settings are not saved. */
+  configFile: string | null;
 }
 
 export interface Settings {

@@ -1,75 +1,121 @@
 // SPDX-License-Identifier: Apache-2.0
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { HarnessStatus, Settings } from '@harnessboard/shared';
-import { LANGUAGES, setLanguage } from '../i18n';
-import type { Language } from '../i18n';
+import type { HarnessStatus, QuotaInfo, Settings } from '@harnessboard/shared';
 import { QuotaMeter } from './Meter';
 
 interface Props {
+  running: number;
+  attention: number;
   status: HarnessStatus | null;
   settings: Settings | null;
   onNewTask: () => void;
   onSettings: () => void;
 }
 
-export function Header({ status, settings, onNewTask, onSettings }: Props) {
-  const { t, i18n } = useTranslation();
-  const quota = status?.quotas['claude-code'];
-  const pauseAt = settings?.quotaPauseUtilization ?? 0.95;
+/** Brand, a one-line summary of the board, the quota, and the two global actions. */
+export function Header({ running, attention, status, settings, onNewTask, onSettings }: Props) {
+  const { t } = useTranslation();
+  const quota = status?.quotas['claude-code'] ?? null;
+  const paused = (status?.quotaPaused.length ?? 0) > 0;
+
+  const jumpToAttention = () =>
+    document.getElementById('stage-attention')?.scrollIntoView({ behavior: 'smooth' });
+
   return (
     <header className="header">
       <div className="brand">
         <img src="/favicon.svg" alt="" />
-        Harnessboard
+        <span>Harnessboard</span>
       </div>
-      <div className="header-stats">
-        {status && (
-          <span className="pill">
-            {t('running', { n: status.running.length, max: status.maxConcurrent })}
-          </span>
+      <div className="summary">
+        <span className="chip">
+          <span className="status-dot running" aria-hidden />{' '}
+          {t('summary.running', { count: running })}
+        </span>
+        {attention > 0 && (
+          <button type="button" className="chip chip-attention" onClick={jumpToAttention}>
+            ! {t('summary.attention', { count: attention })}
+          </button>
         )}
-        {status && status.quotaPaused.length > 0 && (
-          <span className="pill alert">⏸ {t('quotaPaused')}</span>
-        )}
-        {quota?.fiveHourUtilization != null ? (
-          <QuotaMeter
-            label={t('quota5h')}
-            utilization={quota.fiveHourUtilization}
-            pauseAt={pauseAt}
-            resetsAt={quota.resetsAt}
-          />
-        ) : (
-          <span className="pill">{t('quotaUnknown')}</span>
-        )}
-        {quota?.sevenDayUtilization != null && (
-          <QuotaMeter
-            label={t('quota7d')}
-            utilization={quota.sevenDayUtilization}
-            pauseAt={1}
-            resetsAt={null}
-          />
-        )}
+        <QuotaButton
+          quota={quota}
+          paused={paused}
+          pauseAt={settings?.quotaPauseUtilization ?? 0.95}
+        />
       </div>
       <div className="header-actions">
-        <select
-          aria-label={t('language')}
-          value={i18n.language}
-          onChange={(e) => setLanguage(e.target.value as Language)}
-          className="btn"
-        >
-          {Object.entries(LANGUAGES).map(([code, name]) => (
-            <option key={code} value={code}>
-              {name}
-            </option>
-          ))}
-        </select>
         <button type="button" className="btn" onClick={onSettings} disabled={!settings}>
           {t('settings')}
         </button>
-        <button type="button" className="btn primary" onClick={onNewTask}>
+        <button type="button" className="btn primary" onClick={onNewTask} disabled={!settings}>
           + {t('newTask')}
         </button>
       </div>
     </header>
+  );
+}
+
+/** Compact quota reading that opens the full breakdown. */
+function QuotaButton(props: { quota: QuotaInfo | null; paused: boolean; pauseAt: number }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (
+        e instanceof KeyboardEvent ? e.key === 'Escape' : !box.current?.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', close);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', close);
+    };
+  }, [open]);
+
+  const { quota, paused, pauseAt } = props;
+  if (quota?.fiveHourUtilization == null) {
+    return <span className="chip muted">{t('summary.quotaUnknown')}</span>;
+  }
+  const pct = Math.round(quota.fiveHourUtilization * 100);
+  return (
+    <div className="popover-anchor" ref={box}>
+      <button
+        type="button"
+        className={`chip ${paused ? 'chip-warning' : ''}`}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {paused ? `⏸ ${t('summary.quotaPaused')}` : `${t('summary.quota')} 5h ${pct}%`}
+      </button>
+      {open && (
+        <div className="popover" role="dialog" aria-label={t('quota.title')}>
+          <h3>{t('quota.title')}</h3>
+          <QuotaMeter
+            label={t('quota.fiveHour')}
+            utilization={quota.fiveHourUtilization}
+            pauseAt={pauseAt}
+            resetsAt={quota.resetsAt}
+          />
+          {quota.sevenDayUtilization != null && (
+            <QuotaMeter
+              label={t('quota.sevenDay')}
+              utilization={quota.sevenDayUtilization}
+              pauseAt={1}
+              resetsAt={null}
+            />
+          )}
+          <p className="hint">
+            {paused ? t('quota.paused') : t('quota.pauseAt', { pct: Math.round(pauseAt * 100) })}
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

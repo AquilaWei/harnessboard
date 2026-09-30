@@ -1,34 +1,64 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
-import { columnOf, moveAction } from '../src/board';
+import { dropAction, primaryAction, stageOf } from '../src/board';
 
 const task = (status: TaskStatus) => ({ status }) as TaskView;
 
-describe('moveAction', () => {
-  it('queues a backlog task dropped on Queued', () => {
-    expect(moveAction(task('backlog'), 'queued')).toBe('queue');
+describe('stageOf', () => {
+  it('puts quota-paused tasks with the active ones', () => {
+    expect(stageOf('waiting_quota')).toBe('active');
   });
 
-  it('stops a running task dropped on Stopped / failed', () => {
-    expect(moveAction(task('running'), 'halted')).toBe('stop');
-  });
-
-  it('completes a review task dropped on Done', () => {
-    expect(moveAction(task('review'), 'done')).toBe('complete');
-  });
-
-  it('refuses to start a task by dropping it on Running', () => {
-    expect(moveAction(task('queued'), 'running')).toBeNull();
-  });
-
-  it('refuses to mark a running task done', () => {
-    expect(moveAction(task('running'), 'done')).toBeNull();
+  it('puts failed tasks in Needs you', () => {
+    expect(stageOf('failed')).toBe('attention');
   });
 });
 
-describe('columnOf', () => {
-  it('puts failed tasks in the Stopped / failed column', () => {
-    expect(columnOf('failed')).toBe('halted');
+describe('primaryAction', () => {
+  it('offers Start for a draft', () => {
+    expect(primaryAction(task('backlog'))).toBe('start');
+  });
+
+  it('offers Stop while waiting for quota', () => {
+    expect(primaryAction(task('waiting_quota'))).toBe('stop');
+  });
+
+  it('offers Review for a finished task', () => {
+    expect(primaryAction(task('review'))).toBe('review');
+  });
+
+  it('offers Retry for a failed task', () => {
+    expect(primaryAction(task('failed'))).toBe('retry');
+  });
+
+  it('offers nothing for a done task', () => {
+    expect(primaryAction(task('done'))).toBeNull();
+  });
+});
+
+describe('dropAction', () => {
+  it('queues a draft dropped on In progress', () => {
+    expect(dropAction(task('backlog'), 'active')).toBe('queue');
+  });
+
+  it('queues a failed task dropped back on In progress', () => {
+    expect(dropAction(task('failed'), 'active')).toBe('queue');
+  });
+
+  it('stops a running task dropped on Needs you', () => {
+    expect(dropAction(task('running'), 'attention')).toBe('stop');
+  });
+
+  it('completes a reviewed task dropped on Done', () => {
+    expect(dropAction(task('review'), 'done')).toBe('complete');
+  });
+
+  it('refuses to complete a failed task', () => {
+    expect(dropAction(task('failed'), 'done')).toBeNull();
+  });
+
+  it('refuses to complete a running task', () => {
+    expect(dropAction(task('running'), 'done')).toBeNull();
   });
 });

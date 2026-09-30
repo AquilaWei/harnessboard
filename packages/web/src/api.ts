@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  AgentInfo,
   CreateTaskInput,
   HarnessStatus,
   Settings,
   StoredEvent,
   TaskDetail,
   TaskView,
+  TimelineEntry,
   WorktreeDiff,
 } from '@harnessboard/shared';
 
@@ -42,6 +44,8 @@ export const api = {
   events: (id: number, after: number) =>
     request<StoredEvent[]>(`/tasks/${id}/events?after=${after}`),
   diff: (id: number) => request<WorktreeDiff>(`/tasks/${id}/diff`),
+  timeline: (id: number) => request<TimelineEntry[]>(`/tasks/${id}/timeline`),
+  agents: () => request<AgentInfo[]>('/agents'),
   createTask: (input: CreateTaskInput) => send<TaskView>('POST', '/tasks', input),
   queue: (id: number) => send<unknown>('POST', `/tasks/${id}/queue`),
   stop: (id: number) => send<unknown>('POST', `/tasks/${id}/stop`),

@@ -115,7 +115,7 @@ export function QuotaMeter(props: {
         <span>
           {props.label} · <strong>{pct}%</strong>
         </span>
-        {reset && <span>{t('resetsAt', { time: reset })}</span>}
+        {reset && <span>{t('quota.resetsAt', { time: reset })}</span>}
       </div>
       <MeterBar pct={pct} severity={severity} ticks={[pausePct]} label={props.label} />
     </div>

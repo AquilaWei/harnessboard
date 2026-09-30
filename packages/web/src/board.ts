@@ -1,37 +1,60 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
 
-/** Board columns; `halted` groups stopped and failed tasks. */
-export const COLUMNS = [
-  'backlog',
-  'queued',
-  'running',
-  'waiting_quota',
-  'review',
-  'done',
-  'halted',
-] as const;
-export type ColumnId = (typeof COLUMNS)[number];
+/**
+ * Board columns, grouped by who has to act: nobody yet (draft), the agents (active),
+ * you (attention), or nobody any more (done).
+ */
+export const STAGES = ['draft', 'active', 'attention', 'done'] as const;
+export type Stage = (typeof STAGES)[number];
 
-export function columnOf(status: TaskStatus): ColumnId {
-  return status === 'stopped' || status === 'failed' ? 'halted' : status;
+const STAGE_OF: Record<TaskStatus, Stage> = {
+  backlog: 'draft',
+  queued: 'active',
+  running: 'active',
+  waiting_quota: 'active',
+  review: 'attention',
+  failed: 'attention',
+  stopped: 'attention',
+  done: 'done',
+};
+
+export function stageOf(status: TaskStatus): Stage {
+  return STAGE_OF[status];
 }
 
-export type MoveAction = 'queue' | 'stop' | 'complete';
+/** API calls the board can make for a task. */
+export type TaskAction = 'queue' | 'stop' | 'complete';
+
+/** The one button a card offers, if any. `review` opens the task on its changes. */
+export type PrimaryAction = 'start' | 'stop' | 'review' | 'retry';
+
+export function primaryAction(task: TaskView): PrimaryAction | null {
+  switch (task.status) {
+    case 'backlog':
+      return 'start';
+    case 'queued':
+    case 'running':
+    case 'waiting_quota':
+      return 'stop';
+    case 'review':
+      return 'review';
+    case 'failed':
+    case 'stopped':
+      return 'retry';
+    case 'done':
+      return null;
+  }
+}
 
 /**
- * The API call that dropping a task on a column stands for, or `null` when the
- * move is not a real transition (e.g. dragging into Running: only the scheduler starts tasks).
+ * The API call that dropping a task on a stage stands for, or `null` when that move
+ * is not possible (e.g. a running task cannot be dropped on Done).
  */
-export function moveAction(task: TaskView, target: ColumnId): MoveAction | null {
-  const from = task.status;
-  if (
-    target === 'queued' &&
-    ['backlog', 'stopped', 'failed', 'review', 'waiting_quota'].includes(from)
-  ) {
-    return 'queue';
-  }
-  if (target === 'halted' && ['running', 'queued', 'waiting_quota'].includes(from)) return 'stop';
-  if (target === 'done' && from === 'review') return 'complete';
+export function dropAction(task: TaskView, target: Stage): TaskAction | null {
+  const from = stageOf(task.status);
+  if (target === 'active' && (from === 'draft' || from === 'attention')) return 'queue';
+  if (target === 'attention' && from === 'active') return 'stop';
+  if (target === 'done' && task.status === 'review') return 'complete';
   return null;
 }

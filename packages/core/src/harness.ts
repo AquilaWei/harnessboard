@@ -288,6 +288,7 @@ export class Harness {
       quotas: Object.fromEntries(this.quotas),
       quotaPaused: AGENT_PROVIDERS.filter((p) => this.quotaBlocked(p, Date.now())),
       maxConcurrent: this.config.maxConcurrent,
+      configFile: this.settingsFile,
     };
   }
 

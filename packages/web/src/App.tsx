@@ -3,15 +3,17 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HarnessStatus, Settings, TaskView } from '@harnessboard/shared';
 import { api } from './api';
-import type { ColumnId, MoveAction } from './board';
+import { stageOf } from './board';
+import type { Stage, TaskAction } from './board';
 import { Board } from './components/Board';
 import { Header } from './components/Header';
 import { NewTaskDialog } from './components/NewTaskDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TaskDrawer } from './components/TaskDrawer';
+import type { DrawerTab } from './components/TaskDrawer';
 import { useLiveEvents, useThrottled } from './live';
 
-const MOVE: Record<MoveAction, (id: number) => Promise<unknown>> = {
+const ACTIONS: Record<TaskAction, (id: number) => Promise<unknown>> = {
   queue: api.queue,
   stop: api.stop,
   complete: api.complete,
@@ -22,7 +24,7 @@ export function App() {
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [status, setStatus] = useState<HarnessStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<{ id: number; tab: DrawerTab } | null>(null);
   const [dialog, setDialog] = useState<'new' | 'settings' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -49,43 +51,60 @@ export function App() {
   const refresh = useThrottled(() => void load(), 500);
   useLiveEvents(refresh);
 
-  const move = (task: TaskView, action: MoveAction) =>
-    MOVE[action](task.id).then(load, (err: Error) => showToast(err.message));
+  const act = useCallback(
+    (task: TaskView, action: TaskAction) =>
+      ACTIONS[action](task.id).then(load, (err: Error) => showToast(err.message)),
+    [load, showToast],
+  );
 
-  const invalidMove = (task: TaskView, target: ColumnId) =>
-    showToast(
-      t('invalidMove', {
-        from: t(`status.${task.status}`),
-        to: target === 'halted' ? t('column.halted') : t(`status.${target}`),
-      }),
-    );
+  const invalidMove = (task: TaskView, target: Stage) =>
+    showToast(t('invalidMove', { from: t(`status.${task.status}`), to: t(`stage.${target}`) }));
+
+  const attention = tasks.filter((task) => stageOf(task.status) === 'attention').length;
+  const running = tasks.filter((task) => task.status === 'running').length;
 
   return (
     <>
       <Header
+        running={running}
+        attention={attention}
         status={status}
         settings={settings}
         onNewTask={() => setDialog('new')}
         onSettings={() => setDialog('settings')}
       />
-      <Board tasks={tasks} onOpen={setSelected} onMove={move} onInvalidMove={invalidMove} />
-      {selected !== null && (
-        <TaskDrawer taskId={selected} onClose={() => setSelected(null)} onError={showToast} />
+      <Board
+        tasks={tasks}
+        onOpen={(id, tab = 'timeline') => setSelected({ id, tab })}
+        onAction={act}
+        onInvalidMove={invalidMove}
+        onNewTask={() => setDialog('new')}
+      />
+      {selected && (
+        <TaskDrawer
+          key={`${selected.id}-${selected.tab}`}
+          taskId={selected.id}
+          initialTab={selected.tab}
+          onAction={act}
+          onClose={() => setSelected(null)}
+          onError={showToast}
+        />
       )}
-      {dialog === 'new' && (
+      {dialog === 'new' && settings && (
         <NewTaskDialog
-          defaultSize={settings?.defaultContextPolicy.size ?? 'medium'}
+          settings={settings}
           onClose={() => setDialog(null)}
           onCreated={(id) => {
             setDialog(null);
             void load();
-            setSelected(id);
+            setSelected({ id, tab: 'timeline' });
           }}
         />
       )}
       {dialog === 'settings' && settings && (
         <SettingsDialog
           settings={settings}
+          configFile={status?.configFile ?? null}
           onClose={() => setDialog(null)}
           onSaved={(next) => {
             setSettings(next);

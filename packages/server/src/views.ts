@@ -28,6 +28,9 @@ export function taskView(task: Task, harness: Harness): TaskView {
     activity: harness.activity(task.id),
     lastReview: (store.lastEvent(task.id, 'review')?.data as ReviewRecord | undefined) ?? null,
     reviewPending: harness.pendingReview(task.id) !== null,
+    lastNotice:
+      (store.lastEvent(task.id, 'notice')?.data as { message?: string } | undefined)?.message ??
+      null,
   };
 }
 

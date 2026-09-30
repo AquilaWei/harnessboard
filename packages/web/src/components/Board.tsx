@@ -2,62 +2,78 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskView } from '@harnessboard/shared';
-import { COLUMNS, columnOf, moveAction } from '../board';
-import type { ColumnId, MoveAction } from '../board';
+import { STAGES, dropAction, stageOf } from '../board';
+import type { Stage, TaskAction } from '../board';
+import type { DrawerTab } from './TaskDrawer';
 import { TaskCard } from './TaskCard';
 
 interface Props {
   tasks: TaskView[];
-  onOpen: (id: number) => void;
-  onMove: (task: TaskView, action: MoveAction) => void;
-  onInvalidMove: (task: TaskView, target: ColumnId) => void;
+  onOpen: (id: number, tab?: DrawerTab) => void;
+  onAction: (task: TaskView, action: TaskAction) => void;
+  onInvalidMove: (task: TaskView, target: Stage) => void;
+  onNewTask: () => void;
 }
 
-export function Board({ tasks, onOpen, onMove, onInvalidMove }: Props) {
+/** Four stages that fit one screen; cards carry their own buttons, dragging is optional. */
+export function Board({ tasks, onOpen, onAction, onInvalidMove, onNewTask }: Props) {
   const { t } = useTranslation();
   const [dragged, setDragged] = useState<TaskView | null>(null);
-  const [over, setOver] = useState<ColumnId | null>(null);
+  const [over, setOver] = useState<Stage | null>(null);
 
-  const drop = (target: ColumnId) => {
+  const drop = (target: Stage) => {
     setOver(null);
-    if (!dragged || columnOf(dragged.status) === target) return;
-    const action = moveAction(dragged, target);
-    if (action) onMove(dragged, action);
+    if (!dragged || stageOf(dragged.status) === target) return;
+    const action = dropAction(dragged, target);
+    if (action) onAction(dragged, action);
     else onInvalidMove(dragged, target);
   };
 
   return (
     <main className="board">
-      {COLUMNS.map((column) => {
-        const items = tasks.filter((task) => columnOf(task.status) === column);
-        const droppable = dragged !== null && moveAction(dragged, column) !== null;
-        const title = column === 'halted' ? t('column.halted') : t(`status.${column}`);
+      {STAGES.map((stage) => {
+        // Newest first, so fresh work is at the top of each stage.
+        const items = tasks.filter((task) => stageOf(task.status) === stage).reverse();
+        const droppable = dragged !== null && dropAction(dragged, stage) !== null;
         return (
           <section
-            key={column}
-            className={`column ${over === column && droppable ? 'drop-ok' : ''}`}
-            aria-label={title}
+            key={stage}
+            id={`stage-${stage}`}
+            className={`stage stage-${stage} ${items.length > 0 ? 'has-items' : ''} ${over === stage && droppable ? 'drop-ok' : ''} ${
+              dragged && !droppable && stageOf(dragged.status) !== stage ? 'drop-no' : ''
+            }`}
+            aria-label={t(`stage.${stage}`)}
             onDragOver={(e) => {
               e.preventDefault();
-              setOver(column);
+              setOver(stage);
             }}
-            onDragLeave={() => setOver((c) => (c === column ? null : c))}
+            onDragLeave={() => setOver((s) => (s === stage ? null : s))}
             onDrop={(e) => {
               e.preventDefault();
-              drop(column);
+              drop(stage);
             }}
           >
-            <div className="column-head">
-              <span>{title}</span>
+            <h2 className="stage-head">
+              <span>{t(`stage.${stage}`)}</span>
               <span className="count">{items.length}</span>
-            </div>
-            {items.length === 0 && <div className="empty">{t('emptyColumn')}</div>}
+            </h2>
+            {items.length === 0 && (
+              <div className="empty">
+                <p>{t(`stageEmpty.${stage}`)}</p>
+                {stage === 'draft' && (
+                  <button type="button" className="btn" onClick={onNewTask}>
+                    + {t('newTask')}
+                  </button>
+                )}
+              </div>
+            )}
             {items.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
                 dragging={dragged?.id === task.id}
-                onOpen={() => onOpen(task.id)}
+                onOpen={(tab) => onOpen(task.id, tab)}
+                onAction={(action) => onAction(task, action)}
                 onDragStart={() => setDragged(task)}
                 onDragEnd={() => {
                   setDragged(null);
