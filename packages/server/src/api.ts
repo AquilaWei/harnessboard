@@ -2,6 +2,7 @@
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import { inspectFolder, listFolders } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
 import type { CreateTaskInput, HarnessEvent } from '@harnessboard/shared';
 import { latestSnapshot, taskView, timeline } from './views.js';
@@ -37,6 +38,10 @@ export function createApi(harness: Harness): Hono {
   app.onError((err, c) => c.json({ error: err.message }, 400));
 
   app.get('/status', (c) => c.json(harness.status()));
+
+  // Read-only: folder names on this machine, for picking a repository in the web UI.
+  app.get('/folders', async (c) => c.json(await listFolders(c.req.query('path'))));
+  app.get('/folders/inspect', async (c) => c.json(await inspectFolder(c.req.query('path') ?? '')));
 
   app.get('/agents', async (c) => c.json(await harness.probeAgents()));
 

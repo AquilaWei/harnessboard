@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Integration tests: real git worktrees, the fake agent CLI, and a temporary database.
 import { existsSync, readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
@@ -241,10 +242,16 @@ describe('stopping a running task', () => {
 });
 
 describe('createTask', () => {
-  it('rejects a directory outside any git repository', async () => {
+  it('rejects a directory outside any git repository with a way to fix it', async () => {
     await expect(harness.createTask({ prompt: 'x', repo: tempDir('plain') })).rejects.toThrow(
-      /not a git repository/,
+      /not inside a git repository\. Run "git init"/,
     );
+  });
+
+  it('accepts a repository path starting with ~', async () => {
+    const home = path.relative(os.homedir(), repo);
+    const task = await harness.createTask({ prompt: 'x', repo: `~/${home}` });
+    expect(task.repoPath).toBe(repo);
   });
 
   it('rejects an invalid context policy', async () => {

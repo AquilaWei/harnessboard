@@ -131,6 +131,9 @@ other.
   - **Log:** the live log.
   - **Details:** paths, agents and budget.
   - It can also copy `hb open <id>`, so you can take over in Claude Code.
+- **Picking a repository:** type a path (`~` works) or click Browse… to walk through your
+  folders. Git repositories are marked. The field checks what you picked right away: missing
+  folder, not a repository (with the command to fix it), or no commits yet.
 - **Context meter** while a session runs. It is blue under budget, amber past the wrap-up
   point and red past the limit, with ticks at both. Loop tasks also show verified feature
   progress.

@@ -26,6 +26,7 @@ import {
   validate,
 } from './config.js';
 import type { EditableSettings, HarnessConfig } from './config.js';
+import { resolveRepository } from './folders.js';
 import { probe } from './process.js';
 import { createAdapter } from './providers.js';
 import type { AdapterFactory } from './providers.js';
@@ -35,14 +36,7 @@ import { dueForRetry, quotaBlocks, startable } from './scheduler.js';
 import { Store } from './store.js';
 import { Workflow } from './workflow.js';
 import type { SessionPlan } from './workflow.js';
-import {
-  addWorktree,
-  branchName,
-  currentRef,
-  repoRoot,
-  worktreeDiff,
-  worktreePath,
-} from './worktree.js';
+import { addWorktree, branchName, currentRef, worktreeDiff, worktreePath } from './worktree.js';
 
 /** Git commands a task may run without `skipPermissions`, so it can commit its own work. */
 export const DEFAULT_ALLOWED_TOOLS = [
@@ -195,11 +189,11 @@ export class Harness {
 
   /**
    * Validates the repository and thresholds, then records the task.
-   * Throws when `repo` is not inside a git repository, the context policy is invalid, or a
+   * Throws when `repo` is missing, not inside a git repository with a commit, the context policy is invalid, or a
    * loop task has no verify command (from the input or the project's config file).
    */
   async createTask(input: CreateTaskInput): Promise<Task> {
-    const repoPath = await repoRoot(path.resolve(input.repo));
+    const repoPath = await resolveRepository(input.repo);
     const project = loadProjectConfig(repoPath);
     const contextPolicy = {
       ...this.config.defaultContextPolicy,

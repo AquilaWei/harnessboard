@@ -197,3 +197,26 @@ describe('reviewed tasks', () => {
     expect(((await res.json()) as { lastReview: unknown }).lastReview).toEqual(review);
   });
 });
+
+describe('folders API', () => {
+  it('lists subfolders and marks git repositories', async () => {
+    const parent = path.dirname(repo);
+    const res = await app.request(`/api/folders?path=${encodeURIComponent(parent)}`, {
+      headers: local,
+    });
+    const listing = (await res.json()) as { entries: { name: string; isRepo: boolean }[] };
+    expect(listing.entries).toContainEqual(expect.objectContaining({ name: 'repo', isRepo: true }));
+  });
+
+  it('reports whether a typed path is a usable repository', async () => {
+    const res = await app.request(`/api/folders/inspect?path=${encodeURIComponent(repo)}`, {
+      headers: local,
+    });
+    expect(await res.json()).toEqual({
+      path: repo,
+      exists: true,
+      repoRoot: repo,
+      hasCommits: true,
+    });
+  });
+});

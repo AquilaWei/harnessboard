@@ -2,6 +2,8 @@
 import type {
   AgentInfo,
   CreateTaskInput,
+  FolderInfo,
+  FolderListing,
   HarnessStatus,
   Settings,
   StoredEvent,
@@ -46,6 +48,10 @@ export const api = {
   diff: (id: number) => request<WorktreeDiff>(`/tasks/${id}/diff`),
   timeline: (id: number) => request<TimelineEntry[]>(`/tasks/${id}/timeline`),
   agents: () => request<AgentInfo[]>('/agents'),
+  folders: (path?: string) =>
+    request<FolderListing>(`/folders${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+  inspectFolder: (path: string) =>
+    request<FolderInfo>(`/folders/inspect?path=${encodeURIComponent(path)}`),
   createTask: (input: CreateTaskInput) => send<TaskView>('POST', '/tasks', input),
   queue: (id: number) => send<unknown>('POST', `/tasks/${id}/queue`),
   stop: (id: number) => send<unknown>('POST', `/tasks/${id}/stop`),

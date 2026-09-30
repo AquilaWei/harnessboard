@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { definedOnly } from '@harnessboard/shared';
 import type { AgentInfo, Settings, TaskMode, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
+import { FolderField } from './FolderField';
 
 const RECENT_KEY = 'harnessboard.recentRepos';
 const RECENT_MAX = 6;
@@ -135,23 +136,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           />
         </label>
 
-        <label className="field">
-          <span>{t('form.repo')}</span>
-          <input
-            required
-            className="mono"
-            list="recent-repos"
-            value={repo}
-            placeholder="/path/to/project"
-            onChange={(e) => setRepo(e.target.value)}
-          />
-          <datalist id="recent-repos">
-            {recent.map((r) => (
-              <option key={r} value={r} />
-            ))}
-          </datalist>
-          <small className="hint">{t('form.repoHint')}</small>
-        </label>
+        <FolderField value={repo} onChange={setRepo} recent={recent} />
 
         {mode === 'loop' && (
           <label className="field">

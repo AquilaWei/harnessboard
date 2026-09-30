@@ -5,6 +5,17 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Folder picker in the New task dialog:** browse your folders with git repositories marked,
+  and see right away whether a path can be used.
+
+### Fixed
+
+- Creating a task in a folder outside a git repository showed git's raw error. It now says
+  what is wrong and how to fix it. A repository without commits, and paths starting with
+  `~`, are handled too.
+
 ## 0.0.2 - 2026-09-29
 
 ### Added
