@@ -39,7 +39,7 @@ export function FeatureList({ features, lastVerify }: Props) {
               <td className="nowrap">
                 {f.passes ? `✓ ${t('loop.passes')}` : `· ${t('loop.open')}`}
               </td>
-              <td className="mono">{f.id}</td>
+              <td className="mono nowrap">{f.id}</td>
               <td>{f.description}</td>
             </tr>
           ))}
