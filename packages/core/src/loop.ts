@@ -14,6 +14,18 @@ const OUTPUT_TAIL_CHARS = 4_000;
  * with a message that can be shown to the user and to the next session.
  */
 export function readFeatureList(dir: string): Feature[] {
+  return readPlan(dir).features;
+}
+
+/**
+ * The feature list plus the planner's optional `verify` suggestion and open `questions`.
+ * Throws like {@link readFeatureList}; bad optional fields are ignored rather than fatal.
+ */
+export function readPlan(dir: string): {
+  features: Feature[];
+  suggestedVerify: string | null;
+  questions: string[];
+} {
   const file = path.join(dir, FEATURE_LIST_FILE);
   let raw: string;
   try {
@@ -27,20 +39,28 @@ export function readFeatureList(dir: string): Feature[] {
   } catch (err) {
     throw new Error(`${FEATURE_LIST_FILE} is not valid JSON: ${(err as Error).message}`);
   }
-  const features = (parsed as { features?: unknown } | null)?.features;
+  const doc = (parsed ?? {}) as { features?: unknown; verify?: unknown; questions?: unknown };
+  const features = doc.features;
   if (!Array.isArray(features) || features.length === 0) {
     throw new Error(`${FEATURE_LIST_FILE} must contain a non-empty "features" array`);
   }
-  return features.map((f: unknown, i) => {
-    const item = f as Partial<Feature> | null;
-    if (typeof item?.id !== 'string' || typeof item.description !== 'string') {
-      throw new Error(`${FEATURE_LIST_FILE}: feature ${i + 1} needs a string id and description`);
-    }
-    if (typeof item.passes !== 'boolean') {
-      throw new Error(`${FEATURE_LIST_FILE}: feature ${item.id} needs a boolean "passes"`);
-    }
-    return item as Feature;
-  });
+  const suggestedVerify =
+    typeof doc.verify === 'string' && doc.verify.trim() ? doc.verify.trim() : null;
+  const questions = Array.isArray(doc.questions)
+    ? doc.questions.filter((q): q is string => typeof q === 'string' && q.trim() !== '')
+    : [];
+  return { features: features.map(checkFeature), suggestedVerify, questions };
+}
+
+function checkFeature(f: unknown, i: number): Feature {
+  const item = f as Partial<Feature> | null;
+  if (typeof item?.id !== 'string' || typeof item.description !== 'string') {
+    throw new Error(`${FEATURE_LIST_FILE}: feature ${i + 1} needs a string id and description`);
+  }
+  if (typeof item.passes !== 'boolean') {
+    throw new Error(`${FEATURE_LIST_FILE}: feature ${item.id} needs a boolean "passes"`);
+  }
+  return item as Feature;
 }
 
 /** Ids from `baseline` that are no longer in `current`; agents must not drop features. */

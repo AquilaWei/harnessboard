@@ -72,6 +72,7 @@ async function createLoop(verifyCommand = VERIFY_OK) {
     repo,
     mode: 'loop',
     verifyCommand,
+    confirmPlan: false,
     queue: true,
   });
   await harness.waitForIdle();
@@ -94,10 +95,10 @@ async function waitForNotice(id: number, prefix: string): Promise<void> {
 const status = (id: number) => harness.store.getTask(id)!.status;
 
 describe('creating a loop task', () => {
-  it('rejects a loop task without a verify command', async () => {
-    await expect(harness.createTask({ prompt: 'x', repo, mode: 'loop' })).rejects.toThrow(
-      /needs a verify command/,
-    );
+  it('rejects a loop task that skips plan approval without a verify command', async () => {
+    await expect(
+      harness.createTask({ prompt: 'x', repo, mode: 'loop', confirmPlan: false }),
+    ).rejects.toThrow(/needs a verify command/);
   });
 
   it('allows the agent to run the verify command', async () => {
@@ -224,6 +225,7 @@ describe('handoffs in a long loop', () => {
       repo,
       mode: 'loop',
       verifyCommand: VERIFY_OK,
+      confirmPlan: false,
       softPct: 30,
       hardPct: 60,
       queue: true,

@@ -23,6 +23,9 @@ const en = {
     'Warning: agent {id} cannot run {command} ({error}). Its tasks will fail until it works; fix agents.{id}.command in {file} (or HARNESSBOARD_CLAUDE_PATH for claude).',
   unknownAgent: 'Agent profile "{agent}" is not in your config.',
   defaultModel: '(default)',
+  suggestedVerify: 'Suggested verify command (not active until you approve): {command}',
+  planNext:
+    'Reply with `hb feedback {id} "..."`, or start with `hb approve {id} --verify "<command>"`.',
   noVerdict: 'no verdict',
   reviewLine: 'last review by {agent} (round {round}): {verdict}',
 };
@@ -51,6 +54,9 @@ const zhTW: Messages = {
     '警告：agent {id} 無法執行 {command}（{error}）。修好之前它的任務都會失敗；請修改 {file} 裡的 agents.{id}.command（claude 也可以設定 HARNESSBOARD_CLAUDE_PATH）。',
   unknownAgent: '設定檔裡沒有名為「{agent}」的 agent。',
   defaultModel: '（預設）',
+  suggestedVerify: '建議的驗證指令（你確認後才生效）：{command}',
+  planNext:
+    '用 `hb feedback {id} "..."` 回覆意見，或用 `hb approve {id} --verify "<指令>"` 確認開工。',
   noVerdict: '沒有結論',
   reviewLine: '最近一次審查：{agent}（第 {round} 輪）：{verdict}',
 };

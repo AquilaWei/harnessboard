@@ -5,7 +5,7 @@ import { streamSSE } from 'hono/streaming';
 import { inspectFolder, listFolders } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
 import type { CreateTaskInput, HarnessEvent } from '@harnessboard/shared';
-import { latestSnapshot, taskView, timeline } from './views.js';
+import { latestSnapshot, planView, taskView, timeline } from './views.js';
 
 /** Header every state-changing request must carry; see {@link localOnly}. */
 export const CLIENT_HEADER = 'x-harnessboard-client';
@@ -75,6 +75,23 @@ export function createApi(harness: Harness): Hono {
   app.get('/tasks/:id/events', (c) => {
     const after = Number(c.req.query('after') ?? 0);
     return c.json(harness.store.listEvents(taskId(c), after));
+  });
+
+  app.get('/tasks/:id/plan', (c) => {
+    const id = taskId(c);
+    const task = harness.store.getTask(id);
+    if (!task) return c.json({ error: `task ${id} not found` }, 404);
+    return c.json(planView(task, harness.store));
+  });
+  app.post('/tasks/:id/plan/feedback', async (c) => {
+    const { message } = await c.req.json<{ message: string }>();
+    return c.json(harness.planFeedback(taskId(c), message ?? ''));
+  });
+  app.post('/tasks/:id/plan/approve', async (c) => {
+    const body = await c.req.json<{ verifyCommand?: string }>().catch(() => ({}));
+    return c.json(
+      harness.approvePlan(taskId(c), (body as { verifyCommand?: string }).verifyCommand),
+    );
   });
 
   app.get('/tasks/:id/timeline', (c) => c.json(timeline(taskId(c), harness.store)));

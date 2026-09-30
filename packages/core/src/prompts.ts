@@ -52,25 +52,56 @@ export function continuationPrompt(
 export const QUOTA_RESUME_PROMPT =
   '[harness] The usage limit has reset. Continue the task from where you stopped.';
 
-/** First session of a loop task: plan the work as a feature list, implement nothing yet. */
-export function initializerPrompt(goal: string, verifyCommand: string): string {
+/**
+ * First session of a loop task: plan the work as a feature list, implement nothing yet.
+ * Without a verify command the planner proposes one; the user confirms it before building.
+ */
+export function initializerPrompt(goal: string, verifyCommand: string | null): string {
+  const verifyLine = verifyCommand
+    ? `The user checks the work with \`${verifyCommand}\`.`
+    : 'No check command is set yet: propose one in "verify" (see below).';
   return [
-    'You are the first session of a long-running project that later sessions will build',
+    'You are the planning session of a long-running project that later sessions will build',
     'one feature at a time. Do not implement any features in this session.',
     '',
     `Goal:\n${goal}`,
     '',
+    verifyLine,
+    '',
     '1. Study the repository.',
     `2. Write \`${FEATURE_LIST_FILE}\` at the repository root in this shape:`,
-    '   {"features": [{"id": "F1", "description": "...", "steps": ["..."], "passes": false}]}',
-    '   Split the goal into small features that can each be finished and checked in one',
-    '   session, in the order they should be built. Every feature starts with "passes": false.',
-    `3. Write \`${PROGRESS_FILE}\`: an overview of the plan, how to check the work with`,
-    `   \`${verifyCommand}\`, and anything the next session should know.`,
+    '   {"features": [{"id": "F1", "description": "...", "steps": ["..."], "passes": false}],',
+    '    "verify": "<command>", "questions": ["..."]}',
+    '   - Split the goal into small features that can each be finished and checked in one',
+    '     session, in the order they should be built. Every feature starts with "passes": false.',
+    '   - "steps" are the acceptance criteria: concrete, observable checks that show the',
+    '     feature works, preferably ones an automated test can cover.',
+    '   - "verify": one shell command that runs the automated checks without any prompts',
+    '     (tests, lint, build). Omit it if a command is already set above.',
+    '   - "questions": decisions you need from the user (scope, tools, accounts, trade-offs).',
+    '     Leave it empty if nothing is unclear.',
+    `3. Write \`${PROGRESS_FILE}\`: an overview of the plan and anything the next session`,
+    '   should know.',
     '4. Commit both files.',
+    '5. Reply with a short summary of the plan and your questions.',
     '',
-    `After every later session the harness runs \`${verifyCommand}\` itself; a feature only`,
+    'The user reviews this plan and may ask for changes before any feature is built. After',
+    'approval, the harness runs the check command itself after every session; a feature only',
     'counts as done when that command succeeds.',
+  ].join('\n');
+}
+
+/** Sent to the planning session when the user replies to the plan instead of approving it. */
+export function planRevisionPrompt(message: string): string {
+  return [
+    '[harness] The user reviewed your plan and replied:',
+    '',
+    message,
+    '',
+    `Update \`${FEATURE_LIST_FILE}\` and \`${PROGRESS_FILE}\` to match, and commit. Keep ids of`,
+    'features that stay; give new ones new ids. Update "questions" to what is still open.',
+    'Still do not implement any features. Reply with what you changed, your answers to the',
+    "user's points, and any remaining questions.",
   ].join('\n');
 }
 
@@ -94,7 +125,8 @@ export function loopSessionPrompt(
     '',
     `1. Read \`${PROGRESS_FILE}\`, \`${FEATURE_LIST_FILE}\` and \`git log --oneline -20\`.`,
     `2. Run \`${verifyCommand}\`. If something that used to work is broken, fix that first.`,
-    '3. Pick the first feature with "passes": false and implement it.',
+    '3. Pick the first feature with "passes": false and implement it so its "steps" (the',
+    '   acceptance criteria) hold.',
     `4. Run \`${verifyCommand}\`. Set "passes": true for that feature only if it succeeds.`,
     '   Never remove features or change their descriptions or steps.',
     `5. Update \`${PROGRESS_FILE}\` and commit.`,

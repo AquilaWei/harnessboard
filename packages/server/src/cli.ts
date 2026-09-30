@@ -97,10 +97,55 @@ withTaskOptions(
     .command('loop')
     .description('plan a goal as a feature list, then build and verify one feature per session')
     .argument('<goal...>', 'what the finished project should do')
-    .option('--verify <command>', 'command the harness runs to check each feature'),
-).action((words: string[], o: AddOptions & { verify?: string }) =>
-  createTask(words.join(' '), o, definedOnly({ mode: 'loop' as const, verifyCommand: o.verify })),
+    .option(
+      '--verify <command>',
+      'command the harness runs to check each feature (optional: can be set at approval)',
+    )
+    .option('--no-confirm-plan', 'start building right after planning (needs --verify)'),
+).action((words: string[], o: AddOptions & { verify?: string; confirmPlan: boolean }) =>
+  createTask(
+    words.join(' '),
+    o,
+    definedOnly({ mode: 'loop' as const, verifyCommand: o.verify, confirmPlan: o.confirmPlan }),
+  ),
 );
+
+program
+  .command('plan')
+  .description("show a loop task's proposed plan, the planner's questions and reply")
+  .argument('<id>', 'task id', parseInteger)
+  .action(async (id: number) => {
+    const plan = await client().plan(id);
+    if (plan.reply) console.log(`${plan.reply}\n`);
+    if (plan.error) console.log(`✗ ${plan.error}`);
+    for (const feature of plan.features ?? []) {
+      console.log(formatFeature(feature));
+      for (const step of feature.steps ?? []) console.log(`        - ${step}`);
+    }
+    for (const q of plan.questions) console.log(`  ? ${q}`);
+    if (plan.suggestedVerify) console.log(t('suggestedVerify', { command: plan.suggestedVerify }));
+    if (!plan.approved) console.log(t('planNext', { id }));
+  });
+
+program
+  .command('feedback')
+  .description('reply to a proposed plan; the planner revises it')
+  .argument('<id>', 'task id', parseInteger)
+  .argument('<message...>', 'your feedback')
+  .action(async (id: number, words: string[]) => {
+    const task = await client().planFeedback(id, words.join(' '));
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
+  .command('approve')
+  .description('approve a proposed plan and start building')
+  .argument('<id>', 'task id', parseInteger)
+  .option('--verify <command>', 'verify command to use (required unless the task has one)')
+  .action(async (id: number, o: { verify?: string }) => {
+    const task = await client().approvePlan(id, o.verify);
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
 
 program
   .command('agents')

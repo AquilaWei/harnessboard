@@ -29,6 +29,10 @@ export interface TaskView extends Task {
   reviewPending: boolean;
   /** The harness's latest message about the task, e.g. why it failed. */
   lastNotice: string | null;
+  /** Latest plan proposal of a loop task, until it is approved. */
+  plan: { total: number; questions: number; suggestedVerify: string | null } | null;
+  /** True while user feedback on the plan waits for the planner. */
+  planFeedbackPending: boolean;
 }
 
 export interface TaskDetail extends TaskView {
@@ -68,8 +72,13 @@ export interface CreateTaskInput {
   implementer?: string;
   /** `null` turns review off even when a default reviewer is configured. */
   reviewer?: string | null;
-  /** Required for loop tasks unless the project's `.harnessboard.json` sets one. */
+  /**
+   * Loop tasks: optional while `confirmPlan` is on (the default), because it can be set
+   * when the plan is approved; otherwise required unless `.harnessboard.json` sets one.
+   */
   verifyCommand?: string;
+  /** Loop tasks: wait for the user to approve the plan before building (default true). */
+  confirmPlan?: boolean;
   size?: ContextPolicy['size'];
   softPct?: number;
   hardPct?: number;

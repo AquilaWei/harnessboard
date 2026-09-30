@@ -4,8 +4,8 @@ import path from 'node:path';
 import { FEATURE_LIST_FILE, contextPct, resolveThresholds } from '@harnessboard/shared';
 import type {
   AgentRole,
-  Feature,
   FeatureSnapshot,
+  PlanProposal,
   ReviewRecord,
   ReviewRequest,
   Session,
@@ -14,12 +14,13 @@ import type {
   TaskStatus,
 } from '@harnessboard/shared';
 import type { HarnessConfig } from './config.js';
-import { missingFeatures, readFeatureList, runVerify } from './loop.js';
+import { missingFeatures, readPlan, runVerify } from './loop.js';
 import {
   QUOTA_RESUME_PROMPT,
   continuationPrompt,
   initializerPrompt,
   loopSessionPrompt,
+  planRevisionPrompt,
 } from './prompts.js';
 import { parseVerdict, reviewFeedback, reviewPrompt } from './review.js';
 import type { SessionOutcome } from './runner.js';
@@ -63,6 +64,8 @@ export class Workflow {
     const request = this.pendingReview(task.id);
     if (request) return this.reviewPlan(task, request, last);
     if (!last) return this.implement(task, this.firstPrompt(task));
+    const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
+    if (feedback !== null) return this.revisePlan(task, feedback, last);
     if (last.endReason === 'handoff' || last.endReason === 'context_hard_limit') {
       return this.continuation(task, this.handoffNote(task));
     }
@@ -139,7 +142,37 @@ export class Workflow {
   }
 
   private firstPrompt(task: Task): string {
-    return task.mode === 'loop' ? initializerPrompt(task.prompt, task.verifyCommand!) : task.prompt;
+    return task.mode === 'loop' ? initializerPrompt(task.prompt, task.verifyCommand) : task.prompt;
+  }
+
+  /** A loop task before its plan is approved (or accepted without approval). */
+  private inPlanning(task: Task): boolean {
+    return task.mode === 'loop' && this.snapshots(task.id).length === 0;
+  }
+
+  /** The user's reply to the latest plan proposal, if the planner has not seen it yet. */
+  pendingPlanFeedback(taskId: number): string | null {
+    const feedback = this.host.store.lastEvent(taskId, 'plan_feedback');
+    const proposal = this.host.store.lastEvent(taskId, 'plan');
+    if (!feedback || (proposal && proposal.id > feedback.id)) return null;
+    return (feedback.data as { message: string }).message;
+  }
+
+  /**
+   * Continues the planner's own conversation with the user's reply, so it keeps everything
+   * it already discussed; starts over from the plan files only when that is not possible.
+   */
+  private revisePlan(task: Task, message: string, last: Session): SessionPlan {
+    const resumable =
+      last.role === 'implementer' &&
+      last.agentSessionId !== null &&
+      last.contextTokens > 0 &&
+      this.hasBudget(task, last);
+    if (resumable) return this.implement(task, planRevisionPrompt(message), last);
+    return this.implement(
+      task,
+      continuationPrompt(this.firstPrompt(task), null, planRevisionPrompt(message)),
+    );
   }
 
   private continuation(task: Task, note: string | null): SessionPlan {
@@ -147,8 +180,8 @@ export class Workflow {
     if (task.mode === 'single') {
       return this.implement(task, continuationPrompt(task.prompt, note, feedback));
     }
-    // The initializer was cut off before it wrote the feature list; let it finish planning.
-    if (!existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE))) {
+    // Until the plan is approved, a follow-up session keeps planning, never builds.
+    if (this.inPlanning(task) || !existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE))) {
       return this.implement(task, continuationPrompt(this.firstPrompt(task), note));
     }
     const verify = this.snapshots(task.id).at(-1)?.verify;
@@ -202,7 +235,7 @@ export class Workflow {
     }
     switch (outcome.reason) {
       case 'completed':
-        if (task.mode === 'loop') await this.finishLoopStep(task, signal);
+        if (task.mode === 'loop') await this.finishLoopStep(task, signal, outcome.finalText);
         else await this.stepDone(task);
         return;
       case 'handoff':
@@ -333,17 +366,29 @@ export class Workflow {
    * After a loop session: checks the feature list, runs the verify command independently of
    * what the agent reported, and decides whether to continue, finish, or stop for review.
    */
-  private async finishLoopStep(task: Task, signal: AbortSignal): Promise<void> {
-    let features: Feature[];
+  private async finishLoopStep(task: Task, signal: AbortSignal, reply: string): Promise<void> {
+    let plan: ReturnType<typeof readPlan>;
     try {
-      features = readFeatureList(task.worktreePath!);
+      plan = readPlan(task.worktreePath!);
     } catch (err) {
       this.host.notice(task.id, (err as Error).message);
       this.host.setStatus(task.id, 'failed');
       return;
     }
+    const { features } = plan;
     const snapshots = this.snapshots(task.id);
     const baseline = snapshots[0];
+    if (!baseline && task.confirmPlan) {
+      // Nothing is built until the user approves; the approval records the baseline.
+      const proposal: PlanProposal = { ...plan, reply };
+      this.host.store.appendEvent(task.id, null, 'plan', proposal);
+      this.host.notice(
+        task.id,
+        `plan ready for your review: ${features.length} features, ${plan.questions.length} questions`,
+      );
+      this.host.setStatus(task.id, 'awaiting_approval');
+      return;
+    }
     if (!baseline) {
       // The initializer only plans; there is nothing to verify yet.
       this.recordSnapshot(task.id, { features, verify: null, verifiedPassing: 0 });

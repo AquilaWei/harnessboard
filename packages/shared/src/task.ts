@@ -6,6 +6,7 @@ export const TASK_STATUSES = [
   'queued',
   'running',
   'waiting_quota',
+  'awaiting_approval',
   'review',
   'done',
   'failed',
@@ -52,8 +53,13 @@ export interface Task {
   worktreePath: string | null;
   status: TaskStatus;
   mode: TaskMode;
-  /** Shell command the harness runs to check the work; required in loop mode. */
+  /**
+   * Shell command the harness runs to check the work. A loop task needs one before it
+   * starts building; with `confirmPlan` it may be set when the plan is approved.
+   */
   verifyCommand: string | null;
+  /** Loop tasks: wait for the user to approve the planned features before building. */
+  confirmPlan: boolean;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
   agents: TaskAgents;

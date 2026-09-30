@@ -91,3 +91,33 @@ describe('describeTask', () => {
     });
   });
 });
+
+describe('describeTask for plans', () => {
+  it('counts the features and questions of a plan waiting for approval', () => {
+    const task = {
+      ...base,
+      status: 'awaiting_approval',
+      plan: { total: 8, questions: 2, suggestedVerify: 'npm test' },
+    } as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'planReadyQuestions',
+      tone: 'attention',
+      vars: { total: 8, questions: 2 },
+    });
+  });
+
+  it('says the planner is revising an earlier proposal', () => {
+    const task = {
+      ...base,
+      status: 'running',
+      activity: { phase: 'planning', agentId: 'claude' },
+      plan: { total: 8, questions: 0, suggestedVerify: null },
+    } as TaskView;
+    expect(describeTask(task).key).toBe('revisingPlan');
+  });
+
+  it('says queued feedback waits for the planner', () => {
+    const task = { ...base, status: 'queued', planFeedbackPending: true } as TaskView;
+    expect(describeTask(task).key).toBe('revisingPlanQueued');
+  });
+});

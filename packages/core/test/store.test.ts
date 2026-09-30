@@ -12,6 +12,7 @@ const newTask = {
   baseRef: 'main',
   mode: 'single' as const,
   verifyCommand: null,
+  confirmPlan: false,
   agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
   contextPolicy: { size: 'small' as const },
   permission: { allowedTools: [], skipPermissions: false },
@@ -117,5 +118,23 @@ describe('Store', () => {
       'claude',
       's1',
     ]);
+  });
+
+  it('upgrades tasks from before plan approval as already approved', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    const { id } = first.createTask({ ...newTask, mode: 'loop', verifyCommand: 'npm test' });
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(`ALTER TABLE tasks DROP COLUMN confirm_plan; PRAGMA user_version = 3;`);
+    db.close();
+    expect(new Store(file).getTask(id)!.confirmPlan).toBe(false);
+  });
+
+  it('stores an updated permission list as JSON', () => {
+    const store = new Store(':memory:');
+    const { id } = store.createTask(newTask);
+    const permission = { allowedTools: ['Bash(npm test)'], skipPermissions: false };
+    expect(store.updateTask(id, { permission }).permission).toEqual(permission);
   });
 });

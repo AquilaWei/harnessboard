@@ -8,7 +8,10 @@ import type {
   AgentProvider,
   CreateTaskInput,
   HarnessEvent,
+  FeatureSnapshot,
   HarnessStatus,
+  PlanApproval,
+  PlanProposal,
   QuotaInfo,
   ReviewRequest,
   Task,
@@ -27,6 +30,7 @@ import {
 } from './config.js';
 import type { EditableSettings, HarnessConfig } from './config.js';
 import { resolveRepository } from './folders.js';
+import { readPlan } from './loop.js';
 import { probe } from './process.js';
 import { createAdapter } from './providers.js';
 import type { AdapterFactory } from './providers.js';
@@ -134,6 +138,11 @@ export class Harness {
     return this.activities.get(taskId) ?? null;
   }
 
+  /** The user's reply to a plan that the planner has not handled yet. */
+  pendingPlanFeedback(taskId: number): string | null {
+    return this.workflow.pendingPlanFeedback(taskId);
+  }
+
   /** The review a task is waiting for, if its latest step has not been reviewed yet. */
   pendingReview(taskId: number): ReviewRequest | null {
     return this.workflow.pendingReview(taskId);
@@ -203,8 +212,12 @@ export class Harness {
     resolveThresholds(contextPolicy);
     const mode = input.mode ?? 'single';
     const verifyCommand = input.verifyCommand?.trim() || project.verifyCommand || null;
-    if (mode === 'loop' && !verifyCommand) {
-      throw new Error('a loop task needs a verify command, e.g. "npm test"');
+    // With plan approval the command can be chosen (or taken from the planner) at approval.
+    const confirmPlan = mode === 'loop' && (input.confirmPlan ?? true);
+    if (mode === 'loop' && !confirmPlan && !verifyCommand) {
+      throw new Error(
+        'a loop task that starts without plan approval needs a verify command, e.g. "npm test"',
+      );
     }
     const allowedTools = input.allowedTools ?? project.allowedTools ?? DEFAULT_ALLOWED_TOOLS;
     const agents: TaskAgents = {
@@ -224,11 +237,14 @@ export class Harness {
       baseRef: input.baseRef ?? project.baseRef ?? (await currentRef(repoPath)),
       mode,
       verifyCommand: mode === 'loop' ? verifyCommand : null,
+      confirmPlan,
       contextPolicy,
       permission: {
         // A loop session is told to run the verify command, so it must be allowed to.
         allowedTools:
-          mode === 'loop' ? withTool(allowedTools, `Bash(${verifyCommand})`) : allowedTools,
+          mode === 'loop' && verifyCommand
+            ? withTool(allowedTools, `Bash(${verifyCommand})`)
+            : allowedTools,
         skipPermissions: input.skipPermissions ?? false,
       },
       agents,
@@ -261,6 +277,61 @@ export class Harness {
       return this.setStatus(id, 'stopped', { resumeAt: null });
     }
     return task;
+  }
+
+  /**
+   * Sends the user's reply on a proposed plan back to the planner, which revises the plan
+   * in the same conversation. Throws unless the task is waiting for plan approval.
+   */
+  planFeedback(id: number, message: string): Task {
+    const task = this.requireTask(id);
+    if (task.status !== 'awaiting_approval') {
+      throw new Error(`task ${id} is ${task.status}, not waiting for plan approval`);
+    }
+    if (!message.trim()) throw new Error('feedback is empty');
+    this.store.appendEvent(id, null, 'plan_feedback', { message: message.trim() });
+    const queued = this.setStatus(id, 'queued');
+    this.tick();
+    return queued;
+  }
+
+  /**
+   * Approves the plan as it is in the worktree now (it may have been changed in an
+   * interactive session) and starts building. The verify command is the given one or the
+   * task's own; the planner's suggestion is never used unless the user passes it here.
+   * Throws when the task is not waiting for approval, no command is given, or the feature
+   * list is invalid.
+   */
+  approvePlan(id: number, verifyCommand?: string): Task {
+    const task = this.requireTask(id);
+    if (task.status !== 'awaiting_approval') {
+      throw new Error(`task ${id} is ${task.status}, not waiting for plan approval`);
+    }
+    const command = verifyCommand?.trim() || task.verifyCommand;
+    if (!command) {
+      const proposal = this.store.lastEvent(id, 'plan')?.data as PlanProposal | undefined;
+      const hint = proposal?.suggestedVerify
+        ? `; the planner suggested: ${proposal.suggestedVerify}`
+        : '';
+      throw new Error(`choose a verify command to start building${hint}`);
+    }
+    const { features } = readPlan(task.worktreePath!);
+    const others = task.permission.allowedTools.filter(
+      (rule) => rule !== `Bash(${task.verifyCommand})`,
+    );
+    this.store.updateTask(id, {
+      verifyCommand: command,
+      permission: { ...task.permission, allowedTools: withTool(others, `Bash(${command})`) },
+    });
+    const approval: PlanApproval = { verifyCommand: command, features };
+    this.store.appendEvent(id, null, 'plan_approved', approval);
+    // The approved list is the baseline later sessions may not drop features from.
+    const baseline: FeatureSnapshot = { features, verify: null, verifiedPassing: 0 };
+    this.store.appendEvent(id, null, 'features', baseline);
+    this.notice(id, `plan approved: ${features.length} features, verify with ${command}`);
+    const queued = this.setStatus(id, 'queued');
+    this.tick();
+    return queued;
   }
 
   /** Marks a reviewed task as done. */

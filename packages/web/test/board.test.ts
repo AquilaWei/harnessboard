@@ -62,3 +62,17 @@ describe('dropAction', () => {
     expect(dropAction(task('running'), 'done')).toBeNull();
   });
 });
+
+describe('a plan waiting for approval', () => {
+  it('is in Needs you', () => {
+    expect(stageOf('awaiting_approval')).toBe('attention');
+  });
+
+  it('offers Review plan', () => {
+    expect(primaryAction(task('awaiting_approval'))).toBe('approvePlan');
+  });
+
+  it('cannot be dragged back into progress', () => {
+    expect(dropAction(task('awaiting_approval'), 'active')).toBeNull();
+  });
+});

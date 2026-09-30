@@ -14,6 +14,37 @@ export interface Feature {
   passes: boolean;
 }
 
+/**
+ * A planning session's proposal, stored as the `plan` event each time the planner finishes
+ * (first plan and every revision). Nothing is built until the user approves.
+ */
+export interface PlanProposal {
+  features: Feature[];
+  /** Verify command the planner suggests; it only takes effect once the user confirms it. */
+  suggestedVerify: string | null;
+  /** Decisions the planner needs from the user. */
+  questions: string[];
+  /** The planner's reply: a summary of the plan or of what changed. */
+  reply: string;
+}
+
+/** Stored as the `plan_approved` event; the features become the loop's baseline. */
+export interface PlanApproval {
+  verifyCommand: string;
+  features: Feature[];
+}
+
+/** `GET /api/tasks/:id/plan`: the feature list as it is in the worktree right now. */
+export interface PlanView {
+  /** `null` when the file is missing or invalid; `error` says why. */
+  features: Feature[] | null;
+  error: string | null;
+  suggestedVerify: string | null;
+  questions: string[];
+  reply: string | null;
+  approved: boolean;
+}
+
 /** Outcome of the harness running a task's verify command. */
 export interface VerifyResult {
   command: string;

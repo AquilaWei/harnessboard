@@ -22,6 +22,7 @@ export interface NewTask {
   baseRef: string;
   mode: TaskMode;
   verifyCommand: string | null;
+  confirmPlan: boolean;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
   agents: TaskAgents;
@@ -70,6 +71,7 @@ const MIGRATIONS = [
    ALTER TABLE sessions ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'claude';
    ALTER TABLE sessions ADD COLUMN agent_session_id TEXT;
    UPDATE sessions SET agent_session_id = id;`,
+  `ALTER TABLE tasks ADD COLUMN confirm_plan INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 /**
@@ -95,9 +97,10 @@ export class Store {
   createTask(input: NewTask, now = Date.now()): Task {
     const result = this.db
       .prepare(
-        `INSERT INTO tasks (title, prompt, repo_path, base_ref, mode, verify_command, status,
-                            context_policy, permission, agents, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (title, prompt, repo_path, base_ref, mode, verify_command,
+                            confirm_plan, status, context_policy, permission, agents,
+                            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
       )
       .run(
         input.title,
@@ -106,6 +109,7 @@ export class Store {
         input.baseRef,
         input.mode,
         input.verifyCommand,
+        input.confirmPlan ? 1 : 0,
         JSON.stringify(input.contextPolicy),
         JSON.stringify(input.permission),
         JSON.stringify(input.agents),
@@ -126,7 +130,9 @@ export class Store {
 
   updateTask(
     id: number,
-    fields: Partial<Pick<Task, 'status' | 'branch' | 'worktreePath' | 'resumeAt'>>,
+    fields: Partial<
+      Pick<Task, 'status' | 'branch' | 'worktreePath' | 'resumeAt' | 'verifyCommand' | 'permission'>
+    >,
     now = Date.now(),
   ): Task {
     const columns: Record<string, string> = {
@@ -134,8 +140,16 @@ export class Store {
       branch: 'branch',
       worktreePath: 'worktree_path',
       resumeAt: 'resume_at',
+      verifyCommand: 'verify_command',
+      permission: 'permission',
     };
-    const entries = Object.entries(fields).filter(([, v]) => v !== undefined);
+    // Objects are stored as JSON, like on insert.
+    const entries = Object.entries(fields)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]): [string, unknown] => [
+        k,
+        v !== null && typeof v === 'object' ? JSON.stringify(v) : v,
+      ]);
     const sets = entries.map(([k]) => `${columns[k]} = ?`);
     this.db
       .prepare(`UPDATE tasks SET ${[...sets, 'updated_at = ?'].join(', ')} WHERE id = ?`)
@@ -293,6 +307,7 @@ function toTask(row: Row): Task {
     status: row.status as TaskStatus,
     mode: row.mode as TaskMode,
     verifyCommand: (row.verify_command as string | null) ?? null,
+    confirmPlan: Number(row.confirm_plan) === 1,
     contextPolicy: JSON.parse(String(row.context_policy)) as ContextPolicy,
     permission: JSON.parse(String(row.permission)) as PermissionPolicy,
     agents: JSON.parse(String(row.agents)) as TaskAgents,

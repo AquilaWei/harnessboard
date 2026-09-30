@@ -4,6 +4,7 @@ import type {
   CreateTaskInput,
   FolderInfo,
   FolderListing,
+  PlanView,
   HarnessStatus,
   Settings,
   StoredEvent,
@@ -56,6 +57,11 @@ export const api = {
   queue: (id: number) => send<unknown>('POST', `/tasks/${id}/queue`),
   stop: (id: number) => send<unknown>('POST', `/tasks/${id}/stop`),
   complete: (id: number) => send<unknown>('POST', `/tasks/${id}/complete`),
+  plan: (id: number) => request<PlanView>(`/tasks/${id}/plan`),
+  planFeedback: (id: number, message: string) =>
+    send<unknown>('POST', `/tasks/${id}/plan/feedback`, { message }),
+  approvePlan: (id: number, verifyCommand: string) =>
+    send<unknown>('POST', `/tasks/${id}/plan/approve`, { verifyCommand }),
   settings: () => request<Settings>('/settings'),
   saveSettings: (patch: Partial<Settings>) => send<Settings>('PUT', '/settings', patch),
 };

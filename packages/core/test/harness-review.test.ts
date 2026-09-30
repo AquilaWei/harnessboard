@@ -68,7 +68,7 @@ async function createReviewed(mode: 'single' | 'loop' = 'single') {
     repo,
     reviewer: 'checker',
     mode,
-    ...(mode === 'loop' ? { verifyCommand: 'node -e "process.exit(0)"' } : {}),
+    ...(mode === 'loop' ? { verifyCommand: 'node -e "process.exit(0)"', confirmPlan: false } : {}),
     queue: true,
   });
   await harness.waitForIdle();

@@ -32,6 +32,9 @@ export function TaskCard({ task, onOpen, onAction, onDragStart, onDragEnd, dragg
       case 'review':
         onOpen('changes');
         return;
+      case 'approvePlan':
+        onOpen('features');
+        return;
     }
   };
 

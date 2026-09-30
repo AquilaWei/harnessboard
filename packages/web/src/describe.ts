@@ -28,6 +28,7 @@ export function describeTask(task: TaskView): Description {
     case 'backlog':
       return d('draft', 'idle');
     case 'queued':
+      if (task.planFeedbackPending) return d('revisingPlanQueued', 'working');
       if (task.reviewPending) return d('queuedForReview', 'working', { agent: reviewer });
       if (review?.verdict === 'changes') return d('queuedForFixes', 'working', { agent: reviewer });
       return d('queued', 'working');
@@ -37,6 +38,11 @@ export function describeTask(task: TaskView): Description {
       return task.resumeAt
         ? d('waitingQuota', 'working', { time: task.resumeAt })
         : d('waitingQuotaUnknown', 'working');
+    case 'awaiting_approval':
+      return d(task.plan?.questions ? 'planReadyQuestions' : 'planReady', 'attention', {
+        total: task.plan?.total ?? 0,
+        questions: task.plan?.questions ?? 0,
+      });
     case 'review':
       return describeReview(task);
     case 'failed':
@@ -54,7 +60,8 @@ function describeRunning(task: TaskView): Description {
   const agent = activity.agentId ?? '';
   switch (activity.phase) {
     case 'planning':
-      return d('planning', 'working', { agent });
+      // An earlier proposal exists: this session is revising it with the user's feedback.
+      return d(task.plan ? 'revisingPlan' : 'planning', 'working', { agent });
     case 'implementing':
       if (task.lastReview?.verdict === 'changes') {
         return d('fixingReview', 'working', { agent, reviewer: task.lastReview.agentId });

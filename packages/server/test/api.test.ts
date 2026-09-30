@@ -220,3 +220,30 @@ describe('folders API', () => {
     });
   });
 });
+
+describe('plan API', () => {
+  it('shows no features before the planner has run', async () => {
+    const task = await harness.createTask({ prompt: 'Build it', repo, mode: 'loop' });
+    const res = await app.request(`/api/tasks/${task.id}/plan`, { headers: local });
+    expect(await res.json()).toEqual({
+      features: null,
+      error: null,
+      suggestedVerify: null,
+      questions: [],
+      reply: null,
+      approved: false,
+    });
+  });
+
+  it('refuses feedback while the plan is not waiting for approval', async () => {
+    const task = await harness.createTask({ prompt: 'Build it', repo, mode: 'loop' });
+    const res = await post(
+      `/api/tasks/${task.id}/plan/feedback`,
+      { message: 'more tests' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as { error: string }).error).toMatch(
+      /not waiting for plan approval/,
+    );
+  });
+});

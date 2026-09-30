@@ -6,6 +6,7 @@ import type {
   Task,
   TaskDetail,
   TaskView,
+  PlanView,
   TimelineEntry,
   WorktreeDiff,
 } from '@harnessboard/shared';
@@ -20,6 +21,11 @@ export class ApiClient {
   status = () => this.get<Record<string, unknown>>('/status');
   agents = () => this.get<AgentInfo[]>('/agents');
   timeline = (id: number) => this.get<TimelineEntry[]>(`/tasks/${id}/timeline`);
+  plan = (id: number) => this.get<PlanView>(`/tasks/${id}/plan`);
+  planFeedback = (id: number, message: string) =>
+    this.post<Task>(`/tasks/${id}/plan/feedback`, { message });
+  approvePlan = (id: number, verifyCommand?: string) =>
+    this.post<Task>(`/tasks/${id}/plan/approve`, verifyCommand ? { verifyCommand } : {});
   listTasks = () => this.get<TaskView[]>('/tasks');
   getTask = (id: number) => this.get<TaskDetail>(`/tasks/${id}`);
   createTask = (input: CreateTaskInput) => this.post<TaskView>('/tasks', input);
