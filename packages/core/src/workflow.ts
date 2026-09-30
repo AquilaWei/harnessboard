@@ -18,8 +18,11 @@ import {
   initializerPrompt,
   loopSessionPrompt,
 } from './prompts.js';
+import { parseVerdict, reviewFeedback, reviewPrompt } from './review.js';
+import type { ReviewRecord, ReviewRequest } from './review.js';
 import type { SessionOutcome } from './runner.js';
 import type { Store } from './store.js';
+import { headCommit, mergeBase, porcelainStatus } from './worktree.js';
 
 /** Who runs the next session of a task, what it is asked, and whether it resumes one. */
 export interface SessionPlan {
@@ -46,12 +49,15 @@ export class Workflow {
   constructor(private readonly host: WorkflowHost) {}
 
   /**
-   * Fresh session for a new task, after a handoff, or for the next loop feature; `--resume`
-   * of the previous session after a quota pause, stop or error, but only while that session
-   * still has budget.
+   * A reviewer session while a review is pending; otherwise an implementer session: fresh
+   * for a new task, after a handoff, after review feedback or for the next loop feature, and
+   * `--resume` of the previous session after a quota pause, stop or error, but only while
+   * that session still has budget.
    */
   plan(task: Task): SessionPlan {
     const last = this.host.store.listSessions(task.id).at(-1);
+    const request = this.pendingReview(task.id);
+    if (request) return this.reviewPlan(task, request, last);
     if (!last) return this.implement(task, this.firstPrompt(task));
     if (last.endReason === 'handoff' || last.endReason === 'context_hard_limit') {
       return this.continuation(task, this.handoffNote(task));
@@ -61,6 +67,7 @@ export class Workflow {
     // A session that never reached the model was never saved by the CLI, so it can't be resumed.
     const resumable =
       !loopStepDone &&
+      last.role === 'implementer' &&
       last.agentSessionId !== null &&
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
@@ -70,7 +77,49 @@ export class Workflow {
 
   /** Agent profile of the task's next session, for per-provider quota checks. */
   nextAgentId(task: Task): string {
-    return task.agents.implementer;
+    const reviewer = task.agents.reviewer;
+    return reviewer && this.pendingReview(task.id) ? reviewer : task.agents.implementer;
+  }
+
+  private reviewPlan(task: Task, request: ReviewRequest, last: Session | undefined): SessionPlan {
+    const reviewer = task.agents.reviewer!;
+    const resumable =
+      last?.role === 'reviewer' &&
+      last.endReason !== 'completed' &&
+      last.agentSessionId !== null &&
+      last.contextTokens > 0 &&
+      this.hasBudget(task, last);
+    if (resumable) {
+      return { role: 'reviewer', agentId: reviewer, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    }
+    const verify = task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.verify ?? null) : null;
+    return {
+      role: 'reviewer',
+      agentId: reviewer,
+      resume: null,
+      prompt: reviewPrompt(task.prompt, request, verify),
+    };
+  }
+
+  /** The review waiting to run, if the latest step was sent for review and not yet reviewed. */
+  private pendingReview(taskId: number): ReviewRequest | null {
+    const request = this.host.store.lastEvent(taskId, 'review_request');
+    const review = this.host.store.lastEvent(taskId, 'review');
+    if (!request || (review && review.id > request.id)) return null;
+    return request.data as ReviewRequest;
+  }
+
+  /** Requested changes the implementer has not submitted a new step for yet. */
+  private openFeedback(taskId: number): string | null {
+    const review = this.host.store.lastEvent(taskId, 'review');
+    const request = this.host.store.lastEvent(taskId, 'review_request');
+    if (!review || (request && request.id > review.id)) return null;
+    const record = review.data as ReviewRecord;
+    return record.verdict === 'changes' ? reviewFeedback(record) : null;
+  }
+
+  private reviews(taskId: number): ReviewRecord[] {
+    return this.host.store.eventsOfKind(taskId, 'review').map((e) => e.data as ReviewRecord);
   }
 
   private implement(task: Task, prompt: string, resume: Session | null = null): SessionPlan {
@@ -82,8 +131,9 @@ export class Workflow {
   }
 
   private continuation(task: Task, note: string | null): SessionPlan {
+    const feedback = this.openFeedback(task.id);
     if (task.mode === 'single') {
-      return this.implement(task, continuationPrompt(task.prompt, note));
+      return this.implement(task, continuationPrompt(task.prompt, note, feedback));
     }
     // The initializer was cut off before it wrote the feature list; let it finish planning.
     if (!existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE))) {
@@ -91,7 +141,10 @@ export class Workflow {
     }
     const verify = this.snapshots(task.id).at(-1)?.verify;
     const failed = verify && !verify.ok ? verify : null;
-    return this.implement(task, loopSessionPrompt(task.prompt, task.verifyCommand!, failed, note));
+    return this.implement(
+      task,
+      loopSessionPrompt(task.prompt, task.verifyCommand!, failed, note, feedback),
+    );
   }
 
   private handoffNote(task: Task): string | null {
@@ -120,20 +173,38 @@ export class Workflow {
     );
   }
 
-  async finish(task: Task, outcome: SessionOutcome, signal: AbortSignal): Promise<void> {
+  /** Moves the task on after a session: next session, review, a human, or a pause. */
+  async finish(
+    task: Task,
+    plan: SessionPlan,
+    outcome: SessionOutcome,
+    signal: AbortSignal,
+  ): Promise<void> {
     this.host.notice(
       task.id,
       `session ended: ${outcome.reason}${outcome.detail ? ` (${outcome.detail})` : ''}`,
     );
+    if (plan.role === 'reviewer') {
+      await this.finishReview(task, plan, outcome);
+      return;
+    }
     switch (outcome.reason) {
       case 'completed':
         if (task.mode === 'loop') await this.finishLoopStep(task, signal);
-        else this.host.setStatus(task.id, 'review');
+        else await this.stepDone(task);
         return;
       case 'handoff':
       case 'context_hard_limit':
         this.handOff(task, outcome);
         return;
+      default:
+        this.interrupted(task, outcome);
+    }
+  }
+
+  /** Quota, stop and error end a session the same way for every role. */
+  private interrupted(task: Task, outcome: SessionOutcome): void {
+    switch (outcome.reason) {
       case 'quota': {
         const resumeAt =
           outcome.quota?.resetsAt ?? Date.now() + this.host.config.quotaRetryMinutes * 60_000;
@@ -146,6 +217,103 @@ export class Workflow {
       case 'error':
         this.host.setStatus(task.id, 'failed');
         return;
+      default:
+        throw new Error(`unexpected session end: ${outcome.reason}`);
+    }
+  }
+
+  /**
+   * An implementer step is finished (a single task's session, or a verified loop feature).
+   * With a reviewer, new commits are sent for review first; otherwise the task moves on.
+   */
+  private async stepDone(task: Task): Promise<void> {
+    if (!task.agents.reviewer) {
+      this.afterApproval(task);
+      return;
+    }
+    const dir = task.worktreePath!;
+    const [head, status] = await Promise.all([headCommit(dir), porcelainStatus(dir)]);
+    const reviews = this.reviews(task.id);
+    const last = reviews.at(-1);
+    if (last && last.head === head && status === '') {
+      if (last.verdict === 'approve') {
+        this.afterApproval(task);
+      } else {
+        this.host.notice(task.id, 'no new commits since the review asked for changes');
+        this.host.setStatus(task.id, 'review');
+      }
+      return;
+    }
+    const approvedAt = reviews.findLastIndex((r) => r.verdict === 'approve');
+    const round = reviews.slice(approvedAt + 1).length + 1;
+    const since = reviews[approvedAt]?.head ?? (await mergeBase(dir, task.baseRef));
+    const request: ReviewRequest = { round, since, head, status };
+    this.host.store.appendEvent(task.id, null, 'review_request', request);
+    this.host.notice(task.id, `sent for review to ${task.agents.reviewer} (round ${round})`);
+    this.host.setStatus(task.id, 'queued');
+  }
+
+  /** Where an approved (or unreviewed) step leads: the next loop feature or human review. */
+  private afterApproval(task: Task): void {
+    if (task.mode === 'single') {
+      this.host.setStatus(task.id, 'review');
+      return;
+    }
+    const last = this.snapshots(task.id).at(-1);
+    const done = last?.verify?.ok && last.features.every((f) => f.passes);
+    this.host.setStatus(task.id, done ? 'review' : 'queued');
+  }
+
+  private async finishReview(
+    task: Task,
+    plan: SessionPlan,
+    outcome: SessionOutcome,
+  ): Promise<void> {
+    const request = this.pendingReview(task.id)!;
+    const record = (verdict: ReviewRecord['verdict'], findings: string, head: string) =>
+      this.host.store.appendEvent(task.id, null, 'review', {
+        round: request.round,
+        agentId: plan.agentId,
+        verdict,
+        findings,
+        head,
+      } satisfies ReviewRecord);
+
+    if (outcome.reason === 'context_hard_limit' || outcome.reason === 'handoff') {
+      record(null, 'The reviewer ran out of context before giving a verdict.', request.head);
+      this.host.notice(task.id, 'reviewer ran out of context; needs a human');
+      this.host.setStatus(task.id, 'review');
+      return;
+    }
+    if (outcome.reason !== 'completed') {
+      this.interrupted(task, outcome); // the review stays pending and runs again
+      return;
+    }
+    const dir = task.worktreePath!;
+    const [head, status] = await Promise.all([headCommit(dir), porcelainStatus(dir)]);
+    if (head !== request.head || status !== request.status) {
+      record(null, 'The reviewer changed the worktree.', head);
+      this.host.notice(task.id, 'reviewer changed the worktree; stopping for a human');
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    const { verdict, findings } = parseVerdict(outcome.finalText);
+    record(verdict, findings, head);
+    if (verdict === 'approve') {
+      this.host.notice(task.id, `${plan.agentId} approved round ${request.round}`);
+      this.afterApproval(task);
+    } else if (verdict === null) {
+      this.host.notice(task.id, 'reviewer gave no verdict line; needs a human');
+      this.host.setStatus(task.id, 'review');
+    } else if (request.round >= task.agents.maxReviewRounds) {
+      this.host.notice(
+        task.id,
+        `${plan.agentId} still requests changes after ${request.round} rounds; needs a human`,
+      );
+      this.host.setStatus(task.id, 'review');
+    } else {
+      this.host.notice(task.id, `${plan.agentId} requested changes (round ${request.round})`);
+      this.host.setStatus(task.id, 'queued');
     }
   }
 
@@ -181,6 +349,7 @@ export class Workflow {
       return;
     }
 
+    const addressingReview = this.openFeedback(task.id) !== null;
     this.host.notice(task.id, `verifying: ${task.verifyCommand}`);
     const timeoutMs = this.host.config.verifyTimeoutMinutes * 60_000;
     const verify = await runVerify(task.verifyCommand!, task.worktreePath!, signal, timeoutMs);
@@ -199,20 +368,19 @@ export class Workflow {
         : `verify failed (${verify.timedOut ? 'timed out' : `exit ${verify.exitCode}`})`,
     );
 
-    if (verify.ok && claimed === features.length) {
-      this.host.setStatus(task.id, 'review');
-      return;
-    }
+    // Fixing review feedback is expected to add no new features, so it is not a stall.
     const limit = this.host.config.loopStallSessions;
     const recent = [...snapshots.map((s) => s.verifiedPassing), verifiedPassing].slice(
       -(limit + 1),
     );
-    if (recent.length === limit + 1 && recent.every((n) => n === recent[0])) {
+    const stalled = recent.length === limit + 1 && recent.every((n) => n === recent[0]);
+    if (stalled && !addressingReview) {
       this.host.notice(task.id, `no verified progress in ${limit} sessions; stopping for review`);
       this.host.setStatus(task.id, 'failed');
       return;
     }
-    this.host.setStatus(task.id, 'queued');
+    if (verify.ok) await this.stepDone(task);
+    else this.host.setStatus(task.id, 'queued');
   }
 
   private recordSnapshot(taskId: number, snapshot: FeatureSnapshot): void {

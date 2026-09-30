@@ -329,7 +329,7 @@ export class Harness {
       this.setStatus(task.id, 'running');
       const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal);
       this.store.endSession(sessionId, outcome.reason);
-      await this.workflow.finish(ready, outcome, controller.signal);
+      await this.workflow.finish(ready, plan, outcome, controller.signal);
     } catch (err) {
       this.notice(task.id, `task failed: ${(err as Error).message}`);
       this.setStatus(task.id, 'failed');
@@ -374,6 +374,8 @@ export class Harness {
         skipPermissions: task.permission.skipPermissions,
       },
       thresholds: resolveThresholds(task.contextPolicy),
+      // A reviewer has nothing to commit or hand off; it only stops at the hard limit.
+      wrapUp: plan.role === 'implementer',
       contextWindow: window,
       signal,
       onEvent: (event) => {

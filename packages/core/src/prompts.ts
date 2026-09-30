@@ -25,12 +25,19 @@ export function reportsDone(reply: string): boolean {
 
 /**
  * First message of a follow-up session. The note is the previous session's final reply,
- * or `null` when that session was cut off before writing one.
+ * or `null` when that session was cut off before writing one. `feedback` (a reviewer's
+ * requested changes) replaces the note when the previous session finished its step.
  */
-export function continuationPrompt(originalPrompt: string, note: string | null): string {
-  const handoff = note
-    ? `Handoff note from the previous session:\n${note}`
-    : 'The previous session was cut off before it wrote a handoff note.';
+export function continuationPrompt(
+  originalPrompt: string,
+  note: string | null,
+  feedback: string | null = null,
+): string {
+  const handoff =
+    feedback ??
+    (note
+      ? `Handoff note from the previous session:\n${note}`
+      : 'The previous session was cut off before it wrote a handoff note.');
   return [
     'You are continuing a task that an earlier session started in this same worktree.',
     'Check `git log` and `git status` to see the current state before changing anything.',
@@ -77,6 +84,7 @@ export function loopSessionPrompt(
   verifyCommand: string,
   failedVerify: VerifyResult | null,
   note: string | null,
+  feedback: string | null = null,
 ): string {
   const lines = [
     'You are continuing a long-running project in this worktree. Each session implements',
@@ -101,6 +109,7 @@ export function loopSessionPrompt(
       `Output (tail):\n${failedVerify.output}`,
     );
   }
+  if (feedback) lines.push('', feedback);
   if (note) lines.push('', `Handoff note from the previous session:\n${note}`);
   return lines.join('\n');
 }

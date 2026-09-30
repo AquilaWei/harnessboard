@@ -77,3 +77,18 @@ export async function worktreeDiff(dir: string, baseRef: string): Promise<Worktr
   ]);
   return { diff, untracked: untracked.split('\n').filter(Boolean) };
 }
+
+/** Commit hash of HEAD. */
+export async function headCommit(dir: string): Promise<string> {
+  return (await git(dir, ['rev-parse', 'HEAD'])).trim();
+}
+
+/** `git status --porcelain` output; empty when the worktree is clean. */
+export async function porcelainStatus(dir: string): Promise<string> {
+  return git(dir, ['status', '--porcelain']);
+}
+
+/** Commit where HEAD branched off `ref`. */
+export async function mergeBase(dir: string, ref: string): Promise<string> {
+  return (await git(dir, ['merge-base', ref, 'HEAD'])).trim();
+}
