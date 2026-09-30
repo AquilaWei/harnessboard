@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.2 - 2026-09-29
+
 ### Added
 
 - **Reviewer role:** `--reviewer <agent>` (or a default reviewer in settings) has a second
