@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { contextPct, resolveThresholds } from '@harnessboard/shared';
 import type {
+  ChatEnd,
+  ChatEntry,
+  ChatMessage,
   ContextView,
   CriteriaApproval,
   CriteriaProposal,
@@ -112,6 +115,7 @@ export function timeline(taskId: number, store: Store): TimelineEntry[] {
     'plan_approved',
     'criteria',
     'criteria_approved',
+    'chat_message',
     'permission_request',
     'permission_decision',
   ] as const;
@@ -135,6 +139,7 @@ function timelineEvent(
     | 'plan_approved'
     | 'criteria'
     | 'criteria_approved'
+    | 'chat_message'
     | 'permission_request'
     | 'permission_decision',
   ts: number,
@@ -159,11 +164,43 @@ function timelineEvent(
       return { kind, ts, proposal: data as CriteriaProposal };
     case 'criteria_approved':
       return { kind, ts, approval: data as CriteriaApproval };
+    case 'chat_message':
+      return { kind, ts, message: data as ChatMessage };
     case 'permission_request':
       return { kind, ts, request: data as PermissionRequest };
     case 'permission_decision':
       return { kind, ts, decision: data as PermissionDecisionRecord };
   }
+}
+
+/**
+ * The user's chat messages with the agent's text and tool uses in reply, oldest first.
+ * Only what happened in chats is included; the workflow's sessions are on the timeline.
+ */
+export function chatTranscript(taskId: number, store: Store): ChatEntry[] {
+  const first = store.eventsOfKind(taskId, 'chat_message')[0];
+  if (!first) return [];
+  const entries: ChatEntry[] = [];
+  let inChat = false;
+  const kinds = ['chat_message', 'chat_end', 'text', 'tool_use', 'compact'];
+  for (const e of store.eventsOfKinds(taskId, kinds, first.id - 1)) {
+    if (e.kind === 'chat_message') {
+      inChat = true;
+      entries.push({ kind: 'user', ts: e.ts, text: (e.data as ChatMessage).text });
+    } else if (e.kind === 'chat_end') {
+      inChat = false;
+      entries.push({ kind: 'end', ts: e.ts, reason: (e.data as ChatEnd).reason });
+    } else if (inChat && e.kind === 'text') {
+      entries.push({ kind: 'agent', ts: e.ts, text: (e.data as { text: string }).text });
+    } else if (inChat && e.kind === 'tool_use') {
+      const tool = e.data as { name: string; summary: string };
+      entries.push({ kind: 'tool', ts: e.ts, name: tool.name, summary: tool.summary });
+    } else if (inChat && e.kind === 'compact') {
+      const { preTokens, postTokens } = e.data as { preTokens: number; postTokens: number };
+      entries.push({ kind: 'compact', ts: e.ts, preTokens, postTokens });
+    }
+  }
+  return entries;
 }
 
 function contextView(

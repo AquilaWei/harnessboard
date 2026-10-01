@@ -20,6 +20,12 @@ are test versions that have not been accepted on real machines yet.
     `hb feedback`), then approve with the verify command you confirm (`hb approve`).
   - The verify command is now optional when creating a Loop task.
 
+- **Chat with a task's agent:** the task panel's Chat tab (and `hb chat <id> <message>`)
+  continues the task's own conversation once it has stopped or finished, replacing the
+  copy-only "open in terminal" button. The agent remembers the work and may change files
+  under the task's tool rules; slash commands such as `/compact` work. The task returns to
+  its status when the reply ends, also after a restart.
+
 - **Agree on acceptance criteria first:** a single task created without acceptance
   criteria starts with a read-only discussion. Claude reads the repository and proposes
   criteria with its questions; reply as often as needed, edit them and approve (on the new
@@ -45,6 +51,8 @@ are test versions that have not been accepted on real machines yet.
 
 ### Fixed
 
+- A session's context size dropped to 0 after a compaction or a turn that reported no
+  usage, so the session could not be resumed afterwards.
 - Allowed-tools entries that are not tool rules, such as a sentence describing what is
   allowed, were accepted and silently gave the agent no permissions. They are now rejected.
   `--allow` now adds to the default git rules instead of replacing them.

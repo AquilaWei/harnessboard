@@ -1564,3 +1564,53 @@ th {
   display: grid;
   gap: 4px;
 }
+
+/* ---------- chat ---------- */
+
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.chat-user {
+  align-self: flex-end;
+  max-width: 85%;
+}
+
+.chat-user .chat-bubble {
+  background: var(--accent-soft);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-agent {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.chat-bubble {
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.chat-tool {
+  color: var(--ink-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.chat-input {
+  position: sticky;
+  bottom: 0;
+  padding: 8px 0 4px;
+  background: var(--surface);
+}
+
+.chat-input textarea {
+  width: 100%;
+}

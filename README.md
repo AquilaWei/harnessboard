@@ -58,6 +58,7 @@ hb done 1                            # mark it reviewed
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
+| `hb chat <id> <message>`                                                              | Write to the task's agent; prints its reply  |
 | `hb commits <id>`                                                                     | List the commits on the task branch          |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)    |
 | `hb allow <id> [--suggested] [--rule RULE...]` / `hb deny <id> [reason]`              | Answer a tool use the agent waits on         |
@@ -181,7 +182,11 @@ other.
   - **Changes:** the commits on the task branch (open one for its patch), then the diff against the base branch.
   - **Log:** the live log.
   - **Details:** paths, agents and budget.
-  - It can also copy `hb open <id>`, so you can take over in Claude Code.
+  - **Chat:** talk to the agent in the task's own conversation once the task has stopped or
+    finished. It remembers the work so far and may change files, under the task's tool
+    rules and permission prompts. Slash commands such as `/compact` are sent as they are.
+    The task goes back to its status when the reply ends. To work in Claude Code itself,
+    the tab also copies `hb open <id>`.
 - **Picking a repository:** type a path (`~` works) or click Browse… to walk through your
   folders. Git repositories are marked. The field checks what you picked right away: missing
   folder, not a repository (with the command to fix it), or no commits yet.

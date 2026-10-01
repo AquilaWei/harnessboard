@@ -289,9 +289,17 @@ export class Store {
 
   /** All events of one kind for a task, oldest first. */
   eventsOfKind(taskId: number, kind: string): StoredEvent[] {
+    return this.eventsOfKinds(taskId, [kind]);
+  }
+
+  /** Every event of the given kinds for a task, in order; `afterId` skips earlier ones. */
+  eventsOfKinds(taskId: number, kinds: string[], afterId = 0): StoredEvent[] {
+    const marks = kinds.map(() => '?').join(', ');
     return this.db
-      .prepare('SELECT * FROM events WHERE task_id = ? AND kind = ? ORDER BY id')
-      .all(taskId, kind)
+      .prepare(
+        `SELECT * FROM events WHERE task_id = ? AND id > ? AND kind IN (${marks}) ORDER BY id`,
+      )
+      .all(taskId, afterId, ...kinds)
       .map(toEvent);
   }
 

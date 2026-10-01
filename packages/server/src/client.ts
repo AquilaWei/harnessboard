@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  ChatEntry,
   AgentInfo,
   AgentsUpdate,
   CommitInfo,
@@ -46,6 +47,8 @@ export class ApiClient {
     this.send<Task>('PUT', `/tasks/${id}/allowed-tools`, { rules });
   deleteTask = (id: number) => this.send<DeletedTask>('DELETE', `/tasks/${id}`);
   events = (id: number, after = 0) => this.get<StoredEvent[]>(`/tasks/${id}/events?after=${after}`);
+  chat = (id: number) => this.get<ChatEntry[]>(`/tasks/${id}/chat`);
+  sendChat = (id: number, message: string) => this.post<Task>(`/tasks/${id}/chat`, { message });
   commits = (id: number) => this.get<CommitInfo[]>(`/tasks/${id}/commits`);
   diff = (id: number) => this.get<WorktreeDiff>(`/tasks/${id}/diff`);
 

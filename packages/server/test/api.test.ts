@@ -142,6 +142,38 @@ describe('tasks API', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/not waiting/);
   });
 
+  it('lists only what was said in chats, in order', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const { store } = harness;
+    store.appendEvent(id, 's1', 'text', { kind: 'text', text: 'workflow reply' });
+    store.appendEvent(id, 's1', 'chat_message', { text: 'Why?', returnTo: 'review' }, 1);
+    store.appendEvent(
+      id,
+      's1',
+      'tool_use',
+      { kind: 'tool_use', name: 'Read', summary: 'a.txt' },
+      2,
+    );
+    store.appendEvent(id, 's1', 'text', { kind: 'text', text: 'Because.' }, 3);
+    store.appendEvent(id, 's1', 'chat_end', { reason: 'completed' }, 4);
+    store.appendEvent(id, 's1', 'text', { kind: 'text', text: 'later workflow reply' }, 5);
+    const res = await app.request(`/api/tasks/${id}/chat`, { headers: local });
+    expect(await res.json()).toEqual([
+      { kind: 'user', ts: 1, text: 'Why?' },
+      { kind: 'tool', ts: 2, name: 'Read', summary: 'a.txt' },
+      { kind: 'agent', ts: 3, text: 'Because.' },
+      { kind: 'end', ts: 4, reason: 'completed' },
+    ]);
+  });
+
+  it('refuses a chat with a task that has not run', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(`/api/tasks/${id}/chat`, { message: 'hi' }, { [CLIENT_HEADER]: 'test' });
+    expect(((await res.json()) as { error: string }).error).toMatch(/chat once it has stopped/);
+  });
+
   it('rejects a permission answer without a valid behavior', async () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };

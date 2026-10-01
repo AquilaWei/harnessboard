@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  ChatEntry,
   AgentInfo,
   AgentsUpdate,
   CommitInfo,
@@ -78,6 +79,9 @@ export const api = {
     send<unknown>('POST', `/tasks/${id}/plan/approve`, { verifyCommand }),
   approveCriteria: (id: number, criteria: string) =>
     send<unknown>('POST', `/tasks/${id}/criteria/approve`, { criteria }),
+  chat: (id: number) => request<ChatEntry[]>(`/tasks/${id}/chat`),
+  sendChat: (id: number, message: string) =>
+    send<unknown>('POST', `/tasks/${id}/chat`, { message }),
   settings: () => request<Settings>('/settings'),
   saveSettings: (patch: Partial<Settings>) => send<Settings>('PUT', '/settings', patch),
 };

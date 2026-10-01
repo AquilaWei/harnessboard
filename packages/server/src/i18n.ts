@@ -38,6 +38,8 @@ const en = {
   criteriaNext:
     'Reply with `hb feedback {id} "..."`, or start with `hb approve {id}` (`--criteria "..."` to approve your own).',
   noCriteria: 'Task {id} has no acceptance criteria.',
+  chatEnded: '(the reply ended: {reason})',
+  chatCompacted: '(context compacted: {preTokens} → {postTokens} tokens)',
   criteriaHeading: 'acceptance criteria:',
   noVerdict: 'no verdict',
   reviewLine: 'last review by {agent} (round {round}): {verdict}',
@@ -81,6 +83,8 @@ const zhTW: Messages = {
   criteriaNext:
     '用 `hb feedback {id} "..."` 回覆意見，或用 `hb approve {id}` 確認開工（加 `--criteria "..."` 改用你自己寫的標準）。',
   noCriteria: '任務 {id} 沒有驗收標準。',
+  chatEnded: '（回覆中斷：{reason}）',
+  chatCompacted: '（上下文已壓縮：{preTokens} → {postTokens} tokens）',
   criteriaHeading: '驗收標準：',
   noVerdict: '沒有結論',
   reviewLine: '最近一次審查：{agent}（第 {round} 輪）：{verdict}',

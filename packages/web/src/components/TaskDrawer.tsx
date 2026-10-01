@@ -13,6 +13,7 @@ import { api } from '../api';
 import type { TaskAction } from '../board';
 import { useLiveEvents, useThrottled } from '../live';
 import { Description } from './Description';
+import { ChatPanel } from './ChatPanel';
 import { CommitList } from './CommitList';
 import { CriteriaReview } from './CriteriaReview';
 import { DeleteTask } from './DeleteTask';
@@ -25,7 +26,8 @@ import { PermissionPrompt } from './PermissionPrompt';
 import { PlanReview } from './PlanReview';
 import { Timeline } from './Timeline';
 
-export type DrawerTab = 'timeline' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
+export type DrawerTab =
+  'timeline' | 'chat' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
 
 interface Props {
   taskId: number;
@@ -44,7 +46,6 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   const [diff, setDiff] = useState<WorktreeDiff | null>(null);
   const [commits, setCommits] = useState<CommitInfo[] | null>(null);
   const [tab, setTab] = useState<DrawerTab>(initialTab);
-  const [copied, setCopied] = useState(false);
   const lastId = useRef(0);
 
   const loadTask = useCallback(
@@ -94,24 +95,18 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
 
   const act = (action: TaskAction) => task && void onAction(task, action).then(loadTask);
 
-  const copyOpen = async () => {
-    try {
-      await navigator.clipboard.writeText(`hb open ${taskId}`);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      onError(`hb open ${taskId}`);
-    }
-  };
-
   const s = task?.status;
-  const hasCriteria = task?.confirmPlan || task?.acceptance;
-  const tabs: DrawerTab[] =
-    task?.mode === 'loop'
-      ? ['timeline', 'features', 'changes', 'log', 'details']
-      : hasCriteria
-        ? ['timeline', 'criteria', 'changes', 'log', 'details']
-        : ['timeline', 'changes', 'log', 'details'];
+  const hasCriteria = task?.mode === 'single' && (task.confirmPlan || task.acceptance);
+  const tabs: DrawerTab[] = [
+    'timeline',
+    ...(task?.mode === 'loop' ? (['features'] as const) : []),
+    ...(hasCriteria ? (['criteria'] as const) : []),
+    // A chat continues the task's conversation, so there must be one.
+    ...(task?.latestSessionId ? (['chat'] as const) : []),
+    'changes',
+    'log',
+    'details',
+  ];
   // Where a proposal waiting for approval is read and approved.
   const proposalTab: DrawerTab = task?.mode === 'loop' ? 'features' : 'criteria';
 
@@ -191,9 +186,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                     {t('actions.stop')}
                   </button>
                 )}
-                {task.latestSessionId && s !== 'running' && s !== 'awaiting_permission' && (
-                  <button type="button" className="btn ghost" onClick={copyOpen}>
-                    {copied ? t('actions.copied') : t('actions.copyOpen')}
+                {task.latestSessionId && tab !== 'chat' && (
+                  <button type="button" className="btn ghost" onClick={() => setTab('chat')}>
+                    {t('actions.chat')}
                   </button>
                 )}
                 {/* A running task must be stopped first, so its agent is not left orphaned. */}
@@ -220,6 +215,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
         </div>
         <div className="drawer-body">
           {tab === 'timeline' && <Timeline entries={timeline} />}
+          {tab === 'chat' && task && (
+            <ChatPanel task={task} onSent={() => void loadTask()} onError={onError} />
+          )}
           {tab === 'criteria' && task && (
             <CriteriaReview task={task} onDone={() => void loadTask()} onError={onError} />
           )}

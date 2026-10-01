@@ -54,6 +54,7 @@ hb done 1                            # 標記為已審核完成
 | `hb logs <id> [-f]`                                                                 | 印出或持續追蹤紀錄                  |
 | `hb stop <id>` / `hb resume <id>`                                                   | 停止，或重新排入                    |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                    | 審核、互動接手、完成                |
+| `hb chat <id> <訊息>`                                                               | 傳訊息給任務的 agent，印出它的回覆  |
 | `hb commits <id>`                                                                   | 列出任務分支上的 commit             |
 | `hb delete <id>`                                                                    | 刪除沒在執行的任務（見下方）        |
 | `hb allow <id> [--suggested] [--rule 規則...]`／`hb deny <id> [原因]`               | 回覆 agent 正在等的工具請求         |
@@ -160,7 +161,10 @@ Gemini 等 provider，就能讓不同廠商的 agent 互相檢查。
   - **變更**：任務分支上的 commit（點開可看該次的修改），以及相對於基準分支的 diff。
   - **紀錄**：即時紀錄。
   - **詳細資訊**：路徑、agent、上下文預算。
-  - 也可以複製 `hb open <id>` 指令，到 Claude Code 接手。
+  - **對話：** 任務停止或完成後，可以在任務自己的對話裡直接跟 agent 溝通。它記得目前為止
+    的工作，也能修改檔案，但仍受任務的工具規則和權限詢問限制。`/compact` 之類的 slash
+    指令會原樣送出。回覆結束後任務會回到原本的狀態。想在 Claude Code 裡操作的話，這個
+    分頁也能複製 `hb open <id>` 指令。
 - **選擇 repository**：可以直接輸入路徑（支援 `~`），或按「瀏覽…」一層層點選資料夾，
   git repository 會有標記。欄位會即時檢查你選的路徑：資料夾不存在、不是 repository
   （並提示修正指令），或還沒有任何 commit。

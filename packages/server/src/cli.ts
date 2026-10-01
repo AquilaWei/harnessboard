@@ -279,6 +279,31 @@ program
   });
 
 program
+  .command('chat')
+  .description("write to a task's agent and print its reply (it may edit files)")
+  .argument('<id>', 'task id', parseInteger)
+  .argument('<message...>', 'your message; slash commands such as /compact are sent as-is')
+  .action(async (id: number, words: string[]) => {
+    const api = client();
+    let seen = (await api.chat(id)).length + 1; // the message itself is echoed back first
+    await api.sendChat(id, words.join(' '));
+    for (;;) {
+      await new Promise((resolve) => setTimeout(resolve, FOLLOW_INTERVAL_MS));
+      const entries = await api.chat(id);
+      for (const entry of entries.slice(seen)) {
+        if (entry.kind === 'agent') console.log(entry.text);
+        if (entry.kind === 'tool') console.log(`  ⚙ ${entry.name} ${entry.summary}`);
+        if (entry.kind === 'compact') console.log(t('chatCompacted', entry));
+        if (entry.kind === 'end') {
+          if (entry.reason !== 'completed') console.log(t('chatEnded', { reason: entry.reason }));
+          return;
+        }
+      }
+      seen = Math.max(seen, entries.length);
+    }
+  });
+
+program
   .command('stop')
   .description('stop a running or queued task')
   .argument('<id>', 'task id', parseInteger)

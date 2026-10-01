@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { CriteriaApproval, CriteriaProposal, Session } from './task.js';
+import type {
+  CriteriaApproval,
+  CriteriaProposal,
+  Session,
+  SessionEndReason,
+  TaskStatus,
+} from './task.js';
 import type { FeatureSnapshot, PlanApproval, PlanProposal } from './loop.js';
 import type { PermissionDecisionRecord, PermissionRequest } from './permissions.js';
 
@@ -30,14 +36,39 @@ export interface ReviewRecord {
   head: string;
 }
 
-/** What a task's current session is doing, while it runs. */
-export type TaskPhase = 'planning' | 'implementing' | 'verifying' | 'reviewing';
+/**
+ * What a task's current session is doing, while it runs. `chatting`: the user is talking
+ * to the agent in the task's conversation, outside the workflow.
+ */
+export type TaskPhase = 'planning' | 'implementing' | 'verifying' | 'reviewing' | 'chatting';
 
 export interface TaskActivity {
   phase: TaskPhase;
   /** Agent profile running the phase; `null` while the harness itself verifies. */
   agentId: string | null;
 }
+
+/**
+ * Stored as the `chat_message` event when the user writes to a task's agent. The task
+ * returns to `returnTo` once the agent's reply ends, or after a restart cut it off.
+ */
+export interface ChatMessage {
+  text: string;
+  returnTo: TaskStatus;
+}
+
+/** Stored as the `chat_end` event when the agent's reply to a chat message ends. */
+export interface ChatEnd {
+  reason: SessionEndReason;
+}
+
+/** One line of a task's chat (`GET /api/tasks/:id/chat`), oldest first. */
+export type ChatEntry =
+  | { kind: 'user'; ts: number; text: string }
+  | { kind: 'agent'; ts: number; text: string }
+  | { kind: 'tool'; ts: number; name: string; summary: string }
+  | { kind: 'compact'; ts: number; preTokens: number; postTokens: number }
+  | { kind: 'end'; ts: number; reason: SessionEndReason };
 
 /** One step of a task's history (`GET /api/tasks/:id/timeline`), oldest first. */
 export type TimelineEntry =
@@ -57,5 +88,6 @@ export type TimelineEntry =
   | { kind: 'plan_approved'; ts: number; approval: PlanApproval }
   | { kind: 'criteria'; ts: number; proposal: CriteriaProposal }
   | { kind: 'criteria_approved'; ts: number; approval: CriteriaApproval }
+  | { kind: 'chat_message'; ts: number; message: ChatMessage }
   | { kind: 'permission_request'; ts: number; request: PermissionRequest }
   | { kind: 'permission_decision'; ts: number; decision: PermissionDecisionRecord };

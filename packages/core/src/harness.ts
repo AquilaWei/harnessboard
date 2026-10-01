@@ -7,6 +7,7 @@ import {
   AGENT_PROVIDERS,
   DEFAULT_PRESET,
   assertToolRules,
+  contextPct,
   definedOnly,
   isModelId,
   presetRules,
@@ -16,7 +17,10 @@ import type {
   AgentEvent,
   AgentInfo,
   AgentProvider,
+  Session,
   AgentsUpdate,
+  ChatEnd,
+  ChatMessage,
   CommitInfo,
   CreateTaskInput,
   CriteriaApproval,
@@ -89,6 +93,8 @@ interface PendingPermission {
 }
 
 const STARTABLE: TaskStatus[] = ['backlog', 'stopped', 'failed', 'review', 'waiting_quota'];
+/** A task can be chatted with while nothing else is about to run in its conversation. */
+const CHATTABLE: TaskStatus[] = ['stopped', 'failed', 'review', 'done'];
 
 /**
  * Owns task lifecycle and scheduling. Single-threaded: all state changes happen on the
@@ -240,6 +246,12 @@ export class Harness {
    */
   start(): void {
     for (const task of this.store.listTasks()) {
+      // A chat is the user's own conversation, not workflow work to pick up again.
+      const chat = this.unansweredChat(task.id);
+      if (chat && (task.status === 'running' || task.status === 'awaiting_permission')) {
+        this.endChat(task.id, chat.sessionId, chat.message.returnTo, 'stopped');
+        continue;
+      }
       // A task that waited for permission asks again once its session resumes.
       if (task.status === 'running' || task.status === 'awaiting_permission') {
         this.setStatus(task.id, 'queued');
@@ -495,6 +507,94 @@ export class Harness {
     return this.workflow.criteriaProposal(task);
   }
 
+  /**
+   * Writes `message` into the task's latest implementer conversation and runs the agent
+   * until it replies, as if typed in that session: it may edit files, its tool rules and
+   * permission prompts apply, and nothing moves on in the workflow. The task then returns
+   * to the status it had. Throws when the message is empty, the task is running or waiting
+   * for something, there is no conversation to continue, or its context is full.
+   */
+  chat(id: number, message: string): Task {
+    const task = this.requireTask(id);
+    if (this.running.has(id) || !CHATTABLE.includes(task.status)) {
+      throw new Error(`task ${id} is ${task.status}; chat once it has stopped or finished`);
+    }
+    const text = optionalText(message, 'message')?.trim();
+    if (!text) throw new Error('message is empty');
+    const session = this.store
+      .listSessions(id)
+      .findLast(
+        (s) => s.role === 'implementer' && s.agentSessionId !== null && s.contextTokens > 0,
+      );
+    if (!session) throw new Error(`task ${id} has no conversation to continue yet`);
+    const window = session.contextWindow ?? this.workflow.contextWindow(session.agentId);
+    if (
+      contextPct(session.contextTokens, window) >= resolveThresholds(task.contextPolicy).hardPct
+    ) {
+      throw new Error(`the conversation of task ${id} is full; continue it with hb open ${id}`);
+    }
+    const chat: ChatMessage = { text, returnTo: task.status };
+    this.store.appendEvent(id, session.id, 'chat_message', chat);
+    const controller = new AbortController();
+    // Registered before returning, so the scheduler and other calls see the task as busy.
+    this.running.set(id, controller);
+    this.setActivity(id, { phase: 'chatting', agentId: session.agentId });
+    const running = this.setStatus(id, 'running');
+    void this.runChat(task, session, text, controller);
+    return running;
+  }
+
+  private async runChat(
+    task: Task,
+    session: Session,
+    text: string,
+    controller: AbortController,
+  ): Promise<void> {
+    let reason: ChatEnd['reason'] = 'error';
+    try {
+      const plan: SessionPlan = {
+        role: 'implementer',
+        agentId: session.agentId,
+        access: 'edit',
+        resume: session,
+        prompt: text,
+      };
+      const adapter = this.adapterFor(session.agentId);
+      // No wrap-up: a chat is not handed off; it only stops at the hard limit.
+      const outcome = await this.runOne(task, session.id, plan, adapter, controller.signal, false);
+      reason = outcome.reason;
+    } catch (err) {
+      this.notice(task.id, `chat failed: ${(err as Error).message}`);
+    } finally {
+      this.dropPermissions(task.id);
+      this.running.delete(task.id);
+      this.activities.delete(task.id);
+      const chat = this.unansweredChat(task.id);
+      if (chat) this.endChat(task.id, session.id, chat.message.returnTo, reason);
+      if (this.timer) this.tick();
+    }
+  }
+
+  /** The latest chat message when its reply has not ended yet. */
+  private unansweredChat(
+    taskId: number,
+  ): { sessionId: string | null; message: ChatMessage } | null {
+    const message = this.store.lastEvent(taskId, 'chat_message');
+    const end = this.store.lastEvent(taskId, 'chat_end');
+    if (!message || (end && end.id > message.id)) return null;
+    return { sessionId: message.sessionId, message: message.data as ChatMessage };
+  }
+
+  private endChat(
+    taskId: number,
+    sessionId: string | null,
+    returnTo: TaskStatus,
+    reason: ChatEnd['reason'],
+  ): void {
+    this.store.appendEvent(taskId, sessionId, 'chat_end', { reason } satisfies ChatEnd);
+    if (this.store.getTask(taskId)) this.setStatus(taskId, returnTo);
+  }
+
   /** Marks a reviewed task as done. */
   completeTask(id: number): Task {
     const task = this.requireTask(id);
@@ -626,10 +726,13 @@ export class Harness {
     plan: SessionPlan,
     adapter: AgentAdapter,
     signal: AbortSignal,
+    // A read-only session has nothing to commit or hand off; it only stops at the hard limit.
+    wrapUp = plan.access === 'edit',
   ): Promise<SessionOutcome> {
     const window = this.workflow.contextWindow(plan.agentId);
     const provider = adapter.provider;
-    let tokens = 0;
+    // A resumed turn may report no usage (e.g. `/compact`), so start from what is known.
+    let tokens = plan.resume?.contextTokens ?? 0;
     return runSession({
       adapter,
       spec: {
@@ -657,16 +760,15 @@ export class Harness {
         askPermission: plan.access === 'edit' && adapter.capabilities.permissionPrompts,
       },
       thresholds: resolveThresholds(task.contextPolicy),
-      // A read-only session has nothing to commit or hand off; it only stops at the hard limit.
-      wrapUp: plan.access === 'edit',
+      wrapUp,
       contextWindow: window,
       signal,
       onEvent: (event) => {
         if (event.kind === 'init' && event.sessionId) {
           this.store.setAgentSessionId(sessionId, event.sessionId);
         }
-        if (event.kind === 'context') {
-          tokens = event.tokens;
+        if (event.kind === 'context' || event.kind === 'compact') {
+          tokens = event.kind === 'context' ? event.tokens : event.postTokens;
           this.store.updateSessionContext(sessionId, tokens, null);
         }
         // Only a window the agent reported is stored; the fallback is a guess.

@@ -96,6 +96,8 @@ function describeRunning(task: TaskView): Description {
       return d('verifying', 'working', { command: task.verifyCommand ?? '' });
     case 'reviewing':
       return d('reviewing', 'working', { agent });
+    case 'chatting':
+      return d('chatting', 'working', { agent });
   }
 }
 

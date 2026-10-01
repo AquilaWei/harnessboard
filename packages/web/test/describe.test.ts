@@ -186,6 +186,21 @@ describe('describeTask for acceptance criteria', () => {
   });
 });
 
+describe('describeTask for chats', () => {
+  it('says the agent is replying to the user', () => {
+    const task = {
+      ...base,
+      status: 'running',
+      activity: { phase: 'chatting', agentId: 'claude' },
+    } as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'chatting',
+      tone: 'working',
+      vars: { agent: 'claude' },
+    });
+  });
+});
+
 describe('describeTask for permission requests', () => {
   it('names the agent, tool and command it waits on', () => {
     const task = {

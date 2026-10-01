@@ -24,7 +24,9 @@ export function CriteriaReview({ task, onDone, onError }: Props) {
   const [busy, setBusy] = useState(false);
 
   // A revised proposal replaces whatever was typed into the previous one.
-  useEffect(() => setCriteria(proposal?.criteria ?? ''), [proposal?.reply, proposal?.criteria]);
+  useEffect(() => {
+    setCriteria(proposal?.criteria ?? '');
+  }, [proposal?.reply, proposal?.criteria]);
 
   if (!proposal) {
     if (task.acceptance) {

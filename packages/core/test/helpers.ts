@@ -57,6 +57,12 @@ export const errorResult = (status: number) => ({
   modelUsage: {},
 });
 
+export const compactBoundary = (preTokens: number, postTokens: number) => ({
+  type: 'system',
+  subtype: 'compact_boundary',
+  compact_metadata: { trigger: 'manual', pre_tokens: preTokens, post_tokens: postTokens },
+});
+
 export const hang = { __hang: true };
 
 export const exitWith = (code: number, stderr?: string) => ({ __exit: code, __stderr: stderr });

@@ -11,7 +11,7 @@ import type {
   HarnessEvent,
   PermissionDecision,
 } from '@harnessboard/shared';
-import { latestSnapshot, planView, taskView, timeline } from './views.js';
+import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
 
 /** Header every state-changing request must carry; see {@link localOnly}. */
 export const CLIENT_HEADER = 'x-harnessboard-client';
@@ -154,6 +154,12 @@ export function createApi(harness: Harness): Hono {
   app.post('/tasks/:id/criteria/approve', async (c) => {
     const body = await c.req.json<{ criteria?: string }>().catch(() => ({}));
     return c.json(harness.approveCriteria(taskId(c), (body as { criteria?: string }).criteria));
+  });
+
+  app.get('/tasks/:id/chat', (c) => c.json(chatTranscript(taskId(c), harness.store)));
+  app.post('/tasks/:id/chat', async (c) => {
+    const { message } = await c.req.json<{ message: string }>();
+    return c.json(harness.chat(taskId(c), message));
   });
 
   app.get('/tasks/:id/timeline', (c) => c.json(timeline(taskId(c), harness.store)));

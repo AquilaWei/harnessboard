@@ -156,6 +156,13 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           <Markdown className="reply" text={entry.approval.criteria} />
         </li>
       );
+    case 'chat_message':
+      return (
+        <li className="step step-user">
+          <StepHead icon="💬" title={t('timeline.chat')} meta={time} />
+          <div className="reply">{entry.message.text}</div>
+        </li>
+      );
     case 'plan_feedback':
       return (
         <li className="step step-user">
