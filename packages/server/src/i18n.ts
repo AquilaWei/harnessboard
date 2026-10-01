@@ -41,6 +41,10 @@ const en = {
   autoOn: 'Task {id} allows unlisted tools without asking; risky ones still ask.',
   autoOff: 'Task {id} asks before every tool its rules do not allow.',
   chatEnded: '(the reply ended: {reason})',
+  chatQueued:
+    'Task {id} is busy; your message will be sent when its current step ends. Cancel it with `hb chat {id} --cancel`.',
+  chatCancelled: 'The pending messages of task {id} were dropped.',
+  chatNoMessage: 'Write a message, or use --cancel to drop the pending ones.',
   merged: 'Task {id} merged into {base} ({commit}); its worktree and branch were removed.',
   mergeConflicts:
     'Task {id} conflicts with {base}. Its agent is resolving these files; review and merge again afterwards:',
@@ -91,6 +95,10 @@ const zhTW: Messages = {
   autoOn: '任務 {id} 會自動允許規則外的工具；有風險的仍會詢問。',
   autoOff: '任務 {id} 遇到規則外的工具都會先詢問。',
   chatEnded: '（回覆中斷：{reason}）',
+  chatQueued:
+    '任務 {id} 正在忙，訊息會在目前這個階段結束後送出。要取消請用 `hb chat {id} --cancel`。',
+  chatCancelled: '任務 {id} 待送出的訊息已取消。',
+  chatNoMessage: '請寫下訊息，或用 --cancel 取消待送出的訊息。',
   merged: '任務 {id} 已合併到 {base}（{commit}），它的 worktree 和分支已移除。',
   mergeConflicts: '任務 {id} 和 {base} 有衝突。agent 正在解決以下檔案，完成並審核後再合併一次：',
   chatCompacted: '（上下文已壓縮：{preTokens} → {postTokens} tokens）',

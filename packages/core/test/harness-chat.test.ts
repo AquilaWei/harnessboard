@@ -73,6 +73,12 @@ async function finishedTask() {
 
 const status = (id: number) => harness.store.getTask(id)!.status;
 
+async function runQueued(): Promise<void> {
+  await harness.waitForIdle();
+  harness.tick();
+  await harness.waitForIdle();
+}
+
 describe('a chat message', () => {
   beforeEach(() => scenario(session('done'), session('It prints hi.')));
 
@@ -161,12 +167,6 @@ describe('a chat reply past the compact threshold', () => {
 describe('a chat that cannot be sent', () => {
   beforeEach(() => scenario(session('done')));
 
-  it('is refused while the task is queued', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
-    harness.store.updateTask(task.id, { status: 'queued' });
-    expect(() => harness.chat(task.id, 'hi')).toThrow(/chat once it has stopped or finished/);
-  });
-
   it('is refused before the task has a conversation', async () => {
     const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
     harness.store.updateTask(task.id, { status: 'stopped' });
@@ -214,5 +214,155 @@ describe('a chat cut off by a restart', () => {
     restarted.start();
     await restarted.shutdown();
     expect(status(task.id)).toBe('review');
+  });
+});
+
+describe('a chat message written while the task is busy', () => {
+  beforeEach(() => scenario(session('done'), session('It prints hi.')));
+
+  it('waits as pending', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.chat(task.id, 'What does it print?');
+    expect(harness.pendingChat(task.id)).toEqual(['What does it print?']);
+  });
+
+  it('does not interrupt the running session', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(fakeRuns()).toHaveLength(1);
+  });
+
+  it('is sent once the step ends', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.chat(task.id, 'What does it print?');
+    await runQueued();
+    expect(fakeRuns()[1]!.received).toEqual(['What does it print?']);
+  });
+
+  it('returns the task to the status the step ended with', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.chat(task.id, 'What does it print?');
+    await runQueued();
+    expect(status(task.id)).toBe('review');
+  });
+
+  it('is no longer pending once sent', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.chat(task.id, 'What does it print?');
+    await runQueued();
+    expect(harness.pendingChat(task.id)).toEqual([]);
+  });
+});
+
+describe('several pending chat messages', () => {
+  beforeEach(() => scenario(session('done'), session('ok')));
+
+  it('are sent as one message', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.chat(task.id, 'First');
+    harness.chat(task.id, 'Second');
+    await runQueued();
+    expect(fakeRuns()[1]!.received).toEqual(['First\n\nSecond']);
+  });
+});
+
+describe('a pending chat message of a queued task', () => {
+  beforeEach(() => scenario(session('done'), session('It prints hi.'), session('done again')));
+
+  async function queuedWithMessage() {
+    const task = await finishedTask();
+    harness.store.updateTask(task.id, { status: 'queued' });
+    harness.chat(task.id, 'What does it print?');
+    harness.tick();
+    await harness.waitForIdle();
+    return task;
+  }
+
+  it('is sent before the next workflow session', async () => {
+    await queuedWithMessage();
+    expect(fakeRuns()[1]!.received).toEqual(['What does it print?']);
+  });
+
+  it('leaves the task queued for its workflow', async () => {
+    const task = await queuedWithMessage();
+    expect(status(task.id)).toBe('queued');
+  });
+
+  it('lets the workflow continue afterwards', async () => {
+    await queuedWithMessage();
+    await runQueued();
+    expect(fakeRuns()).toHaveLength(3);
+  });
+});
+
+describe('a pending chat message of a stopped task', () => {
+  beforeEach(() => scenario([[init(), assistantText('x', 10_000), hang]], session('Stopped.')));
+
+  it('is sent once the stopped session has ended', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    harness.chat(task.id, 'Why did you stop?');
+    harness.stopTask(task.id);
+    await runQueued();
+    expect(fakeRuns()[1]!.received).toEqual(['Why did you stop?']);
+  });
+});
+
+describe('cancelling pending chat messages', () => {
+  beforeEach(() => scenario(session('done'), session('unexpected')));
+
+  it('keeps them from being sent', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.chat(task.id, 'Never mind');
+    harness.cancelChat(task.id);
+    await runQueued();
+    expect(fakeRuns()).toHaveLength(1);
+  });
+
+  it('records that they were cancelled', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.chat(task.id, 'Never mind');
+    harness.cancelChat(task.id);
+    expect(harness.store.lastEvent(task.id, 'chat_queue_cleared')!.data).toEqual({
+      reason: 'cancelled',
+    });
+  });
+
+  it('is refused when nothing is pending', async () => {
+    const task = await finishedTask();
+    expect(() => harness.cancelChat(task.id)).toThrow(/no pending message/);
+  });
+});
+
+describe('a pending chat message that cannot be sent', () => {
+  beforeEach(() => scenario(session('done')));
+
+  it('is dropped once the task has stopped', async () => {
+    const task = await finishedTask();
+    const [first] = harness.store.listSessions(task.id);
+    harness.store.updateSessionContext(first!.id, 90_000, 100_000);
+    harness.store.updateTask(task.id, { status: 'queued' });
+    harness.chat(task.id, 'hi');
+    harness.store.updateTask(task.id, { status: 'stopped' });
+    harness.tick();
+    expect(harness.store.lastEvent(task.id, 'chat_queue_cleared')!.data).toEqual({
+      reason: 'undeliverable',
+      detail: `the conversation of task ${task.id} is full; continue it with hb open ${task.id}`,
+    });
+  });
+});
+
+describe('a pending chat message after a restart', () => {
+  beforeEach(() => scenario(session('done'), session('It prints hi.')));
+
+  it('is sent by the restarted harness', async () => {
+    const task = await finishedTask();
+    harness.store.appendEvent(task.id, null, 'chat_queued', { text: 'Still there?' });
+    const restarted = new Harness(harness.config, harness.store);
+    restarted.start();
+    await restarted.waitForIdle();
+    await restarted.shutdown();
+    expect(fakeRuns()[1]!.received).toEqual(['Still there?']);
   });
 });

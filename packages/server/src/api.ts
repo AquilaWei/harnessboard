@@ -168,6 +168,7 @@ export function createApi(harness: Harness): Hono {
     const { message } = await c.req.json<{ message: string }>();
     return c.json(harness.chat(taskId(c), message));
   });
+  app.delete('/tasks/:id/chat/pending', (c) => c.json(harness.cancelChat(taskId(c))));
 
   app.post('/tasks/:id/merge', async (c) => c.json(await harness.mergeTask(taskId(c))));
 

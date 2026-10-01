@@ -1633,6 +1633,26 @@ th {
   overflow-wrap: anywhere;
 }
 
+.chat-pending {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.chat-pending .chat-bubble {
+  opacity: 0.65;
+  border: 1px dashed var(--ink-2);
+}
+
+.chat-pending .chat-dropped {
+  text-decoration: line-through;
+}
+
+.chat-tag {
+  color: var(--ink-2);
+  font-size: 12px;
+}
+
 .chat-agent {
   align-self: flex-start;
   max-width: 100%;

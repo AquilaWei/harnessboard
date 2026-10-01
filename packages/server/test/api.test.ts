@@ -174,11 +174,48 @@ describe('tasks API', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/not review/);
   });
 
-  it('refuses a chat with a task that has not run', async () => {
+  it('keeps a chat with a task that has not run as pending', async () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };
-    const res = await post(`/api/tasks/${id}/chat`, { message: 'hi' }, { [CLIENT_HEADER]: 'test' });
-    expect(((await res.json()) as { error: string }).error).toMatch(/chat once it has stopped/);
+    await post(`/api/tasks/${id}/chat`, { message: 'hi' }, { [CLIENT_HEADER]: 'test' });
+    const res = await app.request(`/api/tasks/${id}/chat`, { headers: local });
+    expect((await res.json()) as unknown[]).toEqual([
+      { kind: 'pending', ts: expect.any(Number) as number, text: 'hi' },
+    ]);
+  });
+
+  it('cancels pending chat messages', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    harness.store.appendEvent(id, null, 'chat_queued', { text: 'hi' }, 1);
+    await app.request(`/api/tasks/${id}/chat/pending`, {
+      method: 'DELETE',
+      headers: { ...local, [CLIENT_HEADER]: 'test' },
+    });
+    expect(harness.pendingChat(id)).toEqual([]);
+  });
+
+  it('shows cancelled chat messages with their text', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const { store } = harness;
+    store.appendEvent(id, null, 'chat_queued', { text: 'First' }, 1);
+    store.appendEvent(id, null, 'chat_queued', { text: 'Second' }, 2);
+    store.appendEvent(id, null, 'chat_queue_cleared', { reason: 'cancelled' }, 3);
+    const res = await app.request(`/api/tasks/${id}/chat`, { headers: local });
+    expect(await res.json()).toEqual([
+      { kind: 'dropped', ts: 3, text: 'First\n\nSecond', cleared: { reason: 'cancelled' } },
+    ]);
+  });
+
+  it('shows sent pending messages once, as the message they were sent in', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const { store } = harness;
+    store.appendEvent(id, null, 'chat_queued', { text: 'First' }, 1);
+    store.appendEvent(id, 's1', 'chat_message', { text: 'First', returnTo: 'review' }, 2);
+    const res = await app.request(`/api/tasks/${id}/chat`, { headers: local });
+    expect(await res.json()).toEqual([{ kind: 'user', ts: 2, text: 'First' }]);
   });
 
   it('rejects a permission answer without a valid behavior', async () => {

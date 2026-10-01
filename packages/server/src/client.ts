@@ -56,6 +56,7 @@ export class ApiClient {
   events = (id: number, after = 0) => this.get<StoredEvent[]>(`/tasks/${id}/events?after=${after}`);
   chat = (id: number) => this.get<ChatEntry[]>(`/tasks/${id}/chat`);
   sendChat = (id: number, message: string) => this.post<Task>(`/tasks/${id}/chat`, { message });
+  cancelChat = (id: number) => this.send<Task>('DELETE', `/tasks/${id}/chat/pending`);
   commits = (id: number) => this.get<CommitInfo[]>(`/tasks/${id}/commits`);
   diff = (id: number) => this.get<WorktreeDiff>(`/tasks/${id}/diff`);
 
