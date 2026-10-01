@@ -86,6 +86,7 @@ export const api = {
   chat: (id: number) => request<ChatEntry[]>(`/tasks/${id}/chat`),
   sendChat: (id: number, message: string) =>
     send<unknown>('POST', `/tasks/${id}/chat`, { message }),
+  cancelChat: (id: number) => send<unknown>('DELETE', `/tasks/${id}/chat/pending`),
   settings: () => request<Settings>('/settings'),
   saveSettings: (patch: Partial<Settings>) => send<Settings>('PUT', '/settings', patch),
 };

@@ -21,6 +21,8 @@ import type {
   AgentsUpdate,
   ChatEnd,
   ChatMessage,
+  ChatQueueCleared,
+  ChatQueued,
   CommitInfo,
   CreateTaskInput,
   CriteriaApproval,
@@ -555,36 +557,100 @@ export class Harness {
    * Writes `message` into the task's latest implementer conversation and runs the agent
    * until it replies, as if typed in that session: it may edit files, its tool rules and
    * permission prompts apply, and nothing moves on in the workflow. The task then returns
-   * to the status it had. Throws when the message is empty, the task is running or waiting
-   * for something, there is no conversation to continue, or its context is full.
+   * to the status it had.
+   * While the task is busy (running, queued, waiting for quota or approval) the message is
+   * kept as pending instead and sent when the current step ends; see {@link pendingChat}.
+   * Throws when the message is empty, or the task is idle and there is no conversation to
+   * continue or its context is full.
    */
   chat(id: number, message: string): Task {
     const task = this.requireTask(id);
-    if (this.running.has(id) || !CHATTABLE.includes(task.status)) {
-      throw new Error(`task ${id} is ${task.status}; chat once it has stopped or finished`);
-    }
     const text = optionalText(message, 'message')?.trim();
     if (!text) throw new Error('message is empty');
+    if (this.running.has(id) || !CHATTABLE.includes(task.status)) {
+      this.store.appendEvent(id, null, 'chat_queued', { text } satisfies ChatQueued);
+      this.emit({ type: 'task', taskId: id, status: task.status });
+      return task;
+    }
+    const target = this.chatTarget(task);
+    if (typeof target === 'string') throw new Error(target);
+    return this.startChat(task, target, text);
+  }
+
+  /**
+   * Messages written while the task was busy that have not been sent or cancelled yet,
+   * oldest first.
+   */
+  pendingChat(taskId: number): string[] {
+    const after = Math.max(
+      this.store.lastEvent(taskId, 'chat_message')?.id ?? 0,
+      this.store.lastEvent(taskId, 'chat_queue_cleared')?.id ?? 0,
+    );
+    return this.store
+      .eventsOfKinds(taskId, ['chat_queued'], after)
+      .map((e) => (e.data as ChatQueued).text);
+  }
+
+  /** Drops the task's pending chat messages unsent. Throws when there are none. */
+  cancelChat(id: number): Task {
+    const task = this.requireTask(id);
+    if (this.pendingChat(id).length === 0) throw new Error(`task ${id} has no pending message`);
+    this.clearPendingChat(id, { reason: 'cancelled' });
+    return task;
+  }
+
+  private clearPendingChat(taskId: number, cleared: ChatQueueCleared): void {
+    this.store.appendEvent(taskId, null, 'chat_queue_cleared', cleared);
+    this.emit({ type: 'task', taskId, status: this.requireTask(taskId).status });
+  }
+
+  /**
+   * Sends the pending messages of an idle task as one turn. A task that has stopped drops
+   * them when they cannot be sent, since nothing would change that; a queued one keeps them
+   * for after its next step, which may start a conversation they fit into.
+   * Returns true when a reply started.
+   */
+  private deliverPendingChat(task: Task): boolean {
+    const pending = this.pendingChat(task.id);
+    if (pending.length === 0) return false;
+    const target = this.chatTarget(task);
+    if (typeof target === 'string') {
+      if (CHATTABLE.includes(task.status)) {
+        this.clearPendingChat(task.id, { reason: 'undeliverable', detail: target });
+        this.notice(task.id, `pending message not sent: ${target}`);
+      }
+      return false;
+    }
+    this.startChat(task, target, pending.join('\n\n'));
+    return true;
+  }
+
+  /** The conversation a chat continues, or why there is none to continue. */
+  private chatTarget(task: Task): Session | string {
     const session = this.store
-      .listSessions(id)
+      .listSessions(task.id)
       .findLast(
         (s) => s.role === 'implementer' && s.agentSessionId !== null && s.contextTokens > 0,
       );
-    if (!session) throw new Error(`task ${id} has no conversation to continue yet`);
-    if (!task.worktreePath) throw new Error(`task ${id} was merged; its worktree is gone`);
+    if (!session) return `task ${task.id} has no conversation to continue yet`;
+    if (!task.worktreePath) return `task ${task.id} was merged; its worktree is gone`;
     const window = session.contextWindow ?? this.workflow.contextWindow(session.agentId);
     if (
       contextPct(session.contextTokens, window) >= resolveThresholds(task.contextPolicy).hardPct
     ) {
-      throw new Error(`the conversation of task ${id} is full; continue it with hb open ${id}`);
+      return `the conversation of task ${task.id} is full; continue it with hb open ${task.id}`;
     }
+    return session;
+  }
+
+  private startChat(task: Task, session: Session, text: string): Task {
     const chat: ChatMessage = { text, returnTo: task.status };
-    this.store.appendEvent(id, session.id, 'chat_message', chat);
+    this.store.appendEvent(task.id, session.id, 'chat_message', chat);
     const controller = new AbortController();
     // Registered before returning, so the scheduler and other calls see the task as busy.
-    this.running.set(id, controller);
-    this.setActivity(id, { phase: 'chatting', agentId: session.agentId });
-    const running = this.setStatus(id, 'running');
+    this.running.set(task.id, controller);
+    this.setActivity(task.id, { phase: 'chatting', agentId: session.agentId });
+    const running = this.setStatus(task.id, 'running');
     void this.runChat(task, session, text, controller);
     return running;
   }
@@ -761,12 +827,21 @@ export class Harness {
     for (const task of dueForRetry(this.store.listTasks(), now)) {
       this.setStatus(task.id, 'queued', { resumeAt: null });
     }
+    // Like a message written to an idle task, these do not wait for a free slot.
+    for (const task of this.store.listTasks()) {
+      if (CHATTABLE.includes(task.status) && !this.running.has(task.id)) {
+        this.deliverPendingChat(task);
+      }
+    }
     // A task waits only when the provider of its next session is short of quota.
     const ready = this.store
       .listTasks()
       .filter((t) => t.status !== 'queued' || !this.nextSessionBlocked(t, now));
     const next = startable(ready, this.running, this.config.maxConcurrent);
-    for (const task of next) void this.runTask(task);
+    // Pending messages take the task's turn; its workflow goes on once the reply ends.
+    for (const task of next) {
+      if (!this.deliverPendingChat(task)) void this.runTask(task);
+    }
   }
 
   private nextSessionBlocked(task: Task, now: number): boolean {

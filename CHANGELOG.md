@@ -5,6 +5,13 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Chat while a task runs:** a message written while the task is busy waits as _pending_
+  and is sent when the current step ends (or as soon as you stop the task); the workflow
+  then carries on. Several pending messages are sent together. Cancel them before then with
+  **Cancel pending** or `hb chat <id> --cancel`.
+
 ## 0.0.5 - 2026-10-01
 
 ### Fixed

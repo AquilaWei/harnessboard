@@ -6,7 +6,10 @@ import type { ChatEntry, TaskDetail } from '@harnessboard/shared';
 import { api } from '../api';
 import { Markdown } from './Markdown';
 
-/** Statuses in which the harness accepts a chat message; see `Harness.chat`. */
+/**
+ * Statuses in which a message is sent at once; in any other the harness keeps it pending
+ * until the task's current step ends. See `Harness.chat`.
+ */
 const CHATTABLE = ['stopped', 'failed', 'review', 'done'];
 
 interface Props {
@@ -24,7 +27,7 @@ export function ChatPanel({ task, onSent, onError }: Props) {
   const { t } = useTranslation();
   const [entries, setEntries] = useState<ChatEntry[] | null>(null);
   const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [sending, setSending] = useState(false);
   const [copied, setCopied] = useState(false);
   const end = useRef<HTMLDivElement>(null);
 
@@ -39,19 +42,32 @@ export function ChatPanel({ task, onSent, onError }: Props) {
   }, [entries?.length]);
 
   const replying = task.status === 'running' || task.status === 'awaiting_permission';
-  const canSend = CHATTABLE.includes(task.status) && task.latestSessionId !== null;
+  const busy = !CHATTABLE.includes(task.status);
+  const canSend = busy || task.latestSessionId !== null;
+  const hasPending = entries?.some((e) => e.kind === 'pending') ?? false;
 
   const send = async () => {
     if (!message.trim() || !canSend) return;
-    setBusy(true);
+    setSending(true);
     try {
       await api.sendChat(task.id, message.trim());
       setMessage('');
       onSent();
+      // A pending message does not change the task, so read the chat again here.
+      setEntries(await api.chat(task.id));
     } catch (err) {
       onError((err as Error).message);
     } finally {
-      setBusy(false);
+      setSending(false);
+    }
+  };
+
+  const cancelPending = async () => {
+    try {
+      await api.cancelChat(task.id);
+      setEntries(await api.chat(task.id));
+    } catch (err) {
+      onError((err as Error).message);
     }
   };
 
@@ -83,13 +99,27 @@ export function ChatPanel({ task, onSent, onError }: Props) {
       {replying && task.activity?.phase === 'chatting' && (
         <p className="hint">{t('chat.replying', { agent: task.activity.agentId ?? '' })}</p>
       )}
+      {hasPending && (
+        <div className="actions">
+          <span className="hint">{t('chat.pendingHint')}</span>
+          <button type="button" className="btn ghost" onClick={() => void cancelPending()}>
+            {t('chat.cancelPending')}
+          </button>
+        </div>
+      )}
       <div ref={end} />
       <div className="chat-input">
         <textarea
           rows={3}
           value={message}
           disabled={!canSend}
-          placeholder={canSend ? t('chat.placeholder') : t('chat.unavailable')}
+          placeholder={
+            !canSend
+              ? t('chat.unavailable')
+              : busy
+                ? t('chat.queuePlaceholder')
+                : t('chat.placeholder')
+          }
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={onKey}
           aria-label={t('chat.label')}
@@ -98,10 +128,10 @@ export function ChatPanel({ task, onSent, onError }: Props) {
           <button
             type="button"
             className="btn primary"
-            disabled={busy || !canSend || !message.trim()}
+            disabled={sending || !canSend || !message.trim()}
             onClick={() => void send()}
           >
-            {t('chat.send')}
+            {busy ? t('chat.queue') : t('chat.send')}
           </button>
           <span className="hint">{t('chat.hint')}</span>
           <button type="button" className="btn ghost" onClick={() => void copyOpen()}>
@@ -120,6 +150,24 @@ function ChatLine({ entry }: { entry: ChatEntry }) {
       return (
         <li className="chat-user">
           <div className="chat-bubble">{entry.text}</div>
+        </li>
+      );
+    case 'pending':
+      return (
+        <li className="chat-user chat-pending">
+          <div className="chat-bubble">{entry.text}</div>
+          <span className="chat-tag">{t('chat.pending')}</span>
+        </li>
+      );
+    case 'dropped':
+      return (
+        <li className="chat-user chat-pending">
+          <div className="chat-bubble chat-dropped">{entry.text}</div>
+          <span className="chat-tag">
+            {entry.cleared.reason === 'cancelled'
+              ? t('chat.cancelled')
+              : t('chat.undeliverable', { detail: entry.cleared.detail ?? '' })}
+          </span>
         </li>
       );
     case 'agent':

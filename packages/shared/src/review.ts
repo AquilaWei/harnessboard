@@ -64,9 +64,29 @@ export interface ChatEnd {
   reason: SessionEndReason;
 }
 
+/**
+ * Stored as the `chat_queued` event when the user writes to a task that is busy. Pending
+ * messages are sent together, as one `chat_message`, once the task's current step ends.
+ */
+export interface ChatQueued {
+  text: string;
+}
+
+/**
+ * Stored as the `chat_queue_cleared` event when pending messages are dropped unsent:
+ * the user cancelled them, or the task stopped with no conversation they could go into.
+ */
+export interface ChatQueueCleared {
+  reason: 'cancelled' | 'undeliverable';
+  /** Why they could not be sent, for `undeliverable`. */
+  detail?: string;
+}
+
 /** One line of a task's chat (`GET /api/tasks/:id/chat`), oldest first. */
 export type ChatEntry =
   | { kind: 'user'; ts: number; text: string }
+  | { kind: 'pending'; ts: number; text: string }
+  | { kind: 'dropped'; ts: number; text: string; cleared: ChatQueueCleared }
   | { kind: 'agent'; ts: number; text: string }
   | { kind: 'tool'; ts: number; name: string; summary: string }
   | { kind: 'compact'; ts: number; preTokens: number; postTokens: number }

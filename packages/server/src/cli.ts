@@ -289,13 +289,26 @@ program
 
 program
   .command('chat')
-  .description("write to a task's agent and print its reply (it may edit files)")
+  .description(
+    "write to a task's agent and print its reply (it may edit files); while the task is busy, the message waits until its current step ends",
+  )
   .argument('<id>', 'task id', parseInteger)
-  .argument('<message...>', 'your message; slash commands such as /compact are sent as-is')
-  .action(async (id: number, words: string[]) => {
+  .argument('[message...]', 'your message; slash commands such as /compact are sent as-is')
+  .option('--cancel', 'drop the messages still waiting to be sent')
+  .action(async (id: number, words: string[], o: { cancel?: boolean }) => {
     const api = client();
+    if (o.cancel) {
+      await api.cancelChat(id);
+      console.log(t('chatCancelled', { id }));
+      return;
+    }
+    if (words.length === 0) throw new Error(t('chatNoMessage'));
     let seen = (await api.chat(id)).length + 1; // the message itself is echoed back first
     await api.sendChat(id, words.join(' '));
+    if ((await api.chat(id)).at(-1)?.kind === 'pending') {
+      console.log(t('chatQueued', { id }));
+      return;
+    }
     for (;;) {
       await new Promise((resolve) => setTimeout(resolve, FOLLOW_INTERVAL_MS));
       const entries = await api.chat(id);

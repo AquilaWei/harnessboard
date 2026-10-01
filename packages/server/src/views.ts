@@ -4,6 +4,8 @@ import type {
   ChatEnd,
   ChatEntry,
   ChatMessage,
+  ChatQueueCleared,
+  ChatQueued,
   ContextView,
   CriteriaApproval,
   CriteriaProposal,
@@ -185,18 +187,36 @@ function timelineEvent(
 }
 
 /**
- * The user's chat messages with the agent's text and tool uses in reply, oldest first.
- * Only what happened in chats is included; the workflow's sessions are on the timeline.
+ * The user's chat messages with the agent's text and tool uses in reply, oldest first,
+ * then the messages still waiting to be sent. Only what happened in chats is included;
+ * the workflow's sessions are on the timeline. Pending messages that were sent appear once,
+ * as the message they were sent in.
  */
 export function chatTranscript(taskId: number, store: Store): ChatEntry[] {
-  const first = store.eventsOfKind(taskId, 'chat_message')[0];
+  const first = store.eventsOfKinds(taskId, ['chat_message', 'chat_queued'])[0];
   if (!first) return [];
   const entries: ChatEntry[] = [];
+  let pending: { ts: number; text: string }[] = [];
   let inChat = false;
-  const kinds = ['chat_message', 'chat_end', 'text', 'tool_use', 'compact'];
+  const kinds = [
+    'chat_message',
+    'chat_end',
+    'chat_queued',
+    'chat_queue_cleared',
+    'text',
+    'tool_use',
+    'compact',
+  ];
   for (const e of store.eventsOfKinds(taskId, kinds, first.id - 1)) {
-    if (e.kind === 'chat_message') {
+    if (e.kind === 'chat_queued') {
+      pending.push({ ts: e.ts, text: (e.data as ChatQueued).text });
+    } else if (e.kind === 'chat_queue_cleared') {
+      const text = pending.map((p) => p.text).join('\n\n');
+      entries.push({ kind: 'dropped', ts: e.ts, text, cleared: e.data as ChatQueueCleared });
+      pending = [];
+    } else if (e.kind === 'chat_message') {
       inChat = true;
+      pending = [];
       entries.push({ kind: 'user', ts: e.ts, text: (e.data as ChatMessage).text });
     } else if (e.kind === 'chat_end') {
       inChat = false;
@@ -211,7 +231,7 @@ export function chatTranscript(taskId: number, store: Store): ChatEntry[] {
       entries.push({ kind: 'compact', ts: e.ts, preTokens, postTokens });
     }
   }
-  return entries;
+  return [...entries, ...pending.map((p) => ({ kind: 'pending' as const, ...p }))];
 }
 
 function contextView(

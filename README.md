@@ -58,7 +58,7 @@ hb done 1                            # mark it reviewed
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
-| `hb chat <id> <message>`                                                              | Write to the task's agent; prints its reply  |
+| `hb chat <id> <message>` / `hb chat <id> --cancel`                                    | Write to the task's agent; drop pending ones |
 | `hb commits <id>`                                                                     | List the commits on the task branch          |
 | `hb merge <id>`                                                                       | Merge a reviewed task into its base (below)  |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)    |
@@ -198,11 +198,13 @@ other.
   - **Changes:** the commits on the task branch (open one for its patch), then the diff against the base branch.
   - **Log:** the live log.
   - **Details:** paths, agents and budget.
-  - **Chat:** talk to the agent in the task's own conversation once the task has stopped or
-    finished. It remembers the work so far and may change files, under the task's tool
-    rules and permission prompts. Slash commands such as `/compact` are sent as they are.
-    The task goes back to its status when the reply ends. To work in Claude Code itself,
-    the tab also copies `hb open <id>`.
+  - **Chat:** talk to the agent in the task's own conversation. It remembers the work so
+    far and may change files, under the task's tool rules and permission prompts. Slash
+    commands such as `/compact` are sent as they are. The task goes back to its status when
+    the reply ends.
+    - **While the task is busy**, your message waits as _pending_ and is sent when the
+      current step ends; the workflow then carries on. Cancel it until then.
+    - To work in Claude Code itself, the tab also copies `hb open <id>`.
 - **Picking a repository:** type a path (`~` works) or click Browse… to walk through your
   folders. Git repositories are marked. The field checks what you picked right away: missing
   folder, not a repository (with the command to fix it), or no commits yet.
