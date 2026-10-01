@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.6 - 2026-10-01
+
 ### Added
 
 - **Chat while a task runs:** a message written while the task is busy waits as _pending_
