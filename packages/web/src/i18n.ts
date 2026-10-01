@@ -197,7 +197,6 @@ const en = {
   },
   questions: {
     heading: 'My answers to your questions:',
-    recommended: 'suggested',
     other: 'Or your own answer…',
     answer: 'Your answer…',
     answerFor: 'Your answer to: {{question}}',
@@ -601,7 +600,6 @@ const zhTW: typeof en = {
   },
   questions: {
     heading: '我對你的問題的回答：',
-    recommended: '建議',
     other: '或自己填寫…',
     answer: '你的回答…',
     answerFor: '你對「{{question}}」的回答',

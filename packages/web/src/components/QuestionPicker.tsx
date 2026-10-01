@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { PlanQuestion } from '@harnessboard/shared';
 import { NO_ANSWER } from '../answers';
 import type { Answer } from '../answers';
+import { Markdown } from './Markdown';
 
 interface Props {
   questions: PlanQuestion[];
@@ -13,7 +14,8 @@ interface Props {
 
 /**
  * The agent's questions with their options as choices to click, and room for an answer of
- * your own. Clicking the chosen option again clears it.
+ * your own. Clicking the chosen option again clears it. The agent marks its own
+ * recommendation in the option text, so none is added here.
  */
 export function QuestionPicker({ questions, answers, onChange, disabled = false }: Props) {
   const { t } = useTranslation();
@@ -26,10 +28,10 @@ export function QuestionPicker({ questions, answers, onChange, disabled = false 
         const answer = answers[i] ?? NO_ANSWER;
         return (
           <li key={`${i}-${q.question}`} className="question">
-            <div className="question-text">❓ {q.question}</div>
+            <Markdown className="question-text" text={`❓ ${q.question}`} />
             {q.options.length > 0 && (
               <div className="option-row" role="group" aria-label={q.question}>
-                {q.options.map((option, k) => (
+                {q.options.map((option) => (
                   <button
                     key={option}
                     type="button"
@@ -40,8 +42,8 @@ export function QuestionPicker({ questions, answers, onChange, disabled = false 
                       set(i, { ...answer, option: answer.option === option ? null : option })
                     }
                   >
-                    {option}
-                    {k === 0 && <small className="option-hint">{t('questions.recommended')}</small>}
+                    {/* Agents write options in markdown; emphasis markers would show as-is. */}
+                    {option.replace(/\*\*|__/g, '')}
                   </button>
                 ))}
               </div>
