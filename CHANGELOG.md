@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.5 - 2026-10-01
+
 ### Fixed
 
 - The quota popover could show the weekly reset time under the 5-hour window. Each window
