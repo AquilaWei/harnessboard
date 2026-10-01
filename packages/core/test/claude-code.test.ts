@@ -1,7 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import { ClaudeCodeAdapter } from '../src/claude-code.js';
-import { askBash, assistantText, errorResult, init, rateLimit, result } from './helpers.js';
+import {
+  askBash,
+  assistantText,
+  errorResult,
+  init,
+  rateLimit,
+  result,
+  usageResult,
+} from './helpers.js';
 
 const adapter = new ClaudeCodeAdapter('claude');
 const parse = (obj: unknown) => adapter.parseLine(JSON.stringify(obj));
@@ -92,8 +100,20 @@ describe('ClaudeCodeAdapter.parseLine', () => {
         text: 'done',
         apiErrorStatus: null,
         contextWindow: 1_000_000,
+        usage: null,
       },
     ]);
+  });
+
+  it("takes the conversation's tokens and cost from a result", () => {
+    expect(parse(usageResult('done', 30, 131, 0.03))[0]).toMatchObject({
+      usage: {
+        costUsd: 0.03,
+        models: {
+          'test-model': { input: 30, output: 131, cacheRead: 0, cacheWrite: 0, costUsd: 0.03 },
+        },
+      },
+    });
   });
 
   it('keeps the API error status of a failed result', () => {
@@ -104,6 +124,7 @@ describe('ClaudeCodeAdapter.parseLine', () => {
         text: 'usage limit reached',
         apiErrorStatus: 429,
         contextWindow: null,
+        usage: null,
       },
     ]);
   });

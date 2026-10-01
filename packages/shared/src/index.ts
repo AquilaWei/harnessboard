@@ -8,5 +8,6 @@ export * from './loop.js';
 export * from './permissions.js';
 export * from './review.js';
 export * from './task.js';
+export * from './usage.js';
 export * from './util.js';
 export * from './views.js';

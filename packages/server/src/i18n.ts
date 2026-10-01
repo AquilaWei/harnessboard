@@ -24,6 +24,11 @@ const en = {
   emptyDiff: 'No changes yet.',
   untracked: 'Untracked files:',
   contextLine: 'context {pct}% of {window} (compact {compact}%, soft {soft}%, hard {hard}%)',
+  usageTokens:
+    'usage: {total} tokens (in {input}, out {output}, cache read {cacheRead}, cache write {cacheWrite})',
+  usageCost: '~{cost} at API prices',
+  usageTime: 'agent {agent}, elapsed {elapsed}, runs: {runs}',
+  usageNone: 'usage: not recorded',
   loopLine: 'features {verified}/{total} verified',
   verifyPassed: '(last check `{command}` passed)',
   verifyFailed: '(last check `{command}` failed)',
@@ -78,6 +83,11 @@ const zhTW: Messages = {
   emptyDiff: '目前沒有變更。',
   untracked: '未追蹤的檔案：',
   contextLine: '上下文 {pct}%／{window}（壓縮 {compact}%，收尾 {soft}%，強制 {hard}%）',
+  usageTokens:
+    '用量：{total} tokens（輸入 {input}、輸出 {output}、快取讀 {cacheRead}、快取寫 {cacheWrite}）',
+  usageCost: '約 {cost}（API 價格估算）',
+  usageTime: 'agent {agent}，總歷時 {elapsed}，執行 {runs} 次',
+  usageNone: '用量：未記錄',
   loopLine: 'feature 已驗證 {verified}/{total}',
   verifyPassed: '（上次驗證 `{command}` 通過）',
   verifyFailed: '（上次驗證 `{command}` 失敗）',

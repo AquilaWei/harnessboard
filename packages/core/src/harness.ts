@@ -39,6 +39,7 @@ import type {
   PlanApproval,
   PlanProposal,
   QuotaInfo,
+  UsageRecord,
   ReviewRequest,
   Task,
   TaskActivity,
@@ -908,7 +909,7 @@ export class Harness {
     }
   }
 
-  private runOne(
+  private async runOne(
     task: Task,
     sessionId: string,
     plan: SessionPlan,
@@ -923,7 +924,8 @@ export class Harness {
     const provider = adapter.provider;
     // A resumed turn may report no usage (e.g. `/compact`), so start from what is known.
     let tokens = plan.resume?.contextTokens ?? 0;
-    return runSession({
+    const started = Date.now();
+    const outcome = await runSession({
       adapter,
       spec: {
         cwd: task.worktreePath!,
@@ -973,6 +975,14 @@ export class Harness {
       onNotice: (message) => this.notice(task.id, message, sessionId),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
+    const record: UsageRecord = {
+      role: plan.role,
+      agentId: plan.agentId,
+      durationMs: Date.now() - started,
+      usage: outcome.usage,
+    };
+    this.store.appendEvent(task.id, sessionId, 'usage', record);
+    return outcome;
   }
 
   /**

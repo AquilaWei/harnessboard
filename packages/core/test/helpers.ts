@@ -48,6 +48,22 @@ export const result = (text: string, contextWindow = 100_000) => ({
   modelUsage: { 'test-model': { contextWindow } },
 });
 
+/** A result reporting the conversation's totals so far, as Claude Code does. */
+export const usageResult = (text: string, input: number, output: number, costUsd: number) => ({
+  ...result(text),
+  total_cost_usd: costUsd,
+  modelUsage: {
+    'test-model': {
+      inputTokens: input,
+      outputTokens: output,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      costUSD: costUsd,
+      contextWindow: 100_000,
+    },
+  },
+});
+
 export const errorResult = (status: number) => ({
   type: 'result',
   subtype: 'error_during_execution',

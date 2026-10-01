@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent, QuotaInfo } from '@harnessboard/shared';
+import type { AgentEvent, QuotaInfo, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, PermissionReply, SessionSpec } from './agent.js';
 
 type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }>;
@@ -229,7 +229,7 @@ function toMs(seconds: number | undefined): number | null {
 }
 
 function parseResult(msg: Record<string, unknown>): AgentEvent {
-  const modelUsage = (msg.modelUsage ?? {}) as Record<string, { contextWindow?: number }>;
+  const modelUsage = (msg.modelUsage ?? {}) as Record<string, ModelUsage>;
   const windows = Object.values(modelUsage)
     .map((m) => m.contextWindow)
     .filter((w): w is number => typeof w === 'number');
@@ -239,5 +239,36 @@ function parseResult(msg: Record<string, unknown>): AgentEvent {
     text: typeof msg.result === 'string' ? msg.result : '',
     apiErrorStatus: typeof msg.api_error_status === 'number' ? msg.api_error_status : null,
     contextWindow: windows.length > 0 ? Math.max(...windows) : null,
+    usage: parseUsage(modelUsage, msg.total_cost_usd),
   };
+}
+
+interface ModelUsage {
+  contextWindow?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  costUSD?: number;
+}
+
+/**
+ * `modelUsage` and `total_cost_usd` are the conversation's totals so far: they grow with
+ * each turn of one process and are restored when the conversation is resumed.
+ */
+function parseUsage(modelUsage: Record<string, ModelUsage>, totalCost: unknown): RunUsage | null {
+  const models: RunUsage['models'] = {};
+  for (const [model, m] of Object.entries(modelUsage)) {
+    if (m.inputTokens === undefined && m.outputTokens === undefined) continue;
+    models[model] = {
+      input: m.inputTokens ?? 0,
+      output: m.outputTokens ?? 0,
+      cacheRead: m.cacheReadInputTokens ?? 0,
+      cacheWrite: m.cacheCreationInputTokens ?? 0,
+      costUsd: typeof m.costUSD === 'number' ? m.costUSD : null,
+    };
+  }
+  const costUsd = typeof totalCost === 'number' ? totalCost : null;
+  if (costUsd === null && Object.keys(models).length === 0) return null;
+  return { costUsd, models };
 }

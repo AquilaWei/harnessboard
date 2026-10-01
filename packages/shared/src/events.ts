@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { RunUsage } from './usage.js';
 
 /** Subscription quota snapshot reported by the agent CLI. */
 export interface QuotaInfo {
@@ -48,6 +49,8 @@ export type AgentEvent =
       text: string;
       apiErrorStatus: number | null;
       contextWindow: number | null;
+      /** The conversation's totals so far; `null` when the agent reported none. */
+      usage: RunUsage | null;
     };
 
 /** Harness-level event pushed to CLI/web subscribers. */

@@ -8,9 +8,17 @@ import {
   DEFAULT_PRESET,
   PERMISSION_PRESETS,
   definedOnly,
+  formatCost,
+  formatDuration,
   presetRules,
 } from '@harnessboard/shared';
-import type { PermissionRequest, PlanQuestion, TaskSize, TaskView } from '@harnessboard/shared';
+import type {
+  PermissionRequest,
+  PlanQuestion,
+  TaskSize,
+  TaskUsage,
+  TaskView,
+} from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
 import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
 import { t } from './i18n.js';
@@ -251,6 +259,7 @@ program
         `  ${t('permissionWaiting', { tool: r.toolName, summary: r.summary, request: r.requestId })}${rules}${r.risk ? `  (${r.risk})` : ''}`,
       );
     }
+    console.log(`  ${usageLine(task.usage)}`);
     for (const s of task.sessions) {
       const who = `${s.role}/${s.agentId}`.padEnd(22);
       console.log(
@@ -264,6 +273,26 @@ program
       if (review.findings) console.log(indent(review.findings));
     }
   });
+
+function usageLine(usage: TaskUsage): string {
+  const time = t('usageTime', {
+    agent: usage.runs > 0 ? formatDuration(usage.agentMs) : '-',
+    elapsed: usage.elapsedMs === null ? '-' : formatDuration(usage.elapsedMs),
+    runs: usage.runs,
+  });
+  const u = usage.tokens;
+  if (!u) return `${t('usageNone')} · ${time}`;
+  const tokens = t('usageTokens', {
+    total: formatTokens(u.input + u.output + u.cacheRead + u.cacheWrite),
+    input: formatTokens(u.input),
+    output: formatTokens(u.output),
+    cacheRead: formatTokens(u.cacheRead),
+    cacheWrite: formatTokens(u.cacheWrite),
+  });
+  const cost =
+    usage.costUsd === null ? '' : ` · ${t('usageCost', { cost: formatCost(usage.costUsd) })}`;
+  return `${tokens}${cost} · ${time}`;
+}
 
 program
   .command('logs')

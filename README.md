@@ -45,26 +45,26 @@ hb open 1                            # continue the session interactively in Cla
 hb done 1                            # mark it reviewed
 ```
 
-| Command                                                                               | What it does                                 |
-| ------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                      |
-| `hb loop <goal> [--verify <command>]` [same options as `add`]                         | Start a Loop task (see below)                |
-| `--criteria <text>` / `--no-discuss` on `add`                                         | Give acceptance criteria, or skip agreeing   |
-| `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> [--verify <command>]`   | Review, discuss and approve criteria or plan |
-| `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)  |
-| `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them  |
-| `hb agents`                                                                           | List agent profiles and whether they run     |
-| `hb ls` / `hb show <id>`                                                              | List tasks / show sessions and context usage |
-| `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
-| `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
-| `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
-| `hb chat <id> <message>` / `hb chat <id> --cancel`                                    | Write to the task's agent; drop pending ones |
-| `hb commits <id>`                                                                     | List the commits on the task branch          |
-| `hb merge <id>`                                                                       | Merge a reviewed task into its base (below)  |
-| `hb delete <id>`                                                                      | Delete a task that is not running (below)    |
-| `hb allow <id> [--suggested] [--rule RULE...] [--global]` / `hb deny <id> [reason]`   | Answer a tool use the agent waits on         |
-| `--auto-approve` on `add` / `loop`; `hb auto <id> [on\|off]`; `hb global-tools`       | Ask less: see Permissions below              |
-| `--preset git,node,...` on `add` / `loop`; `hb tools <id> [RULE...]`                  | Choose allowed tools; show or change them    |
+| Command                                                                               | What it does                                                         |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                                              |
+| `hb loop <goal> [--verify <command>]` [same options as `add`]                         | Start a Loop task (see below)                                        |
+| `--criteria <text>` / `--no-discuss` on `add`                                         | Give acceptance criteria, or skip agreeing                           |
+| `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> [--verify <command>]`   | Review, discuss and approve criteria or plan                         |
+| `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)                          |
+| `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them                          |
+| `hb agents`                                                                           | List agent profiles and whether they run                             |
+| `hb ls` / `hb show <id>`                                                              | List tasks / show sessions, context, tokens, estimated cost and time |
+| `hb logs <id> [-f]`                                                                   | Print or follow the log                                              |
+| `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                                                 |
+| `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish                              |
+| `hb chat <id> <message>` / `hb chat <id> --cancel`                                    | Write to the task's agent; drop pending ones                         |
+| `hb commits <id>`                                                                     | List the commits on the task branch                                  |
+| `hb merge <id>`                                                                       | Merge a reviewed task into its base (below)                          |
+| `hb delete <id>`                                                                      | Delete a task that is not running (below)                            |
+| `hb allow <id> [--suggested] [--rule RULE...] [--global]` / `hb deny <id> [reason]`   | Answer a tool use the agent waits on                                 |
+| `--auto-approve` on `add` / `loop`; `hb auto <id> [on\|off]`; `hb global-tools`       | Ask less: see Permissions below                                      |
+| `--preset git,node,...` on `add` / `loop`; `hb tools <id> [RULE...]`                  | Choose allowed tools; show or change them                            |
 
 **Merging a task** (`hb merge`, or **Merge into main** in the task panel of a task in
 review) merges its branch into the branch it started from with a merge commit,
@@ -197,7 +197,9 @@ other.
     and reviews with their findings.
   - **Changes:** the commits on the task branch (open one for its patch), then the diff against the base branch.
   - **Log:** the live log.
-  - **Details:** paths, agents and budget.
+  - **Details:** tokens, estimated cost and time; paths, agents and budget. The cost is the
+    CLI's estimate at API prices; a subscription is not charged per token. A task in review or
+    done also shows a one-line summary under its status.
   - **Chat:** talk to the agent in the task's own conversation. It remembers the work so
     far and may change files, under the task's tool rules and permission prompts. Slash
     commands such as `/compact` are sent as they are. The task goes back to its status when

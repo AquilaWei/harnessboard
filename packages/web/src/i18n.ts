@@ -203,6 +203,21 @@ const en = {
     answer: 'Your answer…',
     answerFor: 'Your answer to: {{question}}',
   },
+  usage: {
+    title: 'Usage',
+    tokens: 'Tokens',
+    tokensShort: '{{tokens}} tokens',
+    tokenParts:
+      '{{total}} (in {{input}}, out {{output}}, cache read {{cacheRead}}, cache write {{cacheWrite}})',
+    cost: 'Estimated cost',
+    costHint: '(API prices; your subscription is not charged per token)',
+    agentTime: 'Agent time',
+    runs_one: '{{time}} in {{count}} run',
+    runs_other: '{{time}} over {{count}} runs',
+    elapsed: 'Elapsed',
+    model: 'Model',
+    notRecorded: 'Not recorded',
+  },
   merge: {
     action: 'Merge into {{base}}',
     merging: 'Merging…',
@@ -622,6 +637,21 @@ const zhTW: typeof en = {
     other: '或自己填寫…',
     answer: '你的回答…',
     answerFor: '你對「{{question}}」的回答',
+  },
+  usage: {
+    title: '用量',
+    tokens: 'Tokens',
+    tokensShort: '{{tokens}} tokens',
+    tokenParts:
+      '{{total}}（輸入 {{input}}、輸出 {{output}}、快取讀 {{cacheRead}}、快取寫 {{cacheWrite}}）',
+    cost: '估算金額',
+    costHint: '（以 API 價格估算；訂閱不會按 token 計費）',
+    agentTime: 'Agent 執行時間',
+    runs_one: '{{time}}，共 {{count}} 次執行',
+    runs_other: '{{time}}，共 {{count}} 次執行',
+    elapsed: '總歷時',
+    model: '模型',
+    notRecorded: '未記錄',
   },
   merge: {
     action: '合併到 {{base}}',
