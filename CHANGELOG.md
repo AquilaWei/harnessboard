@@ -20,6 +20,10 @@ are test versions that have not been accepted on real machines yet.
     `hb feedback`), then approve with the verify command you confirm (`hb approve`).
   - The verify command is now optional when creating a Loop task.
 
+- **Delete tasks:** from the task panel (with an in-place confirmation) or with
+  `hb delete <id>`. The task's history and worktree folder are removed; its branch is kept
+  so committed work can still be merged. Running tasks must be stopped first.
+
 ### Fixed
 
 - Creating a task in a folder outside a git repository showed git's raw error. It now says

@@ -90,6 +90,28 @@ describe('tasks API', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/invalid context thresholds/);
   });
 
+  it('deletes a task that is not running', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}`, {
+      method: 'DELETE',
+      headers: { ...local, [CLIENT_HEADER]: 'test' },
+    });
+    expect([res.status, await res.json(), harness.store.getTask(id)]).toEqual([
+      200,
+      { id, branch: null },
+      undefined,
+    ]);
+  });
+
+  it('returns 404 when deleting an unknown task', async () => {
+    const res = await app.request('/api/tasks/99', {
+      method: 'DELETE',
+      headers: { ...local, [CLIENT_HEADER]: 'test' },
+    });
+    expect(res.status).toBe(404);
+  });
+
   it('returns 404 for an unknown task', async () => {
     const res = await app.request('/api/tasks/99', { headers: local });
     expect(res.status).toBe(404);

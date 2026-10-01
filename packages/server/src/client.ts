@@ -2,6 +2,7 @@
 import type {
   AgentInfo,
   CreateTaskInput,
+  DeletedTask,
   StoredEvent,
   Task,
   TaskDetail,
@@ -32,6 +33,7 @@ export class ApiClient {
   queueTask = (id: number) => this.post<Task>(`/tasks/${id}/queue`);
   stopTask = (id: number) => this.post<Task>(`/tasks/${id}/stop`);
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);
+  deleteTask = (id: number) => this.send<DeletedTask>('DELETE', `/tasks/${id}`);
   events = (id: number, after = 0) => this.get<StoredEvent[]>(`/tasks/${id}/events?after=${after}`);
   diff = (id: number) => this.get<WorktreeDiff>(`/tasks/${id}/diff`);
 
@@ -39,9 +41,13 @@ export class ApiClient {
     return (await this.request(path)).json() as Promise<T>;
   }
 
-  private async post<T>(path: string, body?: unknown): Promise<T> {
+  private post<T>(path: string, body?: unknown): Promise<T> {
+    return this.send<T>('POST', path, body);
+  }
+
+  private async send<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await this.request(path, {
-      method: 'POST',
+      method,
       headers: { 'content-type': 'application/json', [CLIENT_HEADER]: 'cli' },
       body: body === undefined ? null : JSON.stringify(body),
     });

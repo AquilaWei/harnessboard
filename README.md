@@ -56,6 +56,12 @@ hb done 1                            # mark it reviewed
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
+| `hb delete <id>`                                                                      | Delete a task that is not running (below)    |
+
+**Deleting a task** (`hb delete`, or **Delete** in the task panel) removes its history and
+its worktree folder, including edits that were not committed. The branch is kept, so
+committed work can still be merged; remove it with `git branch -D` when you no longer need
+it. Stop a running task first.
 
 ## Loop mode
 

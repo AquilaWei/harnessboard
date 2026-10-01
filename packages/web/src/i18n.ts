@@ -101,6 +101,17 @@ const en = {
     copied: 'Copied',
     close: 'Close',
   },
+  deleteTask: {
+    button: 'Delete',
+    title: 'Delete task #{{id}}?',
+    withWorktree:
+      'Its history and worktree folder are removed, including edits that were not committed. The branch {{branch}} is kept, so committed work can still be merged.',
+    noWorktree: 'Its history is removed. This cannot be undone.',
+    confirm: 'Delete task',
+    cancel: 'Cancel',
+    done: 'Task deleted.',
+    doneBranch: 'Task deleted. Branch {{branch}} is kept.',
+  },
   card: {
     features: '{{verified}}/{{total}} features',
     reviewer: 'reviewed by {{agent}}',
@@ -368,6 +379,17 @@ const zhTW: typeof en = {
     copyOpen: '複製「在終端機開啟」',
     copied: '已複製',
     close: '關閉',
+  },
+  deleteTask: {
+    button: '刪除',
+    title: '要刪除任務 #{{id}} 嗎？',
+    withWorktree:
+      '會刪除它的紀錄和工作資料夾（worktree），還沒 commit 的修改也會一起消失。分支 {{branch}} 會保留，已經 commit 的成果仍然可以合併。',
+    noWorktree: '會刪除它的紀錄，刪除後無法復原。',
+    confirm: '刪除任務',
+    cancel: '取消',
+    done: '已刪除任務。',
+    doneBranch: '已刪除任務，分支 {{branch}} 仍保留。',
   },
   card: {
     features: '{{verified}}/{{total}} 項 feature',

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { AGENT_PROVIDERS, definedOnly, resolveThresholds } from '@harnessboard/shared';
 import type {
@@ -40,7 +42,15 @@ import { dueForRetry, quotaBlocks, startable } from './scheduler.js';
 import { Store } from './store.js';
 import { Workflow } from './workflow.js';
 import type { SessionPlan } from './workflow.js';
-import { addWorktree, branchName, currentRef, worktreeDiff, worktreePath } from './worktree.js';
+import {
+  addWorktree,
+  branchName,
+  currentRef,
+  pruneWorktrees,
+  removeWorktree,
+  worktreeDiff,
+  worktreePath,
+} from './worktree.js';
 
 /** Git commands a task may run without `skipPermissions`, so it can commit its own work. */
 export const DEFAULT_ALLOWED_TOOLS = [
@@ -280,6 +290,26 @@ export class Harness {
   }
 
   /**
+   * Deletes a task with its history and removes its worktree directory, discarding any
+   * uncommitted changes there. The branch is kept, so committed work can still be merged.
+   * Throws when the task is missing or running (stop it first), or git cannot remove the
+   * worktree; the task is then left as it was.
+   */
+  async deleteTask(id: number): Promise<void> {
+    const task = this.requireTask(id);
+    if (this.running.has(id) || task.status === 'running') {
+      throw new Error(`task ${id} is running; stop it before deleting`);
+    }
+    // Take it out of the queue first so the scheduler cannot start it while git works.
+    if (task.status === 'queued' || task.status === 'waiting_quota') {
+      this.setStatus(id, 'stopped', { resumeAt: null });
+    }
+    if (task.worktreePath) await this.discardWorktree(task.repoPath, task.worktreePath);
+    this.store.deleteTask(id);
+    this.emit({ type: 'deleted', taskId: id });
+  }
+
+  /**
    * Sends the user's reply on a proposed plan back to the planner, which revises the plan
    * in the same conversation. Throws unless the task is waiting for plan approval.
    */
@@ -427,6 +457,17 @@ export class Harness {
     const dir = worktreePath(this.config.dataDir, task.repoPath, task.id);
     await addWorktree(task.repoPath, dir, branch, task.baseRef);
     return this.store.updateTask(task.id, { branch, worktreePath: dir });
+  }
+
+  private async discardWorktree(repo: string, dir: string): Promise<void> {
+    if (!existsSync(repo)) {
+      // Without its repository git cannot remove the worktree; the folder is ours to delete.
+      await rm(dir, { recursive: true, force: true });
+    } else if (existsSync(dir)) {
+      await removeWorktree(repo, dir);
+    } else {
+      await pruneWorktrees(repo);
+    }
   }
 
   private runOne(

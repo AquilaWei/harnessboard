@@ -104,3 +104,9 @@ export interface WorktreeDiff {
   /** New files git does not track yet; not part of `diff`. */
   untracked: string[];
 }
+
+/** Reply to deleting a task; the branch is kept so its commits can still be merged. */
+export interface DeletedTask {
+  id: number;
+  branch: string | null;
+}

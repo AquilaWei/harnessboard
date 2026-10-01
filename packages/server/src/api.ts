@@ -4,7 +4,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { inspectFolder, listFolders } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
-import type { CreateTaskInput, HarnessEvent } from '@harnessboard/shared';
+import type { CreateTaskInput, DeletedTask, HarnessEvent } from '@harnessboard/shared';
 import { latestSnapshot, planView, taskView, timeline } from './views.js';
 
 /** Header every state-changing request must carry; see {@link localOnly}. */
@@ -66,6 +66,16 @@ export function createApi(harness: Harness): Hono {
       sessions: harness.store.listSessions(id),
       features: latestSnapshot(harness.store, id)?.features ?? null,
     });
+  });
+
+  // The branch is kept; it is returned so the caller can tell the user where the work is.
+  app.delete('/tasks/:id', async (c) => {
+    const id = taskId(c);
+    const task = harness.store.getTask(id);
+    if (!task) return c.json({ error: `task ${id} not found` }, 404);
+    await harness.deleteTask(id);
+    const reply: DeletedTask = { id, branch: task.branch };
+    return c.json(reply);
   });
 
   app.post('/tasks/:id/queue', (c) => c.json(harness.queueTask(taskId(c))));

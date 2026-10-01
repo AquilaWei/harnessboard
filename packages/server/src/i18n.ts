@@ -9,6 +9,9 @@ const en = {
   taskNotFound: 'Task {id} not found.',
   taskStatus: 'Task {id} is now {status}.',
   stopRequested: 'Stop requested for task {id}.',
+  taskDeleted: 'Deleted task {id}.',
+  taskDeletedBranch:
+    'Deleted task {id}. Its branch {branch} is kept; remove it with git branch -D {branch}.',
   openWhileRunning: 'Task {id} is running; stop it before opening its session.',
   noSession: 'Task {id} has not started a session yet.',
   opening: 'Opening session {session} in {dir}',
@@ -40,6 +43,9 @@ const zhTW: Messages = {
   taskNotFound: '找不到任務 {id}。',
   taskStatus: '任務 {id} 目前狀態：{status}。',
   stopRequested: '已要求停止任務 {id}。',
+  taskDeleted: '已刪除任務 {id}。',
+  taskDeletedBranch:
+    '已刪除任務 {id}。分支 {branch} 仍保留，不需要的話可以用 git branch -D {branch} 刪除。',
   openWhileRunning: '任務 {id} 正在執行，請先停止再開啟它的 session。',
   noSession: '任務 {id} 還沒有開始任何 session。',
   opening: '在 {dir} 開啟 session {session}',

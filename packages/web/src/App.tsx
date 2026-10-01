@@ -49,7 +49,11 @@ export function App() {
   }, [load, showToast]);
 
   const refresh = useThrottled(() => void load(), 500);
-  useLiveEvents(refresh);
+  useLiveEvents((event) => {
+    // Deleted elsewhere (e.g. `hb delete`): close its panel, which could no longer load.
+    if (event.type === 'deleted') setSelected((s) => (s?.id === event.taskId ? null : s));
+    refresh();
+  });
 
   const act = useCallback(
     (task: TaskView, action: TaskAction) =>

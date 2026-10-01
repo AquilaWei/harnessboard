@@ -242,6 +242,17 @@ program
   });
 
 program
+  .command('delete')
+  .description(
+    'delete a task that is not running, with its history and worktree (the branch is kept)',
+  )
+  .argument('<id>', 'task id', parseInteger)
+  .action(async (id: number) => {
+    const { branch } = await client().deleteTask(id);
+    console.log(branch ? t('taskDeletedBranch', { id, branch }) : t('taskDeleted', { id }));
+  });
+
+program
   .command('resume')
   .description('queue a stopped, failed or reviewed task again')
   .argument('<id>', 'task id', parseInteger)

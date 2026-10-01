@@ -68,6 +68,11 @@ export async function removeWorktree(repo: string, dir: string): Promise<void> {
   await git(repo, ['worktree', 'remove', '--force', dir]);
 }
 
+/** Forgets worktrees whose directories were deleted by hand. */
+export async function pruneWorktrees(repo: string): Promise<void> {
+  await git(repo, ['worktree', 'prune']);
+}
+
 /** Everything the task changed relative to its base. Read-only: never touches the index. */
 export async function worktreeDiff(dir: string, baseRef: string): Promise<WorktreeDiff> {
   const mergeBase = (await git(dir, ['merge-base', baseRef, 'HEAD'])).trim();

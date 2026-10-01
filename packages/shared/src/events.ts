@@ -35,4 +35,5 @@ export type AgentEvent =
 export type HarnessEvent =
   | { type: 'agent'; taskId: number; sessionId: string; event: AgentEvent }
   | { type: 'task'; taskId: number; status: string }
+  | { type: 'deleted'; taskId: number }
   | { type: 'harness'; taskId: number; message: string };

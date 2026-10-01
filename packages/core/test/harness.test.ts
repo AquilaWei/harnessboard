@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Integration tests: real git worktrees, the fake agent CLI, and a temporary database.
-import { existsSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -60,6 +61,10 @@ function fakeRuns(): FakeRun[] {
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line) as FakeRun);
+}
+
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync('git', args, { cwd, encoding: 'utf8' });
 }
 
 async function runQueued(): Promise<void> {
@@ -238,6 +243,61 @@ describe('stopping a running task', () => {
     harness.stopTask(task.id);
     await harness.waitForIdle();
     expect(harness.store.getTask(task.id)!.status).toBe('stopped');
+  });
+});
+
+describe('deleting a task', () => {
+  it('removes the task with its sessions and events', async () => {
+    scenario([[init(), result('done')]]);
+    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    await harness.waitForIdle();
+    await harness.deleteTask(task.id);
+    expect([
+      harness.store.getTask(task.id),
+      harness.store.listSessions(task.id),
+      harness.store.listEvents(task.id),
+    ]).toEqual([undefined, [], []]);
+  });
+
+  it('removes its worktree directory', async () => {
+    scenario([[init(), result('done')]]);
+    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    await harness.waitForIdle();
+    const worktree = harness.store.getTask(task.id)!.worktreePath!;
+    await harness.deleteTask(task.id);
+    expect(existsSync(worktree)).toBe(false);
+  });
+
+  it('keeps its branch so committed work can still be merged', async () => {
+    scenario([[init(), result('done')]]);
+    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    await harness.waitForIdle();
+    await harness.deleteTask(task.id);
+    expect(git(repo, 'branch', '--list', 'hb/1-fix-the-bug')).toContain('hb/1-fix-the-bug');
+  });
+
+  it('works when the worktree directory was already deleted by hand', async () => {
+    scenario([[init(), result('done')]]);
+    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    await harness.waitForIdle();
+    rmSync(harness.store.getTask(task.id)!.worktreePath!, { recursive: true });
+    await harness.deleteTask(task.id);
+    expect(harness.store.getTask(task.id)).toBeUndefined();
+  });
+
+  it('refuses while the task is running', async () => {
+    scenario([[init(), hang]]);
+    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    await waitForStatus(task.id, 'running');
+    await expect(harness.deleteTask(task.id)).rejects.toThrow(/stop it before deleting/);
+  });
+
+  it('tells subscribers the task is gone', async () => {
+    const task = await harness.createTask({ prompt: 'Fix the bug', repo });
+    const seen: unknown[] = [];
+    harness.subscribe((event) => seen.push(event));
+    await harness.deleteTask(task.id);
+    expect(seen).toEqual([{ type: 'deleted', taskId: task.id }]);
   });
 });
 

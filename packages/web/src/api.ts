@@ -2,6 +2,7 @@
 import type {
   AgentInfo,
   CreateTaskInput,
+  DeletedTask,
   FolderInfo,
   FolderListing,
   PlanView,
@@ -57,6 +58,7 @@ export const api = {
   queue: (id: number) => send<unknown>('POST', `/tasks/${id}/queue`),
   stop: (id: number) => send<unknown>('POST', `/tasks/${id}/stop`),
   complete: (id: number) => send<unknown>('POST', `/tasks/${id}/complete`),
+  deleteTask: (id: number) => send<DeletedTask>('DELETE', `/tasks/${id}`),
   plan: (id: number) => request<PlanView>(`/tasks/${id}/plan`),
   planFeedback: (id: number, message: string) =>
     send<unknown>('POST', `/tasks/${id}/plan/feedback`, { message }),

@@ -159,6 +159,20 @@ export class Store {
     return task;
   }
 
+  /** Removes a task with its sessions and events, all or nothing. */
+  deleteTask(id: number): void {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare('DELETE FROM events WHERE task_id = ?').run(id);
+      this.db.prepare('DELETE FROM sessions WHERE task_id = ?').run(id);
+      this.db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      this.db.exec('ROLLBACK');
+      throw err;
+    }
+  }
+
   startSession(
     id: string,
     taskId: number,

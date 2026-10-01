@@ -315,6 +315,29 @@ summary:focus-visible {
   color: var(--critical-ink);
 }
 
+.btn.danger-fill {
+  background: var(--critical-ink);
+  border-color: var(--critical-ink);
+  color: var(--surface);
+}
+
+.btn.push-end {
+  margin-left: auto;
+}
+
+.confirm-delete {
+  flex-basis: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--critical-ink);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.confirm-delete p {
+  margin: 4px 0 10px;
+  color: var(--ink-2);
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: default;

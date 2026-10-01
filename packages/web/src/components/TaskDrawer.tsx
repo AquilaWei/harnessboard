@@ -12,6 +12,7 @@ import { api } from '../api';
 import type { TaskAction } from '../board';
 import { useLiveEvents, useThrottled } from '../live';
 import { Description } from './Description';
+import { DeleteTask } from './DeleteTask';
 import { Details } from './Details';
 import { DiffView } from './DiffView';
 import { FeatureList } from './FeatureList';
@@ -171,6 +172,10 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                   <button type="button" className="btn ghost" onClick={copyOpen}>
                     {copied ? t('actions.copied') : t('actions.copyOpen')}
                   </button>
+                )}
+                {/* A running task must be stopped first, so its agent is not left orphaned. */}
+                {s !== 'running' && (
+                  <DeleteTask task={task} onDeleted={onClose} onMessage={onError} />
                 )}
               </div>
             </div>

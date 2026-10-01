@@ -52,6 +52,11 @@ hb done 1                            # 標記為已審核完成
 | `hb logs <id> [-f]`                                                                 | 印出或持續追蹤紀錄                  |
 | `hb stop <id>` / `hb resume <id>`                                                   | 停止，或重新排入                    |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                    | 審核、互動接手、完成                |
+| `hb delete <id>`                                                                    | 刪除沒在執行的任務（見下方）        |
+
+**刪除任務**（`hb delete`，或任務面板裡的「刪除」）會刪掉它的紀錄和 worktree 資料夾，
+還沒 commit 的修改也會一起消失。分支會保留，已經 commit 的成果仍然可以合併；不需要時再用
+`git branch -D` 刪除。執行中的任務要先停止才能刪除。
 
 ## Loop 模式
 
