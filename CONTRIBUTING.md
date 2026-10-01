@@ -46,6 +46,8 @@ The format of Claude Code's headless output, which the runner depends on, is des
 - **Docs:** if you change a command, option, environment variable or install step, update
   `README.md` and `README.zh-TW.md` in the same commit. Add a line under _Unreleased_ in
   `CHANGELOG.md` for anything users will notice.
+- **Web dependencies:** after adding or updating a package in `packages/web`, run
+  `node scripts/third-party-notices.mjs` and commit the updated `THIRD-PARTY-NOTICES.md`.
 
 ## Commits
 
