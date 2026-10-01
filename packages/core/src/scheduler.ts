@@ -4,13 +4,18 @@ import { isQuotaLimited } from './runner.js';
 
 /**
  * True while no new session should start: the agent reported requests are refused, or
- * five-hour usage is at or above `pauseAt`. A snapshot whose window has reset no longer counts.
+ * five-hour usage is at or above `pauseAt`. Each condition ends when its own window resets:
+ * a refusal with the limiting window, high usage with the five-hour window.
  */
 export function quotaBlocks(quota: QuotaInfo | null, now: number, pauseAt: number): boolean {
   if (!quota) return false;
-  if (quota.resetsAt !== null && quota.resetsAt <= now) return false;
-  if (isQuotaLimited(quota)) return true;
+  if (isQuotaLimited(quota)) return !hasPassed(quota.resetsAt, now);
+  if (hasPassed(quota.fiveHourResetsAt ?? quota.resetsAt, now)) return false;
   return (quota.fiveHourUtilization ?? 0) >= pauseAt;
+}
+
+function hasPassed(time: number | null, now: number): boolean {
+  return time !== null && time <= now;
 }
 
 /** Tasks waiting for quota whose retry time has come. */

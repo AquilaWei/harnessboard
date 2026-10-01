@@ -98,6 +98,17 @@ export function FeatureProgress({ loop }: { loop: LoopProgress | null }) {
   );
 }
 
+/** The time of day for a reset later today; the weekday too for a later day. */
+function formatReset(time: number, language: string): string {
+  const date = new Date(time);
+  const today = date.toDateString() === new Date().toDateString();
+  return date.toLocaleString(language, {
+    ...(today ? {} : { weekday: 'short' }),
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 /** Quota window utilisation with the pause threshold as a tick. */
 export function QuotaMeter(props: {
   label: string;
@@ -110,12 +121,7 @@ export function QuotaMeter(props: {
   const pausePct = Math.round(props.pauseAt * 100);
   const severity: Severity =
     pct >= pausePct ? 'critical' : pct >= pausePct - 15 ? 'warning' : 'normal';
-  const reset = props.resetsAt
-    ? new Date(props.resetsAt).toLocaleTimeString(i18n.language, {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : null;
+  const reset = props.resetsAt ? formatReset(props.resetsAt, i18n.language) : null;
   return (
     <div className="stat">
       <div className="stat-label">

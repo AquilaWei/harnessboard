@@ -217,8 +217,15 @@ function parseQuota(raw: unknown): QuotaInfo {
     status: info.status ?? 'unknown',
     fiveHourUtilization: windows.five_hour?.utilization ?? null,
     sevenDayUtilization: windows.seven_day?.utilization ?? null,
-    resetsAt: info.resetsAt ? info.resetsAt * 1000 : null,
+    fiveHourResetsAt: toMs(windows.five_hour?.resetsAt),
+    sevenDayResetsAt: toMs(windows.seven_day?.resetsAt),
+    resetsAt: toMs(info.resetsAt),
   };
+}
+
+/** The CLI reports reset times in Unix seconds. */
+function toMs(seconds: number | undefined): number | null {
+  return seconds ? seconds * 1000 : null;
 }
 
 function parseResult(msg: Record<string, unknown>): AgentEvent {
