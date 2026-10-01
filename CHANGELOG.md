@@ -24,8 +24,14 @@ are test versions that have not been accepted on real machines yet.
   `hb delete <id>`. The task's history and worktree folder are removed; its branch is kept
   so committed work can still be merged. Running tasks must be stopped first.
 
+- **Permission presets:** choose common tool groups (git, node, python, gradle, docker, web,
+  files) with `--preset`, and change a task's rules later with `hb tools`.
+
 ### Fixed
 
+- Allowed-tools entries that are not tool rules, such as a sentence describing what is
+  allowed, were accepted and silently gave the agent no permissions. They are now rejected.
+  `--allow` now adds to the default git rules instead of replacing them.
 - Creating a task in a folder outside a git repository showed git's raw error. It now says
   what is wrong and how to fix it. A repository without commits, and paths starting with
   `~`, are handled too.

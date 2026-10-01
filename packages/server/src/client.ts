@@ -33,6 +33,8 @@ export class ApiClient {
   queueTask = (id: number) => this.post<Task>(`/tasks/${id}/queue`);
   stopTask = (id: number) => this.post<Task>(`/tasks/${id}/stop`);
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);
+  setAllowedTools = (id: number, rules: string[]) =>
+    this.send<Task>('PUT', `/tasks/${id}/allowed-tools`, { rules });
   deleteTask = (id: number) => this.send<DeletedTask>('DELETE', `/tasks/${id}`);
   events = (id: number, after = 0) => this.get<StoredEvent[]>(`/tasks/${id}/events?after=${after}`);
   diff = (id: number) => this.get<WorktreeDiff>(`/tasks/${id}/diff`);

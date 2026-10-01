@@ -57,6 +57,7 @@ hb done 1                            # mark it reviewed
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)    |
+| `--preset git,node,...` on `add` / `loop`; `hb tools <id> [RULE...]`                  | Choose allowed tools; show or change them    |
 
 **Deleting a task** (`hb delete`, or **Delete** in the task panel) removes its history and
 its worktree folder, including edits that were not committed. The branch is kept, so
@@ -207,9 +208,16 @@ add more in `config.json`, for example a second Claude with another model:
 Supported providers: `claude-code`. The design for adding other CLIs, such as Codex or
 Gemini, is in [docs/architecture.md](docs/architecture.md).
 
-**Permissions:** tasks run with `--permission-mode acceptEdits`, plus a small allow-list of git
-commands so the agent can commit. Add more rules with `--allow`. `--skip-permissions` removes
-all checks; use it only in a sandbox.
+**Permissions:** tasks run with `--permission-mode acceptEdits` and a list of allowed tool
+rules such as `Bash(npm *)`:
+
+- **Presets** cover common needs: `git` (the default, so the agent can commit), `node`,
+  `python`, `gradle`, `docker`, `web` (`WebFetch`, `WebSearch`) and `files`. `docker` is
+  nearly unrestricted, because a container can mount any folder.
+- Add single rules with `--allow`. Entries that are not tool rules, such as a sentence, are
+  rejected instead of being silently ignored.
+- Change a task's rules while it is not running with `hb tools <id> RULE...`.
+- `--skip-permissions` removes all checks; use it only in a sandbox.
 
 ## Development
 

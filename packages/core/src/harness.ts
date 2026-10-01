@@ -3,7 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
-import { AGENT_PROVIDERS, definedOnly, resolveThresholds } from '@harnessboard/shared';
+import {
+  AGENT_PROVIDERS,
+  DEFAULT_PRESET,
+  assertToolRules,
+  definedOnly,
+  presetRules,
+  resolveThresholds,
+} from '@harnessboard/shared';
 import type {
   AgentEvent,
   AgentInfo,
@@ -52,15 +59,8 @@ import {
   worktreePath,
 } from './worktree.js';
 
-/** Git commands a task may run without `skipPermissions`, so it can commit its own work. */
-export const DEFAULT_ALLOWED_TOOLS = [
-  'Bash(git status)',
-  'Bash(git status *)',
-  'Bash(git diff *)',
-  'Bash(git log *)',
-  'Bash(git add *)',
-  'Bash(git commit *)',
-];
+/** Rules a task gets when none are given: the git commands it needs to commit its work. */
+export const DEFAULT_ALLOWED_TOOLS = presetRules([DEFAULT_PRESET]);
 
 const TICK_MS = 5_000;
 const DEFAULT_REVIEW_ROUNDS = 2;
@@ -208,8 +208,9 @@ export class Harness {
 
   /**
    * Validates the repository and thresholds, then records the task.
-   * Throws when `repo` is missing, not inside a git repository with a commit, the context policy is invalid, or a
-   * loop task has no verify command (from the input or the project's config file).
+   * Throws when `repo` is missing, not inside a git repository with a commit, the context policy is invalid, a
+   * loop task has no verify command (from the input or the project's config file), or an
+   * allowed-tools entry is not a tool rule.
    */
   async createTask(input: CreateTaskInput): Promise<Task> {
     const repoPath = await resolveRepository(input.repo);
@@ -230,6 +231,7 @@ export class Harness {
       );
     }
     const allowedTools = input.allowedTools ?? project.allowedTools ?? DEFAULT_ALLOWED_TOOLS;
+    assertToolRules(allowedTools);
     const agents: TaskAgents = {
       implementer: input.implementer ?? DEFAULT_AGENT,
       reviewer: input.reviewer === undefined ? this.config.defaultReviewer : input.reviewer,
@@ -287,6 +289,24 @@ export class Harness {
       return this.setStatus(id, 'stopped', { resumeAt: null });
     }
     return task;
+  }
+
+  /**
+   * Replaces the tool rules of a task, e.g. to fix rules that kept it from working. Takes
+   * effect from its next session. Throws when the task is running or a rule is invalid.
+   */
+  setAllowedTools(id: number, rules: string[]): Task {
+    const task = this.requireTask(id);
+    if (this.running.has(id) || task.status === 'running') {
+      throw new Error(`task ${id} is running; stop it before changing its tools`);
+    }
+    const unique = [...new Set(rules.map((rule) => rule.trim()).filter(Boolean))];
+    assertToolRules(unique);
+    const updated = this.store.updateTask(id, {
+      permission: { ...task.permission, allowedTools: unique },
+    });
+    this.emit({ type: 'task', taskId: id, status: updated.status });
+    return updated;
   }
 
   /**

@@ -3,7 +3,13 @@ import spawn from 'cross-spawn';
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
-import { APP_NAME, definedOnly } from '@harnessboard/shared';
+import {
+  APP_NAME,
+  DEFAULT_PRESET,
+  PERMISSION_PRESETS,
+  definedOnly,
+  presetRules,
+} from '@harnessboard/shared';
 import type { TaskSize } from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
 import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
@@ -59,7 +65,12 @@ function withTaskOptions(command: Command): Command {
     )
     .option('--soft <pct>', 'soft context threshold in percent', parseInteger)
     .option('--hard <pct>', 'hard context threshold in percent', parseInteger)
-    .option('--allow <rules...>', 'tool rules the agent may use without asking')
+    .option(
+      '--preset <ids>',
+      `permission presets, comma-separated: ${PERMISSION_PRESETS.map((p) => p.id).join(', ')} or none (default ${DEFAULT_PRESET})`,
+      parsePresets,
+    )
+    .option('--allow <rules...>', 'more tool rules the agent may use without asking')
     .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--no-queue', 'leave the task in the backlog');
@@ -76,7 +87,7 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       size: o.size,
       softPct: o.soft,
       hardPct: o.hard,
-      allowedTools: o.allow,
+      allowedTools: allowedTools(o.preset, o.allow),
       skipPermissions: o.skipPermissions,
       reviewer: o.reviewer === 'none' ? null : o.reviewer,
       queue: o.queue,
@@ -242,6 +253,22 @@ program
   });
 
 program
+  .command('tools')
+  .description("show a task's allowed tools, or replace them while it is not running")
+  .argument('<id>', 'task id', parseInteger)
+  .argument('[rules...]', 'new tool rules, e.g. "Bash(npm *)" WebSearch')
+  .option('--preset <ids>', 'add these permission presets, comma-separated', parsePresets)
+  .action(async (id: number, rules: string[], o: { preset?: string[] }) => {
+    const api = client();
+    const task =
+      rules.length > 0 || o.preset
+        ? await api.setAllowedTools(id, [...presetRules(o.preset ?? []), ...rules])
+        : await api.getTask(id);
+    const list = task.permission.allowedTools;
+    console.log(list.length > 0 ? list.join('\n') : t('noTools'));
+  });
+
+program
   .command('delete')
   .description(
     'delete a task that is not running, with its history and worktree (the branch is kept)',
@@ -314,6 +341,7 @@ interface AddOptions {
   size?: TaskSize;
   soft?: number;
   hard?: number;
+  preset?: string[];
   allow?: string[];
   skipPermissions?: boolean;
   reviewer?: string;
@@ -325,6 +353,29 @@ function indent(text: string): string {
     .split('\n')
     .map((line) => `    ${line}`)
     .join('\n');
+}
+
+/** Comma-separated preset ids; `none` for no preset. Unknown ids are rejected here. */
+function parsePresets(value: string): string[] {
+  const ids = value
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => id && id !== 'none');
+  try {
+    presetRules(ids);
+  } catch (err) {
+    throw new InvalidArgumentError((err as Error).message);
+  }
+  return ids;
+}
+
+/**
+ * Rules to send, or `undefined` to let the server choose. `--allow` alone adds to the
+ * default preset, so extra rules never silently take away the git commands.
+ */
+function allowedTools(presets?: string[], allow?: string[]): string[] | undefined {
+  if (!presets && !allow) return undefined;
+  return [...new Set([...presetRules(presets ?? [DEFAULT_PRESET]), ...(allow ?? [])])];
 }
 
 function parseInteger(value: string): number {

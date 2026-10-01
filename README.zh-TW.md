@@ -53,6 +53,7 @@ hb done 1                            # 標記為已審核完成
 | `hb stop <id>` / `hb resume <id>`                                                   | 停止，或重新排入                    |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                    | 審核、互動接手、完成                |
 | `hb delete <id>`                                                                    | 刪除沒在執行的任務（見下方）        |
+| `add`／`loop` 加上 `--preset git,node,...`；`hb tools <id> [規則...]`               | 選擇允許的工具；查看或修改          |
 
 **刪除任務**（`hb delete`，或任務面板裡的「刪除」）會刪掉它的紀錄和 worktree 資料夾，
 還沒 commit 的修改也會一起消失。分支會保留，已經 commit 的成果仍然可以合併；不需要時再用
@@ -185,8 +186,16 @@ API 只接受 loopback 的 `Host` 標頭，而且每個寫入請求都必須帶�
 目前支援的 provider：`claude-code`。之後要加入 Codex、Gemini 等其他 CLI 的設計，寫在
 [docs/architecture.md](docs/architecture.md)。
 
-**權限**：任務以 `--permission-mode acceptEdits` 執行，另外允許幾個 git 指令，讓 agent 可以
-commit。要允許更多指令用 `--allow`。`--skip-permissions` 會關閉所有檢查，只能在沙盒環境使用。
+**權限**：任務以 `--permission-mode acceptEdits` 執行，再加上一份允許的工具規則，例如
+`Bash(npm *)`：
+
+- **權限組**涵蓋常見需求：`git`（預設，讓 agent 可以 commit）、`node`、`python`、`gradle`、
+  `docker`、`web`（`WebFetch`、`WebSearch`）和 `files`。`docker` 幾乎等於全開，因為容器
+  可以掛載任何資料夾。
+- 單條規則用 `--allow` 加上。不是工具規則的內容（例如一段說明文字）會直接被拒絕，
+  不會默默失效。
+- 任務沒在執行時，可以用 `hb tools <id> 規則...` 修改它的規則。
+- `--skip-permissions` 會關閉所有檢查，只能在沙盒環境使用。
 
 ## 開發
 

@@ -10,6 +10,7 @@ const en = {
   taskStatus: 'Task {id} is now {status}.',
   stopRequested: 'Stop requested for task {id}.',
   taskDeleted: 'Deleted task {id}.',
+  noTools: 'No allowed tools; the agent asks before every command.',
   taskDeletedBranch:
     'Deleted task {id}. Its branch {branch} is kept; remove it with git branch -D {branch}.',
   openWhileRunning: 'Task {id} is running; stop it before opening its session.',
@@ -44,6 +45,7 @@ const zhTW: Messages = {
   taskStatus: '任務 {id} 目前狀態：{status}。',
   stopRequested: '已要求停止任務 {id}。',
   taskDeleted: '已刪除任務 {id}。',
+  noTools: '沒有允許的工具；agent 每個指令都會先問你。',
   taskDeletedBranch:
     '已刪除任務 {id}。分支 {branch} 仍保留，不需要的話可以用 git branch -D {branch} 刪除。',
   openWhileRunning: '任務 {id} 正在執行，請先停止再開啟它的 session。',

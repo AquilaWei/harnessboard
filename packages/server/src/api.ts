@@ -78,6 +78,14 @@ export function createApi(harness: Harness): Hono {
     return c.json(reply);
   });
 
+  app.put('/tasks/:id/allowed-tools', async (c) => {
+    const { rules } = await c.req.json<{ rules?: unknown }>();
+    if (!Array.isArray(rules) || !rules.every((r) => typeof r === 'string')) {
+      throw new Error('rules must be a list of strings');
+    }
+    return c.json(harness.setAllowedTools(taskId(c), rules));
+  });
+
   app.post('/tasks/:id/queue', (c) => c.json(harness.queueTask(taskId(c))));
   app.post('/tasks/:id/stop', (c) => c.json(harness.stopTask(taskId(c))));
   app.post('/tasks/:id/complete', (c) => c.json(harness.completeTask(taskId(c))));

@@ -5,6 +5,7 @@ export * from './context.js';
 export * from './events.js';
 export * from './folders.js';
 export * from './loop.js';
+export * from './permissions.js';
 export * from './review.js';
 export * from './task.js';
 export * from './util.js';

@@ -246,6 +246,36 @@ describe('stopping a running task', () => {
   });
 });
 
+describe('setAllowedTools', () => {
+  it('replaces the rules of a task that is not running', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    const updated = harness.setAllowedTools(task.id, ['Bash(npm *)', ' WebSearch ', 'Bash(npm *)']);
+    expect(updated.permission.allowedTools).toEqual(['Bash(npm *)', 'WebSearch']);
+  });
+
+  it('passes the new rules to the next session', async () => {
+    scenario([[init(), result('done')]]);
+    const task = await harness.createTask({ prompt: 'x', repo });
+    harness.setAllowedTools(task.id, ['Bash(./gradlew *)']);
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    const args = fakeRuns()[0]!.args;
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe('Bash(./gradlew *)');
+  });
+
+  it('rejects a rule that is not a tool rule', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    expect(() => harness.setAllowedTools(task.id, ['please allow npm'])).toThrow(/not a tool rule/);
+  });
+
+  it('refuses while the task is running', async () => {
+    scenario([[init(), hang]]);
+    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    await waitForStatus(task.id, 'running');
+    expect(() => harness.setAllowedTools(task.id, ['WebSearch'])).toThrow(/stop it before/);
+  });
+});
+
 describe('deleting a task', () => {
   it('removes the task with its sessions and events', async () => {
     scenario([[init(), result('done')]]);
@@ -312,6 +342,17 @@ describe('createTask', () => {
     const home = path.relative(os.homedir(), repo);
     const task = await harness.createTask({ prompt: 'x', repo: `~/${home}` });
     expect(task.repoPath).toBe(repo);
+  });
+
+  it('rejects allowed tools that are not tool rules', async () => {
+    await expect(
+      harness.createTask({ prompt: 'x', repo, allowedTools: ['anything is fine locally'] }),
+    ).rejects.toThrow(/not a tool rule: "anything is fine locally"/);
+  });
+
+  it('gives the git preset when no rules are given', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    expect(task.permission.allowedTools).toContain('Bash(git commit *)');
   });
 
   it('rejects an invalid context policy', async () => {

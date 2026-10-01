@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
+import type { Task } from '@harnessboard/shared';
 import { CLIENT_HEADER, createApi, localOnly } from '../src/api.js';
 
 const PORT = 4999;
@@ -88,6 +89,28 @@ describe('tasks API', () => {
       { [CLIENT_HEADER]: 'test' },
     );
     expect(((await res.json()) as { error: string }).error).toMatch(/invalid context thresholds/);
+  });
+
+  it('replaces the allowed tools of a task', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}/allowed-tools`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ rules: ['WebSearch'] }),
+    });
+    expect(((await res.json()) as Task).permission.allowedTools).toEqual(['WebSearch']);
+  });
+
+  it('rejects allowed tools that are not a list of strings', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}/allowed-tools`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ rules: 'WebSearch' }),
+    });
+    expect(res.status).toBe(400);
   });
 
   it('deletes a task that is not running', async () => {
