@@ -245,8 +245,9 @@ thresholds still apply within a turn.
 Settings are layered, and later layers win: built-in defaults < user config file <
 environment < CLI flags.
 
-- **User config:** `config.json` in the platform config directory (`~/.config/harnessboard` on Linux).
-- **Environment:** `HARNESSBOARD_HOME` (data directory), `HARNESSBOARD_PORT`,
+- **User config:** `config.json` in the platform config directory (`~/.config/harnessboard` on Linux),
+  or in `HARNESSBOARD_HOME` when that is set.
+- **Environment:** `HARNESSBOARD_HOME` (data directory and config file), `HARNESSBOARD_PORT`,
   `HARNESSBOARD_MAX_CONCURRENT`, `HARNESSBOARD_LANG` (`en`, `zh-TW`), and
   `HARNESSBOARD_CLAUDE_PATH` / `HARNESSBOARD_MODEL`, which apply to the `claude` agent profile.
 - **Per repository:** `.harnessboard.json` with `baseRef`, `allowedTools`, `contextPolicy` and

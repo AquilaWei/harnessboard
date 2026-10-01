@@ -214,8 +214,9 @@ API 只接受 loopback 的 `Host` 標頭，而且每個寫入請求都必須帶�
 
 設定分層，後面的覆蓋前面的：內建預設值 < 使用者設定檔 < 環境變數 < CLI 參數。
 
-- **使用者設定檔**：平台設定目錄下的 `config.json`（Linux 為 `~/.config/harnessboard`）。
-- **環境變數**：`HARNESSBOARD_HOME`（資料目錄）、`HARNESSBOARD_PORT`、`HARNESSBOARD_MAX_CONCURRENT`、
+- **使用者設定檔**：平台設定目錄下的 `config.json`（Linux 為 `~/.config/harnessboard`）；
+  有設定 `HARNESSBOARD_HOME` 時改放在那個目錄。
+- **環境變數**：`HARNESSBOARD_HOME`（資料目錄和設定檔）、`HARNESSBOARD_PORT`、`HARNESSBOARD_MAX_CONCURRENT`、
   `HARNESSBOARD_LANG`（`en`、`zh-TW`），以及套用到 `claude` 這個 agent 設定檔的
   `HARNESSBOARD_CLAUDE_PATH`／`HARNESSBOARD_MODEL`。
 - **每個 repository**：`.harnessboard.json`，可設定 `baseRef`、`allowedTools`、`contextPolicy` 和

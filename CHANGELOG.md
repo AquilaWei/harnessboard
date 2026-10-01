@@ -24,6 +24,11 @@ are test versions that have not been accepted on real machines yet.
   the task's agent to resolve in its worktree, never in your checkout; review and merge
   again afterwards.
 
+### Changed
+
+- With `HARNESSBOARD_HOME` set, `config.json` is read from and saved to that folder too, so
+  a separate instance (for example for testing) no longer changes your own settings.
+
 ## 0.0.3 - 2026-09-30
 
 ### Added
