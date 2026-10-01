@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PlanView, TaskDetail } from '@harnessboard/shared';
 import { api } from '../api';
+import { composeFeedback } from '../answers';
+import type { Answer } from '../answers';
 import { Markdown } from './Markdown';
+import { QuestionPicker } from './QuestionPicker';
 
 interface Props {
   task: TaskDetail;
@@ -22,11 +25,17 @@ export function PlanReview({ task, version, onDone, onError }: Props) {
   const [plan, setPlan] = useState<PlanView | null>(null);
   const [verify, setVerify] = useState<string | null>(null);
   const [feedback, setFeedback] = useState('');
+  const [answers, setAnswers] = useState<Answer[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     api.plan(task.id).then(setPlan, (e: Error) => onError(e.message));
   }, [task.id, version, onError]);
+
+  // A revised plan asks new questions, so earlier picks no longer apply.
+  useEffect(() => {
+    setAnswers([]);
+  }, [plan?.reply]);
 
   // Pre-fill once: the task's own command, else the planner's suggestion for you to confirm.
   useEffect(() => {
@@ -35,12 +44,14 @@ export function PlanReview({ task, version, onDone, onError }: Props) {
 
   if (!plan) return null;
   const waiting = task.status === 'awaiting_approval';
+  const message = composeFeedback(plan.questions, answers, feedback, t('questions.heading'));
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     try {
       await fn();
       setFeedback('');
+      setAnswers([]);
       onDone();
     } catch (err) {
       onError((err as Error).message);
@@ -61,11 +72,12 @@ export function PlanReview({ task, version, onDone, onError }: Props) {
       {plan.questions.length > 0 && (
         <section className="plan-section plan-questions">
           <h3>{t('plan.questions', { count: plan.questions.length })}</h3>
-          <ul>
-            {plan.questions.map((q) => (
-              <li key={q}>❓ {q}</li>
-            ))}
-          </ul>
+          <QuestionPicker
+            questions={plan.questions}
+            answers={answers}
+            onChange={setAnswers}
+            disabled={!waiting || busy}
+          />
         </section>
       )}
       <section className="plan-section">
@@ -129,8 +141,8 @@ export function PlanReview({ task, version, onDone, onError }: Props) {
               <button
                 type="button"
                 className="btn"
-                disabled={busy || !feedback.trim()}
-                onClick={() => void act(() => api.planFeedback(task.id, feedback))}
+                disabled={busy || !message}
+                onClick={() => void act(() => api.planFeedback(task.id, message))}
               >
                 {t('plan.send')}
               </button>

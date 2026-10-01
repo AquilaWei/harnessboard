@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { FEATURE_LIST_FILE, contextPct, resolveThresholds } from '@harnessboard/shared';
+import {
+  FEATURE_LIST_FILE,
+  contextPct,
+  resolveThresholds,
+  toQuestions,
+} from '@harnessboard/shared';
 import type {
   AgentRole,
   CriteriaProposal,
@@ -28,6 +33,7 @@ import {
   loopSessionPrompt,
   mergeConflictPrompt,
   parseCriteria,
+  parseQuestions,
   planRevisionPrompt,
   taskGoal,
 } from './prompts.js';
@@ -232,7 +238,10 @@ export class Workflow {
   /** Latest proposed criteria of a single task, until the user approves them. */
   criteriaProposal(task: Task): CriteriaProposal | null {
     if (!this.discussing(task)) return null;
-    return (this.host.store.lastEvent(task.id, 'criteria')?.data as CriteriaProposal) ?? null;
+    const stored = this.host.store.lastEvent(task.id, 'criteria')?.data as
+      CriteriaProposal | undefined;
+    // Proposals stored before questions were parsed have none.
+    return stored ? { ...stored, questions: toQuestions(stored.questions) } : null;
   }
 
   /**
@@ -329,7 +338,11 @@ export class Workflow {
 
   /** Nothing is changed until the user approves the criteria or replies to them. */
   private proposeCriteria(task: Task, reply: string): void {
-    const proposal: CriteriaProposal = { criteria: parseCriteria(reply), reply };
+    const proposal: CriteriaProposal = {
+      criteria: parseCriteria(reply),
+      reply,
+      questions: parseQuestions(reply),
+    };
     this.host.store.appendEvent(task.id, null, 'criteria', proposal);
     this.host.notice(
       task.id,

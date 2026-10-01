@@ -3,8 +3,8 @@ import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import treeKill from 'tree-kill';
-import { FEATURE_LIST_FILE } from '@harnessboard/shared';
-import type { Feature, VerifyResult } from '@harnessboard/shared';
+import { FEATURE_LIST_FILE, toQuestions } from '@harnessboard/shared';
+import type { Feature, PlanQuestion, VerifyResult } from '@harnessboard/shared';
 
 const OUTPUT_TAIL_CHARS = 4_000;
 
@@ -24,7 +24,7 @@ export function readFeatureList(dir: string): Feature[] {
 export function readPlan(dir: string): {
   features: Feature[];
   suggestedVerify: string | null;
-  questions: string[];
+  questions: PlanQuestion[];
 } {
   const file = path.join(dir, FEATURE_LIST_FILE);
   let raw: string;
@@ -46,9 +46,7 @@ export function readPlan(dir: string): {
   }
   const suggestedVerify =
     typeof doc.verify === 'string' && doc.verify.trim() ? doc.verify.trim() : null;
-  const questions = Array.isArray(doc.questions)
-    ? doc.questions.filter((q): q is string => typeof q === 'string' && q.trim() !== '')
-    : [];
+  const questions = toQuestions(doc.questions);
   return { features: features.map(checkFeature), suggestedVerify, questions };
 }
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { AgentRole, TaskAgents } from './agents.js';
+import type { PlanQuestion } from './loop.js';
 
 export const TASK_STATUSES = [
   'backlog',
@@ -93,6 +94,8 @@ export interface CriteriaProposal {
   criteria: string | null;
   /** The agent's whole reply, with its questions for the user. */
   reply: string;
+  /** The questions section of the reply, with the options it lists for each. */
+  questions: PlanQuestion[];
 }
 
 /** Stored as the `criteria_approved` event; the criteria are saved on the task too. */

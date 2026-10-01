@@ -10,7 +10,7 @@ import {
   definedOnly,
   presetRules,
 } from '@harnessboard/shared';
-import type { PermissionRequest, TaskSize, TaskView } from '@harnessboard/shared';
+import type { PermissionRequest, PlanQuestion, TaskSize, TaskView } from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
 import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
 import { t } from './i18n.js';
@@ -157,7 +157,7 @@ program
       console.log(formatFeature(feature));
       for (const step of feature.steps ?? []) console.log(`        - ${step}`);
     }
-    for (const q of plan.questions) console.log(`  ? ${q}`);
+    for (const q of plan.questions) printQuestion(q);
     if (plan.suggestedVerify) console.log(t('suggestedVerify', { command: plan.suggestedVerify }));
     if (!plan.approved) console.log(t('planNext', { id }));
   });
@@ -562,3 +562,9 @@ program.parseAsync().catch((err: unknown) => {
   console.error(message);
   process.exit(1);
 });
+
+/** A question with its options lettered, so `hb feedback` can refer to them. */
+function printQuestion(q: PlanQuestion): void {
+  console.log(`  ? ${q.question}`);
+  q.options.forEach((option, i) => console.log(`      ${String.fromCharCode(97 + i)}) ${option}`));
+}

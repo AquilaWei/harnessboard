@@ -195,6 +195,13 @@ const en = {
     chat: 'Chat',
     details: 'Details',
   },
+  questions: {
+    heading: 'My answers to your questions:',
+    recommended: 'suggested',
+    other: 'Or your own answer…',
+    answer: 'Your answer…',
+    answerFor: 'Your answer to: {{question}}',
+  },
   merge: {
     action: 'Merge into {{base}}',
     merging: 'Merging…',
@@ -591,6 +598,13 @@ const zhTW: typeof en = {
     criteria: '驗收標準',
     chat: '對話',
     details: '詳細資訊',
+  },
+  questions: {
+    heading: '我對你的問題的回答：',
+    recommended: '建議',
+    other: '或自己填寫…',
+    answer: '你的回答…',
+    answerFor: '你對「{{question}}」的回答',
   },
   merge: {
     action: '合併到 {{base}}',

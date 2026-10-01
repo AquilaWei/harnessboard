@@ -115,7 +115,7 @@ describe('a finished planning session', () => {
         { id: 'F2', description: 'feature F2', passes: false },
       ],
       suggestedVerify: 'npm test',
-      questions: ['Which storage?'],
+      questions: [{ question: 'Which storage?', options: [] }],
       reply: 'Plan: F1, F2. Which storage?',
     });
   });

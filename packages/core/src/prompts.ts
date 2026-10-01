@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { FEATURE_LIST_FILE, PROGRESS_FILE } from '@harnessboard/shared';
-import type { VerifyResult } from '@harnessboard/shared';
+import type { PlanQuestion, VerifyResult } from '@harnessboard/shared';
 
 /** Injected mid-turn when the soft context threshold is crossed. */
 export function wrapUpPrompt(pct: number): string {
@@ -71,7 +71,8 @@ export function initializerPrompt(goal: string, verifyCommand: string | null): s
     '1. Study the repository.',
     `2. Write \`${FEATURE_LIST_FILE}\` at the repository root in this shape:`,
     '   {"features": [{"id": "F1", "description": "...", "steps": ["..."], "passes": false}],',
-    '    "verify": "<command>", "questions": ["..."]}',
+    '    "verify": "<command>",',
+    '    "questions": [{"question": "...", "options": ["...", "..."]}]}',
     '   - Split the goal into small features that can each be finished and checked in one',
     '     session, in the order they should be built. Every feature starts with "passes": false.',
     '   - "steps" are the acceptance criteria: concrete, observable checks that show the',
@@ -79,7 +80,9 @@ export function initializerPrompt(goal: string, verifyCommand: string | null): s
     '   - "verify": one shell command that runs the automated checks without any prompts',
     '     (tests, lint, build). Omit it if a command is already set above.',
     '   - "questions": decisions you need from the user (scope, tools, accounts, trade-offs).',
-    '     Leave it empty if nothing is unclear.',
+    '     Give each 2-4 short "options" the user can pick with one click, your',
+    '     recommendation first; leave "options" empty only for an answer that cannot be a',
+    '     choice. Leave "questions" empty if nothing is unclear.',
     `3. Write \`${PROGRESS_FILE}\`: an overview of the plan and anything the next session`,
     '   should know.',
     '4. Commit both files.',
@@ -179,8 +182,10 @@ export function criteriaPrompt(request: string, draft: string | null): string {
     '- One concrete, observable check per line (behaviour, tests that pass, edge cases',
     '  handled). Prefer checks a test or a command can show.',
     '## Questions',
-    '- Decisions you need from the user (scope, trade-offs, anything unclear). Leave this',
-    '  section out if nothing is unclear.',
+    '- A decision you need from the user (scope, trade-offs, anything unclear)',
+    '  - a short option the user can pick with one click (your recommendation first)',
+    '  - another option (2-4 in all; none only if the answer cannot be a choice)',
+    '- Leave this section out if nothing is unclear.',
     '',
     'Keep it short. The user may reply before approving; nothing is built until then.',
   );
@@ -252,4 +257,28 @@ export function mergeConflictPrompt(goal: string, base: string, files: string[])
     '',
     `The task this branch was made for:\n${goal}`,
   ].join('\n');
+}
+
+/**
+ * The questions section of a discussion reply (`## Questions`): each top-level list item is
+ * a question and the items indented under it are its options. Text after the list ends
+ * the section, like the next heading does.
+ */
+export function parseQuestions(reply: string): PlanQuestion[] {
+  const lines = reply.split('\n');
+  const start = lines.findIndex((line) => /^##\s+questions\s*$/i.test(line.trim()));
+  if (start < 0) return [];
+  const questions: PlanQuestion[] = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^#{1,2}\s/.test(line)) break;
+    const item = /^(\s*)(?:[-*+]|\d+[.)])\s+(.*)$/.exec(line);
+    if (!item) {
+      if (line.trim() && questions.length > 0 && !/^\s/.test(line)) break;
+      continue;
+    }
+    const [, indent = '', text = ''] = item;
+    if (indent.length === 0) questions.push({ question: text.trim(), options: [] });
+    else questions.at(-1)?.options.push(text.trim());
+  }
+  return questions.filter((q) => q.question !== '');
 }

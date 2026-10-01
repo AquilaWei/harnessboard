@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
-import { parseCriteria, taskGoal } from '../src/prompts.js';
+import { parseCriteria, parseQuestions, taskGoal } from '../src/prompts.js';
 import { reviewPrompt } from '../src/review.js';
 
 describe('parseCriteria', () => {
@@ -34,6 +34,35 @@ describe('parseCriteria', () => {
 
   it('returns null for an empty section', () => {
     expect(parseCriteria('## Acceptance criteria\n\n## Questions\n- Colour?')).toBeNull();
+  });
+});
+
+describe('parseQuestions', () => {
+  it('reads each question with the options indented under it', () => {
+    const reply = '## Questions\n- Which storage?\n  - SQLite\n  - JSON file\n- Colour?';
+    expect(parseQuestions(reply)).toEqual([
+      { question: 'Which storage?', options: ['SQLite', 'JSON file'] },
+      { question: 'Colour?', options: [] },
+    ]);
+  });
+
+  it('stops at the next heading', () => {
+    const reply = '## Questions\n- Colour?\n## Notes\n- not a question';
+    expect(parseQuestions(reply)).toEqual([{ question: 'Colour?', options: [] }]);
+  });
+
+  it('stops at text after the list', () => {
+    const reply = '## Questions\n- Colour?\n\nReady when you are.';
+    expect(parseQuestions(reply)).toEqual([{ question: 'Colour?', options: [] }]);
+  });
+
+  it('accepts numbered questions', () => {
+    const reply = '## Questions\n1. Colour?\n   - blue';
+    expect(parseQuestions(reply)).toEqual([{ question: 'Colour?', options: ['blue'] }]);
+  });
+
+  it('returns none without a questions section', () => {
+    expect(parseQuestions('## Acceptance criteria\n- prints hi')).toEqual([]);
   });
 });
 

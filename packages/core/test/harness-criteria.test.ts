@@ -111,6 +111,7 @@ describe('the discussion session', () => {
     expect(harness.criteriaProposal(harness.store.getTask(task.id)!)).toEqual({
       criteria: '- prints hi',
       reply: PROPOSAL,
+      questions: [{ question: 'Colour?', options: [] }],
     });
   });
 

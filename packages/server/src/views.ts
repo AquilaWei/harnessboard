@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { contextPct, resolveThresholds } from '@harnessboard/shared';
+import { contextPct, resolveThresholds, toQuestions } from '@harnessboard/shared';
 import type {
   ChatEnd,
   ChatEntry,
@@ -87,7 +87,7 @@ export function planView(task: Task, store: Store): PlanView {
       features: null,
       error: (err as Error).message,
       suggestedVerify: proposal?.suggestedVerify ?? null,
-      questions: proposal?.questions ?? [],
+      questions: toQuestions(proposal?.questions),
     };
   }
 }

@@ -3,7 +3,10 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskDetail } from '@harnessboard/shared';
 import { api } from '../api';
+import { composeFeedback } from '../answers';
+import type { Answer } from '../answers';
 import { Markdown } from './Markdown';
+import { QuestionPicker } from './QuestionPicker';
 
 interface Props {
   task: TaskDetail;
@@ -21,11 +24,13 @@ export function CriteriaReview({ task, onDone, onError }: Props) {
   const proposal = task.criteria;
   const [criteria, setCriteria] = useState(proposal?.criteria ?? '');
   const [feedback, setFeedback] = useState('');
+  const [answers, setAnswers] = useState<Answer[]>([]);
   const [busy, setBusy] = useState(false);
 
   // A revised proposal replaces whatever was typed into the previous one.
   useEffect(() => {
     setCriteria(proposal?.criteria ?? '');
+    setAnswers([]);
   }, [proposal?.reply, proposal?.criteria]);
 
   if (!proposal) {
@@ -42,11 +47,13 @@ export function CriteriaReview({ task, onDone, onError }: Props) {
   }
 
   const waiting = task.status === 'awaiting_approval';
+  const message = composeFeedback(proposal.questions, answers, feedback, t('questions.heading'));
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     try {
       await fn();
       setFeedback('');
+      setAnswers([]);
       onDone();
     } catch (err) {
       onError((err as Error).message);
@@ -87,6 +94,17 @@ export function CriteriaReview({ task, onDone, onError }: Props) {
               {t('criteria.approve')}
             </button>
           </section>
+          {proposal.questions.length > 0 && (
+            <section className="plan-section plan-questions">
+              <h3>{t('plan.questions', { count: proposal.questions.length })}</h3>
+              <QuestionPicker
+                questions={proposal.questions}
+                answers={answers}
+                onChange={setAnswers}
+                disabled={busy}
+              />
+            </section>
+          )}
           <section className="plan-section">
             <label className="field">
               <span>{t('criteria.feedback')}</span>
@@ -101,8 +119,8 @@ export function CriteriaReview({ task, onDone, onError }: Props) {
               <button
                 type="button"
                 className="btn"
-                disabled={busy || !feedback.trim()}
-                onClick={() => void act(() => api.planFeedback(task.id, feedback))}
+                disabled={busy || !message}
+                onClick={() => void act(() => api.planFeedback(task.id, message))}
               >
                 {t('plan.send')}
               </button>

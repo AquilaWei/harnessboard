@@ -14,6 +14,31 @@ export interface Feature {
   passes: boolean;
 }
 
+/** A decision the agent needs from the user, with choices to pick from (possibly none). */
+export interface PlanQuestion {
+  question: string;
+  /** Short answers the agent suggests, its recommendation first; empty for open questions. */
+  options: string[];
+}
+
+/**
+ * Questions as an agent or an older version stored them: plain strings or
+ * `{ question, options }` objects. Anything else is dropped.
+ */
+export function toQuestions(value: unknown): PlanQuestion[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): PlanQuestion[] => {
+    if (typeof item === 'string')
+      return item.trim() ? [{ question: item.trim(), options: [] }] : [];
+    const q = item as { question?: unknown; options?: unknown } | null;
+    if (typeof q?.question !== 'string' || !q.question.trim()) return [];
+    const options = Array.isArray(q.options)
+      ? q.options.filter((o): o is string => typeof o === 'string' && o.trim() !== '')
+      : [];
+    return [{ question: q.question.trim(), options: options.map((o) => o.trim()) }];
+  });
+}
+
 /**
  * A planning session's proposal, stored as the `plan` event each time the planner finishes
  * (first plan and every revision). Nothing is built until the user approves.
@@ -23,7 +48,7 @@ export interface PlanProposal {
   /** Verify command the planner suggests; it only takes effect once the user confirms it. */
   suggestedVerify: string | null;
   /** Decisions the planner needs from the user. */
-  questions: string[];
+  questions: PlanQuestion[];
   /** The planner's reply: a summary of the plan or of what changed. */
   reply: string;
 }
@@ -40,7 +65,7 @@ export interface PlanView {
   features: Feature[] | null;
   error: string | null;
   suggestedVerify: string | null;
-  questions: string[];
+  questions: PlanQuestion[];
   reply: string | null;
   approved: boolean;
 }

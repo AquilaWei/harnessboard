@@ -7,6 +7,9 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **Answer questions with a click:** when Claude proposes a plan or acceptance criteria,
+  each of its questions comes with options you can pick (or write your own answer); your
+  picks and notes are sent together as one reply.
 - **Merge a task into its base:** `hb merge <id>`, or **Merge into main** on a task in
   review, merges the branch with a merge commit and keeps every commit; the task is then
   done and its worktree and branch are removed. Conflicting changes on the base are sent to
