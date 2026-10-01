@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.8 - 2026-10-01
+
 ### Added
 
 - **Notifications when a task needs you:** turn on **Notify me when a task needs me** under
