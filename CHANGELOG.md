@@ -5,6 +5,13 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Notifications when a task needs you:** turn on **Notify me when a task needs me** under
+  Settings. While the board is open in a background tab or a minimised window, the browser
+  shows a notification when a task waits for permission, approval or review, or fails;
+  clicking it opens the task.
+
 ## 0.0.7 - 2026-10-01
 
 ### Added

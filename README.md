@@ -221,6 +221,9 @@ other.
   - The agent profiles and whether each CLI runs.
   - Language (English, 繁體中文) and theme (system, light, dark), which apply to this browser
     only.
+  - **Notify me when a task needs me:** a desktop notification from this browser when a task
+    waits for permission, approval or review, or fails, while the board is open but not in
+    front. Click it to open the task.
 
 The API accepts only loopback `Host` headers, and it requires a custom header on every
 write. A web page you visit cannot drive your agents through the browser.

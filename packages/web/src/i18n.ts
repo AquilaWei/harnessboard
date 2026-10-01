@@ -37,6 +37,13 @@ const en = {
   settings: 'Settings',
   language: 'Language',
   theme: { label: 'Theme', system: 'Follow system', light: 'Light', dark: 'Dark' },
+  notify: {
+    label: 'Notify me when a task needs me',
+    hint: 'A desktop notification from this browser when a task waits for permission, approval or review, or fails, while the board is open but not in front.',
+    blocked:
+      'This browser blocks notifications from the board. Allow them in the site settings for this address, then switch this on again.',
+    unsupported: 'This browser does not support notifications.',
+  },
   stage: {
     draft: 'Draft',
     active: 'In progress',
@@ -477,6 +484,12 @@ const zhTW: typeof en = {
   settings: '設定',
   language: '語言',
   theme: { label: '外觀', system: '跟隨系統', light: '淺色', dark: '深色' },
+  notify: {
+    label: '任務需要我時通知我',
+    hint: '看板開著但不在前景時，任務等你允許、核准、審查，或失敗，就由這個瀏覽器跳出桌面通知。',
+    blocked: '這個瀏覽器封鎖了看板的通知。請在這個網址的網站設定中允許通知，再重新開啟這個選項。',
+    unsupported: '這個瀏覽器不支援通知。',
+  },
   stage: {
     draft: '草稿',
     active: '進行中',
