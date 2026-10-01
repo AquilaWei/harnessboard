@@ -1402,15 +1402,18 @@ th {
   list-style: none;
 }
 
+.status-chip.awaiting_permission,
 .status-chip.awaiting_approval {
   background: var(--warning-soft);
   color: var(--warning-ink);
 }
 
+.status-dot.awaiting_permission,
 .status-dot.awaiting_approval {
   background: var(--warning);
 }
 
+.status-box.awaiting_permission,
 .status-box.awaiting_approval {
   border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
   background: var(--warning-soft);

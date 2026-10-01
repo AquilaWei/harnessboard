@@ -38,6 +38,14 @@ export function describeTask(task: TaskView): Description {
       return task.resumeAt
         ? d('waitingQuota', 'working', { time: task.resumeAt })
         : d('waitingQuotaUnknown', 'working');
+    case 'awaiting_permission': {
+      const request = task.permissionRequests[0];
+      return d('permissionAsked', 'attention', {
+        agent: task.activity?.agentId ?? '',
+        tool: request?.toolName ?? '',
+        summary: request?.summary ?? '',
+      });
+    }
     case 'awaiting_approval':
       return d(task.plan?.questions ? 'planReadyQuestions' : 'planReady', 'attention', {
         total: task.plan?.total ?? 0,

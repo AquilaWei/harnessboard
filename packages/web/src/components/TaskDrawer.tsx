@@ -163,12 +163,15 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                     {t('actions.retry')}
                   </button>
                 )}
-                {(s === 'running' || s === 'queued' || s === 'waiting_quota') && (
+                {(s === 'running' ||
+                  s === 'awaiting_permission' ||
+                  s === 'queued' ||
+                  s === 'waiting_quota') && (
                   <button type="button" className="btn danger" onClick={() => act('stop')}>
                     {t('actions.stop')}
                   </button>
                 )}
-                {task.latestSessionId && s !== 'running' && (
+                {task.latestSessionId && s !== 'running' && s !== 'awaiting_permission' && (
                   <button type="button" className="btn ghost" onClick={copyOpen}>
                     {copied ? t('actions.copied') : t('actions.copyOpen')}
                   </button>

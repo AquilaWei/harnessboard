@@ -79,3 +79,39 @@ export function assertToolRules(rules: readonly string[]): void {
     );
   }
 }
+
+/** A tool use waiting for the user's answer, as shown on the board. */
+export interface PermissionRequest {
+  requestId: string;
+  sessionId: string;
+  toolName: string;
+  summary: string;
+  suggestedRules: string[];
+  /** Unix ms when the agent asked. */
+  ts: number;
+}
+
+/**
+ * The user's answer to a {@link PermissionRequest}. `rules` (allow only) are added to the
+ * task, so later sessions may use them without asking; `message` (deny only) tells the
+ * agent why.
+ */
+export interface PermissionDecision {
+  requestId: string;
+  behavior: 'allow' | 'deny';
+  rules?: string[];
+  message?: string;
+}
+
+/** What was decided, as kept in the task's history. */
+export interface PermissionDecisionRecord {
+  requestId: string;
+  toolName: string;
+  summary: string;
+  behavior: 'allow' | 'deny';
+  /** Rules added to the task with this answer; empty for "allow once" or a denial. */
+  rules: string[];
+  message: string | null;
+  /** True when the harness allowed it because the task's rules already covered it. */
+  auto: boolean;
+}

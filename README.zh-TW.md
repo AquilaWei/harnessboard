@@ -53,6 +53,7 @@ hb done 1                            # 標記為已審核完成
 | `hb stop <id>` / `hb resume <id>`                                                   | 停止，或重新排入                    |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                    | 審核、互動接手、完成                |
 | `hb delete <id>`                                                                    | 刪除沒在執行的任務（見下方）        |
+| `hb allow <id> [--suggested] [--rule 規則...]`／`hb deny <id> [原因]`               | 回覆 agent 正在等的工具請求         |
 | `add`／`loop` 加上 `--preset git,node,...`；`hb tools <id> [規則...]`               | 選擇允許的工具；查看或修改          |
 
 **刪除任務**（`hb delete`，或任務面板裡的「刪除」）會刪掉它的紀錄和 worktree 資料夾，
@@ -194,6 +195,11 @@ API 只接受 loopback 的 `Host` 標頭，而且每個寫入請求都必須帶�
   可以掛載任何資料夾。
 - 單條規則用 `--allow` 加上。不是工具規則的內容（例如一段說明文字）會直接被拒絕，
   不會默默失效。
+- **其他工具會先問你，不會直接拒絕**：agent 想用規則沒涵蓋的工具時，任務會暫停在
+  「等你允許」。你可以允許這一次、允許並把規則加進任務（會預填 agent 建議的規則，例如
+  `Bash(node *)`），或拒絕並附上原因讓 agent 知道。終端機用 `hb allow <id> [--suggested]
+[--rule 規則...]` 和 `hb deny <id> [原因]`。等待中的任務會佔著執行名額；審查者不會被詢問，
+  一律唯讀。
 - 任務沒在執行時，可以用 `hb tools <id> 規則...` 修改它的規則。
 - `--skip-permissions` 會關閉所有檢查，只能在沙盒環境使用。
 

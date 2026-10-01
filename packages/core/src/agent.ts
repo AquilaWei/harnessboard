@@ -24,6 +24,18 @@ export interface SessionSpec {
   allowedTools: string[];
   /** Turns off the CLI's permission checks; only honoured for `edit` sessions. */
   skipPermissions: boolean;
+  /**
+   * Ask the harness about tools outside `allowedTools` instead of refusing them; only for
+   * `edit` sessions of a CLI with `permissionPrompts`, and ignored with `skipPermissions`.
+   */
+  askPermission: boolean;
+}
+
+/** The answer to a `permission_request` event. */
+export interface PermissionReply {
+  behavior: 'allow' | 'deny';
+  /** Deny only: why, so the agent can try something else. */
+  message?: string;
 }
 
 /**
@@ -39,6 +51,11 @@ export interface AgentCapabilities {
   midTurnInput: boolean;
   /** `harness`: the harness picks the session id up front; `agent`: the CLI reports it in `init`. */
   sessionIds: 'harness' | 'agent';
+  /**
+   * The CLI can pause on a tool its rules do not allow, emit `permission_request` and wait
+   * for {@link AgentAdapter.encodePermissionReply}. Without it such tools are refused.
+   */
+  permissionPrompts: boolean;
 }
 
 /**
@@ -53,6 +70,11 @@ export interface AgentAdapter {
   buildArgs(spec: SessionSpec): string[];
   /** Encodes one user message for stdin; only called when `midTurnInput` is true. */
   encodeMessage(text: string): string;
+  /** Encodes the answer to a permission request; only called with `permissionPrompts`. */
+  encodePermissionReply(
+    request: Extract<AgentEvent, { kind: 'permission_request' }>,
+    reply: PermissionReply,
+  ): string;
   /** Normalises one stdout line; unknown or irrelevant lines yield no events. */
   parseLine(line: string): AgentEvent[];
   /** Arguments that print the CLI version; used to check the CLI is installed. */

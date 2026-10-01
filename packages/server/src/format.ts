@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent, Feature, TaskView } from '@harnessboard/shared';
+import type {
+  AgentEvent,
+  Feature,
+  PermissionDecisionRecord,
+  PermissionRequest,
+  TaskView,
+} from '@harnessboard/shared';
 
 const STATUS_WIDTH = 13;
 
@@ -46,6 +52,21 @@ export function createEventFormatter(
       }
       case 'notice':
         return `[harness] ${(data as { message: string }).message}`;
+      case 'permission_request': {
+        const e = data as PermissionRequest;
+        return `  ? ${e.toolName}: ${e.summary} — waiting for permission`;
+      }
+      case 'permission_decision': {
+        const e = data as PermissionDecisionRecord;
+        const added = e.rules.length > 0 ? ` (+ ${e.rules.join(', ')})` : '';
+        const why = e.message ? `: ${e.message}` : '';
+        const who = e.auto
+          ? 'allowed by task rules'
+          : e.behavior === 'allow'
+            ? 'allowed'
+            : 'denied';
+        return `  ${e.behavior === 'allow' ? '✓' : '✗'} ${e.toolName}: ${who}${added}${why}`;
+      }
       case 'init':
         lastPct = -1;
         return `── session ${(data as { sessionId: string }).sessionId} ──`;

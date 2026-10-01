@@ -4,7 +4,12 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { inspectFolder, listFolders } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
-import type { CreateTaskInput, DeletedTask, HarnessEvent } from '@harnessboard/shared';
+import type {
+  CreateTaskInput,
+  DeletedTask,
+  HarnessEvent,
+  PermissionDecision,
+} from '@harnessboard/shared';
 import { latestSnapshot, planView, taskView, timeline } from './views.js';
 
 /** Header every state-changing request must carry; see {@link localOnly}. */
@@ -76,6 +81,26 @@ export function createApi(harness: Harness): Hono {
     await harness.deleteTask(id);
     const reply: DeletedTask = { id, branch: task.branch };
     return c.json(reply);
+  });
+
+  app.post('/tasks/:id/permission', async (c) => {
+    const body = await c.req.json<Partial<PermissionDecision>>();
+    if (typeof body.requestId !== 'string' || !['allow', 'deny'].includes(body.behavior ?? '')) {
+      throw new Error('send a requestId and a behavior of "allow" or "deny"');
+    }
+    if (
+      body.rules !== undefined &&
+      !(Array.isArray(body.rules) && body.rules.every((r) => typeof r === 'string'))
+    ) {
+      throw new Error('rules must be a list of strings');
+    }
+    const decision: PermissionDecision = {
+      requestId: body.requestId,
+      behavior: body.behavior!,
+      ...(body.rules ? { rules: body.rules } : {}),
+      ...(typeof body.message === 'string' ? { message: body.message } : {}),
+    };
+    return c.json(harness.answerPermission(taskId(c), decision));
   });
 
   app.put('/tasks/:id/allowed-tools', async (c) => {

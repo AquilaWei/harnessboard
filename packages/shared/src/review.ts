@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { Session } from './task.js';
 import type { FeatureSnapshot, PlanApproval, PlanProposal } from './loop.js';
+import type { PermissionDecisionRecord, PermissionRequest } from './permissions.js';
 
 export type Verdict = 'approve' | 'changes';
 
@@ -53,4 +54,6 @@ export type TimelineEntry =
   | { kind: 'handoff'; ts: number; note: string | null }
   | { kind: 'plan'; ts: number; proposal: PlanProposal }
   | { kind: 'plan_feedback'; ts: number; message: string }
-  | { kind: 'plan_approved'; ts: number; approval: PlanApproval };
+  | { kind: 'plan_approved'; ts: number; approval: PlanApproval }
+  | { kind: 'permission_request'; ts: number; request: PermissionRequest }
+  | { kind: 'permission_decision'; ts: number; decision: PermissionDecisionRecord };

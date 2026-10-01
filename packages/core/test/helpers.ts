@@ -95,6 +95,31 @@ export function makeRepo(): string {
   return repo;
 }
 
+/**
+ * A Claude Code `can_use_tool` request for a shell command. The fake CLI waits for the
+ * harness's answer before emitting the next line.
+ */
+export function askBash(requestId: string, command: string, ruleContent: string) {
+  return {
+    type: 'control_request',
+    request_id: requestId,
+    request: {
+      subtype: 'can_use_tool',
+      tool_name: 'Bash',
+      input: { command },
+      permission_suggestions: [
+        {
+          type: 'addRules',
+          rules: [{ toolName: 'Bash', ruleContent }],
+          behavior: 'allow',
+          destination: 'localSettings',
+        },
+      ],
+      tool_use_id: `toolu_${requestId}`,
+    },
+  };
+}
+
 /** Writes a fake-claude scenario (one entry of turns per session run) and returns its path. */
 export function writeScenario(dir: string, sessions: unknown[][][]): string {
   mkdirSync(dir, { recursive: true });
@@ -110,7 +135,11 @@ export function writeScenario(dir: string, sessions: unknown[][][]): string {
 export class PromptArgAdapter implements AgentAdapter {
   readonly provider = 'claude-code';
   readonly versionArgs = ['--version'];
-  readonly capabilities: AgentCapabilities = { midTurnInput: false, sessionIds: 'agent' };
+  readonly capabilities: AgentCapabilities = {
+    midTurnInput: false,
+    sessionIds: 'agent',
+    permissionPrompts: false,
+  };
   private readonly parser = new ClaudeCodeAdapter(FAKE_CLAUDE);
 
   constructor(readonly command: string) {}
@@ -122,6 +151,10 @@ export class PromptArgAdapter implements AgentAdapter {
 
   encodeMessage(): string {
     throw new Error('this CLI takes no stdin input');
+  }
+
+  encodePermissionReply(): string {
+    throw new Error('this CLI cannot ask for permission');
   }
 
   parseLine(line: string) {

@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import { contextPct } from '@harnessboard/shared';
 import type { AgentEvent, QuotaInfo, SessionEndReason, Thresholds } from '@harnessboard/shared';
-import type { AgentAdapter, SessionSpec } from './agent.js';
+import type { AgentAdapter, PermissionReply, SessionSpec } from './agent.js';
 import { spawnLines } from './process.js';
 import { reportsDone, wrapUpPrompt } from './prompts.js';
 
 const STDERR_TAIL_LINES = 5;
 
 type ResultEvent = Extract<AgentEvent, { kind: 'result' }>;
+type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }>;
 
 export interface SessionOutcome {
   reason: SessionEndReason;
@@ -32,6 +33,11 @@ export interface RunSessionOptions {
   /** Aborting stops the session and kills the agent's process tree. */
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
+  /**
+   * Decides a tool use the agent asked about (`spec.askPermission`). The agent waits, with
+   * its process running, until the promise settles; stopping the session ends the wait.
+   */
+  onPermissionRequest?: (event: PermissionRequestEvent) => Promise<PermissionReply>;
   onNotice: (message: string) => void;
   onStderr: (line: string) => void;
 }
@@ -130,11 +136,26 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
       if (event.kind === 'init' && event.sessionId) agentSessionId = event.sessionId;
       if (event.kind === 'quota') quota = event.quota;
       if (event.kind === 'context') checkBudget(event.tokens);
+      if (event.kind === 'permission_request') answer(event);
       if (event.kind === 'result') {
         result = event;
         if (event.contextWindow) window = event.contextWindow;
         child.closeInput();
       }
+    }
+
+    function answer(event: PermissionRequestEvent): void {
+      const decide = options.onPermissionRequest;
+      const reply = decide
+        ? decide(event)
+        : Promise.resolve<PermissionReply>({ behavior: 'deny', message: 'nobody to ask' });
+      void reply.then(
+        (r) => child.write(adapter.encodePermissionReply(event, r)),
+        (err: Error) =>
+          child.write(
+            adapter.encodePermissionReply(event, { behavior: 'deny', message: err.message }),
+          ),
+      );
     }
 
     function checkBudget(tokens: number): void {

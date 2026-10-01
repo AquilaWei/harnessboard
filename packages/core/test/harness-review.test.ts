@@ -98,6 +98,13 @@ describe('a finished step with a reviewer', () => {
     expect([args.includes('acceptEdits'), args.includes('review-model')]).toEqual([false, true]);
   });
 
+  it('never lets the reviewer ask for more tools', async () => {
+    scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
+    await createReviewed();
+    await runQueued();
+    expect(fakeRuns()[1]!.args).not.toContain('--permission-prompt-tool');
+  });
+
   it('goes to a human once the reviewer approves', async () => {
     scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE\nGood.'));
     const task = await createReviewed();

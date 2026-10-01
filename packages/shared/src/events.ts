@@ -24,6 +24,18 @@ export type AgentEvent =
   | { kind: 'quota'; quota: QuotaInfo }
   | { kind: 'compact'; preTokens: number; postTokens: number }
   | {
+      /** The agent wants a tool its rules do not allow and waits for an answer. */
+      kind: 'permission_request';
+      requestId: string;
+      toolName: string;
+      /** The command, path or other input in one line, for showing to the user. */
+      summary: string;
+      /** The tool's full input; the reply echoes it, so it is not stored in the log. */
+      input: Record<string, unknown>;
+      /** Rules the agent CLI suggests for allowing this, e.g. `Bash(git add *)`. */
+      suggestedRules: string[];
+    }
+  | {
       kind: 'result';
       isError: boolean;
       text: string;

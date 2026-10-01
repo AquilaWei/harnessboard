@@ -4,6 +4,8 @@ import type {
   ContextView,
   FeatureSnapshot,
   LoopProgress,
+  PermissionDecisionRecord,
+  PermissionRequest,
   PlanApproval,
   PlanProposal,
   PlanView,
@@ -34,6 +36,7 @@ export function taskView(task: Task, harness: Harness): TaskView {
     reviewPending: harness.pendingReview(task.id) !== null,
     plan: task.mode === 'loop' ? planSummary(task.id, store) : null,
     planFeedbackPending: harness.pendingPlanFeedback(task.id) !== null,
+    permissionRequests: harness.permissionRequests(task.id),
     lastNotice:
       (store.lastEvent(task.id, 'notice')?.data as { message?: string } | undefined)?.message ??
       null,
@@ -104,6 +107,8 @@ export function timeline(taskId: number, store: Store): TimelineEntry[] {
     'plan',
     'plan_feedback',
     'plan_approved',
+    'permission_request',
+    'permission_decision',
   ] as const;
   for (const kind of kinds) {
     for (const e of store.eventsOfKind(taskId, kind)) {
@@ -122,7 +127,9 @@ function timelineEvent(
     | 'handoff'
     | 'plan'
     | 'plan_feedback'
-    | 'plan_approved',
+    | 'plan_approved'
+    | 'permission_request'
+    | 'permission_decision',
   ts: number,
   data: unknown,
 ): TimelineEntry {
@@ -141,6 +148,10 @@ function timelineEvent(
       return { kind, ts, message: (data as { message: string }).message };
     case 'plan_approved':
       return { kind, ts, approval: data as PlanApproval };
+    case 'permission_request':
+      return { kind, ts, request: data as PermissionRequest };
+    case 'permission_decision':
+      return { kind, ts, decision: data as PermissionDecisionRecord };
   }
 }
 

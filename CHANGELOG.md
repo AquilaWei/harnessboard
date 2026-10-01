@@ -24,6 +24,9 @@ are test versions that have not been accepted on real machines yet.
   `hb delete <id>`. The task's history and worktree folder are removed; its branch is kept
   so committed work can still be merged. Running tasks must be stopped first.
 
+- **Asked, not refused:** when the agent wants a tool its rules do not cover, the task
+  pauses as "Needs permission" instead of failing the command. Allow it once, allow it and
+  add the rule to the task, or deny it with a reason (`hb allow`, `hb deny`).
 - **Permission presets:** choose common tool groups (git, node, python, gradle, docker, web,
   files) with `--preset`, and change a task's rules later with `hb tools`.
 

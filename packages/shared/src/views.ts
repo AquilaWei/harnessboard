@@ -4,6 +4,7 @@ import type { Feature, LoopProgress } from './loop.js';
 import type { ReviewRecord, TaskActivity } from './review.js';
 import type { AgentProvider } from './agents.js';
 import type { QuotaInfo } from './events.js';
+import type { PermissionRequest } from './permissions.js';
 
 /** Context usage of a task's latest session, as shown in the CLI and web UI. */
 export interface ContextView {
@@ -33,6 +34,8 @@ export interface TaskView extends Task {
   plan: { total: number; questions: number; suggestedVerify: string | null } | null;
   /** True while user feedback on the plan waits for the planner. */
   planFeedbackPending: boolean;
+  /** Tool uses the running session waits on the user to allow or deny, oldest first. */
+  permissionRequests: PermissionRequest[];
 }
 
 export interface TaskDetail extends TaskView {

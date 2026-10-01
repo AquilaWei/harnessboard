@@ -10,6 +10,10 @@ describe('stageOf', () => {
     expect(stageOf('waiting_quota')).toBe('active');
   });
 
+  it('puts a task waiting for permission in Needs you', () => {
+    expect(stageOf('awaiting_permission')).toBe('attention');
+  });
+
   it('puts failed tasks in Needs you', () => {
     expect(stageOf('failed')).toBe('attention');
   });
@@ -32,12 +36,20 @@ describe('primaryAction', () => {
     expect(primaryAction(task('failed'))).toBe('retry');
   });
 
+  it('offers an answer for a task waiting for permission', () => {
+    expect(primaryAction(task('awaiting_permission'))).toBe('answerPermission');
+  });
+
   it('offers nothing for a done task', () => {
     expect(primaryAction(task('done'))).toBeNull();
   });
 });
 
 describe('dropAction', () => {
+  it('does not queue a task waiting for permission when dropped on In progress', () => {
+    expect(dropAction(task('awaiting_permission'), 'active')).toBeNull();
+  });
+
   it('queues a draft dropped on In progress', () => {
     expect(dropAction(task('backlog'), 'active')).toBe('queue');
   });

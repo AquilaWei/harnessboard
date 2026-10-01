@@ -113,6 +113,30 @@ describe('tasks API', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects a permission answer without a valid behavior', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(
+      `/api/tasks/${id}/permission`,
+      { requestId: 'r1', behavior: 'maybe' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/"allow" or "deny"/);
+  });
+
+  it('rejects a permission answer when nothing is waiting', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(
+      `/api/tasks/${id}/permission`,
+      { requestId: 'r1', behavior: 'allow' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as { error: string }).error).toMatch(
+      /no pending permission request/,
+    );
+  });
+
   it('deletes a task that is not running', async () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };

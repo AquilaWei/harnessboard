@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { AgentEvent, QuotaInfo } from '@harnessboard/shared';
-import type { AgentAdapter, AgentCapabilities, SessionSpec } from './agent.js';
+import type { AgentAdapter, AgentCapabilities, PermissionReply, SessionSpec } from './agent.js';
+
+type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }>;
 
 /** What a reviewer may use: read files and inspect history, nothing that changes them. */
 export const READ_ONLY_TOOLS = [
@@ -20,7 +22,11 @@ export const READ_ONLY_TOOLS = [
 export class ClaudeCodeAdapter implements AgentAdapter {
   readonly provider = 'claude-code';
   readonly versionArgs = ['--version'];
-  readonly capabilities: AgentCapabilities = { midTurnInput: true, sessionIds: 'harness' };
+  readonly capabilities: AgentCapabilities = {
+    midTurnInput: true,
+    sessionIds: 'harness',
+    permissionPrompts: true,
+  };
 
   constructor(readonly command: string) {}
 
@@ -46,6 +52,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     } else {
       args.push('--permission-mode', 'acceptEdits');
       if (spec.allowedTools.length > 0) args.push('--allowedTools', ...spec.allowedTools);
+      // The CLI then sends a `can_use_tool` request on stdout and waits for our answer.
+      if (spec.askPermission) args.push('--permission-prompt-tool', 'stdio');
     }
     return args;
   }
@@ -56,6 +64,19 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
   encodeMessage(text: string): string {
     return JSON.stringify({ type: 'user', message: { role: 'user', content: text } }) + '\n';
+  }
+
+  encodePermissionReply(request: PermissionRequestEvent, reply: PermissionReply): string {
+    const response =
+      reply.behavior === 'allow'
+        ? { behavior: 'allow', updatedInput: request.input }
+        : { behavior: 'deny', message: reply.message || 'The user denied this tool use.' };
+    return (
+      JSON.stringify({
+        type: 'control_response',
+        response: { subtype: 'success', request_id: request.requestId, response },
+      }) + '\n'
+    );
   }
 
   parseLine(line: string): AgentEvent[] {
@@ -74,6 +95,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         return [{ kind: 'quota', quota: parseQuota(msg.rate_limit_info) }];
       case 'result':
         return [parseResult(msg)];
+      case 'control_request':
+        return parseControlRequest(msg);
       default:
         return [];
     }
@@ -95,6 +118,42 @@ function parseSystem(msg: Record<string, unknown>): AgentEvent[] {
     ];
   }
   return [];
+}
+
+interface RuleSuggestion {
+  type?: string;
+  behavior?: string;
+  rules?: { toolName?: string; ruleContent?: string }[];
+}
+
+function parseControlRequest(msg: Record<string, unknown>): AgentEvent[] {
+  const request = (msg.request ?? {}) as {
+    subtype?: string;
+    tool_name?: string;
+    input?: Record<string, unknown>;
+    permission_suggestions?: RuleSuggestion[];
+  };
+  if (request.subtype !== 'can_use_tool' || typeof msg.request_id !== 'string') return [];
+  const suggestedRules: string[] = [];
+  for (const suggestion of request.permission_suggestions ?? []) {
+    if (suggestion.type !== 'addRules' || suggestion.behavior !== 'allow') continue;
+    for (const rule of suggestion.rules ?? []) {
+      if (!rule.toolName) continue;
+      const text = rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName;
+      if (!suggestedRules.includes(text)) suggestedRules.push(text);
+    }
+  }
+  const input = request.input ?? {};
+  return [
+    {
+      kind: 'permission_request',
+      requestId: msg.request_id,
+      toolName: request.tool_name ?? '?',
+      summary: summarizeToolInput(input),
+      input,
+      suggestedRules,
+    },
+  ];
 }
 
 interface ContentBlock {

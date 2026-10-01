@@ -57,6 +57,7 @@ hb done 1                            # mark it reviewed
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                         |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)    |
+| `hb allow <id> [--suggested] [--rule RULE...]` / `hb deny <id> [reason]`              | Answer a tool use the agent waits on         |
 | `--preset git,node,...` on `add` / `loop`; `hb tools <id> [RULE...]`                  | Choose allowed tools; show or change them    |
 
 **Deleting a task** (`hb delete`, or **Delete** in the task panel) removes its history and
@@ -216,6 +217,12 @@ rules such as `Bash(npm *)`:
   nearly unrestricted, because a container can mount any folder.
 - Add single rules with `--allow`. Entries that are not tool rules, such as a sentence, are
   rejected instead of being silently ignored.
+- **Anything else is asked, not refused:** when the agent wants a tool its rules do not
+  cover, the task pauses as **Needs permission** and waits for you. Allow it once, allow it
+  and add a rule to the task (the agent's suggestion, e.g. `Bash(node *)`, is filled in), or
+  deny it with a reason the agent is told. In the terminal: `hb allow <id> [--suggested]
+[--rule RULE...]` and `hb deny <id> [reason]`. A waiting task keeps its slot; reviewers are
+  never asked and stay read-only.
 - Change a task's rules while it is not running with `hb tools <id> RULE...`.
 - `--skip-permissions` removes all checks; use it only in a sandbox.
 

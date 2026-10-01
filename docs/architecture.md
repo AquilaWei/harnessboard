@@ -65,10 +65,11 @@ restart picks up exactly where the task was.
    - `quota`, if the CLI reports usage limits
 4. Declare `capabilities` honestly. The runner adapts to them:
 
-   | Capability     | `true` / `harness`                                              | `false` / `agent`                                                                             |
-   | -------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-   | `midTurnInput` | Prompt and wrap-up request are written to stdin during the turn | Prompt goes in the arguments; the wrap-up is sent by resuming the session after the turn ends |
-   | `sessionIds`   | The harness picks the id and passes it                          | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it     |
+   | Capability          | `true` / `harness`                                                                             | `false` / `agent`                                                                             |
+   | ------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+   | `midTurnInput`      | Prompt and wrap-up request are written to stdin during the turn                                | Prompt goes in the arguments; the wrap-up is sent by resuming the session after the turn ends |
+   | `sessionIds`        | The harness picks the id and passes it                                                         | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it     |
+   | `permissionPrompts` | A tool outside the rules emits `permission_request`; the CLI waits for `encodePermissionReply` | Such tools are refused; the user widens the rules with `hb tools` and runs the task again     |
 
 5. Map `SessionSpec.access: 'readOnly'` to the CLI's most restrictive mode. Reviewers rely
    on it. The harness also compares HEAD and `git status` before and after every review,
@@ -87,13 +88,13 @@ yet. Check them against the real CLIs before relying on them.
     `turn.started`, `turn.completed` (with token usage), `turn.failed`, `item.*` (messages,
     commands, file changes) and `error`.
   - It resumes with `codex exec resume <id> "<prompt>"`.
-  - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`.
+  - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
   - It signs in with a ChatGPT plan, so no API key is needed.
 - **Google Gemini CLI:**
   - `gemini -p "<prompt>" --output-format stream-json` prints JSONL events: `init` (with the
     session id), `message`, `tool_use`, `tool_result`, `error` and `result` (with stats).
   - It resumes with `--resume <id>`.
-  - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`.
+  - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
   - Read-only mode: check which approval mode or sandbox flag refuses edits.
 
 Neither CLI reports a subscription quota the way Claude Code's `rate_limit_event` does.

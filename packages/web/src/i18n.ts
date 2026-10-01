@@ -53,6 +53,7 @@ const en = {
     backlog: 'Draft',
     queued: 'Queued',
     running: 'Running',
+    awaiting_permission: 'Needs permission',
     waiting_quota: 'Waiting for quota',
     awaiting_approval: 'Plan to approve',
     review: 'Ready for review',
@@ -62,6 +63,7 @@ const en = {
   },
   describe: {
     draft: 'Not started yet.',
+    permissionAsked: '{{agent}} wants to use {{tool}}: {{summary}}. Allow it or not?',
     queued: 'Waiting for a free slot.',
     planReady: 'Claude planned {{total}} features. Review the plan, then approve it or reply.',
     planReadyQuestions:
@@ -95,6 +97,7 @@ const en = {
     review: 'Review',
     retry: 'Retry',
     approvePlan: 'Review plan',
+    answerPermission: 'Allow or deny',
     markDone: 'Mark done',
     sendBack: 'Run again',
     copyOpen: 'Copy “open in terminal”',
@@ -332,6 +335,7 @@ const zhTW: typeof en = {
     backlog: '草稿',
     queued: '排隊中',
     running: '執行中',
+    awaiting_permission: '等你允許',
     waiting_quota: '等待額度',
     awaiting_approval: '等你確認規格',
     review: '待審核',
@@ -341,6 +345,7 @@ const zhTW: typeof en = {
   },
   describe: {
     draft: '還沒開始。',
+    permissionAsked: '{{agent}} 想使用 {{tool}}：{{summary}}。要允許嗎？',
     queued: '等待空出執行位置。',
     planReady: 'Claude 規劃了 {{total}} 項 feature。請檢查規格，確認開工或提出意見。',
     planReadyQuestions:
@@ -374,6 +379,7 @@ const zhTW: typeof en = {
     review: '審核',
     retry: '重試',
     approvePlan: '確認規格',
+    answerPermission: '允許／拒絕',
     markDone: '標為完成',
     sendBack: '再執行一次',
     copyOpen: '複製「在終端機開啟」',

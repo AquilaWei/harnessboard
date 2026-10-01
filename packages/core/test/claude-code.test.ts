@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import { ClaudeCodeAdapter } from '../src/claude-code.js';
-import { assistantText, errorResult, init, rateLimit, result } from './helpers.js';
+import { askBash, assistantText, errorResult, init, rateLimit, result } from './helpers.js';
 
 const adapter = new ClaudeCodeAdapter('claude');
 const parse = (obj: unknown) => adapter.parseLine(JSON.stringify(obj));
@@ -83,6 +83,46 @@ describe('ClaudeCodeAdapter.parseLine', () => {
   });
 });
 
+describe('ClaudeCodeAdapter permission requests', () => {
+  it('reads a can_use_tool request with the suggested rule', () => {
+    expect(parse(askBash('r1', 'git add a.txt', 'git add *'))).toEqual([
+      {
+        kind: 'permission_request',
+        requestId: 'r1',
+        toolName: 'Bash',
+        summary: 'git add a.txt',
+        input: { command: 'git add a.txt' },
+        suggestedRules: ['Bash(git add *)'],
+      },
+    ]);
+  });
+
+  it('allows by echoing the original input', () => {
+    const [request] = parse(askBash('r1', 'git add a.txt', 'git add *'));
+    const reply = adapter.encodePermissionReply(request as never, { behavior: 'allow' });
+    expect(JSON.parse(reply)).toEqual({
+      type: 'control_response',
+      response: {
+        subtype: 'success',
+        request_id: 'r1',
+        response: { behavior: 'allow', updatedInput: { command: 'git add a.txt' } },
+      },
+    });
+  });
+
+  it("denies with the user's reason", () => {
+    const [request] = parse(askBash('r1', 'rm -rf build', 'rm *'));
+    const reply = adapter.encodePermissionReply(request as never, {
+      behavior: 'deny',
+      message: 'use the clean task instead',
+    });
+    expect(JSON.parse(reply).response.response).toEqual({
+      behavior: 'deny',
+      message: 'use the clean task instead',
+    });
+  });
+});
+
 describe('ClaudeCodeAdapter.buildArgs', () => {
   const spec = {
     cwd: '/w',
@@ -93,7 +133,27 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
     access: 'edit' as const,
     allowedTools: ['Bash(git add *)'],
     skipPermissions: false,
+    askPermission: false,
   };
+
+  it('asks the harness about other tools when askPermission is set', () => {
+    expect(adapter.buildArgs({ ...spec, askPermission: true }).slice(-2)).toEqual([
+      '--permission-prompt-tool',
+      'stdio',
+    ]);
+  });
+
+  it('never asks when skipPermissions is set', () => {
+    expect(
+      adapter.buildArgs({ ...spec, askPermission: true, skipPermissions: true }),
+    ).not.toContain('--permission-prompt-tool');
+  });
+
+  it('never asks in a read-only session', () => {
+    expect(adapter.buildArgs({ ...spec, access: 'readOnly', askPermission: true })).not.toContain(
+      '--permission-prompt-tool',
+    );
+  });
 
   it('starts a new session with acceptEdits and the allowed tools', () => {
     expect(adapter.buildArgs(spec)).toEqual([

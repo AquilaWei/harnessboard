@@ -3,6 +3,7 @@ import type {
   AgentInfo,
   CreateTaskInput,
   DeletedTask,
+  PermissionDecision,
   StoredEvent,
   Task,
   TaskDetail,
@@ -33,6 +34,8 @@ export class ApiClient {
   queueTask = (id: number) => this.post<Task>(`/tasks/${id}/queue`);
   stopTask = (id: number) => this.post<Task>(`/tasks/${id}/stop`);
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);
+  answerPermission = (id: number, decision: PermissionDecision) =>
+    this.post<Task>(`/tasks/${id}/permission`, decision);
   setAllowedTools = (id: number, rules: string[]) =>
     this.send<Task>('PUT', `/tasks/${id}/allowed-tools`, { rules });
   deleteTask = (id: number) => this.send<DeletedTask>('DELETE', `/tasks/${id}`);

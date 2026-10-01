@@ -5,6 +5,7 @@ export const TASK_STATUSES = [
   'backlog',
   'queued',
   'running',
+  'awaiting_permission',
   'waiting_quota',
   'awaiting_approval',
   'review',

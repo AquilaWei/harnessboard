@@ -9,6 +9,7 @@ import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
+  askBash,
   assistantText,
   errorResult,
   exitWith,
@@ -243,6 +244,166 @@ describe('stopping a running task', () => {
     harness.stopTask(task.id);
     await harness.waitForIdle();
     expect(harness.store.getTask(task.id)!.status).toBe('stopped');
+  });
+});
+
+describe('a tool the task does not allow', () => {
+  beforeEach(() => {
+    scenario([[init(), askBash('r1', 'node hello.js', 'node *'), result('done')]]);
+  });
+
+  it('starts the agent so that it asks instead of refusing', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    await harness.waitForIdle();
+    expect(fakeRuns()[0]!.args).toContain('--permission-prompt-tool');
+  });
+
+  it('pauses the task until the user answers', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    expect(harness.permissionRequests(task.id)).toMatchObject([
+      {
+        requestId: 'r1',
+        toolName: 'Bash',
+        summary: 'node hello.js',
+        suggestedRules: ['Bash(node *)'],
+      },
+    ]);
+  });
+
+  it('lets the agent go on once allowed', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    await harness.waitForIdle();
+    expect([fakeRuns()[0]!.received[1], harness.store.getTask(task.id)!.status]).toEqual([
+      { answer: { behavior: 'allow', updatedInput: { command: 'node hello.js' } } },
+      'review',
+    ]);
+  });
+
+  it('goes back to running once answered', async () => {
+    scenario([[init(), askBash('r1', 'node hello.js', 'node *'), hang]]);
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    expect(harness.store.getTask(task.id)!.status).toBe('running');
+  });
+
+  it('keeps the task rules unchanged when allowed once', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.permission.allowedTools).not.toContain('Bash(node *)');
+  });
+
+  it('adds the rules given with the answer to the task', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, {
+      requestId: 'r1',
+      behavior: 'allow',
+      rules: ['Bash(node *)'],
+    });
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.permission.allowedTools).toContain('Bash(node *)');
+  });
+
+  it('passes the reason to the agent when denied', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, {
+      requestId: 'r1',
+      behavior: 'deny',
+      message: 'use the test script',
+    });
+    await harness.waitForIdle();
+    expect(fakeRuns()[0]!.received[1]).toEqual({
+      answer: { behavior: 'deny', message: 'use the test script' },
+    });
+  });
+
+  it('records the request and the answer in the history', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'deny' });
+    await harness.waitForIdle();
+    expect([
+      harness.store.eventsOfKind(task.id, 'permission_request').length,
+      harness.store.lastEvent(task.id, 'permission_decision')!.data,
+    ]).toEqual([
+      1,
+      {
+        requestId: 'r1',
+        toolName: 'Bash',
+        summary: 'node hello.js',
+        behavior: 'deny',
+        rules: [],
+        message: null,
+        auto: false,
+      },
+    ]);
+  });
+
+  it('rejects an invalid rule without answering the agent', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    expect(() =>
+      harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow', rules: ['node ok'] }),
+    ).toThrow(/not a tool rule/);
+    expect(harness.permissionRequests(task.id)).toHaveLength(1);
+  });
+
+  it('rejects an answer to a request that is not waiting', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo });
+    expect(() => harness.answerPermission(task.id, { requestId: 'r9', behavior: 'allow' })).toThrow(
+      /no pending permission request r9/,
+    );
+  });
+
+  it('is stopped, not left waiting, when the user stops it', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.stopTask(task.id);
+    await harness.waitForIdle();
+    expect([harness.store.getTask(task.id)!.status, harness.permissionRequests(task.id)]).toEqual([
+      'stopped',
+      [],
+    ]);
+  });
+
+  it('is queued again after a restart', async () => {
+    const task = await harness.createTask({ prompt: 'Run it', repo });
+    harness.store.updateTask(task.id, { status: 'awaiting_permission' });
+    const restarted = new Harness(harness.config, harness.store);
+    restarted.start();
+    await restarted.shutdown();
+    expect(harness.store.getTask(task.id)!.status).not.toBe('awaiting_permission');
+  });
+});
+
+describe('a tool the task rules already cover', () => {
+  it('is allowed without asking when the user added its rule earlier in the session', async () => {
+    scenario([
+      [
+        init(),
+        askBash('r1', 'node a.js', 'node *'),
+        askBash('r2', 'node b.js', 'node *'),
+        result('done'),
+      ],
+    ]);
+    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, {
+      requestId: 'r1',
+      behavior: 'allow',
+      rules: ['Bash(node *)'],
+    });
+    await harness.waitForIdle();
+    expect(harness.store.eventsOfKind(task.id, 'permission_request')).toHaveLength(1);
   });
 });
 

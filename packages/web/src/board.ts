@@ -12,6 +12,7 @@ const STAGE_OF: Record<TaskStatus, Stage> = {
   backlog: 'draft',
   queued: 'active',
   running: 'active',
+  awaiting_permission: 'attention',
   waiting_quota: 'active',
   awaiting_approval: 'attention',
   review: 'attention',
@@ -29,9 +30,10 @@ export type TaskAction = 'queue' | 'stop' | 'complete';
 
 /**
  * The one button a card offers, if any. `review` opens the task on its changes,
- * `approvePlan` on its proposed plan.
+ * `approvePlan` on its proposed plan, `answerPermission` on the tool use it waits on.
  */
-export type PrimaryAction = 'start' | 'stop' | 'review' | 'retry' | 'approvePlan';
+export type PrimaryAction =
+  'start' | 'stop' | 'review' | 'retry' | 'approvePlan' | 'answerPermission';
 
 export function primaryAction(task: TaskView): PrimaryAction | null {
   switch (task.status) {
@@ -45,6 +47,8 @@ export function primaryAction(task: TaskView): PrimaryAction | null {
       return 'review';
     case 'awaiting_approval':
       return 'approvePlan';
+    case 'awaiting_permission':
+      return 'answerPermission';
     case 'failed':
     case 'stopped':
       return 'retry';
@@ -59,9 +63,10 @@ export function primaryAction(task: TaskView): PrimaryAction | null {
  */
 export function dropAction(task: TaskView, target: Stage): TaskAction | null {
   const from = stageOf(task.status);
-  // A plan waiting for approval moves on through feedback or approval, not by queueing.
-  const queueable =
-    from === 'draft' || (from === 'attention' && task.status !== 'awaiting_approval');
+  // A plan or a tool use waiting for you moves on through your answer, not by queueing.
+  const waitsForAnswer =
+    task.status === 'awaiting_approval' || task.status === 'awaiting_permission';
+  const queueable = from === 'draft' || (from === 'attention' && !waitsForAnswer);
   if (target === 'active' && queueable) return 'queue';
   if (target === 'attention' && from === 'active') return 'stop';
   if (target === 'done' && task.status === 'review') return 'complete';

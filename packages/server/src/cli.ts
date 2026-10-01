@@ -10,7 +10,7 @@ import {
   definedOnly,
   presetRules,
 } from '@harnessboard/shared';
-import type { TaskSize } from '@harnessboard/shared';
+import type { PermissionRequest, TaskSize, TaskView } from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
 import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
 import { t } from './i18n.js';
@@ -207,6 +207,12 @@ program
       );
     }
     for (const feature of task.features ?? []) console.log(formatFeature(feature));
+    for (const r of task.permissionRequests) {
+      const rules = r.suggestedRules.length > 0 ? `  [${r.suggestedRules.join(', ')}]` : '';
+      console.log(
+        `  ${t('permissionWaiting', { tool: r.toolName, summary: r.summary, request: r.requestId })}${rules}`,
+      );
+    }
     for (const s of task.sessions) {
       const who = `${s.role}/${s.agentId}`.padEnd(22);
       console.log(
@@ -250,6 +256,43 @@ program
   .action(async (id: number) => {
     await client().stopTask(id);
     console.log(t('stopRequested', { id }));
+  });
+
+program
+  .command('allow')
+  .description('allow a tool use the agent is waiting on')
+  .argument('<id>', 'task id', parseInteger)
+  .option('--rule <rules...>', 'also add these rules to the task, e.g. "Bash(npm *)"')
+  .option('--suggested', 'also add the rules the agent suggested')
+  .option('--request <requestId>', 'which request, when several are waiting')
+  .action(async (id: number, o: { rule?: string[]; suggested?: boolean; request?: string }) => {
+    const api = client();
+    const request = pickRequest(await api.getTask(id), o.request);
+    const rules = [...(o.suggested ? request.suggestedRules : []), ...(o.rule ?? [])];
+    const task = await api.answerPermission(id, {
+      requestId: request.requestId,
+      behavior: 'allow',
+      rules,
+    });
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
+  .command('deny')
+  .description('deny a tool use the agent is waiting on; the reason is passed to the agent')
+  .argument('<id>', 'task id', parseInteger)
+  .argument('[reason...]', 'why, so the agent can try something else')
+  .option('--request <requestId>', 'which request, when several are waiting')
+  .action(async (id: number, words: string[], o: { request?: string }) => {
+    const api = client();
+    const request = pickRequest(await api.getTask(id), o.request);
+    const message = words.join(' ');
+    const task = await api.answerPermission(id, {
+      requestId: request.requestId,
+      behavior: 'deny',
+      ...(message ? { message } : {}),
+    });
+    console.log(t('taskStatus', { id, status: task.status }));
   });
 
 program
@@ -353,6 +396,17 @@ function indent(text: string): string {
     .split('\n')
     .map((line) => `    ${line}`)
     .join('\n');
+}
+
+/** The request to answer: the given one, or the only one waiting. Throws otherwise. */
+function pickRequest(task: TaskView, requestId?: string): PermissionRequest {
+  const waiting = task.permissionRequests;
+  const found = requestId ? waiting.find((r) => r.requestId === requestId) : waiting[0];
+  if (!found) throw new Error(t('noPermissionRequest', { id: task.id }));
+  if (!requestId && waiting.length > 1) {
+    throw new Error(t('severalPermissionRequests', { id: task.id }));
+  }
+  return found;
 }
 
 /** Comma-separated preset ids; `none` for no preset. Unknown ids are rejected here. */

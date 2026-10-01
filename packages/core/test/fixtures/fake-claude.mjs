@@ -6,6 +6,8 @@
 // the i-th user message on stdin emits turns[i]. A line {"__hang": true} waits until killed;
 // {"__exit": code} writes {"__stderr"}'s text (if any) to stderr and exits with that code.
 // {"__write": {"path", "content"}} writes a file relative to the working directory.
+// A {"type": "control_request"} line is printed, then the fake waits for the matching
+// control_response on stdin and records its answer in `received` as { answer }.
 // With `--prompt <text>` it acts like a CLI without stdin input: it answers that one prompt
 // with turns[0] and exits (`--resume <id>` is only logged).
 // FAKE_CLAUDE_LOG: file that receives one JSON line per run with the args and messages.
@@ -37,8 +39,15 @@ if (promptAt !== -1) {
 
 let turn = 0;
 let queue = Promise.resolve();
+const answers = new Map();
 createInterface({ input: process.stdin }).on('line', (line) => {
-  received.push(JSON.parse(line).message.content);
+  const msg = JSON.parse(line);
+  if (msg.type === 'control_response') {
+    received.push({ answer: msg.response.response });
+    answers.get(msg.response.request_id)?.();
+    return;
+  }
+  received.push(msg.message.content);
   const lines = scenario.turns[turn++] ?? [];
   queue = queue.then(() => emit(lines));
 });
@@ -65,6 +74,9 @@ async function emit(lines) {
       await new Promise(() => {});
     }
     process.stdout.write(JSON.stringify(line) + '\n');
+    if (line.type === 'control_request') {
+      await new Promise((resolve) => answers.set(line.request_id, resolve));
+    }
     await new Promise((r) => setTimeout(r, 5));
   }
 }

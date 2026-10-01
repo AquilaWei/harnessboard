@@ -70,3 +70,20 @@ A user message written to stdin while a turn is still running is injected into t
 the agent sees it at the next tool-result boundary and acts on it (the test asked it to stop
 after the current command, and it did, producing a single `result`). This is how the soft
 context threshold asks the agent to wrap up without waiting for the turn to end.
+
+## Permission prompts (`--permission-prompt-tool stdio`)
+
+Checked with Claude Code 2.1.285.
+
+- Without the flag, `-p` refuses every tool that the rules do not allow. The refusal shows up
+  as a tool result ("This command requires approval"), and the `result` line lists it under
+  `permission_denials`.
+- With the flag, the CLI prints a control request and waits, with the process still
+  running, until it gets an answer:
+  `{"type":"control_request","request_id":"<id>","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git add a.txt"},"permission_suggestions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"git add *"}],"behavior":"allow","destination":"localSettings"}],"tool_use_id":"toolu_…"}}`
+- The answer is one line on stdin:
+  `{"type":"control_response","response":{"subtype":"success","request_id":"<id>","response":{"behavior":"allow","updatedInput":<the request's input>}}}`.
+  To deny, send `{"behavior":"deny","message":"why"}` instead. The agent sees the message
+  and carries on.
+- No `initialize` control request is needed first.
+- A suggested rule such as `git add *` corresponds to the rule `Bash(git add *)`.

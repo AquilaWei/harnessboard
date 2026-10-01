@@ -19,6 +19,9 @@ import type {
   HarnessEvent,
   FeatureSnapshot,
   HarnessStatus,
+  PermissionDecision,
+  PermissionDecisionRecord,
+  PermissionRequest,
   PlanApproval,
   PlanProposal,
   QuotaInfo,
@@ -29,7 +32,7 @@ import type {
   TaskStatus,
   WorktreeDiff,
 } from '@harnessboard/shared';
-import type { AgentAdapter } from './agent.js';
+import type { AgentAdapter, PermissionReply } from './agent.js';
 import {
   DEFAULT_AGENT,
   EDITABLE_SETTINGS,
@@ -71,6 +74,13 @@ export interface HarnessOptions {
   /** Builds agent adapters from profiles; tests substitute fake CLIs. */
   adapterFactory?: AdapterFactory;
 }
+type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }>;
+
+interface PendingPermission {
+  request: PermissionRequest;
+  resolve: (reply: PermissionReply) => void;
+}
+
 const STARTABLE: TaskStatus[] = ['backlog', 'stopped', 'failed', 'review', 'waiting_quota'];
 
 /**
@@ -83,6 +93,8 @@ export class Harness {
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   private readonly adapters = new Map<string, AgentAdapter>();
   private readonly activities = new Map<number, TaskActivity>();
+  /** Tool uses each running task waits on the user for, by request id. */
+  private readonly permissions = new Map<number, Map<string, PendingPermission>>();
   private timer: NodeJS.Timeout | null = null;
   private readonly workflow: Workflow;
   private readonly settingsFile: string | null;
@@ -158,6 +170,41 @@ export class Harness {
     return this.workflow.pendingReview(taskId);
   }
 
+  /** Tool uses a running task waits on the user to allow or deny, oldest first. */
+  permissionRequests(taskId: number): PermissionRequest[] {
+    return [...(this.permissions.get(taskId)?.values() ?? [])].map((p) => p.request);
+  }
+
+  /**
+   * Answers a tool use the agent is waiting on. Allowing with `rules` also adds them to the
+   * task, so this and later sessions use them without asking. The task goes back to
+   * `running` once nothing else is waiting. Throws when the request is not pending or a
+   * rule is invalid; nothing is answered then.
+   */
+  answerPermission(id: number, decision: PermissionDecision): Task {
+    const task = this.requireTask(id);
+    const pending = this.permissions.get(id)?.get(decision.requestId);
+    if (!pending)
+      throw new Error(`task ${id} has no pending permission request ${decision.requestId}`);
+    const allow = decision.behavior === 'allow';
+    const rules = allow
+      ? [...new Set((decision.rules ?? []).map((r) => r.trim()).filter(Boolean))]
+      : [];
+    assertToolRules(rules);
+    if (rules.length > 0) {
+      const allowedTools = rules.reduce(withTool, task.permission.allowedTools);
+      this.store.updateTask(id, { permission: { ...task.permission, allowedTools } });
+    }
+    const message = allow ? null : decision.message?.trim() || null;
+    this.settlePermission(id, pending, {
+      behavior: decision.behavior,
+      rules,
+      message,
+      auto: false,
+    });
+    return this.requireTask(id);
+  }
+
   settings(): EditableSettings {
     const { maxConcurrent, quotaPauseUtilization, defaultContextPolicy, defaultReviewer } =
       this.config;
@@ -181,12 +228,15 @@ export class Harness {
   }
 
   /**
-   * Starts periodic scheduling. Tasks left `running` by a previous process that died are
-   * re-queued, because their agent process no longer exists.
+   * Starts periodic scheduling. Tasks left `running` or `awaiting_permission` by a previous
+   * process that died are re-queued, because their agent process no longer exists.
    */
   start(): void {
     for (const task of this.store.listTasks()) {
-      if (task.status === 'running') this.setStatus(task.id, 'queued');
+      // A task that waited for permission asks again once its session resumes.
+      if (task.status === 'running' || task.status === 'awaiting_permission') {
+        this.setStatus(task.id, 'queued');
+      }
     }
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.tick();
@@ -283,6 +333,7 @@ export class Harness {
     const controller = this.running.get(id);
     if (controller) {
       controller.abort(); // the session's completion handler records the `stopped` status
+      this.dropPermissions(id);
       return task;
     }
     if (task.status === 'queued' || task.status === 'waiting_quota') {
@@ -465,6 +516,7 @@ export class Harness {
       this.notice(task.id, `task failed: ${(err as Error).message}`);
       this.setStatus(task.id, 'failed');
     } finally {
+      this.dropPermissions(task.id);
       this.running.delete(task.id);
       this.activities.delete(task.id);
       if (this.timer) this.tick();
@@ -521,6 +573,8 @@ export class Harness {
               : []
             : task.permission.allowedTools,
         skipPermissions: task.permission.skipPermissions,
+        // Reviewers must not change anything, so they are never offered more tools.
+        askPermission: plan.role === 'implementer' && adapter.capabilities.permissionPrompts,
       },
       thresholds: resolveThresholds(task.contextPolicy),
       // A reviewer has nothing to commit or hand off; it only stops at the hard limit.
@@ -541,9 +595,84 @@ export class Harness {
         }
         this.recordAgentEvent(task.id, sessionId, provider, event);
       },
+      onPermissionRequest: (event) => this.askPermission(task.id, sessionId, event),
       onNotice: (message) => this.notice(task.id, message, sessionId),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
+  }
+
+  /**
+   * Allows a tool use the task's rules already cover (they may have been added earlier in
+   * this session, after the CLI started); otherwise records it and waits for the user.
+   */
+  private askPermission(
+    taskId: number,
+    sessionId: string,
+    event: PermissionRequestEvent,
+  ): Promise<PermissionReply> {
+    const { requestId, toolName, summary, suggestedRules } = event;
+    const request: PermissionRequest = {
+      requestId,
+      sessionId,
+      toolName,
+      summary,
+      suggestedRules,
+      ts: Date.now(),
+    };
+    const allowed = this.requireTask(taskId).permission.allowedTools;
+    if (suggestedRules.length > 0 && suggestedRules.every((rule) => allowed.includes(rule))) {
+      this.recordDecision(taskId, request, {
+        behavior: 'allow',
+        rules: [],
+        message: null,
+        auto: true,
+      });
+      return Promise.resolve({ behavior: 'allow' });
+    }
+    return new Promise((resolve) => {
+      let waiting = this.permissions.get(taskId);
+      if (!waiting) this.permissions.set(taskId, (waiting = new Map()));
+      waiting.set(requestId, { request, resolve });
+      this.store.appendEvent(taskId, sessionId, 'permission_request', request);
+      this.setStatus(taskId, 'awaiting_permission');
+    });
+  }
+
+  private settlePermission(
+    taskId: number,
+    pending: PendingPermission,
+    outcome: Omit<PermissionDecisionRecord, 'requestId' | 'toolName' | 'summary'>,
+  ): void {
+    const waiting = this.permissions.get(taskId);
+    waiting?.delete(pending.request.requestId);
+    this.recordDecision(taskId, pending.request, outcome);
+    pending.resolve(
+      outcome.behavior === 'allow'
+        ? { behavior: 'allow' }
+        : { behavior: 'deny', ...(outcome.message ? { message: outcome.message } : {}) },
+    );
+    if (waiting?.size === 0 && this.running.has(taskId)) this.setStatus(taskId, 'running');
+  }
+
+  private recordDecision(
+    taskId: number,
+    request: PermissionRequest,
+    outcome: Omit<PermissionDecisionRecord, 'requestId' | 'toolName' | 'summary'>,
+  ): void {
+    const { requestId, toolName, summary } = request;
+    const record: PermissionDecisionRecord = { requestId, toolName, summary, ...outcome };
+    this.store.appendEvent(taskId, request.sessionId, 'permission_decision', record);
+    this.emit({ type: 'task', taskId, status: this.requireTask(taskId).status });
+  }
+
+  /** Denies whatever a task still waits on, e.g. when it is stopped; the agent is ending. */
+  private dropPermissions(taskId: number): void {
+    const waiting = this.permissions.get(taskId);
+    if (!waiting) return;
+    this.permissions.delete(taskId);
+    for (const pending of waiting.values()) {
+      pending.resolve({ behavior: 'deny', message: 'The task was stopped.' });
+    }
   }
 
   private recordAgentEvent(
@@ -552,7 +681,10 @@ export class Harness {
     provider: AgentProvider,
     event: AgentEvent,
   ): void {
-    this.store.appendEvent(taskId, sessionId, event.kind, event);
+    // A permission request is recorded by askPermission, without the tool's full input.
+    if (event.kind !== 'permission_request') {
+      this.store.appendEvent(taskId, sessionId, event.kind, event);
+    }
     if (event.kind === 'quota') this.quotas.set(provider, event.quota);
     this.emit({ type: 'agent', taskId, sessionId, event });
   }

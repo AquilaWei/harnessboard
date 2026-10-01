@@ -121,3 +121,28 @@ describe('describeTask for plans', () => {
     expect(describeTask(task).key).toBe('revisingPlanQueued');
   });
 });
+
+describe('describeTask for permission requests', () => {
+  it('names the agent, tool and command it waits on', () => {
+    const task = {
+      ...base,
+      status: 'awaiting_permission',
+      activity: { phase: 'implementing', agentId: 'claude' },
+      permissionRequests: [
+        {
+          requestId: 'r1',
+          sessionId: 's1',
+          toolName: 'Bash',
+          summary: 'node hello.js',
+          suggestedRules: ['Bash(node *)'],
+          ts: 1,
+        },
+      ],
+    } as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'permissionAsked',
+      tone: 'attention',
+      vars: { agent: 'claude', tool: 'Bash', summary: 'node hello.js' },
+    });
+  });
+});
