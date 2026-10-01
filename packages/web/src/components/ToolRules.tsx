@@ -49,9 +49,34 @@ export function ToolRules({ task, onSaved, onError }: Props) {
     }
   };
 
+  const toggleAuto = async (on: boolean) => {
+    try {
+      await api.setAutoApprove(task.id, on);
+      onSaved();
+    } catch (err) {
+      onError((err as Error).message);
+    }
+  };
+
+  // Read at each request, so it can change while the task runs.
+  const autoToggle = (
+    <label className="check">
+      <input
+        type="checkbox"
+        checked={task.permission.autoApprove === true}
+        onChange={(e) => void toggleAuto(e.target.checked)}
+      />
+      <span>
+        {t('form.autoApprove')}
+        <small className="hint">{t('form.autoApproveHint')}</small>
+      </span>
+    </label>
+  );
+
   if (!editing) {
     return (
       <div className="tool-rules">
+        {autoToggle}
         {rules.length > 0 ? (
           <ul className="rule-list mono">
             {rules.map((rule) => (

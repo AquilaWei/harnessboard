@@ -7,6 +7,7 @@ import {
   APP_NAME,
   ENV_PREFIX,
   PROJECT_CONFIG_FILE,
+  assertToolRules,
   resolveThresholds,
 } from '@harnessboard/shared';
 import type { AgentProfile, ContextPolicy } from '@harnessboard/shared';
@@ -34,18 +35,25 @@ export interface HarnessConfig {
   loopStallSessions: number;
   /** Applied to new tasks before project and per-task settings. */
   defaultContextPolicy: ContextPolicy;
+  /** Tool rules every task's sessions may use without asking, on top of the task's own. */
+  allowedTools: string[];
 }
 
 /** Settings the web UI may change at runtime; they are saved to the user config file. */
 export type EditableSettings = Pick<
   HarnessConfig,
-  'maxConcurrent' | 'quotaPauseUtilization' | 'defaultContextPolicy' | 'defaultReviewer'
+  | 'maxConcurrent'
+  | 'quotaPauseUtilization'
+  | 'defaultContextPolicy'
+  | 'defaultReviewer'
+  | 'allowedTools'
 >;
 export const EDITABLE_SETTINGS = [
   'maxConcurrent',
   'quotaPauseUtilization',
   'defaultContextPolicy',
   'defaultReviewer',
+  'allowedTools',
 ] as const;
 
 /** Profile every config has; tasks use it unless they name another implementer. */
@@ -77,6 +85,7 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     verifyTimeoutMinutes: 10,
     loopStallSessions: 3,
     defaultContextPolicy: { size: 'medium' },
+    allowedTools: [],
   };
 }
 
@@ -168,6 +177,8 @@ export function validate(config: HarnessConfig): void {
     throw new Error('config quotaPauseUtilization must be in (0, 1]');
   }
   resolveThresholds(config.defaultContextPolicy);
+  if (!Array.isArray(config.allowedTools)) throw new Error('config allowedTools must be a list');
+  assertToolRules(config.allowedTools);
   if (!config.agents[DEFAULT_AGENT]) {
     throw new Error(`config agents must include "${DEFAULT_AGENT}"`);
   }

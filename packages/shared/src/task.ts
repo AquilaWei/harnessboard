@@ -46,6 +46,11 @@ export interface PermissionPolicy {
   allowedTools: string[];
   /** Maps to `--dangerously-skip-permissions`; must be opted into per task. */
   skipPermissions: boolean;
+  /**
+   * Allow tools the rules do not cover without asking, unless they look risky (see
+   * `riskOf`). Absent on tasks from before it existed, which means off.
+   */
+  autoApprove?: boolean;
 }
 
 export interface Task {

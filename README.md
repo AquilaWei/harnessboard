@@ -62,7 +62,8 @@ hb done 1                            # mark it reviewed
 | `hb commits <id>`                                                                     | List the commits on the task branch          |
 | `hb merge <id>`                                                                       | Merge a reviewed task into its base (below)  |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)    |
-| `hb allow <id> [--suggested] [--rule RULE...]` / `hb deny <id> [reason]`              | Answer a tool use the agent waits on         |
+| `hb allow <id> [--suggested] [--rule RULE...] [--global]` / `hb deny <id> [reason]`   | Answer a tool use the agent waits on         |
+| `--auto-approve` on `add` / `loop`; `hb auto <id> [on\|off]`; `hb global-tools`       | Ask less: see Permissions below              |
 | `--preset git,node,...` on `add` / `loop`; `hb tools <id> [RULE...]`                  | Choose allowed tools; show or change them    |
 
 **Merging a task** (`hb merge`, or **Merge into main** in the task panel of a task in
@@ -282,6 +283,16 @@ rules such as `Bash(npm *)`:
   never asked and stay read-only.
 - Change a task's rules while it is not running: **Details → Allowed tools → Edit** on the
   board, or `hb tools <id> RULE...`.
+- **For every task:** **Allow for all tasks** on a request (or `hb allow <id> --global`)
+  adds the rule to `allowedTools` in your user config. Every task's sessions get these rules
+  on top of their own. Edit them under **Settings** or with `hb global-tools [RULE...]`.
+- **Auto-approve** (a checkbox when creating a task or under Details, `--auto-approve`, or
+  `hb auto <id> on|off`): tools the rules do not cover are allowed without asking, except
+  risky ones, which still ask and say why. Risky means `git push`, history-rewriting git
+  commands, `rm -r`, `sudo`, network commands (`curl`, `wget`, `ssh`…), publishing,
+  containers, writing outside the task's worktree, and MCP tools. A list like this cannot
+  catch everything, so it is a convenience, not a sandbox. It can be switched while the task
+  runs.
 - `--skip-permissions` removes all checks; use it only in a sandbox.
 
 ## Development

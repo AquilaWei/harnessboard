@@ -99,6 +99,7 @@ export function createApi(harness: Harness): Hono {
       requestId: body.requestId,
       behavior: body.behavior!,
       ...(body.rules ? { rules: body.rules } : {}),
+      ...(body.scope === 'global' ? { scope: 'global' as const } : {}),
       ...(typeof body.message === 'string' ? { message: body.message } : {}),
     };
     return c.json(harness.answerPermission(taskId(c), decision));
@@ -115,6 +116,12 @@ export function createApi(harness: Harness): Hono {
       if (typeof value === 'string' || value === null) update[key] = value;
     }
     return c.json(harness.setAgents(taskId(c), update));
+  });
+
+  app.put('/tasks/:id/auto-approve', async (c) => {
+    const { on } = await c.req.json<{ on?: unknown }>();
+    if (typeof on !== 'boolean') throw new Error('send { "on": true } or { "on": false }');
+    return c.json(harness.setAutoApprove(taskId(c), on));
   });
 
   app.put('/tasks/:id/allowed-tools', async (c) => {

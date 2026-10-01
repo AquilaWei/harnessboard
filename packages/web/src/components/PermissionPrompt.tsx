@@ -12,7 +12,10 @@ interface Props {
   onError: (message: string) => void;
 }
 
-/** The tool uses the agent waits on, each with allow once, allow and remember, or deny. */
+/**
+ * The tool uses the agent waits on, each with allow and remember (for this task or for
+ * every task), allow once, or deny.
+ */
 export function PermissionPrompt({ taskId, requests, onAnswered, onError }: Props) {
   return (
     <div className="permission-list">
@@ -64,6 +67,9 @@ function Request({
         <strong>{t('permission.title', { tool: request.toolName })}</strong>
       </div>
       <pre className="permission-command">{request.summary || request.toolName}</pre>
+      {request.risk && (
+        <p className="hint warn-text">⚠ {t('permission.risky', { reason: request.risk })}</p>
+      )}
       <label className="field">
         <span>{t('permission.rules')}</span>
         <textarea
@@ -118,6 +124,14 @@ function Request({
               onClick={() => void answer({ behavior: 'allow', rules })}
             >
               {t('permission.allowRemember')}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy || rules.length === 0 || invalid.length > 0}
+              onClick={() => void answer({ behavior: 'allow', rules, scope: 'global' })}
+            >
+              {t('permission.allowEverywhere')}
             </button>
             <button
               type="button"

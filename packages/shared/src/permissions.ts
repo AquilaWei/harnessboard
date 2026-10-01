@@ -87,19 +87,22 @@ export interface PermissionRequest {
   toolName: string;
   summary: string;
   suggestedRules: string[];
+  /** Why auto-approve did not allow it on its own; `null` when the task does not auto-approve. */
+  risk: string | null;
   /** Unix ms when the agent asked. */
   ts: number;
 }
 
 /**
  * The user's answer to a {@link PermissionRequest}. `rules` (allow only) are added to the
- * task, so later sessions may use them without asking; `message` (deny only) tells the
- * agent why.
+ * task, or with `scope: 'global'` to the user's settings for every task, so later sessions
+ * may use them without asking; `message` (deny only) tells the agent why.
  */
 export interface PermissionDecision {
   requestId: string;
   behavior: 'allow' | 'deny';
   rules?: string[];
+  scope?: 'task' | 'global';
   message?: string;
 }
 
@@ -109,9 +112,14 @@ export interface PermissionDecisionRecord {
   toolName: string;
   summary: string;
   behavior: 'allow' | 'deny';
-  /** Rules added to the task with this answer; empty for "allow once" or a denial. */
+  /** Rules added with this answer; empty for "allow once" or a denial. */
   rules: string[];
+  /** Where `rules` were added; absent in records from before global rules. */
+  scope?: 'task' | 'global';
   message: string | null;
-  /** True when the harness allowed it because the task's rules already covered it. */
+  /**
+   * True when the harness allowed it without asking: the task's or the global rules covered
+   * it, or the task auto-approves and it was not risky.
+   */
   auto: boolean;
 }
