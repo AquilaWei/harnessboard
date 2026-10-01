@@ -190,7 +190,7 @@ API 只接受 loopback 的 `Host` 標頭，而且每個寫入請求都必須帶�
 **權限**：任務以 `--permission-mode acceptEdits` 執行，再加上一份允許的工具規則，例如
 `Bash(npm *)`：
 
-- **權限組**涵蓋常見需求：`git`（預設，讓 agent 可以 commit）、`node`、`python`、`gradle`、
+- **權限組**在「新增任務」對話框裡勾選（或用 `--preset`），涵蓋常見需求：`git`（預設，讓 agent 可以 commit）、`node`、`python`、`gradle`、
   `docker`、`web`（`WebFetch`、`WebSearch`）和 `files`。`docker` 幾乎等於全開，因為容器
   可以掛載任何資料夾。
 - 單條規則用 `--allow` 加上。不是工具規則的內容（例如一段說明文字）會直接被拒絕，
@@ -200,7 +200,8 @@ API 只接受 loopback 的 `Host` 標頭，而且每個寫入請求都必須帶�
   `Bash(node *)`），或拒絕並附上原因讓 agent 知道。終端機用 `hb allow <id> [--suggested]
 [--rule 規則...]` 和 `hb deny <id> [原因]`。等待中的任務會佔著執行名額；審查者不會被詢問，
   一律唯讀。
-- 任務沒在執行時，可以用 `hb tools <id> 規則...` 修改它的規則。
+- 任務沒在執行時可以修改規則：看板上是「詳細資料 → 允許的工具 → 編輯」，終端機用
+  `hb tools <id> 規則...`。
 - `--skip-permissions` 會關閉所有檢查，只能在沙盒環境使用。
 
 ## 開發

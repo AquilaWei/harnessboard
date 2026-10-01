@@ -18,6 +18,7 @@ import { DiffView } from './DiffView';
 import { FeatureList } from './FeatureList';
 import { LogView } from './LogView';
 import { FeatureProgress } from './Meter';
+import { PermissionPrompt } from './PermissionPrompt';
 import { PlanReview } from './PlanReview';
 import { Timeline } from './Timeline';
 
@@ -128,6 +129,14 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                 <span className="card-id">#{task.id}</span>
               </div>
               <Description task={task} />
+              {task.permissionRequests.length > 0 && (
+                <PermissionPrompt
+                  taskId={task.id}
+                  requests={task.permissionRequests}
+                  onAnswered={() => void loadTask()}
+                  onError={onError}
+                />
+              )}
               {/* A proposed plan is shown on the Plan tab; progress starts after approval. */}
               {task.mode === 'loop' && task.sessionCount > 0 && !task.plan && (
                 <FeatureProgress loop={task.loop} />
@@ -177,7 +186,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                   </button>
                 )}
                 {/* A running task must be stopped first, so its agent is not left orphaned. */}
-                {s !== 'running' && (
+                {s !== 'running' && s !== 'awaiting_permission' && (
                   <DeleteTask task={task} onDeleted={onClose} onMessage={onError} />
                 )}
               </div>
@@ -215,7 +224,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
             ))}
           {tab === 'changes' && <DiffView diff={diff} />}
           {tab === 'log' && <LogView events={events} window={task?.context?.window ?? 1_000_000} />}
-          {tab === 'details' && task && <Details task={task} />}
+          {tab === 'details' && task && (
+            <Details task={task} onSaved={() => void loadTask()} onError={onError} />
+          )}
         </div>
       </aside>
     </>

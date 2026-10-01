@@ -152,6 +152,40 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           />
         </li>
       );
+    case 'permission_request': {
+      const r = entry.request;
+      return (
+        <li className="step step-user">
+          <StepHead
+            icon="?"
+            title={t('timeline.permissionRequest', { tool: r.toolName })}
+            meta={time}
+          />
+          <pre className="reply">{r.summary}</pre>
+        </li>
+      );
+    }
+    case 'permission_decision': {
+      const d = entry.decision;
+      const key =
+        d.behavior === 'deny'
+          ? 'permissionDenied'
+          : d.auto
+            ? 'permissionAuto'
+            : d.rules.length > 0
+              ? 'permissionAllowedRules'
+              : 'permissionAllowed';
+      return (
+        <li className={`step ${d.behavior === 'allow' ? 'step-good' : 'step-bad'}`}>
+          <StepHead
+            icon={d.behavior === 'allow' ? '✓' : '✗'}
+            title={t(`timeline.${key}`, { tool: d.toolName, rules: d.rules.join(', ') })}
+            meta={`${d.summary} · ${time}`}
+          />
+          {d.message && <p className="reply">{d.message}</p>}
+        </li>
+      );
+    }
     case 'handoff':
       return (
         <li className="step">

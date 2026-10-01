@@ -2,11 +2,17 @@
 import { useTranslation } from 'react-i18next';
 import type { TaskDetail } from '@harnessboard/shared';
 import { ContextMeter } from './Meter';
+import { ToolRules } from './ToolRules';
+
+interface Props {
+  task: TaskDetail;
+  onSaved: () => void;
+  onError: (message: string) => void;
+}
 
 /** Where the task lives and how it is configured; kept out of the way of the status. */
-export function Details({ task }: { task: TaskDetail }) {
+export function Details({ task, onSaved, onError }: Props) {
   const { t } = useTranslation();
-  const extraTools = task.permission.allowedTools.filter((rule) => !rule.startsWith('Bash(git '));
   return (
     <>
       <dl className="facts">
@@ -31,7 +37,9 @@ export function Details({ task }: { task: TaskDetail }) {
         <dt>{t('fields.worktree')}</dt>
         <dd className="mono">{task.worktreePath ?? '-'}</dd>
         <dt>{t('fields.tools')}</dt>
-        <dd className="mono">{extraTools.length > 0 ? extraTools.join(', ') : t('fields.none')}</dd>
+        <dd>
+          <ToolRules task={task} onSaved={onSaved} onError={onError} />
+        </dd>
         <dt>{t('fields.skip')}</dt>
         <dd>{task.permission.skipPermissions ? `⚠ ${t('fields.skipOff')}` : t('fields.skipOn')}</dd>
       </dl>

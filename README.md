@@ -212,7 +212,7 @@ Gemini, is in [docs/architecture.md](docs/architecture.md).
 **Permissions:** tasks run with `--permission-mode acceptEdits` and a list of allowed tool
 rules such as `Bash(npm *)`:
 
-- **Presets** cover common needs: `git` (the default, so the agent can commit), `node`,
+- **Presets** are checkboxes in the New task dialog (or `--preset`) and cover common needs: `git` (the default, so the agent can commit), `node`,
   `python`, `gradle`, `docker`, `web` (`WebFetch`, `WebSearch`) and `files`. `docker` is
   nearly unrestricted, because a container can mount any folder.
 - Add single rules with `--allow`. Entries that are not tool rules, such as a sentence, are
@@ -223,7 +223,8 @@ rules such as `Bash(npm *)`:
   deny it with a reason the agent is told. In the terminal: `hb allow <id> [--suggested]
 [--rule RULE...]` and `hb deny <id> [reason]`. A waiting task keeps its slot; reviewers are
   never asked and stay read-only.
-- Change a task's rules while it is not running with `hb tools <id> RULE...`.
+- Change a task's rules while it is not running: **Details → Allowed tools → Edit** on the
+  board, or `hb tools <id> RULE...`.
 - `--skip-permissions` removes all checks; use it only in a sandbox.
 
 ## Development

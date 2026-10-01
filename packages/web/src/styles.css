@@ -1426,3 +1426,83 @@ th {
 .check .hint {
   display: block;
 }
+
+.permission-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.permission {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border));
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.permission .field {
+  margin: 8px 0;
+}
+
+.permission-command {
+  margin: 6px 0 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.tool-rules {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.tool-rules textarea {
+  width: 100%;
+}
+
+.rule-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.presets {
+  margin: 0 0 14px;
+  border: 0;
+  padding: 0;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0 16px;
+  margin-bottom: 6px;
+}
+
+.preset-grid .check {
+  margin-bottom: 8px;
+}
+
+.presets legend {
+  margin-bottom: 6px;
+  font-weight: 550;
+}
+
+.presets .check .hint {
+  display: block;
+  font-size: 11.5px;
+  word-break: break-word;
+}

@@ -5,6 +5,7 @@ import type {
   DeletedTask,
   FolderInfo,
   FolderListing,
+  PermissionDecision,
   PlanView,
   HarnessStatus,
   Settings,
@@ -58,6 +59,10 @@ export const api = {
   queue: (id: number) => send<unknown>('POST', `/tasks/${id}/queue`),
   stop: (id: number) => send<unknown>('POST', `/tasks/${id}/stop`),
   complete: (id: number) => send<unknown>('POST', `/tasks/${id}/complete`),
+  answerPermission: (id: number, decision: PermissionDecision) =>
+    send<unknown>('POST', `/tasks/${id}/permission`, decision),
+  setAllowedTools: (id: number, rules: string[]) =>
+    send<unknown>('PUT', `/tasks/${id}/allowed-tools`, { rules }),
   deleteTask: (id: number) => send<DeletedTask>('DELETE', `/tasks/${id}`),
   plan: (id: number) => request<PlanView>(`/tasks/${id}/plan`),
   planFeedback: (id: number, message: string) =>
