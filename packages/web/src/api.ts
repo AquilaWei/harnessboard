@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
   AgentInfo,
+  CommitInfo,
   CreateTaskInput,
   DeletedTask,
   FolderInfo,
@@ -48,6 +49,9 @@ export const api = {
   task: (id: number) => request<TaskDetail>(`/tasks/${id}`),
   events: (id: number, after: number) =>
     request<StoredEvent[]>(`/tasks/${id}/events?after=${after}`),
+  commits: (id: number) => request<CommitInfo[]>(`/tasks/${id}/commits`),
+  commit: (id: number, hash: string) =>
+    request<{ show: string }>(`/tasks/${id}/commits/${encodeURIComponent(hash)}`),
   diff: (id: number) => request<WorktreeDiff>(`/tasks/${id}/diff`),
   timeline: (id: number) => request<TimelineEntry[]>(`/tasks/${id}/timeline`),
   agents: () => request<AgentInfo[]>('/agents'),

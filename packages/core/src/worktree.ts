@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import type { WorktreeDiff } from '@harnessboard/shared';
+import type { CommitInfo, WorktreeDiff } from '@harnessboard/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -81,6 +81,33 @@ export async function worktreeDiff(dir: string, baseRef: string): Promise<Worktr
     git(dir, ['ls-files', '--others', '--exclude-standard']),
   ]);
   return { diff, untracked: untracked.split('\n').filter(Boolean) };
+}
+
+// Unit and record separators cannot appear in a one-line subject or an author name.
+const FIELD = '\x1f';
+const RECORD = '\x1e';
+
+/** Commits on HEAD since it branched off `baseRef`, newest first. */
+export async function commitLog(dir: string, baseRef: string): Promise<CommitInfo[]> {
+  const base = await mergeBase(dir, baseRef);
+  const out = await git(dir, [
+    'log',
+    `--format=%H${FIELD}%an${FIELD}%at${FIELD}%s${RECORD}`,
+    `${base}..HEAD`,
+  ]);
+  return out
+    .split(RECORD)
+    .map((record) => record.trim())
+    .filter(Boolean)
+    .map((record) => {
+      const [hash = '', author = '', at = '0', subject = ''] = record.split(FIELD);
+      return { hash, author, subject, ts: Number(at) * 1000 };
+    });
+}
+
+/** Full message, file summary and patch of one commit. `hash` must be a full commit id. */
+export async function commitDiff(dir: string, hash: string): Promise<string> {
+  return git(dir, ['show', '--stat', '--patch', '--format=%B', hash]);
 }
 
 /** Commit hash of HEAD. */

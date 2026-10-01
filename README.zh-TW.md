@@ -52,6 +52,7 @@ hb done 1                            # 標記為已審核完成
 | `hb logs <id> [-f]`                                                                 | 印出或持續追蹤紀錄                  |
 | `hb stop <id>` / `hb resume <id>`                                                   | 停止，或重新排入                    |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                    | 審核、互動接手、完成                |
+| `hb commits <id>`                                                                   | 列出任務分支上的 commit             |
 | `hb delete <id>`                                                                    | 刪除沒在執行的任務（見下方）        |
 | `hb allow <id> [--suggested] [--rule 規則...]`／`hb deny <id> [原因]`               | 回覆 agent 正在等的工具請求         |
 | `add`／`loop` 加上 `--preset git,node,...`；`hb tools <id> [規則...]`               | 選擇允許的工具；查看或修改          |
@@ -132,7 +133,7 @@ Gemini 等 provider，就能讓不同廠商的 agent 互相檢查。
 - **任務面板**：
   - 最上方說明目前狀況，以及你可以做的動作，例如「標為完成」「再執行一次」。
   - **時間軸**：每個 session 的角色和 agent、交接、驗證結果，以及審查結論和意見。
-  - **變更**：相對於基準分支的 diff。
+  - **變更**：任務分支上的 commit（點開可看該次的修改），以及相對於基準分支的 diff。
   - **紀錄**：即時紀錄。
   - **詳細資訊**：路徑、agent、上下文預算。
   - 也可以複製 `hb open <id>` 指令，到 Claude Code 接手。

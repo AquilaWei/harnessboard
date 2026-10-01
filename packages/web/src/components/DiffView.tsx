@@ -10,21 +10,26 @@ function lineClass(line: string): string {
   return '';
 }
 
+/** Unified diff text with added, removed and header lines coloured. */
+export function DiffLines({ text }: { text: string }) {
+  return (
+    <pre className="diff">
+      {text.split('\n').map((line, i) => (
+        <span key={i} className={lineClass(line)}>
+          {line || ' '}
+        </span>
+      ))}
+    </pre>
+  );
+}
+
 export function DiffView({ diff }: { diff: WorktreeDiff | null }) {
   const { t } = useTranslation();
   if (!diff) return null;
   if (!diff.diff && diff.untracked.length === 0) return <p className="empty">{t('noDiff')}</p>;
   return (
     <>
-      {diff.diff && (
-        <pre className="diff">
-          {diff.diff.split('\n').map((line, i) => (
-            <span key={i} className={lineClass(line)}>
-              {line || ' '}
-            </span>
-          ))}
-        </pre>
-      )}
+      {diff.diff && <DiffLines text={diff.diff} />}
       {diff.untracked.length > 0 && (
         <>
           <h3>{t('untracked')}</h3>

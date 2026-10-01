@@ -15,6 +15,7 @@ import type {
   AgentEvent,
   AgentInfo,
   AgentProvider,
+  CommitInfo,
   CreateTaskInput,
   HarnessEvent,
   FeatureSnapshot,
@@ -55,6 +56,8 @@ import type { SessionPlan } from './workflow.js';
 import {
   addWorktree,
   branchName,
+  commitDiff,
+  commitLog,
   currentRef,
   pruneWorktrees,
   removeWorktree,
@@ -446,6 +449,24 @@ export class Harness {
     const task = this.requireTask(id);
     if (!task.worktreePath) return { diff: '', untracked: [] };
     return worktreeDiff(task.worktreePath, task.baseRef);
+  }
+
+  /** Commits on the task's branch since its base, newest first; none before it has a worktree. */
+  async commits(id: number): Promise<CommitInfo[]> {
+    const task = this.requireTask(id);
+    if (!task.worktreePath) return [];
+    return commitLog(task.worktreePath, task.baseRef);
+  }
+
+  /**
+   * One commit of the task's branch as `git show` prints it. Only commits from
+   * {@link commits} are accepted, so the caller cannot read other refs or pass git options.
+   */
+  async commitDiff(id: number, hash: string): Promise<string> {
+    const task = this.requireTask(id);
+    const known = (await this.commits(id)).some((c) => c.hash === hash);
+    if (!known) throw new Error(`commit ${hash} is not on task ${id}'s branch`);
+    return commitDiff(task.worktreePath!, hash);
   }
 
   status(): HarnessStatus {

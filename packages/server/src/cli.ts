@@ -259,6 +259,19 @@ program
   });
 
 program
+  .command('commits')
+  .description("list the commits on a task's branch since its base, newest first")
+  .argument('<id>', 'task id', parseInteger)
+  .action(async (id: number) => {
+    const commits = await client().commits(id);
+    if (commits.length === 0) return console.log(t('noCommits', { id }));
+    for (const c of commits) {
+      const when = new Date(c.ts).toLocaleString();
+      console.log(`${c.hash.slice(0, 8)}  ${c.subject}  (${c.author}, ${when})`);
+    }
+  });
+
+program
   .command('allow')
   .description('allow a tool use the agent is waiting on')
   .argument('<id>', 'task id', parseInteger)

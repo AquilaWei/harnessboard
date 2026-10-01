@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
   AgentInfo,
+  CommitInfo,
   CreateTaskInput,
   DeletedTask,
   PermissionDecision,
@@ -40,6 +41,7 @@ export class ApiClient {
     this.send<Task>('PUT', `/tasks/${id}/allowed-tools`, { rules });
   deleteTask = (id: number) => this.send<DeletedTask>('DELETE', `/tasks/${id}`);
   events = (id: number, after = 0) => this.get<StoredEvent[]>(`/tasks/${id}/events?after=${after}`);
+  commits = (id: number) => this.get<CommitInfo[]>(`/tasks/${id}/commits`);
   diff = (id: number) => this.get<WorktreeDiff>(`/tasks/${id}/diff`);
 
   private async get<T>(path: string): Promise<T> {

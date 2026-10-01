@@ -113,3 +113,12 @@ export interface DeletedTask {
   id: number;
   branch: string | null;
 }
+
+/** One commit on a task's branch since it left its base. */
+export interface CommitInfo {
+  hash: string;
+  subject: string;
+  author: string;
+  /** Unix ms of the commit. */
+  ts: number;
+}

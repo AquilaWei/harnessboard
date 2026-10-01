@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
+  CommitInfo,
   HarnessEvent,
   StoredEvent,
   TaskDetail,
@@ -12,6 +13,7 @@ import { api } from '../api';
 import type { TaskAction } from '../board';
 import { useLiveEvents, useThrottled } from '../live';
 import { Description } from './Description';
+import { CommitList } from './CommitList';
 import { DeleteTask } from './DeleteTask';
 import { Details } from './Details';
 import { DiffView } from './DiffView';
@@ -39,6 +41,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   const [timeline, setTimeline] = useState<TimelineEntry[] | null>(null);
   const [events, setEvents] = useState<StoredEvent[]>([]);
   const [diff, setDiff] = useState<WorktreeDiff | null>(null);
+  const [commits, setCommits] = useState<CommitInfo[] | null>(null);
   const [tab, setTab] = useState<DrawerTab>(initialTab);
   const [copied, setCopied] = useState(false);
   const lastId = useRef(0);
@@ -69,7 +72,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   }, [loadTask, loadEvents]);
 
   useEffect(() => {
-    if (tab === 'changes') api.diff(taskId).then(setDiff, (e: Error) => onError(e.message));
+    if (tab !== 'changes') return;
+    api.diff(taskId).then(setDiff, (e: Error) => onError(e.message));
+    api.commits(taskId).then(setCommits, (e: Error) => onError(e.message));
   }, [tab, taskId, task?.status, onError]);
 
   const refresh = useThrottled(() => {
@@ -222,7 +227,13 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
             ) : (
               <FeatureList features={task.features} lastVerify={task.loop?.lastVerify ?? null} />
             ))}
-          {tab === 'changes' && <DiffView diff={diff} />}
+          {tab === 'changes' && (
+            <>
+              <CommitList taskId={taskId} commits={commits} onError={onError} />
+              <h3>{t('commits.allChanges')}</h3>
+              <DiffView diff={diff} />
+            </>
+          )}
           {tab === 'log' && <LogView events={events} window={task?.context?.window ?? 1_000_000} />}
           {tab === 'details' && task && (
             <Details task={task} onSaved={() => void loadTask()} onError={onError} />

@@ -437,6 +437,17 @@ describe('setAllowedTools', () => {
   });
 });
 
+describe('commitDiff', () => {
+  it('refuses a ref that is not a commit of the task', async () => {
+    scenario([[init(), result('done')]]);
+    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    await harness.waitForIdle();
+    await expect(harness.commitDiff(task.id, '--output=/tmp/x')).rejects.toThrow(
+      /is not on task 1's branch/,
+    );
+  });
+});
+
 describe('deleting a task', () => {
   it('removes the task with its sessions and events', async () => {
     scenario([[init(), result('done')]]);

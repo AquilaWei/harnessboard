@@ -104,6 +104,13 @@ const en = {
     copied: 'Copied',
     close: 'Close',
   },
+  commits: {
+    title_one: '{{count}} commit',
+    title_other: '{{count}} commits',
+    none: 'No commits on this branch yet.',
+    loading: 'Loading…',
+    allChanges: 'All changes since the base, including uncommitted edits',
+  },
   presets: {
     git: { label: 'Git: stage and commit', warn: '' },
     node: { label: 'Node.js: npm, npx, pnpm, node', warn: '' },
@@ -424,6 +431,13 @@ const zhTW: typeof en = {
     copyOpen: '複製「在終端機開啟」',
     copied: '已複製',
     close: '關閉',
+  },
+  commits: {
+    title_one: '{{count}} 個 commit',
+    title_other: '{{count}} 個 commit',
+    none: '這個分支還沒有 commit。',
+    loading: '載入中…',
+    allChanges: '相對於基準的所有變更（包含還沒 commit 的修改）',
   },
   presets: {
     git: { label: 'Git：暫存與 commit', warn: '' },
