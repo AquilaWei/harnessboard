@@ -2,6 +2,8 @@
 import { contextPct, resolveThresholds } from '@harnessboard/shared';
 import type {
   ContextView,
+  CriteriaApproval,
+  CriteriaProposal,
   FeatureSnapshot,
   LoopProgress,
   PermissionDecisionRecord,
@@ -36,6 +38,7 @@ export function taskView(task: Task, harness: Harness): TaskView {
     reviewPending: harness.pendingReview(task.id) !== null,
     plan: task.mode === 'loop' ? planSummary(task.id, store) : null,
     planFeedbackPending: harness.pendingPlanFeedback(task.id) !== null,
+    criteria: harness.criteriaProposal(task),
     permissionRequests: harness.permissionRequests(task.id),
     lastNotice:
       (store.lastEvent(task.id, 'notice')?.data as { message?: string } | undefined)?.message ??
@@ -107,6 +110,8 @@ export function timeline(taskId: number, store: Store): TimelineEntry[] {
     'plan',
     'plan_feedback',
     'plan_approved',
+    'criteria',
+    'criteria_approved',
     'permission_request',
     'permission_decision',
   ] as const;
@@ -128,6 +133,8 @@ function timelineEvent(
     | 'plan'
     | 'plan_feedback'
     | 'plan_approved'
+    | 'criteria'
+    | 'criteria_approved'
     | 'permission_request'
     | 'permission_decision',
   ts: number,
@@ -148,6 +155,10 @@ function timelineEvent(
       return { kind, ts, message: (data as { message: string }).message };
     case 'plan_approved':
       return { kind, ts, approval: data as PlanApproval };
+    case 'criteria':
+      return { kind, ts, proposal: data as CriteriaProposal };
+    case 'criteria_approved':
+      return { kind, ts, approval: data as CriteriaApproval };
     case 'permission_request':
       return { kind, ts, request: data as PermissionRequest };
     case 'permission_decision':

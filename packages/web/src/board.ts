@@ -30,10 +30,11 @@ export type TaskAction = 'queue' | 'stop' | 'complete';
 
 /**
  * The one button a card offers, if any. `review` opens the task on its changes,
- * `approvePlan` on its proposed plan, `answerPermission` on the tool use it waits on.
+ * `approvePlan` on its proposed plan, `approveCriteria` on its proposed acceptance
+ * criteria, `answerPermission` on the tool use it waits on.
  */
 export type PrimaryAction =
-  'start' | 'stop' | 'review' | 'retry' | 'approvePlan' | 'answerPermission';
+  'start' | 'stop' | 'review' | 'retry' | 'approvePlan' | 'approveCriteria' | 'answerPermission';
 
 export function primaryAction(task: TaskView): PrimaryAction | null {
   switch (task.status) {
@@ -46,7 +47,7 @@ export function primaryAction(task: TaskView): PrimaryAction | null {
     case 'review':
       return 'review';
     case 'awaiting_approval':
-      return 'approvePlan';
+      return task.mode === 'single' ? 'approveCriteria' : 'approvePlan';
     case 'awaiting_permission':
       return 'answerPermission';
     case 'failed':

@@ -28,7 +28,12 @@ export function describeTask(task: TaskView): Description {
     case 'backlog':
       return d('draft', 'idle');
     case 'queued':
-      if (task.planFeedbackPending) return d('revisingPlanQueued', 'working');
+      if (task.planFeedbackPending) {
+        return d(
+          task.mode === 'single' ? 'revisingCriteriaQueued' : 'revisingPlanQueued',
+          'working',
+        );
+      }
       if (task.reviewPending) return d('queuedForReview', 'working', { agent: reviewer });
       if (review?.verdict === 'changes') return d('queuedForFixes', 'working', { agent: reviewer });
       return d('queued', 'working');
@@ -47,6 +52,11 @@ export function describeTask(task: TaskView): Description {
       });
     }
     case 'awaiting_approval':
+      if (task.mode === 'single') {
+        return d(task.criteria?.criteria ? 'criteriaReady' : 'criteriaMissing', 'attention', {
+          agent: task.agents.implementer,
+        });
+      }
       return d(task.plan?.questions ? 'planReadyQuestions' : 'planReady', 'attention', {
         total: task.plan?.total ?? 0,
         questions: task.plan?.questions ?? 0,
@@ -69,6 +79,9 @@ function describeRunning(task: TaskView): Description {
   switch (activity.phase) {
     case 'planning':
       // An earlier proposal exists: this session is revising it with the user's feedback.
+      if (task.mode === 'single') {
+        return d(task.criteria ? 'revisingCriteria' : 'discussing', 'working', { agent });
+      }
       return d(task.plan ? 'revisingPlan' : 'planning', 'working', { agent });
     case 'implementing':
       if (task.lastReview?.verdict === 'changes') {

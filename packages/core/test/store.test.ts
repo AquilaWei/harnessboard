@@ -12,6 +12,7 @@ const newTask = {
   baseRef: 'main',
   mode: 'single' as const,
   verifyCommand: null,
+  acceptance: null,
   confirmPlan: false,
   agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
   contextPolicy: { size: 'small' as const },
@@ -134,10 +135,28 @@ describe('Store', () => {
     first.close();
     const db = new DatabaseSync(file);
     db.exec(
-      `DROP TABLE counters; ALTER TABLE tasks DROP COLUMN confirm_plan; PRAGMA user_version = 3;`,
+      `DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
+       ALTER TABLE tasks DROP COLUMN confirm_plan; PRAGMA user_version = 3;`,
     );
     db.close();
     expect(new Store(file).getTask(id)!.confirmPlan).toBe(false);
+  });
+
+  it('stores approved acceptance criteria on the task', () => {
+    const store = new Store(':memory:');
+    const { id } = store.createTask(newTask);
+    expect(store.updateTask(id, { acceptance: '- prints hi' }).acceptance).toBe('- prints hi');
+  });
+
+  it('upgrades tasks from before acceptance criteria as having none', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    const { id } = first.createTask(newTask);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(`ALTER TABLE tasks DROP COLUMN acceptance; PRAGMA user_version = 5;`);
+    db.close();
+    expect(new Store(file).getTask(id)!.acceptance).toBeNull();
   });
 
   it('stores an updated permission list as JSON', () => {

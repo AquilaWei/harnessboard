@@ -68,7 +68,8 @@ async function createReviewed(mode: 'single' | 'loop' = 'single') {
     repo,
     reviewer: 'checker',
     mode,
-    ...(mode === 'loop' ? { verifyCommand: 'node -e "process.exit(0)"', confirmPlan: false } : {}),
+    confirmPlan: false,
+    ...(mode === 'loop' ? { verifyCommand: 'node -e "process.exit(0)"' } : {}),
     queue: true,
   });
   await harness.waitForIdle();
@@ -105,6 +106,7 @@ describe('a finished step with a reviewer', () => {
       repo,
       reviewer: 'checker',
       reviewerModel: 'opus',
+      confirmPlan: false,
       queue: true,
     });
     await harness.waitForIdle();

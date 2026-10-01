@@ -59,7 +59,16 @@ export interface Task {
    * starts building; with `confirmPlan` it may be set when the plan is approved.
    */
   verifyCommand: string | null;
-  /** Loop tasks: wait for the user to approve the planned features before building. */
+  /**
+   * What must hold for the work to count as done, agreed with the user. Both the
+   * implementer and the reviewer are given it; `null` when none was set.
+   */
+  acceptance: string | null;
+  /**
+   * Wait for the user to approve a plan before changing anything: the feature list of a
+   * loop task, or the acceptance criteria a single task's agent proposes in a read-only
+   * discussion first.
+   */
   confirmPlan: boolean;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
@@ -68,6 +77,22 @@ export interface Task {
   resumeAt: number | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * Stored as the `criteria` event each time a single task's discussion session finishes
+ * (first proposal and every revision). Nothing is changed until the user approves.
+ */
+export interface CriteriaProposal {
+  /** The criteria section of the reply; `null` when the agent did not write one. */
+  criteria: string | null;
+  /** The agent's whole reply, with its questions for the user. */
+  reply: string;
+}
+
+/** Stored as the `criteria_approved` event; the criteria are saved on the task too. */
+export interface CriteriaApproval {
+  criteria: string;
 }
 
 export type SessionEndReason =

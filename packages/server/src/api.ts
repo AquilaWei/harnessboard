@@ -151,6 +151,11 @@ export function createApi(harness: Harness): Hono {
     );
   });
 
+  app.post('/tasks/:id/criteria/approve', async (c) => {
+    const body = await c.req.json<{ criteria?: string }>().catch(() => ({}));
+    return c.json(harness.approveCriteria(taskId(c), (body as { criteria?: string }).criteria));
+  });
+
   app.get('/tasks/:id/timeline', (c) => c.json(timeline(taskId(c), harness.store)));
 
   app.get('/tasks/:id/commits', async (c) => c.json(await harness.commits(taskId(c))));

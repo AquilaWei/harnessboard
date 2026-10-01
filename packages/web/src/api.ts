@@ -76,6 +76,8 @@ export const api = {
     send<unknown>('POST', `/tasks/${id}/plan/feedback`, { message }),
   approvePlan: (id: number, verifyCommand: string) =>
     send<unknown>('POST', `/tasks/${id}/plan/approve`, { verifyCommand }),
+  approveCriteria: (id: number, criteria: string) =>
+    send<unknown>('POST', `/tasks/${id}/criteria/approve`, { criteria }),
   settings: () => request<Settings>('/settings'),
   saveSettings: (patch: Partial<Settings>) => send<Settings>('PUT', '/settings', patch),
 };

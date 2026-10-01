@@ -19,6 +19,8 @@ import type {
   AgentsUpdate,
   CommitInfo,
   CreateTaskInput,
+  CriteriaApproval,
+  CriteriaProposal,
   HarnessEvent,
   FeatureSnapshot,
   HarnessStatus,
@@ -278,8 +280,10 @@ export class Harness {
     resolveThresholds(contextPolicy);
     const mode = input.mode ?? 'single';
     const verifyCommand = input.verifyCommand?.trim() || project.verifyCommand || null;
+    const acceptance = optionalText(input.acceptance, 'acceptance')?.trim() || null;
     // With plan approval the command can be chosen (or taken from the planner) at approval.
-    const confirmPlan = mode === 'loop' && (input.confirmPlan ?? true);
+    // A single task without criteria agrees on them with the user first.
+    const confirmPlan = input.confirmPlan ?? (mode === 'loop' || !acceptance);
     if (mode === 'loop' && !confirmPlan && !verifyCommand) {
       throw new Error(
         'a loop task that starts without plan approval needs a verify command, e.g. "npm test"',
@@ -302,6 +306,7 @@ export class Harness {
       baseRef: input.baseRef ?? project.baseRef ?? (await currentRef(repoPath)),
       mode,
       verifyCommand: mode === 'loop' ? verifyCommand : null,
+      acceptance,
       confirmPlan,
       contextPolicy,
       permission: {
@@ -408,8 +413,9 @@ export class Harness {
   }
 
   /**
-   * Sends the user's reply on a proposed plan back to the planner, which revises the plan
-   * in the same conversation. Throws unless the task is waiting for plan approval.
+   * Sends the user's reply on a proposed plan (a loop task's features or a single task's
+   * acceptance criteria) back to the agent, which revises it in the same conversation.
+   * Throws unless the task is waiting for approval.
    */
   planFeedback(id: number, message: string): Task {
     const task = this.requireTask(id);
@@ -460,6 +466,33 @@ export class Harness {
     const queued = this.setStatus(id, 'queued');
     this.tick();
     return queued;
+  }
+
+  /**
+   * Approves a single task's acceptance criteria and lets its agent start changing files.
+   * `criteria` replaces the proposed ones, e.g. after the user edited them. Throws when the
+   * task is not a single task waiting for approval, or there are no criteria to approve.
+   */
+  approveCriteria(id: number, criteria?: string): Task {
+    const task = this.requireTask(id);
+    if (task.mode !== 'single' || task.status !== 'awaiting_approval') {
+      throw new Error(`task ${id} is not waiting for its acceptance criteria to be approved`);
+    }
+    const agreed =
+      optionalText(criteria, 'criteria')?.trim() || this.workflow.criteriaProposal(task)?.criteria;
+    if (!agreed) throw new Error('write the acceptance criteria to approve');
+    this.store.updateTask(id, { acceptance: agreed });
+    const approval: CriteriaApproval = { criteria: agreed };
+    this.store.appendEvent(id, null, 'criteria_approved', approval);
+    this.notice(id, 'acceptance criteria approved; starting work');
+    const queued = this.setStatus(id, 'queued');
+    this.tick();
+    return queued;
+  }
+
+  /** Latest proposed criteria of a single task, until they are approved. */
+  criteriaProposal(task: Task): CriteriaProposal | null {
+    return this.workflow.criteriaProposal(task);
   }
 
   /** Marks a reviewed task as done. */
@@ -611,21 +644,21 @@ export class Harness {
         model:
           (plan.role === 'reviewer' ? task.agents.reviewerModel : task.agents.implementerModel) ??
           this.config.agents[plan.agentId]!.model,
-        access: plan.role === 'reviewer' ? 'readOnly' : 'edit',
-        // A reviewer may run the task's own check, but nothing that edits.
+        access: plan.access,
+        // A read-only session may run the task's own check, but nothing that edits.
         allowedTools:
-          plan.role === 'reviewer'
+          plan.access === 'readOnly'
             ? task.verifyCommand
               ? [`Bash(${task.verifyCommand})`]
               : []
             : task.permission.allowedTools,
         skipPermissions: task.permission.skipPermissions,
-        // Reviewers must not change anything, so they are never offered more tools.
-        askPermission: plan.role === 'implementer' && adapter.capabilities.permissionPrompts,
+        // Read-only sessions must not change anything, so they are never offered more tools.
+        askPermission: plan.access === 'edit' && adapter.capabilities.permissionPrompts,
       },
       thresholds: resolveThresholds(task.contextPolicy),
-      // A reviewer has nothing to commit or hand off; it only stops at the hard limit.
-      wrapUp: plan.role === 'implementer',
+      // A read-only session has nothing to commit or hand off; it only stops at the hard limit.
+      wrapUp: plan.access === 'edit',
       contextWindow: window,
       signal,
       onEvent: (event) => {
@@ -792,4 +825,11 @@ function withTool(tools: string[], rule: string): string[] {
 function firstLine(text: string): string {
   const line = text.trim().split('\n')[0] ?? '';
   return line.length > 80 ? `${line.slice(0, 77)}...` : line;
+}
+
+/** Checks a field that arrives from JSON; throws when it is set but not a string. */
+function optionalText(value: unknown, field: string): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'string') throw new Error(`${field} must be text`);
+  return value;
 }

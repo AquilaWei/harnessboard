@@ -14,6 +14,7 @@ import type { TaskAction } from '../board';
 import { useLiveEvents, useThrottled } from '../live';
 import { Description } from './Description';
 import { CommitList } from './CommitList';
+import { CriteriaReview } from './CriteriaReview';
 import { DeleteTask } from './DeleteTask';
 import { Details } from './Details';
 import { DiffView } from './DiffView';
@@ -24,7 +25,7 @@ import { PermissionPrompt } from './PermissionPrompt';
 import { PlanReview } from './PlanReview';
 import { Timeline } from './Timeline';
 
-export type DrawerTab = 'timeline' | 'changes' | 'log' | 'features' | 'details';
+export type DrawerTab = 'timeline' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
 
 interface Props {
   taskId: number;
@@ -104,10 +105,15 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   };
 
   const s = task?.status;
+  const hasCriteria = task?.confirmPlan || task?.acceptance;
   const tabs: DrawerTab[] =
     task?.mode === 'loop'
       ? ['timeline', 'features', 'changes', 'log', 'details']
-      : ['timeline', 'changes', 'log', 'details'];
+      : hasCriteria
+        ? ['timeline', 'criteria', 'changes', 'log', 'details']
+        : ['timeline', 'changes', 'log', 'details'];
+  // Where a proposal waiting for approval is read and approved.
+  const proposalTab: DrawerTab = task?.mode === 'loop' ? 'features' : 'criteria';
 
   return (
     <>
@@ -162,9 +168,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                     </button>
                   </>
                 )}
-                {s === 'awaiting_approval' && tab !== 'features' && (
-                  <button type="button" className="btn primary" onClick={() => setTab('features')}>
-                    {t('actions.approvePlan')}
+                {s === 'awaiting_approval' && tab !== proposalTab && (
+                  <button type="button" className="btn primary" onClick={() => setTab(proposalTab)}>
+                    {t(task.mode === 'loop' ? 'actions.approvePlan' : 'actions.approveCriteria')}
                   </button>
                 )}
                 {s === 'backlog' && (
@@ -214,6 +220,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
         </div>
         <div className="drawer-body">
           {tab === 'timeline' && <Timeline entries={timeline} />}
+          {tab === 'criteria' && task && (
+            <CriteriaReview task={task} onDone={() => void loadTask()} onError={onError} />
+          )}
           {tab === 'features' &&
             task &&
             // Until the plan is approved this tab is where it is discussed and approved.

@@ -113,6 +113,35 @@ describe('tasks API', () => {
     expect(res.status).toBe(400);
   });
 
+  it('keeps the acceptance criteria a task was created with', async () => {
+    const res = await post(
+      '/api/tasks',
+      { prompt: 'x', repo, acceptance: '- prints hi' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as Task).acceptance).toBe('- prints hi');
+  });
+
+  it('rejects acceptance criteria that are not text', async () => {
+    const res = await post(
+      '/api/tasks',
+      { prompt: 'x', repo, acceptance: ['- prints hi'] },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/acceptance must be text/);
+  });
+
+  it('refuses to approve criteria of a task that is not waiting for them', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(
+      `/api/tasks/${id}/criteria/approve`,
+      { criteria: '- prints hi' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/not waiting/);
+  });
+
   it('rejects a permission answer without a valid behavior', async () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };

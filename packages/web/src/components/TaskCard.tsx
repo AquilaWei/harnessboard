@@ -35,6 +35,9 @@ export function TaskCard({ task, onOpen, onAction, onDragStart, onDragEnd, dragg
       case 'approvePlan':
         onOpen('features');
         return;
+      case 'approveCriteria':
+        onOpen('criteria');
+        return;
       case 'answerPermission':
         onOpen(); // the question is shown above the tabs
         return;

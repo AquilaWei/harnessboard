@@ -84,6 +84,11 @@ describe('a plan waiting for approval', () => {
     expect(primaryAction(task('awaiting_approval'))).toBe('approvePlan');
   });
 
+  it('offers Review criteria for a single task', () => {
+    const single = { ...task('awaiting_approval'), mode: 'single' } as TaskView;
+    expect(primaryAction(single)).toBe('approveCriteria');
+  });
+
   it('cannot be dragged back into progress', () => {
     expect(dropAction(task('awaiting_approval'), 'active')).toBeNull();
   });

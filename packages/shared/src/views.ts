@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { ContextPolicy, Session, Task, TaskMode } from './task.js';
+import type { ContextPolicy, CriteriaProposal, Session, Task, TaskMode } from './task.js';
 import type { Feature, LoopProgress } from './loop.js';
 import type { ReviewRecord, TaskActivity } from './review.js';
 import type { AgentProvider, TaskAgents } from './agents.js';
@@ -34,6 +34,8 @@ export interface TaskView extends Task {
   plan: { total: number; questions: number; suggestedVerify: string | null } | null;
   /** True while user feedback on the plan waits for the planner. */
   planFeedbackPending: boolean;
+  /** Latest acceptance criteria a single task's agent proposed, until they are approved. */
+  criteria: CriteriaProposal | null;
   /** Tool uses the running session waits on the user to allow or deny, oldest first. */
   permissionRequests: PermissionRequest[];
 }
@@ -83,7 +85,13 @@ export interface CreateTaskInput {
    * when the plan is approved; otherwise required unless `.harnessboard.json` sets one.
    */
   verifyCommand?: string;
-  /** Loop tasks: wait for the user to approve the plan before building (default true). */
+  /** What must hold for the work to count as done; see {@link Task.acceptance}. */
+  acceptance?: string;
+  /**
+   * Wait for the user to approve a plan before building. Loop tasks default to true; single
+   * tasks default to true only without `acceptance`, and their agent then proposes criteria
+   * (refining `acceptance` as a draft when both are given).
+   */
   confirmPlan?: boolean;
   size?: ContextPolicy['size'];
   softPct?: number;

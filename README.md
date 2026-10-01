@@ -49,7 +49,8 @@ hb done 1                            # mark it reviewed
 | ------------------------------------------------------------------------------------- | -------------------------------------------- |
 | `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                      |
 | `hb loop <goal> [--verify <command>]` [same options as `add`]                         | Start a Loop task (see below)                |
-| `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> --verify <command>`     | Review, discuss and approve a Loop plan      |
+| `--criteria <text>` / `--no-discuss` on `add`                                         | Give acceptance criteria, or skip agreeing   |
+| `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> [--verify <command>]`   | Review, discuss and approve criteria or plan |
 | `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)  |
 | `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them  |
 | `hb agents`                                                                           | List agent profiles and whether they run     |
@@ -66,6 +67,30 @@ hb done 1                            # mark it reviewed
 its worktree folder, including edits that were not committed. The branch is kept, so
 committed work can still be merged; remove it with `git branch -D` when you no longer need
 it. Stop a running task first.
+
+## Acceptance criteria: agree first
+
+A task without acceptance criteria does not start changing code right away. Claude first
+agrees with you on what "done" means.
+
+```bash
+hb add "Add a dark mode toggle"                       # discuss criteria first
+hb add "Add a dark mode toggle" --criteria "- toggle persists after reload"   # start now
+```
+
+1. **Read-only discussion:** Claude reads the repository without changing anything, then
+   proposes acceptance criteria and asks what is unclear. The task waits in _Needs you_.
+2. **You decide** on the **Criteria** tab (or with `hb plan <id>`):
+   - **reply** (`hb feedback <id> "..."`): Claude answers and revises the criteria in the
+     same conversation.
+   - **approve** (`hb approve <id>`, or `--criteria "..."` for your own wording): edit the
+     criteria if you like, then approve. The same conversation continues, now allowed to
+     change files.
+3. **Checked against them:** the criteria are saved on the task. The implementer works
+   towards them, and a reviewer checks each one.
+
+Criteria given when creating the task are used as they are. `--no-discuss` (or unticking
+the box in the New task dialog) starts without criteria.
 
 ## Loop mode
 

@@ -22,6 +22,7 @@ export interface NewTask {
   baseRef: string;
   mode: TaskMode;
   verifyCommand: string | null;
+  acceptance: string | null;
   confirmPlan: boolean;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
@@ -73,6 +74,7 @@ const MIGRATIONS = [
    UPDATE sessions SET agent_session_id = id;`,
   `ALTER TABLE tasks ADD COLUMN confirm_plan INTEGER NOT NULL DEFAULT 0;`,
   `CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);`,
+  `ALTER TABLE tasks ADD COLUMN acceptance TEXT;`,
 ];
 
 /**
@@ -99,9 +101,9 @@ export class Store {
     const result = this.db
       .prepare(
         `INSERT INTO tasks (id, title, prompt, repo_path, base_ref, mode, verify_command,
-                            confirm_plan, status, context_policy, permission, agents,
-                            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
+                            acceptance, confirm_plan, status, context_policy, permission,
+                            agents, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
       )
       .run(
         this.nextTaskId(),
@@ -111,6 +113,7 @@ export class Store {
         input.baseRef,
         input.mode,
         input.verifyCommand,
+        input.acceptance,
         input.confirmPlan ? 1 : 0,
         JSON.stringify(input.contextPolicy),
         JSON.stringify(input.permission),
@@ -140,6 +143,7 @@ export class Store {
         | 'worktreePath'
         | 'resumeAt'
         | 'verifyCommand'
+        | 'acceptance'
         | 'permission'
         | 'agents'
       >
@@ -152,6 +156,7 @@ export class Store {
       worktreePath: 'worktree_path',
       resumeAt: 'resume_at',
       verifyCommand: 'verify_command',
+      acceptance: 'acceptance',
       permission: 'permission',
       agents: 'agents',
     };
@@ -264,6 +269,16 @@ export class Store {
     return row ? toEvent(row) : undefined;
   }
 
+  /** True when any session of the task recorded an event after event `afterId`. */
+  hasSessionEventsAfter(taskId: number, afterId: number): boolean {
+    const row = this.db
+      .prepare(
+        'SELECT 1 FROM events WHERE task_id = ? AND id > ? AND session_id IS NOT NULL LIMIT 1',
+      )
+      .get(taskId, afterId);
+    return row !== undefined;
+  }
+
   /** Most recent event of one kind within a session, e.g. its final result. */
   lastSessionEvent(sessionId: string, kind: string): StoredEvent | undefined {
     const row = this.db
@@ -353,6 +368,7 @@ function toTask(row: Row): Task {
     status: row.status as TaskStatus,
     mode: row.mode as TaskMode,
     verifyCommand: (row.verify_command as string | null) ?? null,
+    acceptance: (row.acceptance as string | null) ?? null,
     confirmPlan: Number(row.confirm_plan) === 1,
     contextPolicy: JSON.parse(String(row.context_policy)) as ContextPolicy,
     permission: JSON.parse(String(row.permission)) as PermissionPolicy,

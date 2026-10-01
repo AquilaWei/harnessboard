@@ -85,26 +85,36 @@ describe('a task whose session completes', () => {
   });
 
   it('moves to review', async () => {
-    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     expect(harness.store.getTask(task.id)!.status).toBe('review');
   });
 
   it('runs the agent inside its own worktree on a task branch', async () => {
-    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     const stored = harness.store.getTask(task.id)!;
     expect([stored.branch, fakeRuns()[0]!.cwd]).toEqual(['hb/1-fix-the-bug', stored.worktreePath]);
   });
 
   it('sends the task prompt as the first message', async () => {
-    await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    await harness.createTask({ prompt: 'Fix the bug', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     expect(fakeRuns()[0]!.received).toEqual(['Fix the bug']);
   });
 
   it('records the context window the agent reported', async () => {
-    await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    await harness.createTask({ prompt: 'Fix the bug', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     expect(harness.store.lastKnownContextWindow('claude')).toBe(100_000);
   });
@@ -122,7 +132,14 @@ describe('a session that crosses the soft threshold', () => {
   });
 
   const create = () =>
-    harness.createTask({ prompt: 'Build it', repo, softPct: 30, hardPct: 60, queue: true });
+    harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      softPct: 30,
+      hardPct: 60,
+      queue: true,
+    });
 
   it('asks the agent to wrap up mid-session', async () => {
     await create();
@@ -160,6 +177,7 @@ describe('a wrap-up reply that reports the task done', () => {
     const task = await harness.createTask({
       prompt: 'Build it',
       repo,
+      confirmPlan: false,
       softPct: 30,
       hardPct: 60,
       queue: true,
@@ -175,6 +193,7 @@ describe('a session that crosses the hard threshold', () => {
     const task = await harness.createTask({
       prompt: 'Build it',
       repo,
+      confirmPlan: false,
       softPct: 30,
       hardPct: 60,
       queue: true,
@@ -200,14 +219,19 @@ describe('a session that hits the usage limit', () => {
   });
 
   it('waits for the reported reset time', async () => {
-    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     const stored = harness.store.getTask(task.id)!;
     expect([stored.status, stored.resumeAt]).toEqual(['waiting_quota', FUTURE_SEC * 1000]);
   });
 
   it('resumes the same session once the reset time has passed', async () => {
-    await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    await harness.createTask({ prompt: 'Build it', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     harness.tick(FUTURE_SEC * 1000 + 1);
     await harness.waitForIdle();
@@ -218,9 +242,14 @@ describe('a session that hits the usage limit', () => {
 describe('quota utilisation above the pause threshold', () => {
   it('keeps new tasks queued', async () => {
     scenario([[init(), rateLimit('allowed', 0.97, FUTURE_SEC), result('done')]]);
-    await harness.createTask({ prompt: 'First', repo, queue: true });
+    await harness.createTask({ prompt: 'First', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
-    const second = await harness.createTask({ prompt: 'Second', repo, queue: true });
+    const second = await harness.createTask({
+      prompt: 'Second',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     expect(harness.store.getTask(second.id)!.status).toBe('queued');
   });
@@ -229,7 +258,7 @@ describe('quota utilisation above the pause threshold', () => {
 describe('restarting the harness', () => {
   it('restores the last reported quota', async () => {
     scenario([[init(), rateLimit('allowed', 0.4, FUTURE_SEC), result('done')]]);
-    await harness.createTask({ prompt: 'First', repo, queue: true });
+    await harness.createTask({ prompt: 'First', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     const restarted = new Harness(harness.config, harness.store);
     expect(restarted.status().quotas['claude-code']?.fiveHourUtilization).toBe(0.4);
@@ -239,7 +268,12 @@ describe('restarting the harness', () => {
 describe('stopping a running task', () => {
   it('kills the agent and marks the task stopped', async () => {
     scenario([[init(), hang]]);
-    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'running');
     harness.stopTask(task.id);
     await harness.waitForIdle();
@@ -253,7 +287,12 @@ describe('a tool the task does not allow', () => {
   });
 
   it('starts the agent so that it asks instead of refusing', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
     await harness.waitForIdle();
@@ -261,7 +300,12 @@ describe('a tool the task does not allow', () => {
   });
 
   it('pauses the task until the user answers', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     expect(harness.permissionRequests(task.id)).toMatchObject([
       {
@@ -274,7 +318,12 @@ describe('a tool the task does not allow', () => {
   });
 
   it('lets the agent go on once allowed', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
     await harness.waitForIdle();
@@ -286,14 +335,24 @@ describe('a tool the task does not allow', () => {
 
   it('goes back to running once answered', async () => {
     scenario([[init(), askBash('r1', 'node hello.js', 'node *'), hang]]);
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
     expect(harness.store.getTask(task.id)!.status).toBe('running');
   });
 
   it('keeps the task rules unchanged when allowed once', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
     await harness.waitForIdle();
@@ -301,7 +360,12 @@ describe('a tool the task does not allow', () => {
   });
 
   it('adds the rules given with the answer to the task', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, {
       requestId: 'r1',
@@ -313,7 +377,12 @@ describe('a tool the task does not allow', () => {
   });
 
   it('passes the reason to the agent when denied', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, {
       requestId: 'r1',
@@ -327,7 +396,12 @@ describe('a tool the task does not allow', () => {
   });
 
   it('records the request and the answer in the history', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, { requestId: 'r1', behavior: 'deny' });
     await harness.waitForIdle();
@@ -349,7 +423,12 @@ describe('a tool the task does not allow', () => {
   });
 
   it('rejects an invalid rule without answering the agent', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     expect(() =>
       harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow', rules: ['node ok'] }),
@@ -365,7 +444,12 @@ describe('a tool the task does not allow', () => {
   });
 
   it('is stopped, not left waiting, when the user stops it', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.stopTask(task.id);
     await harness.waitForIdle();
@@ -395,7 +479,12 @@ describe('a tool the task rules already cover', () => {
         result('done'),
       ],
     ]);
-    const task = await harness.createTask({ prompt: 'Run it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, {
       requestId: 'r1',
@@ -410,7 +499,13 @@ describe('a tool the task rules already cover', () => {
 describe('task models', () => {
   it('runs the implementer with the model chosen for the task', async () => {
     scenario([[init(), result('done')]]);
-    await harness.createTask({ prompt: 'x', repo, implementerModel: 'haiku', queue: true });
+    await harness.createTask({
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      implementerModel: 'haiku',
+      queue: true,
+    });
     await harness.waitForIdle();
     const args = fakeRuns()[0]!.args;
     expect(args[args.indexOf('--model') + 1]).toBe('haiku');
@@ -418,14 +513,19 @@ describe('task models', () => {
 
   it('uses the profile model when the task does not choose one', async () => {
     scenario([[init(), result('done')]]);
-    await harness.createTask({ prompt: 'x', repo, queue: true });
+    await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     expect(fakeRuns()[0]!.args).not.toContain('--model');
   });
 
   it('rejects a model id that could be read as an option', async () => {
     await expect(
-      harness.createTask({ prompt: 'x', repo, implementerModel: '--dangerously-skip-permissions' }),
+      harness.createTask({
+        prompt: 'x',
+        repo,
+        confirmPlan: false,
+        implementerModel: '--dangerously-skip-permissions',
+      }),
     ).rejects.toThrow(/is not a model id/);
   });
 
@@ -436,7 +536,12 @@ describe('task models', () => {
   });
 
   it('keeps the other agent settings when changing one', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, implementerModel: 'opus' });
+    const task = await harness.createTask({
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      implementerModel: 'opus',
+    });
     const updated = harness.setAgents(task.id, { reviewer: null });
     expect([updated.agents.implementerModel, updated.agents.reviewer]).toEqual(['opus', null]);
   });
@@ -458,7 +563,7 @@ describe('setAllowedTools', () => {
 
   it('passes the new rules to the next session', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
     harness.setAllowedTools(task.id, ['Bash(./gradlew *)']);
     harness.queueTask(task.id);
     await harness.waitForIdle();
@@ -473,7 +578,12 @@ describe('setAllowedTools', () => {
 
   it('refuses while the task is running', async () => {
     scenario([[init(), hang]]);
-    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'running');
     expect(() => harness.setAllowedTools(task.id, ['WebSearch'])).toThrow(/stop it before/);
   });
@@ -482,7 +592,12 @@ describe('setAllowedTools', () => {
 describe('commitDiff', () => {
   it('refuses a ref that is not a commit of the task', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     await expect(harness.commitDiff(task.id, '--output=/tmp/x')).rejects.toThrow(
       /is not on task 1's branch/,
@@ -493,7 +608,12 @@ describe('commitDiff', () => {
 describe('deleting a task', () => {
   it('removes the task with its sessions and events', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     await harness.deleteTask(task.id);
     expect([
@@ -505,7 +625,12 @@ describe('deleting a task', () => {
 
   it('removes its worktree directory', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     const worktree = harness.store.getTask(task.id)!.worktreePath!;
     await harness.deleteTask(task.id);
@@ -514,7 +639,12 @@ describe('deleting a task', () => {
 
   it('keeps its branch so committed work can still be merged', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     await harness.deleteTask(task.id);
     expect(git(repo, 'branch', '--list', 'hb/1-fix-the-bug')).toContain('hb/1-fix-the-bug');
@@ -522,7 +652,12 @@ describe('deleting a task', () => {
 
   it('works when the worktree directory was already deleted by hand', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'Fix the bug', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     rmSync(harness.store.getTask(task.id)!.worktreePath!, { recursive: true });
     await harness.deleteTask(task.id);
@@ -531,7 +666,12 @@ describe('deleting a task', () => {
 
   it('refuses while the task is running', async () => {
     scenario([[init(), hang]]);
-    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'running');
     await expect(harness.deleteTask(task.id)).rejects.toThrow(/stop it before deleting/);
   });
@@ -560,7 +700,12 @@ describe('createTask', () => {
 
   it('rejects allowed tools that are not tool rules', async () => {
     await expect(
-      harness.createTask({ prompt: 'x', repo, allowedTools: ['anything is fine locally'] }),
+      harness.createTask({
+        prompt: 'x',
+        repo,
+        confirmPlan: false,
+        allowedTools: ['anything is fine locally'],
+      }),
     ).rejects.toThrow(/not a tool rule: "anything is fine locally"/);
   });
 
@@ -571,7 +716,7 @@ describe('createTask', () => {
 
   it('rejects an invalid context policy', async () => {
     await expect(
-      harness.createTask({ prompt: 'x', repo, softPct: 60, hardPct: 50 }),
+      harness.createTask({ prompt: 'x', repo, confirmPlan: false, softPct: 60, hardPct: 50 }),
     ).rejects.toThrow(RangeError);
   });
 });
@@ -601,7 +746,12 @@ describe('updateSettings', () => {
 describe('retrying a session that never reached the model', () => {
   it('starts a fresh session instead of resuming one that does not exist', async () => {
     scenario([[exitWith(1, 'No conversation found')]], [[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     harness.queueTask(task.id);
     await harness.waitForIdle();
@@ -612,7 +762,12 @@ describe('retrying a session that never reached the model', () => {
 describe('an agent that exits before producing a result', () => {
   it('reports its stderr in the session notice', async () => {
     scenario([[exitWith(1, 'No conversation found')]]);
-    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     const notice = harness.store.lastEvent(task.id, 'notice')!.data as { message: string };
     expect(notice.message).toContain('No conversation found');
@@ -632,7 +787,7 @@ describe('an agent CLI that cannot be found', () => {
       },
     };
     const missing = new Harness(config, harness.store);
-    const task = await missing.createTask({ prompt: 'x', repo, queue: true });
+    const task = await missing.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
     await missing.waitForIdle();
     const notices = missing.store.listEvents(task.id).map((e) => JSON.stringify(e.data));
     expect(notices.some((n) => n.includes('HARNESSBOARD_CLAUDE_PATH'))).toBe(true);

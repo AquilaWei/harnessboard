@@ -59,14 +59,19 @@ function fakeRuns(): FakeRun[] {
 describe('a CLI that assigns its own session ids', () => {
   it('records the id it reports', async () => {
     scenario([[init('agent-7'), assistantText('done', 5_000), result('done')]]);
-    const task = await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     expect(harness.store.listSessions(task.id)[0]!.agentSessionId).toBe('agent-7');
   });
 
   it('passes the prompt as an argument', async () => {
     scenario([[init('agent-7'), result('done')]]);
-    await harness.createTask({ prompt: 'Build it', repo, queue: true });
+    await harness.createTask({ prompt: 'Build it', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     expect(fakeRuns()[0]!.args).toEqual(['--prompt', 'Build it']);
   });
@@ -81,7 +86,14 @@ describe('a CLI without mid-turn input crossing the soft threshold', () => {
   });
 
   const create = () =>
-    harness.createTask({ prompt: 'Build it', repo, softPct: 30, hardPct: 60, queue: true });
+    harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      softPct: 30,
+      hardPct: 60,
+      queue: true,
+    });
 
   it('asks for the wrap-up by resuming after the turn ends', async () => {
     await create();

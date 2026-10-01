@@ -135,6 +135,27 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
         </li>
       );
     }
+    case 'criteria':
+      return (
+        <li className="step">
+          <StepHead
+            icon="📋"
+            title={t(entry.proposal.criteria ? 'timeline.criteria' : 'timeline.criteriaMissing')}
+            meta={time}
+          />
+          <details>
+            <summary>{t('timeline.reply')}</summary>
+            <Markdown className="reply" text={entry.proposal.reply} />
+          </details>
+        </li>
+      );
+    case 'criteria_approved':
+      return (
+        <li className="step step-good">
+          <StepHead icon="✓" title={t('timeline.criteriaApproved')} meta={time} />
+          <Markdown className="reply" text={entry.approval.criteria} />
+        </li>
+      );
     case 'plan_feedback':
       return (
         <li className="step step-user">

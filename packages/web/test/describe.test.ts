@@ -122,6 +122,70 @@ describe('describeTask for plans', () => {
   });
 });
 
+describe('describeTask for acceptance criteria', () => {
+  const proposal = { criteria: '- prints hi', reply: '## Acceptance criteria\n- prints hi' };
+
+  it('says the agent is reading the repository to propose criteria', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'running',
+      activity: { phase: 'planning', agentId: 'claude' },
+      criteria: null,
+    } as unknown as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'discussing',
+      tone: 'working',
+      vars: { agent: 'claude' },
+    });
+  });
+
+  it('asks the user to approve proposed criteria', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'awaiting_approval',
+      criteria: proposal,
+    } as unknown as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'criteriaReady',
+      tone: 'attention',
+      vars: { agent: 'claude' },
+    });
+  });
+
+  it('asks the user to answer when the agent proposed no criteria', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'awaiting_approval',
+      criteria: { criteria: null, reply: 'What should it print?' },
+    } as unknown as TaskView;
+    expect(describeTask(task).key).toBe('criteriaMissing');
+  });
+
+  it('says the agent is revising its criteria', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'running',
+      activity: { phase: 'planning', agentId: 'claude' },
+      criteria: proposal,
+    } as unknown as TaskView;
+    expect(describeTask(task).key).toBe('revisingCriteria');
+  });
+
+  it('says queued feedback waits for the agent', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'queued',
+      planFeedbackPending: true,
+    } as unknown as TaskView;
+    expect(describeTask(task).key).toBe('revisingCriteriaQueued');
+  });
+});
+
 describe('describeTask for permission requests', () => {
   it('names the agent, tool and command it waits on', () => {
     const task = {

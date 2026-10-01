@@ -20,6 +20,14 @@ are test versions that have not been accepted on real machines yet.
     `hb feedback`), then approve with the verify command you confirm (`hb approve`).
   - The verify command is now optional when creating a Loop task.
 
+- **Agree on acceptance criteria first:** a single task created without acceptance
+  criteria starts with a read-only discussion. Claude reads the repository and proposes
+  criteria with its questions; reply as often as needed, edit them and approve (on the new
+  Criteria tab, or with `hb feedback` / `hb approve`). Only then does it start changing
+  files, in the same conversation. The implementer and the reviewer both get the approved
+  criteria. Give them up front with `--criteria`, or skip the discussion with
+  `--no-discuss`.
+
 - **Delete tasks:** from the task panel (with an in-place confirmation) or with
   `hb delete <id>`. The task's history and worktree folder are removed; its branch is kept
   so committed work can still be merged. Running tasks must be stopped first.

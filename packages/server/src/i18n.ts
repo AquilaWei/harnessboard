@@ -35,6 +35,10 @@ const en = {
   suggestedVerify: 'Suggested verify command (not active until you approve): {command}',
   planNext:
     'Reply with `hb feedback {id} "..."`, or start with `hb approve {id} --verify "<command>"`.',
+  criteriaNext:
+    'Reply with `hb feedback {id} "..."`, or start with `hb approve {id}` (`--criteria "..."` to approve your own).',
+  noCriteria: 'Task {id} has no acceptance criteria.',
+  criteriaHeading: 'acceptance criteria:',
   noVerdict: 'no verdict',
   reviewLine: 'last review by {agent} (round {round}): {verdict}',
 };
@@ -74,6 +78,10 @@ const zhTW: Messages = {
   suggestedVerify: '建議的驗證指令（你確認後才生效）：{command}',
   planNext:
     '用 `hb feedback {id} "..."` 回覆意見，或用 `hb approve {id} --verify "<指令>"` 確認開工。',
+  criteriaNext:
+    '用 `hb feedback {id} "..."` 回覆意見，或用 `hb approve {id}` 確認開工（加 `--criteria "..."` 改用你自己寫的標準）。',
+  noCriteria: '任務 {id} 沒有驗收標準。',
+  criteriaHeading: '驗收標準：',
   noVerdict: '沒有結論',
   reviewLine: '最近一次審查：{agent}（第 {round} 輪）：{verdict}',
 };

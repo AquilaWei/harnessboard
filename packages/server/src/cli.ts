@@ -55,6 +55,7 @@ function withTaskOptions(command: Command): Command {
   return command
     .option('-C, --repo <dir>', 'repository to work in', process.cwd())
     .option('--title <title>', 'short title (defaults to the first line of the prompt)')
+    .option('--criteria <text>', 'acceptance criteria: what must hold for the work to be done')
     .option('--base <ref>', 'git ref to branch from (defaults to the current branch)')
     .addOption(
       new Option('--size <size>', 'task size; sets the soft context threshold').choices([
@@ -83,6 +84,7 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
     definedOnly({
       prompt,
       ...loop,
+      acceptance: o.criteria,
       repo: o.repo,
       title: o.title,
       baseRef: o.base,
@@ -103,9 +105,14 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
 withTaskOptions(
   program
     .command('add')
-    .description('create a task and queue it')
-    .argument('<prompt...>', 'what the agent should do'),
-).action((words: string[], o: AddOptions) => createTask(words.join(' '), o));
+    .description(
+      'create a task and queue it; without --criteria the agent first proposes acceptance criteria',
+    )
+    .argument('<prompt...>', 'what the agent should do')
+    .option('--no-discuss', 'without --criteria, start right away instead of agreeing on them'),
+).action((words: string[], o: AddOptions & { discuss: boolean }) =>
+  createTask(words.join(' '), o, { confirmPlan: o.discuss }),
+);
 
 withTaskOptions(
   program
@@ -127,9 +134,16 @@ withTaskOptions(
 
 program
   .command('plan')
-  .description("show a loop task's proposed plan, the planner's questions and reply")
+  .description("show a task's proposed plan or acceptance criteria, with the agent's questions")
   .argument('<id>', 'task id', parseInteger)
   .action(async (id: number) => {
+    const task = await client().getTask(id);
+    if (task.mode === 'single') {
+      if (task.criteria) console.log(`${task.criteria.reply}\n\n${t('criteriaNext', { id })}`);
+      else if (task.acceptance) console.log(task.acceptance);
+      else console.log(t('noCriteria', { id }));
+      return;
+    }
     const plan = await client().plan(id);
     if (plan.reply) console.log(`${plan.reply}\n`);
     if (plan.error) console.log(`✗ ${plan.error}`);
@@ -144,7 +158,7 @@ program
 
 program
   .command('feedback')
-  .description('reply to a proposed plan; the planner revises it')
+  .description('reply to a proposed plan or acceptance criteria; the agent revises them')
   .argument('<id>', 'task id', parseInteger)
   .argument('<message...>', 'your feedback')
   .action(async (id: number, words: string[]) => {
@@ -154,11 +168,17 @@ program
 
 program
   .command('approve')
-  .description('approve a proposed plan and start building')
+  .description('approve a proposed plan or acceptance criteria and start building')
   .argument('<id>', 'task id', parseInteger)
-  .option('--verify <command>', 'verify command to use (required unless the task has one)')
-  .action(async (id: number, o: { verify?: string }) => {
-    const task = await client().approvePlan(id, o.verify);
+  .option('--verify <command>', 'loop tasks: verify command (required unless the task has one)')
+  .option('--criteria <text>', 'single tasks: approve these criteria instead of the proposed ones')
+  .action(async (id: number, o: { verify?: string; criteria?: string }) => {
+    const api = client();
+    const { mode } = await api.getTask(id);
+    const task =
+      mode === 'single'
+        ? await api.approveCriteria(id, o.criteria)
+        : await api.approvePlan(id, o.verify);
     console.log(t('taskStatus', { id, status: task.status }));
   });
 
@@ -193,6 +213,11 @@ program
     console.log(formatTaskRow(task));
     console.log(`  repo:     ${task.repoPath} (${task.baseRef})`);
     console.log(`  worktree: ${task.worktreePath ?? '-'} ${task.branch ?? ''}`);
+    if (task.acceptance) {
+      console.log(`  ${t('criteriaHeading')}`);
+      for (const line of task.acceptance.split('\n')) console.log(`    ${line}`);
+    }
+    if (task.criteria) console.log(`  ${t('criteriaNext', { id })}`);
     if (task.context) {
       const c = task.context;
       const line = t('contextLine', {
@@ -415,10 +440,12 @@ program
 interface LoopInput {
   mode?: 'loop';
   verifyCommand?: string;
+  confirmPlan?: boolean;
 }
 
 interface AddOptions {
   repo: string;
+  criteria?: string;
   title?: string;
   base?: string;
   size?: TaskSize;

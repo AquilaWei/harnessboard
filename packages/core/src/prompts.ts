@@ -145,3 +145,89 @@ export function loopSessionPrompt(
   if (note) lines.push('', `Handoff note from the previous session:\n${note}`);
   return lines.join('\n');
 }
+
+/** Heading the discussion session puts its proposed criteria under; see {@link parseCriteria}. */
+export const CRITERIA_HEADING = '## Acceptance criteria';
+
+/** The task as every implementer and reviewer sees it: the request plus agreed criteria. */
+export function taskGoal(prompt: string, acceptance: string | null): string {
+  if (!acceptance) return prompt;
+  return [
+    prompt,
+    '',
+    'Acceptance criteria, agreed with the user (the work is done when all of them hold):',
+    acceptance,
+  ].join('\n');
+}
+
+/**
+ * First session of a single task that has no agreed criteria yet: a read-only discussion
+ * that ends with proposed criteria and questions. `draft` is criteria the user gave.
+ */
+export function criteriaPrompt(request: string, draft: string | null): string {
+  const lines = [
+    'Before any work starts on the task below, agree with the user on what "done" means.',
+    'This session is read-only: study the repository, but do not change anything.',
+    '',
+    `Task:\n${request}`,
+  ];
+  if (draft) lines.push('', `The user's draft acceptance criteria:\n${draft}`);
+  lines.push(
+    '',
+    'Reply in this shape:',
+    CRITERIA_HEADING,
+    '- One concrete, observable check per line (behaviour, tests that pass, edge cases',
+    '  handled). Prefer checks a test or a command can show.',
+    '## Questions',
+    '- Decisions you need from the user (scope, trade-offs, anything unclear). Leave this',
+    '  section out if nothing is unclear.',
+    '',
+    'Keep it short. The user may reply before approving; nothing is built until then.',
+  );
+  return lines.join('\n');
+}
+
+/** Sent to the discussion session when the user replies instead of approving. */
+export function criteriaRevisionPrompt(message: string): string {
+  return [
+    '[harness] The user read your proposal and replied:',
+    '',
+    message,
+    '',
+    'Answer their points and reply with the revised proposal in the same shape, starting with',
+    `\`${CRITERIA_HEADING}\`. This session is still read-only.`,
+  ].join('\n');
+}
+
+/** Sent when resuming the discussion session after the user approved the criteria. */
+export function criteriaApprovedPrompt(criteria: string): string {
+  return [
+    '[harness] The user approved these acceptance criteria:',
+    '',
+    criteria,
+    '',
+    'You may now change files. Implement the task so that every criterion holds, check them',
+    'as far as you can, and commit your work.',
+  ].join('\n');
+}
+
+/**
+ * The criteria section of a discussion reply: the lines under {@link CRITERIA_HEADING} up
+ * to the next heading of the same level, without a closing remark after the list (a
+ * paragraph that is not a list item, after a blank line); `null` when there is no such
+ * section or it is empty.
+ */
+export function parseCriteria(reply: string): string | null {
+  const lines = reply.split('\n');
+  const start = lines.findIndex(
+    (line) => line.trim().toLowerCase() === CRITERIA_HEADING.toLowerCase(),
+  );
+  if (start < 0) return null;
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^#{1,2}\s/.test(line));
+  const section = (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
+  const blocks = section.split(/\n\s*\n/);
+  const listed = (block: string) => /^\s*([-*+]|\d+[.)]|#)/.test(block);
+  while (blocks.length > 1 && !listed(blocks.at(-1)!)) blocks.pop();
+  return blocks.join('\n\n').trim() || null;
+}

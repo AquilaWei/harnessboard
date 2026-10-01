@@ -45,6 +45,8 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   const [repo, setRepo] = useState(recent[0] ?? '');
   const [mode, setMode] = useState<TaskMode>('single');
   const [verify, setVerify] = useState('');
+  const [acceptance, setAcceptance] = useState('');
+  const [discuss, setDiscuss] = useState(true);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [who, setWho] = useState<AgentChoice>({
     implementer: 'claude',
@@ -97,7 +99,9 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           repo: repo.trim(),
           mode,
           verifyCommand: mode === 'loop' ? verify.trim() || undefined : undefined,
-          confirmPlan: mode === 'loop' ? confirmPlan : undefined,
+          acceptance: acceptance.trim() || undefined,
+          // Criteria given up front are used as they are; blank ones are agreed on first.
+          confirmPlan: mode === 'loop' ? confirmPlan : acceptance.trim() ? undefined : discuss,
           implementer: who.implementer,
           implementerModel: who.implementerModel,
           reviewer: who.reviewer,
@@ -161,6 +165,37 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
             autoFocus
           />
         </label>
+
+        <label className="field">
+          <span>{t('form.acceptance')}</span>
+          <textarea
+            rows={3}
+            value={acceptance}
+            placeholder={t('form.acceptancePlaceholder')}
+            onChange={(e) => setAcceptance(e.target.value)}
+          />
+          <small className="hint">
+            {t(
+              mode === 'loop'
+                ? 'form.acceptanceHintLoop'
+                : acceptance.trim()
+                  ? 'form.acceptanceHintGiven'
+                  : discuss
+                    ? 'form.acceptanceHint'
+                    : 'form.acceptanceHintSkip',
+            )}
+          </small>
+        </label>
+        {mode === 'single' && !acceptance.trim() && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={discuss}
+              onChange={(e) => setDiscuss(e.target.checked)}
+            />
+            <span>{t('form.discuss')}</span>
+          </label>
+        )}
 
         <FolderField value={repo} onChange={setRepo} recent={recent} />
 

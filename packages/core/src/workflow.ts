@@ -4,6 +4,7 @@ import path from 'node:path';
 import { FEATURE_LIST_FILE, contextPct, resolveThresholds } from '@harnessboard/shared';
 import type {
   AgentRole,
+  CriteriaProposal,
   FeatureSnapshot,
   PlanProposal,
   ReviewRecord,
@@ -13,14 +14,20 @@ import type {
   TaskActivity,
   TaskStatus,
 } from '@harnessboard/shared';
+import type { SessionAccess } from './agent.js';
 import type { HarnessConfig } from './config.js';
 import { missingFeatures, readPlan, runVerify } from './loop.js';
 import {
   QUOTA_RESUME_PROMPT,
   continuationPrompt,
+  criteriaApprovedPrompt,
+  criteriaPrompt,
+  criteriaRevisionPrompt,
   initializerPrompt,
   loopSessionPrompt,
+  parseCriteria,
   planRevisionPrompt,
+  taskGoal,
 } from './prompts.js';
 import { parseVerdict, reviewFeedback, reviewPrompt } from './review.js';
 import type { SessionOutcome } from './runner.js';
@@ -31,6 +38,8 @@ import { headCommit, mergeBase, porcelainStatus } from './worktree.js';
 export interface SessionPlan {
   role: AgentRole;
   agentId: string;
+  /** Reviewers and a single task's criteria discussion only read; everything else edits. */
+  access: SessionAccess;
   /** Session to continue; `null` starts a new one. */
   resume: Session | null;
   prompt: string;
@@ -66,6 +75,7 @@ export class Workflow {
     if (!last) return this.implement(task, this.firstPrompt(task));
     const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
     if (feedback !== null) return this.revisePlan(task, feedback, last);
+    if (this.justApproved(task)) return this.startAfterDiscussion(task, last);
     if (last.endReason === 'handoff' || last.endReason === 'context_hard_limit') {
       return this.continuation(task, this.handoffNote(task));
     }
@@ -96,15 +106,13 @@ export class Workflow {
       last.agentSessionId !== null &&
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
-    if (resumable) {
-      return { role: 'reviewer', agentId: reviewer, resume: last, prompt: QUOTA_RESUME_PROMPT };
-    }
+    const base = { role: 'reviewer', agentId: reviewer, access: 'readOnly' } as const;
+    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
     const verify = task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.verify ?? null) : null;
     return {
-      role: 'reviewer',
-      agentId: reviewer,
+      ...base,
       resume: null,
-      prompt: reviewPrompt(task.prompt, request, verify),
+      prompt: reviewPrompt(this.goal(task), request, verify, task.acceptance !== null),
     };
   }
 
@@ -140,24 +148,77 @@ export class Workflow {
   }
 
   private implement(task: Task, prompt: string, resume: Session | null = null): SessionPlan {
-    return { role: 'implementer', agentId: task.agents.implementer, resume, prompt };
+    const access = this.discussing(task) ? 'readOnly' : 'edit';
+    return { role: 'implementer', agentId: task.agents.implementer, access, resume, prompt };
+  }
+
+  /** The task as the agents are given it: the request plus any agreed criteria. */
+  private goal(task: Task): string {
+    return taskGoal(task.prompt, task.acceptance);
   }
 
   private firstPrompt(task: Task): string {
-    return task.mode === 'loop' ? initializerPrompt(task.prompt, task.verifyCommand) : task.prompt;
+    if (task.mode === 'loop') return initializerPrompt(this.goal(task), task.verifyCommand);
+    return this.discussing(task) ? criteriaPrompt(task.prompt, task.acceptance) : this.goal(task);
   }
 
-  /** A loop task before its plan is approved (or accepted without approval). */
+  /**
+   * Before the plan is approved: a loop task's feature list (or until it was accepted
+   * without approval), or a single task's acceptance criteria when it discusses them first.
+   */
   private inPlanning(task: Task): boolean {
-    return task.mode === 'loop' && this.snapshots(task.id).length === 0;
+    if (task.mode === 'loop') return this.snapshots(task.id).length === 0;
+    return this.discussing(task);
   }
 
-  /** The user's reply to the latest plan proposal, if the planner has not seen it yet. */
+  /** A single task agreeing on acceptance criteria with the user; it may not edit yet. */
+  private discussing(task: Task): boolean {
+    return (
+      task.mode === 'single' &&
+      task.confirmPlan &&
+      !this.host.store.lastEvent(task.id, 'criteria_approved')
+    );
+  }
+
+  /**
+   * The criteria were approved and no session has run since, so `last` was the discussion.
+   * A resumed session keeps its record, so this is told by events rather than sessions.
+   */
+  private justApproved(task: Task): boolean {
+    if (task.mode !== 'single') return false;
+    const approval = this.host.store.lastEvent(task.id, 'criteria_approved');
+    return !!approval && !this.host.store.hasSessionEventsAfter(task.id, approval.id);
+  }
+
+  /**
+   * Continues the discussion's conversation, which already knows the repository, now
+   * allowed to edit; starts afresh with the agreed goal when that is not possible.
+   */
+  private startAfterDiscussion(task: Task, last: Session): SessionPlan {
+    const resumable =
+      last.role === 'implementer' &&
+      last.agentSessionId !== null &&
+      last.contextTokens > 0 &&
+      this.hasBudget(task, last);
+    if (resumable) return this.implement(task, criteriaApprovedPrompt(task.acceptance!), last);
+    return this.implement(task, this.goal(task));
+  }
+
+  /** The user's reply to the latest proposal, if the planner has not seen it yet. */
   pendingPlanFeedback(taskId: number): string | null {
     const feedback = this.host.store.lastEvent(taskId, 'plan_feedback');
-    const proposal = this.host.store.lastEvent(taskId, 'plan');
-    if (!feedback || (proposal && proposal.id > feedback.id)) return null;
+    const proposals = [
+      this.host.store.lastEvent(taskId, 'plan'),
+      this.host.store.lastEvent(taskId, 'criteria'),
+    ];
+    if (!feedback || proposals.some((p) => p && p.id > feedback.id)) return null;
     return (feedback.data as { message: string }).message;
+  }
+
+  /** Latest proposed criteria of a single task, until the user approves them. */
+  criteriaProposal(task: Task): CriteriaProposal | null {
+    if (!this.discussing(task)) return null;
+    return (this.host.store.lastEvent(task.id, 'criteria')?.data as CriteriaProposal) ?? null;
   }
 
   /**
@@ -170,17 +231,19 @@ export class Workflow {
       last.agentSessionId !== null &&
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
-    if (resumable) return this.implement(task, planRevisionPrompt(message), last);
-    return this.implement(
-      task,
-      continuationPrompt(this.firstPrompt(task), null, planRevisionPrompt(message)),
-    );
+    const revision =
+      task.mode === 'loop' ? planRevisionPrompt(message) : criteriaRevisionPrompt(message);
+    if (resumable) return this.implement(task, revision, last);
+    return this.implement(task, continuationPrompt(this.firstPrompt(task), null, revision));
   }
 
   private continuation(task: Task, note: string | null): SessionPlan {
     const feedback = this.openFeedback(task.id);
     if (task.mode === 'single') {
-      return this.implement(task, continuationPrompt(task.prompt, note, feedback));
+      if (this.discussing(task)) {
+        return this.implement(task, continuationPrompt(this.firstPrompt(task), note));
+      }
+      return this.implement(task, continuationPrompt(this.goal(task), note, feedback));
     }
     // Until the plan is approved, a follow-up session keeps planning, never builds.
     if (this.inPlanning(task) || !existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE))) {
@@ -190,7 +253,7 @@ export class Workflow {
     const failed = verify && !verify.ok ? verify : null;
     return this.implement(
       task,
-      loopSessionPrompt(task.prompt, task.verifyCommand!, failed, note, feedback),
+      loopSessionPrompt(this.goal(task), task.verifyCommand!, failed, note, feedback),
     );
   }
 
@@ -237,7 +300,8 @@ export class Workflow {
     }
     switch (outcome.reason) {
       case 'completed':
-        if (task.mode === 'loop') await this.finishLoopStep(task, signal, outcome.finalText);
+        if (this.discussing(task)) this.proposeCriteria(task, outcome.finalText);
+        else if (task.mode === 'loop') await this.finishLoopStep(task, signal, outcome.finalText);
         else await this.stepDone(task);
         return;
       case 'handoff':
@@ -247,6 +311,19 @@ export class Workflow {
       default:
         this.interrupted(task, outcome);
     }
+  }
+
+  /** Nothing is changed until the user approves the criteria or replies to them. */
+  private proposeCriteria(task: Task, reply: string): void {
+    const proposal: CriteriaProposal = { criteria: parseCriteria(reply), reply };
+    this.host.store.appendEvent(task.id, null, 'criteria', proposal);
+    this.host.notice(
+      task.id,
+      proposal.criteria
+        ? 'acceptance criteria proposed; waiting for your approval'
+        : 'no acceptance criteria section in the reply; reply to the agent or write them yourself',
+    );
+    this.host.setStatus(task.id, 'awaiting_approval');
   }
 
   /** Quota, stop and error end a session the same way for every role. */

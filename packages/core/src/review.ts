@@ -16,11 +16,15 @@ export function parseVerdict(reply: string): { verdict: Verdict | null; findings
   return { verdict, findings: (verdict ? rest.join('\n') : reply).trim() };
 }
 
-/** First message of a reviewer session. It runs read-only in the implementer's worktree. */
+/**
+ * First message of a reviewer session. It runs read-only in the implementer's worktree.
+ * `goal` includes the task's acceptance criteria when `hasCriteria` is true.
+ */
 export function reviewPrompt(
   goal: string,
   request: ReviewRequest,
   verify: VerifyResult | null,
+  hasCriteria = false,
 ): string {
   const lines = [
     'You are reviewing work another agent did in this repository. You cannot edit files;',
@@ -40,6 +44,9 @@ export function reviewPrompt(
     '',
     'Check correctness, missing tests, edge cases, and anything the task asked for that is',
     'not done. Ignore style that a formatter would settle.',
+    ...(hasCriteria
+      ? ['Check every acceptance criterion; one that does not hold is a required change.']
+      : []),
     '',
     `Make the first line of your reply exactly \`${VERDICT_APPROVE}\` or \`${VERDICT_CHANGES}\`.`,
     `After ${VERDICT_CHANGES}, list each required change with the file and what to do,`,
