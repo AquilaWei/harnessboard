@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { TaskView } from '@harnessboard/shared';
 import { primaryAction } from '../board';
 import type { TaskAction } from '../board';
+import { openTab } from '../notify';
 import { Description } from './Description';
 import { ContextMeter } from './Meter';
 import type { DrawerTab } from './TaskDrawer';
@@ -30,16 +31,10 @@ export function TaskCard({ task, onOpen, onAction, onDragStart, onDragEnd, dragg
         onAction('stop');
         return;
       case 'review':
-        onOpen('changes');
-        return;
       case 'approvePlan':
-        onOpen('features');
-        return;
       case 'approveCriteria':
-        onOpen('criteria');
-        return;
       case 'answerPermission':
-        onOpen(); // the question is shown above the tabs
+        onOpen(openTab(task));
         return;
     }
   };

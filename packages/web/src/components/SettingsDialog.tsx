@@ -7,6 +7,7 @@ import { api } from '../api';
 import { LANGUAGES, setLanguage } from '../i18n';
 import { parseRules } from '../rules';
 import type { Language } from '../i18n';
+import { notificationPermission, notificationsEnabled, setNotifications } from '../notify';
 import { THEMES, applyTheme, savedTheme } from '../theme';
 import type { Theme } from '../theme';
 
@@ -27,6 +28,8 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [globalRules, setGlobalRules] = useState(settings.allowedTools.join('\n'));
   const parsedRules = parseRules(globalRules);
   const [theme, setTheme] = useState<Theme>(savedTheme);
+  const [notify, setNotify] = useState(notificationsEnabled);
+  const [permission, setPermission] = useState(notificationPermission);
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -190,6 +193,30 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
             </select>
           </label>
         </div>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={notify}
+            disabled={permission === null}
+            onChange={(e) => {
+              const on = e.target.checked;
+              void setNotifications(on).then((granted) => {
+                setPermission(granted);
+                setNotify(on && granted === 'granted');
+              });
+            }}
+          />
+          <span>
+            {t('notify.label')}
+            <small className="hint">
+              {permission === null
+                ? t('notify.unsupported')
+                : permission === 'denied'
+                  ? t('notify.blocked')
+                  : t('notify.hint')}
+            </small>
+          </span>
+        </label>
 
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onClose}>

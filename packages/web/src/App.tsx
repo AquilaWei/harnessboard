@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { HarnessStatus, Settings, TaskView } from '@harnessboard/shared';
+import type { HarnessStatus, Settings, TaskStatus, TaskView } from '@harnessboard/shared';
 import { api } from './api';
 import { stageOf } from './board';
 import type { Stage, TaskAction } from './board';
@@ -11,7 +11,9 @@ import { NewTaskDialog } from './components/NewTaskDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TaskDrawer } from './components/TaskDrawer';
 import type { DrawerTab } from './components/TaskDrawer';
+import { descriptionText } from './components/Description';
 import { useLiveEvents, useThrottled } from './live';
+import { newlyWaiting, notificationsEnabled, openTab } from './notify';
 
 const ACTIONS: Record<TaskAction, (id: number) => Promise<unknown>> = {
   queue: api.queue,
@@ -20,7 +22,7 @@ const ACTIONS: Record<TaskAction, (id: number) => Promise<unknown>> = {
 };
 
 export function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [status, setStatus] = useState<HarnessStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -33,10 +35,33 @@ export function App() {
     window.setTimeout(() => setToast((current) => (current === message ? null : current)), 4000);
   }, []);
 
+  // Statuses at the previous load; `null` until the first one, which notifies nothing.
+  const lastStatuses = useRef<Map<number, TaskStatus> | null>(null);
+  const notifyWaiting = useRef((_: TaskView[]) => {});
+  notifyWaiting.current = (nextTasks: TaskView[]) => {
+    const waiting = newlyWaiting(lastStatuses.current, nextTasks);
+    lastStatuses.current = new Map(nextTasks.map((task) => [task.id, task.status]));
+    // While you are looking at the board the card itself tells you.
+    const looking = document.visibilityState === 'visible' && document.hasFocus();
+    if (looking || !notificationsEnabled()) return;
+    for (const task of waiting) {
+      const notification = new Notification(`#${task.id} ${task.title}`, {
+        body: descriptionText(task, t, i18n.language),
+        tag: `task-${task.id}`, // a newer notice for the task replaces the older one
+      });
+      notification.onclick = () => {
+        window.focus();
+        setSelected({ id: task.id, tab: openTab(task) });
+        notification.close();
+      };
+    }
+  };
+
   const load = useCallback(async () => {
     try {
       const [nextTasks, nextStatus] = await Promise.all([api.tasks(), api.status()]);
       setTasks(nextTasks);
+      notifyWaiting.current(nextTasks);
       setStatus(nextStatus);
     } catch (err) {
       showToast((err as Error).message);
