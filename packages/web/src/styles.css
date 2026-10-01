@@ -873,6 +873,17 @@ summary:focus-visible {
   margin: 20px 0 8px;
 }
 
+.usage-line {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 13px;
+}
+
+.usage-models td,
+.usage-models th {
+  text-align: left;
+}
+
 .detail-section h3 {
   font-size: 13px;
 }

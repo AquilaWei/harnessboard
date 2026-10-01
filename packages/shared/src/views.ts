@@ -12,6 +12,7 @@ import type { ReviewRecord, TaskActivity } from './review.js';
 import type { AgentProvider, TaskAgents } from './agents.js';
 import type { QuotaInfo } from './events.js';
 import type { PermissionRequest } from './permissions.js';
+import type { TaskUsage } from './usage.js';
 
 /** Context usage of a task's latest session, as shown in the CLI and web UI. */
 export interface ContextView {
@@ -48,6 +49,8 @@ export interface TaskView extends Task {
   merge: MergeRecord | null;
   /** Tool uses the running session waits on the user to allow or deny, oldest first. */
   permissionRequests: PermissionRequest[];
+  /** Tokens, estimated cost and time over all the task's sessions. */
+  usage: TaskUsage;
 }
 
 export interface TaskDetail extends TaskView {

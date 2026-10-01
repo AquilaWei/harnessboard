@@ -5,6 +5,13 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Usage per task:** tokens, an estimated cost (at API prices; your subscription is not
+  charged per token), agent time and elapsed time, under **Details** and in `hb show`. A
+  task in review or done shows them in one line under its status. Tasks from earlier
+  versions show "not recorded" for tokens and cost.
+
 ## 0.0.6 - 2026-10-01
 
 ### Added

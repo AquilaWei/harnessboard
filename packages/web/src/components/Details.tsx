@@ -4,6 +4,7 @@ import type { TaskDetail } from '@harnessboard/shared';
 import { ContextMeter } from './Meter';
 import { TaskAgentsEditor } from './TaskAgentsEditor';
 import { ToolRules } from './ToolRules';
+import { UsageSummary } from './UsageSummary';
 
 interface Props {
   task: TaskDetail;
@@ -16,6 +17,7 @@ export function Details({ task, onSaved, onError }: Props) {
   const { t } = useTranslation();
   return (
     <>
+      {task.sessionCount > 0 && <UsageSummary usage={task.usage} />}
       <dl className="facts">
         <dt>{t('fields.mode')}</dt>
         <dd>{t(`form.modes.${task.mode}`)}</dd>

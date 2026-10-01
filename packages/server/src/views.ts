@@ -22,8 +22,11 @@ import type {
   ReviewRequest,
   Session,
   Task,
+  TaskUsage,
   TaskView,
   TimelineEntry,
+  TokenCounts,
+  UsageRecord,
 } from '@harnessboard/shared';
 import { readPlan } from '@harnessboard/core';
 import type { Harness, HarnessConfig, Store } from '@harnessboard/core';
@@ -48,10 +51,82 @@ export function taskView(task: Task, harness: Harness): TaskView {
     criteria: harness.criteriaProposal(task),
     merge: harness.lastMerge(task.id),
     permissionRequests: harness.permissionRequests(task.id),
+    usage: taskUsage(task.id, store, sessions, harness.activity(task.id) !== null),
     lastNotice:
       (store.lastEvent(task.id, 'notice')?.data as { message?: string } | undefined)?.message ??
       null,
   };
+}
+
+type ModelTotals = TaskUsage['byModel'];
+
+/**
+ * Adds up what a task's agent runs used. A run reports its conversation's totals so far,
+ * so each session counts with its latest report; a report lower than the one before (the
+ * CLI lost the earlier totals) starts the count afresh on top of it.
+ */
+export function taskUsage(
+  taskId: number,
+  store: Store,
+  sessions: Session[],
+  running: boolean,
+  now = Date.now(),
+): TaskUsage {
+  const records = store.eventsOfKind(taskId, 'usage');
+  const latest = new Map<string, ModelTotals>();
+  const banked: ModelTotals = {};
+  let agentMs = 0;
+  for (const event of records) {
+    const record = event.data as UsageRecord;
+    agentMs += record.durationMs;
+    if (!record.usage) continue;
+    const key = event.sessionId ?? '';
+    const before = latest.get(key);
+    if (before && totalTokens(record.usage.models) < totalTokens(before)) addModels(banked, before);
+    latest.set(key, record.usage.models);
+  }
+  const byModel: ModelTotals = { ...banked };
+  for (const models of latest.values()) addModels(byModel, models);
+  const counted = Object.values(byModel);
+  const costs = counted.map((m) => m.costUsd).filter((c): c is number => c !== null);
+  const ends = sessions.map((s) => s.endedAt ?? 0).concat(records.map((e) => e.ts));
+  return {
+    runs: records.length,
+    agentMs,
+    elapsedMs:
+      sessions.length > 0 ? (running ? now : Math.max(...ends)) - sessions[0]!.startedAt : null,
+    tokens: counted.length > 0 ? sumTokens(counted) : null,
+    costUsd: costs.length > 0 ? costs.reduce((a, b) => a + b, 0) : null,
+    byModel,
+  };
+}
+
+function addModels(into: ModelTotals, models: ModelTotals): void {
+  for (const [model, m] of Object.entries(models)) {
+    const sum = into[model] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: null };
+    into[model] = {
+      ...sumTokens([sum, m]),
+      costUsd:
+        sum.costUsd === null && m.costUsd === null ? null : (sum.costUsd ?? 0) + (m.costUsd ?? 0),
+    };
+  }
+}
+
+function sumTokens(counts: TokenCounts[]): TokenCounts {
+  return counts.reduce(
+    (a, c) => ({
+      input: a.input + c.input,
+      output: a.output + c.output,
+      cacheRead: a.cacheRead + c.cacheRead,
+      cacheWrite: a.cacheWrite + c.cacheWrite,
+    }),
+    { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  );
+}
+
+function totalTokens(models: ModelTotals): number {
+  const t = sumTokens(Object.values(models));
+  return t.input + t.output + t.cacheRead + t.cacheWrite;
 }
 
 /** Latest proposal while a loop task's plan is not approved yet. */

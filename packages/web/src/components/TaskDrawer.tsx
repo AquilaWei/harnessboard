@@ -18,6 +18,7 @@ import { CommitList } from './CommitList';
 import { CriteriaReview } from './CriteriaReview';
 import { DeleteTask } from './DeleteTask';
 import { Details } from './Details';
+import { UsageLine } from './UsageSummary';
 import { DiffView } from './DiffView';
 import { FeatureList } from './FeatureList';
 import { LogView } from './LogView';
@@ -152,6 +153,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                 <span className="card-id">#{task.id}</span>
               </div>
               <Description task={task} />
+              {(s === 'review' || s === 'done') && <UsageLine usage={task.usage} />}
               {task.permissionRequests.length > 0 && (
                 <PermissionPrompt
                   taskId={task.id}

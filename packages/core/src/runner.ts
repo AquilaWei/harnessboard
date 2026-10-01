@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import { contextPct } from '@harnessboard/shared';
-import type { AgentEvent, QuotaInfo, SessionEndReason, Thresholds } from '@harnessboard/shared';
+import type {
+  AgentEvent,
+  QuotaInfo,
+  RunUsage,
+  SessionEndReason,
+  Thresholds,
+} from '@harnessboard/shared';
 import type { AgentAdapter, PermissionReply, SessionSpec } from './agent.js';
 import { spawnLines } from './process.js';
 import { COMPACT_COMMAND, reportsDone, wrapUpPrompt } from './prompts.js';
@@ -19,6 +25,8 @@ export interface SessionOutcome {
   /** Window reported by the agent, when it got as far as a result. */
   contextWindow: number | null;
   detail: string | null;
+  /** The conversation's totals at its latest result, `/compact` included. */
+  usage: RunUsage | null;
 }
 
 export interface RunSessionOptions {
@@ -78,6 +86,8 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   let reply: ResultEvent | null = null; // the agent's own result, kept while compacting
   let quota: QuotaInfo | null = null;
   let result: ResultEvent | null = null;
+  // Totals are cumulative for the conversation, so the latest report replaces the earlier.
+  let usage: RunUsage | null = null;
   // Kept to explain an exit without a result; the CLI reports such failures on stderr.
   const stderrTail: string[] = [];
   let kill = () => {};
@@ -148,6 +158,7 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
     else child.closeInput(); // the prompt went in as an argument
 
     function handle(event: AgentEvent): void {
+      if (event.kind === 'result' && event.usage) usage = event.usage;
       if (compacting && event.kind === 'result') {
         finishCompaction(event);
         return;
@@ -240,6 +251,7 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
       quota,
       contextWindow: final?.contextWindow ?? null,
       detail,
+      usage,
     };
   }
 }

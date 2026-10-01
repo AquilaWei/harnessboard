@@ -142,6 +142,20 @@ describe('tasks API', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/not waiting/);
   });
 
+  it("includes the task's usage", async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}`, { headers: local });
+    expect(((await res.json()) as { usage: unknown }).usage).toEqual({
+      runs: 0,
+      agentMs: 0,
+      elapsedMs: null,
+      tokens: null,
+      costUsd: null,
+      byModel: {},
+    });
+  });
+
   it('lists only what was said in chats, in order', async () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };
