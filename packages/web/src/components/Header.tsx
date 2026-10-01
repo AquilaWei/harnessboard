@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HarnessStatus, QuotaInfo, Settings } from '@harnessboard/shared';
+import { windowAt } from '../quota';
 import { QuotaMeter } from './Meter';
 
 interface Props {
@@ -83,7 +84,18 @@ function QuotaButton(props: { quota: QuotaInfo | null; paused: boolean; pauseAt:
   if (quota?.fiveHourUtilization == null) {
     return <span className="chip muted">{t('summary.quotaUnknown')}</span>;
   }
-  const pct = Math.round(quota.fiveHourUtilization * 100);
+  const now = Date.now();
+  // Snapshots from before 0.0.5 have no per-window reset; the top-level one is the best guess.
+  const fiveHour = windowAt(
+    quota.fiveHourUtilization,
+    quota.fiveHourResetsAt ?? quota.resetsAt,
+    now,
+  );
+  const sevenDay =
+    quota.sevenDayUtilization == null
+      ? null
+      : windowAt(quota.sevenDayUtilization, quota.sevenDayResetsAt, now);
+  const pct = Math.round(fiveHour.utilization * 100);
   return (
     <div className="popover-anchor" ref={box}>
       <button
@@ -99,16 +111,16 @@ function QuotaButton(props: { quota: QuotaInfo | null; paused: boolean; pauseAt:
           <h3>{t('quota.title')}</h3>
           <QuotaMeter
             label={t('quota.fiveHour')}
-            utilization={quota.fiveHourUtilization}
+            utilization={fiveHour.utilization}
             pauseAt={pauseAt}
-            resetsAt={quota.resetsAt}
+            resetsAt={fiveHour.resetsAt}
           />
-          {quota.sevenDayUtilization != null && (
+          {sevenDay && (
             <QuotaMeter
               label={t('quota.sevenDay')}
-              utilization={quota.sevenDayUtilization}
+              utilization={sevenDay.utilization}
               pauseAt={1}
-              resetsAt={null}
+              resetsAt={sevenDay.resetsAt}
             />
           )}
           <p className="hint">

@@ -8,7 +8,14 @@ export interface QuotaInfo {
   fiveHourUtilization: number | null;
   /** 0–1 utilisation of the seven-day window, when reported. */
   sevenDayUtilization: number | null;
-  /** Unix ms when the limiting window resets, when reported. */
+  /** Unix ms when the five-hour window resets, when reported. */
+  fiveHourResetsAt: number | null;
+  /** Unix ms when the seven-day window resets, when reported. */
+  sevenDayResetsAt: number | null;
+  /**
+   * Unix ms when the limiting window resets, when reported; it may be either window, so a
+   * refused request waits for this one.
+   */
   resetsAt: number | null;
 }
 

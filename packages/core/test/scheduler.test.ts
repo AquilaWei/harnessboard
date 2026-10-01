@@ -10,6 +10,8 @@ const quota = (fiveHour: number, status = 'allowed', resetsAt: number | null = 1
   status,
   fiveHourUtilization: fiveHour,
   sevenDayUtilization: null,
+  fiveHourResetsAt: resetsAt,
+  sevenDayResetsAt: null,
   resetsAt,
 });
 
@@ -28,6 +30,20 @@ describe('quotaBlocks', () => {
 
   it('ignores a snapshot whose window has reset', () => {
     expect(quotaBlocks(quota(1, 'rejected', 10_000), 10_000, 0.95)).toBe(false);
+  });
+
+  it('allows again once the five-hour window resets while the weekly one is limiting', () => {
+    const weeklyLimiting = { ...quota(0.97), fiveHourResetsAt: 10_000, resetsAt: 900_000 };
+    expect(quotaBlocks(weeklyLimiting, 10_000, 0.95)).toBe(false);
+  });
+
+  it('keeps blocking a refused request until the limiting window resets', () => {
+    const weeklyRefused = {
+      ...quota(0.2, 'rejected'),
+      fiveHourResetsAt: 10_000,
+      resetsAt: 900_000,
+    };
+    expect(quotaBlocks(weeklyRefused, 10_000, 0.95)).toBe(true);
   });
 });
 

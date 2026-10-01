@@ -48,7 +48,37 @@ describe('ClaudeCodeAdapter.parseLine', () => {
           status: 'allowed',
           fiveHourUtilization: 0.5,
           sevenDayUtilization: null,
+          fiveHourResetsAt: 1790718000000,
+          sevenDayResetsAt: null,
           resetsAt: 1790718000000,
+        },
+      },
+    ]);
+  });
+
+  it('keeps each window its own reset time when the weekly window is limiting', () => {
+    const line = {
+      type: 'rate_limit_event',
+      rate_limit_info: {
+        status: 'allowed',
+        resetsAt: 1790812800,
+        rateLimitType: 'seven_day',
+        unifiedWindows: {
+          five_hour: { utilization: 0.5, resetsAt: 1790718000 },
+          seven_day: { utilization: 0.9, resetsAt: 1790812800 },
+        },
+      },
+    };
+    expect(parse(line)).toEqual([
+      {
+        kind: 'quota',
+        quota: {
+          status: 'allowed',
+          fiveHourUtilization: 0.5,
+          sevenDayUtilization: 0.9,
+          fiveHourResetsAt: 1790718000000,
+          sevenDayResetsAt: 1790812800000,
+          resetsAt: 1790812800000,
         },
       },
     ]);
