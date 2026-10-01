@@ -12,6 +12,8 @@ are test versions that have not been accepted on real machines yet.
   reset reads as empty.
 - New sessions could stay paused after the 5-hour window had reset, while the weekly window
   was the one Claude reported as limiting.
+- The button on a card that needs permission said "Allow or deny" although it only opens the
+  request; it now says **View request**, and you allow or deny after reading it.
 
 ## 0.0.4 - 2026-10-01
 
