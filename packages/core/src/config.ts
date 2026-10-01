@@ -89,8 +89,14 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
   };
 }
 
-/** Location of the per-user config file for this platform. */
-export function userConfigFile(): string {
+/**
+ * Location of the per-user config file: inside `HARNESSBOARD_HOME` when it is set, so a
+ * separate home (for example a test instance) never reads or changes the user's settings;
+ * otherwise in this platform's config folder.
+ */
+export function userConfigFile(env: Env = process.env): string {
+  const home = env[`${ENV_PREFIX}HOME`];
+  if (home) return path.join(home, 'config.json');
   return path.join(envPaths(APP_NAME, { suffix: '' }).config, 'config.json');
 }
 
@@ -103,7 +109,7 @@ export function loadConfig(
   options: { env?: Env; overrides?: Partial<HarnessConfig>; configFile?: string } = {},
 ): HarnessConfig {
   const env = options.env ?? process.env;
-  const fromFile = readJsonIfExists(options.configFile ?? userConfigFile()) as
+  const fromFile = readJsonIfExists(options.configFile ?? userConfigFile(env)) as
     Partial<HarnessConfig> | undefined;
   const defaults = defaultConfig(env);
   // Profiles merge by id so a file that only adds a reviewer keeps the default `claude`.

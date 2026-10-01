@@ -2,12 +2,30 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadConfig, loadProjectConfig, saveUserConfig } from '../src/config.js';
+import { loadConfig, loadProjectConfig, saveUserConfig, userConfigFile } from '../src/config.js';
 import { tempDir } from './helpers.js';
 
 const missing = path.join(tempDir('cfg'), 'none.json');
 
+describe('userConfigFile', () => {
+  it('lives in HARNESSBOARD_HOME when it is set', () => {
+    expect(userConfigFile({ HARNESSBOARD_HOME: '/data/hb' })).toBe(
+      path.join('/data/hb', 'config.json'),
+    );
+  });
+
+  it('lives in the platform config folder without HARNESSBOARD_HOME', () => {
+    expect(userConfigFile({})).toMatch(/harnessboard[/\\]config\.json$/);
+  });
+});
+
 describe('loadConfig', () => {
+  it('reads the config file in HARNESSBOARD_HOME', () => {
+    const home = tempDir('cfg');
+    writeFileSync(path.join(home, 'config.json'), JSON.stringify({ maxConcurrent: 4 }));
+    expect(loadConfig({ env: { HARNESSBOARD_HOME: home } }).maxConcurrent).toBe(4);
+  });
+
   it('uses HARNESSBOARD_HOME as the data directory', () => {
     const config = loadConfig({ env: { HARNESSBOARD_HOME: '/data/hb' }, configFile: missing });
     expect(config.dataDir).toBe('/data/hb');
