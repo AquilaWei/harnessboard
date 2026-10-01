@@ -278,4 +278,5 @@ Harnessboard 依賴的 Claude Code 輸出格式記錄在
 
 ## 授權
 
-[Apache-2.0](LICENSE)。Harnessboard 是獨立專案，與 Anthropic 沒有關係。
+[Apache-2.0](LICENSE)。Harnessboard 是獨立專案，與 Anthropic 沒有關係。網頁介面所打包的第三方套件授權見
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

@@ -321,4 +321,5 @@ output format that Harnessboard relies on are in
 ## License
 
 [Apache-2.0](LICENSE). Harnessboard is an independent project and is not affiliated with
-Anthropic.
+Anthropic. The licenses of the packages bundled in the web board are in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

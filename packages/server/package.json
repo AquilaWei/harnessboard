@@ -22,7 +22,7 @@
     "kanban"
   ],
   "scripts": {
-    "build": "tsup && node -e \"require('node:fs').cpSync('../web/dist','dist/web',{recursive:true})\"",
+    "build": "tsup && node -e \"const f=require('node:fs');f.cpSync('../web/dist','dist/web',{recursive:true});for(const n of ['NOTICE','THIRD-PARTY-NOTICES.md'])f.cpSync('../../'+n,'dist/'+n)\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -5,6 +5,11 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Fixed
+
+- The published package now includes `NOTICE` and the licenses of the packages bundled in
+  the web board (`THIRD-PARTY-NOTICES.md`), as their licenses require.
+
 ## 0.0.8 - 2026-10-01
 
 ### Added
