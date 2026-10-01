@@ -24,6 +24,9 @@ are test versions that have not been accepted on real machines yet.
   `hb delete <id>`. The task's history and worktree folder are removed; its branch is kept
   so committed work can still be merged. Running tasks must be stopped first.
 
+- **Models per task:** choose the implementer's and the reviewer's model (Opus, Sonnet,
+  Haiku or any model id) when creating a task, and change them later under Details or with
+  `hb models <id>`. Without a choice the agent profile's model is used.
 - **Commit history:** the Changes tab lists the commits on the task branch since its base;
   open one to see its message and patch. In the terminal: `hb commits <id>`.
 - **Asked, not refused:** when the agent wants a tool its rules do not cover, the task

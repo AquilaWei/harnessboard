@@ -133,7 +133,16 @@ export class Store {
   updateTask(
     id: number,
     fields: Partial<
-      Pick<Task, 'status' | 'branch' | 'worktreePath' | 'resumeAt' | 'verifyCommand' | 'permission'>
+      Pick<
+        Task,
+        | 'status'
+        | 'branch'
+        | 'worktreePath'
+        | 'resumeAt'
+        | 'verifyCommand'
+        | 'permission'
+        | 'agents'
+      >
     >,
     now = Date.now(),
   ): Task {
@@ -144,6 +153,7 @@ export class Store {
       resumeAt: 'resume_at',
       verifyCommand: 'verify_command',
       permission: 'permission',
+      agents: 'agents',
     };
     // Objects are stored as JSON, like on insert.
     const entries = Object.entries(fields)

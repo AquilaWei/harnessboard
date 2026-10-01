@@ -2,6 +2,7 @@
 import { useTranslation } from 'react-i18next';
 import type { TaskDetail } from '@harnessboard/shared';
 import { ContextMeter } from './Meter';
+import { TaskAgentsEditor } from './TaskAgentsEditor';
 import { ToolRules } from './ToolRules';
 
 interface Props {
@@ -18,10 +19,10 @@ export function Details({ task, onSaved, onError }: Props) {
       <dl className="facts">
         <dt>{t('fields.mode')}</dt>
         <dd>{t(`form.modes.${task.mode}`)}</dd>
-        <dt>{t('fields.implementer')}</dt>
-        <dd className="mono">{task.agents.implementer}</dd>
-        <dt>{t('fields.reviewer')}</dt>
-        <dd className="mono">{task.agents.reviewer ?? t('fields.none')}</dd>
+        <dt>{t('fields.agents')}</dt>
+        <dd>
+          <TaskAgentsEditor task={task} onSaved={onSaved} onError={onError} />
+        </dd>
         {task.verifyCommand && (
           <>
             <dt>{t('fields.verify')}</dt>

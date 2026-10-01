@@ -51,6 +51,7 @@ hb done 1                            # mark it reviewed
 | `hb loop <goal> [--verify <command>]` [same options as `add`]                         | Start a Loop task (see below)                |
 | `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> --verify <command>`     | Review, discuss and approve a Loop plan      |
 | `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)  |
+| `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them  |
 | `hb agents`                                                                           | List agent profiles and whether they run     |
 | `hb ls` / `hb show <id>`                                                              | List tasks / show sessions and context usage |
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                      |
@@ -124,8 +125,10 @@ hb add "Add input validation to the signup form" --reviewer opus
 - **Default reviewer:** `defaultReviewer` in the config (or the web settings) applies to
   new tasks. `--reviewer none` turns review off for one task.
 
-Today the reviewer can be any Claude Code profile, for example with a different model.
-Codex and Gemini are planned as further providers, so different vendors can check each
+**Models:** each task can pick its own model for the implementer and for the reviewer, for
+example Haiku to build and Opus to review: `hb add "..." --model haiku --reviewer claude
+--reviewer-model opus`, or the model menus in the New task dialog. Today the reviewer can be
+any Claude Code profile. Codex and Gemini are planned as further providers, so different vendors can check each
 other.
 
 ## Web board

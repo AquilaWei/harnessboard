@@ -5,6 +5,7 @@ import { streamSSE } from 'hono/streaming';
 import { inspectFolder, listFolders } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
 import type {
+  AgentsUpdate,
   CreateTaskInput,
   DeletedTask,
   HarnessEvent,
@@ -101,6 +102,19 @@ export function createApi(harness: Harness): Hono {
       ...(typeof body.message === 'string' ? { message: body.message } : {}),
     };
     return c.json(harness.answerPermission(taskId(c), decision));
+  });
+
+  app.put('/tasks/:id/agents', async (c) => {
+    const body = await c.req.json<Record<string, unknown>>();
+    const update: AgentsUpdate = {};
+    if (typeof body.implementer === 'string') update.implementer = body.implementer;
+    if (typeof body.reviewer === 'string' || body.reviewer === null)
+      update.reviewer = body.reviewer;
+    for (const key of ['implementerModel', 'reviewerModel'] as const) {
+      const value = body[key];
+      if (typeof value === 'string' || value === null) update[key] = value;
+    }
+    return c.json(harness.setAgents(taskId(c), update));
   });
 
   app.put('/tasks/:id/allowed-tools', async (c) => {

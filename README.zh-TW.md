@@ -47,6 +47,7 @@ hb done 1                            # 標記為已審核完成
 | `hb loop <目標> [--verify <指令>]`（其餘選項與 `add` 相同）                         | 建立 Loop 任務（見下方）            |
 | `hb plan <id>`／`hb feedback <id> <意見>`／`hb approve <id> --verify <指令>`        | 檢視、討論、確認 Loop 規格          |
 | `add`／`loop` 加上 `--reviewer <agent>`                                             | 由另一個 agent 審查每一步（見下方） |
+| `add`／`loop` 加上 `--model <m>`／`--reviewer-model <m>`；`hb models <id>`          | 每個任務各自選模型；查看或修改      |
 | `hb agents`                                                                         | 列出 agent 設定檔與是否能執行       |
 | `hb ls` / `hb show <id>`                                                            | 列出任務／顯示 session 與上下文用量 |
 | `hb logs <id> [-f]`                                                                 | 印出或持續追蹤紀錄                  |
@@ -112,7 +113,9 @@ hb add "Add input validation to the signup form" --reviewer opus
 - **預設審查者**：設定裡的 `defaultReviewer`（網頁設定也能改）會套用到新任務；
   單一任務可以用 `--reviewer none` 關閉審查。
 
-目前審查者可以是任何 Claude Code 設定檔，例如使用不同模型的設定檔。之後計畫加入 Codex、
+**模型**：每個任務可以分別替執行者和審查者選模型，例如用 Haiku 實作、用 Opus 審查：
+`hb add "..." --model haiku --reviewer claude --reviewer-model opus`，或在「新增任務」對話框
+的模型選單選。目前審查者可以是任何 Claude Code 設定檔。之後計畫加入 Codex、
 Gemini 等 provider，就能讓不同廠商的 agent 互相檢查。
 
 ## 網頁看板

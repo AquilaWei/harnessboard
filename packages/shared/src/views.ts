@@ -2,7 +2,7 @@
 import type { ContextPolicy, Session, Task, TaskMode } from './task.js';
 import type { Feature, LoopProgress } from './loop.js';
 import type { ReviewRecord, TaskActivity } from './review.js';
-import type { AgentProvider } from './agents.js';
+import type { AgentProvider, TaskAgents } from './agents.js';
 import type { QuotaInfo } from './events.js';
 import type { PermissionRequest } from './permissions.js';
 
@@ -75,6 +75,9 @@ export interface CreateTaskInput {
   implementer?: string;
   /** `null` turns review off even when a default reviewer is configured. */
   reviewer?: string | null;
+  /** Models for this task only; omitted or `null` uses the profile's model. */
+  implementerModel?: string | null;
+  reviewerModel?: string | null;
   /**
    * Loop tasks: optional while `confirmPlan` is on (the default), because it can be set
    * when the plan is approved; otherwise required unless `.harnessboard.json` sets one.
@@ -122,3 +125,8 @@ export interface CommitInfo {
   /** Unix ms of the commit. */
   ts: number;
 }
+
+/** Body of `PUT /api/tasks/:id/agents`: only the given fields change. */
+export type AgentsUpdate = Partial<
+  Pick<TaskAgents, 'implementer' | 'reviewer' | 'implementerModel' | 'reviewerModel'>
+>;

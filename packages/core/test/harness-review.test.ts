@@ -98,6 +98,24 @@ describe('a finished step with a reviewer', () => {
     expect([args.includes('acceptEdits'), args.includes('review-model')]).toEqual([false, true]);
   });
 
+  it('runs the reviewer with the model chosen for the task', async () => {
+    scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
+    const task = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      reviewer: 'checker',
+      reviewerModel: 'opus',
+      queue: true,
+    });
+    await harness.waitForIdle();
+    await runQueued();
+    const args = fakeRuns()[1]!.args;
+    expect([task.agents.reviewerModel, args[args.indexOf('--model') + 1]]).toEqual([
+      'opus',
+      'opus',
+    ]);
+  });
+
   it('never lets the reviewer ask for more tools', async () => {
     scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
     await createReviewed();

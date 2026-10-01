@@ -407,6 +407,48 @@ describe('a tool the task rules already cover', () => {
   });
 });
 
+describe('task models', () => {
+  it('runs the implementer with the model chosen for the task', async () => {
+    scenario([[init(), result('done')]]);
+    await harness.createTask({ prompt: 'x', repo, implementerModel: 'haiku', queue: true });
+    await harness.waitForIdle();
+    const args = fakeRuns()[0]!.args;
+    expect(args[args.indexOf('--model') + 1]).toBe('haiku');
+  });
+
+  it('uses the profile model when the task does not choose one', async () => {
+    scenario([[init(), result('done')]]);
+    await harness.createTask({ prompt: 'x', repo, queue: true });
+    await harness.waitForIdle();
+    expect(fakeRuns()[0]!.args).not.toContain('--model');
+  });
+
+  it('rejects a model id that could be read as an option', async () => {
+    await expect(
+      harness.createTask({ prompt: 'x', repo, implementerModel: '--dangerously-skip-permissions' }),
+    ).rejects.toThrow(/is not a model id/);
+  });
+
+  it('changes the model of a task that is not running', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    const updated = harness.setAgents(task.id, { implementerModel: 'sonnet' });
+    expect(updated.agents.implementerModel).toBe('sonnet');
+  });
+
+  it('keeps the other agent settings when changing one', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, implementerModel: 'opus' });
+    const updated = harness.setAgents(task.id, { reviewer: null });
+    expect([updated.agents.implementerModel, updated.agents.reviewer]).toEqual(['opus', null]);
+  });
+
+  it('rejects an agent profile that is not configured', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    expect(() => harness.setAgents(task.id, { reviewer: 'gemini' })).toThrow(
+      /agent profile "gemini" is not configured/,
+    );
+  });
+});
+
 describe('setAllowedTools', () => {
   it('replaces the rules of a task that is not running', async () => {
     const task = await harness.createTask({ prompt: 'x', repo });

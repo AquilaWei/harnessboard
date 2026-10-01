@@ -8,6 +8,7 @@ import {
   DEFAULT_PRESET,
   assertToolRules,
   definedOnly,
+  isModelId,
   presetRules,
   resolveThresholds,
 } from '@harnessboard/shared';
@@ -15,6 +16,7 @@ import type {
   AgentEvent,
   AgentInfo,
   AgentProvider,
+  AgentsUpdate,
   CommitInfo,
   CreateTaskInput,
   HarnessEvent,
@@ -262,8 +264,8 @@ export class Harness {
   /**
    * Validates the repository and thresholds, then records the task.
    * Throws when `repo` is missing, not inside a git repository with a commit, the context policy is invalid, a
-   * loop task has no verify command (from the input or the project's config file), or an
-   * allowed-tools entry is not a tool rule.
+   * loop task has no verify command (from the input or the project's config file), an
+   * allowed-tools entry is not a tool rule, or an agent profile or model id is invalid.
    */
   async createTask(input: CreateTaskInput): Promise<Task> {
     const repoPath = await resolveRepository(input.repo);
@@ -289,12 +291,10 @@ export class Harness {
       implementer: input.implementer ?? DEFAULT_AGENT,
       reviewer: input.reviewer === undefined ? this.config.defaultReviewer : input.reviewer,
       maxReviewRounds: DEFAULT_REVIEW_ROUNDS,
+      implementerModel: modelOrNull(input.implementerModel),
+      reviewerModel: modelOrNull(input.reviewerModel),
     };
-    for (const id of [agents.implementer, agents.reviewer]) {
-      if (id !== null && !this.config.agents[id]) {
-        throw new Error(`agent profile "${id}" is not configured`);
-      }
-    }
+    this.checkProfiles(agents);
     const task = this.store.createTask({
       title: input.title ?? firstLine(input.prompt),
       prompt: input.prompt,
@@ -343,6 +343,30 @@ export class Harness {
       return this.setStatus(id, 'stopped', { resumeAt: null });
     }
     return task;
+  }
+
+  /**
+   * Changes who works on a task and with which models; fields left out stay as they are.
+   * Takes effect from its next session. Throws when the task is running, a profile is not
+   * configured or a model id is invalid.
+   */
+  setAgents(id: number, update: AgentsUpdate): Task {
+    const task = this.requireTask(id);
+    if (this.running.has(id) || task.status === 'running') {
+      throw new Error(`task ${id} is running; stop it before changing its agents`);
+    }
+    const agents: TaskAgents = { ...task.agents };
+    if (update.implementer !== undefined) agents.implementer = update.implementer;
+    if (update.reviewer !== undefined) agents.reviewer = update.reviewer;
+    if (update.implementerModel !== undefined) {
+      agents.implementerModel = modelOrNull(update.implementerModel);
+    }
+    if (update.reviewerModel !== undefined)
+      agents.reviewerModel = modelOrNull(update.reviewerModel);
+    this.checkProfiles(agents);
+    const updated = this.store.updateTask(id, { agents });
+    this.emit({ type: 'task', taskId: id, status: updated.status });
+    return updated;
   }
 
   /**
@@ -584,7 +608,9 @@ export class Harness {
             : null,
         resume: plan.resume !== null,
         prompt: plan.prompt,
-        model: this.config.agents[plan.agentId]!.model,
+        model:
+          (plan.role === 'reviewer' ? task.agents.reviewerModel : task.agents.implementerModel) ??
+          this.config.agents[plan.agentId]!.model,
         access: plan.role === 'reviewer' ? 'readOnly' : 'edit',
         // A reviewer may run the task's own check, but nothing that edits.
         allowedTools:
@@ -710,6 +736,14 @@ export class Harness {
     this.emit({ type: 'agent', taskId, sessionId, event });
   }
 
+  private checkProfiles(agents: TaskAgents): void {
+    for (const id of [agents.implementer, agents.reviewer]) {
+      if (id !== null && !this.config.agents[id]) {
+        throw new Error(`agent profile "${id}" is not configured`);
+      }
+    }
+  }
+
   private requireTask(id: number): Task {
     const task = this.store.getTask(id);
     if (!task) throw new Error(`task ${id} not found`);
@@ -739,6 +773,16 @@ export class Harness {
   private emit(event: HarnessEvent): void {
     for (const listener of this.listeners) listener(event);
   }
+}
+
+/** A trimmed model id, or `null` for empty; throws on anything that is not a model id. */
+function modelOrNull(model: string | null | undefined): string | null {
+  const trimmed = model?.trim();
+  if (!trimmed) return null;
+  if (!isModelId(trimmed)) {
+    throw new Error(`"${trimmed}" is not a model id; use e.g. opus, sonnet or claude-opus-5-5`);
+  }
+  return trimmed;
 }
 
 function withTool(tools: string[], rule: string): string[] {

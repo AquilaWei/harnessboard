@@ -6,6 +6,8 @@ import { DEFAULT_PRESET, PERMISSION_PRESETS, definedOnly, presetRules } from '@h
 import type { AgentInfo, Settings, TaskMode, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
 import { parseRules } from '../rules';
+import { AgentFields } from './AgentFields';
+import type { AgentChoice } from './AgentFields';
 import { FolderField } from './FolderField';
 
 const RECENT_KEY = 'harnessboard.recentRepos';
@@ -44,7 +46,12 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<TaskMode>('single');
   const [verify, setVerify] = useState('');
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [reviewer, setReviewer] = useState<string>(settings.defaultReviewer ?? '');
+  const [who, setWho] = useState<AgentChoice>({
+    implementer: 'claude',
+    implementerModel: null,
+    reviewer: settings.defaultReviewer,
+    reviewerModel: null,
+  });
   const [title, setTitle] = useState('');
   const [base, setBase] = useState('');
   const [size, setSize] = useState<TaskSize>(settings.defaultContextPolicy.size ?? 'medium');
@@ -91,7 +98,10 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           mode,
           verifyCommand: mode === 'loop' ? verify.trim() || undefined : undefined,
           confirmPlan: mode === 'loop' ? confirmPlan : undefined,
-          reviewer: reviewer === '' ? null : reviewer,
+          implementer: who.implementer,
+          implementerModel: who.implementerModel,
+          reviewer: who.reviewer,
+          reviewerModel: who.reviewer ? who.reviewerModel : null,
           title: title.trim() || undefined,
           baseRef: base.trim() || undefined,
           size,
@@ -211,20 +221,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           <small className="hint">{t('form.permissionsHint')}</small>
         </fieldset>
 
-        <label className="field">
-          <span>{t('form.reviewer')}</span>
-          <select value={reviewer} onChange={(e) => setReviewer(e.target.value)}>
-            <option value="">{t('form.reviewerNone')}</option>
-            {agents.map((a) => (
-              <option key={a.id} value={a.id} disabled={!a.ok}>
-                {a.id}
-                {a.profile.model ? ` (${a.profile.model})` : ''}
-                {a.ok ? '' : ` ${t('form.agentMissing')}`}
-              </option>
-            ))}
-          </select>
-          <small className="hint">{t('form.reviewerHint')}</small>
-        </label>
+        <AgentFields agents={agents} value={who} onChange={setWho} />
 
         <details className="advanced">
           <summary>{t('form.advanced')}</summary>

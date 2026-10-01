@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
   AgentInfo,
+  AgentsUpdate,
   CommitInfo,
   CreateTaskInput,
   DeletedTask,
@@ -65,6 +66,8 @@ export const api = {
   complete: (id: number) => send<unknown>('POST', `/tasks/${id}/complete`),
   answerPermission: (id: number, decision: PermissionDecision) =>
     send<unknown>('POST', `/tasks/${id}/permission`, decision),
+  setAgents: (id: number, update: AgentsUpdate) =>
+    send<unknown>('PUT', `/tasks/${id}/agents`, update),
   setAllowedTools: (id: number, rules: string[]) =>
     send<unknown>('PUT', `/tasks/${id}/allowed-tools`, { rules }),
   deleteTask: (id: number) => send<DeletedTask>('DELETE', `/tasks/${id}`),

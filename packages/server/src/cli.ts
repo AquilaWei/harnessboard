@@ -72,7 +72,9 @@ function withTaskOptions(command: Command): Command {
     )
     .option('--allow <rules...>', 'more tool rules the agent may use without asking')
     .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
+    .option('--model <model>', 'model for the implementer, e.g. opus, sonnet, haiku')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
+    .option('--reviewer-model <model>', 'model for the reviewer')
     .option('--no-queue', 'leave the task in the backlog');
 }
 
@@ -90,6 +92,8 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       allowedTools: allowedTools(o.preset, o.allow),
       skipPermissions: o.skipPermissions,
       reviewer: o.reviewer === 'none' ? null : o.reviewer,
+      implementerModel: o.model,
+      reviewerModel: o.reviewerModel,
       queue: o.queue,
     }),
   );
@@ -259,6 +263,29 @@ program
   });
 
 program
+  .command('models')
+  .description("show a task's agents and models, or change them while it is not running")
+  .argument('<id>', 'task id', parseInteger)
+  .option('--model <model>', 'implementer model, or "default" for the profile model')
+  .option('--reviewer <agent>', 'reviewer profile, or "none"')
+  .option('--reviewer-model <model>', 'reviewer model, or "default" for the profile model')
+  .action(async (id: number, o: { model?: string; reviewer?: string; reviewerModel?: string }) => {
+    const api = client();
+    const model = (m?: string) => (m === undefined ? undefined : m === 'default' ? null : m);
+    const update = definedOnly({
+      implementerModel: model(o.model),
+      reviewer: o.reviewer === undefined ? undefined : o.reviewer === 'none' ? null : o.reviewer,
+      reviewerModel: model(o.reviewerModel),
+    });
+    const task =
+      Object.keys(update).length > 0 ? await api.setAgents(id, update) : await api.getTask(id);
+    const a = task.agents;
+    const shown = (m?: string | null) => m ?? t('defaultModel');
+    console.log(`implementer  ${a.implementer}  ${shown(a.implementerModel)}`);
+    console.log(`reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel) : ''}`);
+  });
+
+program
   .command('commits')
   .description("list the commits on a task's branch since its base, newest first")
   .argument('<id>', 'task id', parseInteger)
@@ -401,6 +428,8 @@ interface AddOptions {
   allow?: string[];
   skipPermissions?: boolean;
   reviewer?: string;
+  model?: string;
+  reviewerModel?: string;
   queue: boolean;
 }
 
