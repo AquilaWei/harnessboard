@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.3 - 2026-09-30
+
 ### Added
 
 - **Folder picker in the New task dialog:** browse your folders with git repositories marked,
