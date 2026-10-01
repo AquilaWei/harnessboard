@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.7 - 2026-10-01
+
 ### Added
 
 - **Usage per task:** tokens, an estimated cost (at API prices; your subscription is not
