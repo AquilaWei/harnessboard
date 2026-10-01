@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { AgentInfo, Settings, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
 import { LANGUAGES, setLanguage } from '../i18n';
+import { parseRules } from '../rules';
 import type { Language } from '../i18n';
 import { THEMES, applyTheme, savedTheme } from '../theme';
 import type { Theme } from '../theme';
@@ -23,6 +24,8 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [pausePct, setPausePct] = useState(Math.round(settings.quotaPauseUtilization * 100));
   const [size, setSize] = useState<TaskSize>(settings.defaultContextPolicy.size ?? 'medium');
   const [reviewer, setReviewer] = useState(settings.defaultReviewer ?? '');
+  const [globalRules, setGlobalRules] = useState(settings.allowedTools.join('\n'));
+  const parsedRules = parseRules(globalRules);
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +43,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           quotaPauseUtilization: pausePct / 100,
           defaultContextPolicy: { ...settings.defaultContextPolicy, size },
           defaultReviewer: reviewer === '' ? null : reviewer,
+          allowedTools: parsedRules.rules,
         }),
       );
     } catch (err) {
@@ -104,6 +108,25 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
             </select>
           </label>
         </div>
+
+        <label className="field">
+          <span>{t('settingsForm.globalRules')}</span>
+          <textarea
+            rows={Math.max(2, parsedRules.rules.length + parsedRules.invalid.length)}
+            className="mono"
+            value={globalRules}
+            placeholder="Bash(make *)"
+            onChange={(e) => setGlobalRules(e.target.value)}
+            aria-invalid={parsedRules.invalid.length > 0}
+          />
+          {parsedRules.invalid.length > 0 ? (
+            <small className="hint warn-text">
+              {t('permission.invalid', { rules: parsedRules.invalid.join(', ') })}
+            </small>
+          ) : (
+            <small className="hint">{t('settingsForm.globalRulesHint')}</small>
+          )}
+        </label>
 
         <section className="detail-section">
           <h3>{t('settingsForm.agents')}</h3>
@@ -172,7 +195,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           <button type="button" className="btn" onClick={onClose}>
             {t('form.cancel')}
           </button>
-          <button type="submit" className="btn primary">
+          <button type="submit" className="btn primary" disabled={parsedRules.invalid.length > 0}>
             {t('settingsForm.save')}
           </button>
         </div>

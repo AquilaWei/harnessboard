@@ -73,6 +73,8 @@ export interface Settings {
   defaultContextPolicy: ContextPolicy;
   /** Reviewer profile for new tasks; `null` for no review. */
   defaultReviewer: string | null;
+  /** Tool rules every task may use without asking, on top of its own. */
+  allowedTools: string[];
 }
 
 /** Body of `POST /api/tasks`. */
@@ -109,6 +111,8 @@ export interface CreateTaskInput {
   hardPct?: number;
   allowedTools?: string[];
   skipPermissions?: boolean;
+  /** Allow unlisted tools without asking unless they look risky; see `PermissionPolicy`. */
+  autoApprove?: boolean;
   /** Queue immediately instead of leaving the task in the backlog. */
   queue?: boolean;
 }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import spawn from 'cross-spawn';
-import { Command, InvalidArgumentError, Option } from 'commander';
+import { Argument, Command, InvalidArgumentError, Option } from 'commander';
 import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import {
@@ -78,6 +78,7 @@ function withTaskOptions(command: Command): Command {
     )
     .option('--allow <rules...>', 'more tool rules the agent may use without asking')
     .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
+    .option('--auto-approve', 'allow unlisted tools without asking, except risky ones')
     .option('--model <model>', 'model for the implementer, e.g. opus, sonnet, haiku')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--reviewer-model <model>', 'model for the reviewer')
@@ -99,6 +100,7 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       hardPct: o.hard,
       allowedTools: allowedTools(o.preset, o.allow),
       skipPermissions: o.skipPermissions,
+      autoApprove: o.autoApprove,
       reviewer: o.reviewer === 'none' ? null : o.reviewer,
       implementerModel: o.model,
       reviewerModel: o.reviewerModel,
@@ -246,7 +248,7 @@ program
     for (const r of task.permissionRequests) {
       const rules = r.suggestedRules.length > 0 ? `  [${r.suggestedRules.join(', ')}]` : '';
       console.log(
-        `  ${t('permissionWaiting', { tool: r.toolName, summary: r.summary, request: r.requestId })}${rules}`,
+        `  ${t('permissionWaiting', { tool: r.toolName, summary: r.summary, request: r.requestId })}${rules}${r.risk ? `  (${r.risk})` : ''}`,
       );
     }
     for (const s of task.sessions) {
@@ -361,18 +363,30 @@ program
   .argument('<id>', 'task id', parseInteger)
   .option('--rule <rules...>', 'also add these rules to the task, e.g. "Bash(npm *)"')
   .option('--suggested', 'also add the rules the agent suggested')
+  .option(
+    '--global',
+    'add the rules (the suggested ones unless --rule is given) for every task instead of this one',
+  )
   .option('--request <requestId>', 'which request, when several are waiting')
-  .action(async (id: number, o: { rule?: string[]; suggested?: boolean; request?: string }) => {
-    const api = client();
-    const request = pickRequest(await api.getTask(id), o.request);
-    const rules = [...(o.suggested ? request.suggestedRules : []), ...(o.rule ?? [])];
-    const task = await api.answerPermission(id, {
-      requestId: request.requestId,
-      behavior: 'allow',
-      rules,
-    });
-    console.log(t('taskStatus', { id, status: task.status }));
-  });
+  .action(
+    async (
+      id: number,
+      o: { rule?: string[]; suggested?: boolean; global?: boolean; request?: string },
+    ) => {
+      const api = client();
+      const request = pickRequest(await api.getTask(id), o.request);
+      // A global allow without rules would only allow this once, so it takes the suggestion.
+      const suggested = o.suggested || (o.global && !o.rule);
+      const rules = [...(suggested ? request.suggestedRules : []), ...(o.rule ?? [])];
+      const task = await api.answerPermission(id, {
+        requestId: request.requestId,
+        behavior: 'allow',
+        rules,
+        ...(o.global ? { scope: 'global' as const } : {}),
+      });
+      console.log(t('taskStatus', { id, status: task.status }));
+    },
+  );
 
 program
   .command('deny')
@@ -406,6 +420,35 @@ program
         : await api.getTask(id);
     const list = task.permission.allowedTools;
     console.log(list.length > 0 ? list.join('\n') : t('noTools'));
+  });
+
+program
+  .command('global-tools')
+  .description('show the tool rules every task may use without asking, or replace them')
+  .argument('[rules...]', 'new tool rules, e.g. "Bash(npm *)" WebSearch')
+  .option('--preset <ids>', 'add these permission presets, comma-separated', parsePresets)
+  .option('--clear', 'remove every global rule')
+  .action(async (rules: string[], o: { preset?: string[]; clear?: boolean }) => {
+    const api = client();
+    const replace = o.clear || rules.length > 0 || o.preset;
+    const settings = replace
+      ? await api.saveSettings({ allowedTools: [...presetRules(o.preset ?? []), ...rules] })
+      : await api.settings();
+    const list = settings.allowedTools;
+    console.log(list.length > 0 ? list.join('\n') : t('noTools'));
+  });
+
+program
+  .command('auto')
+  .description(
+    'show or set whether a task allows unlisted tools without asking (risky ones still ask)',
+  )
+  .argument('<id>', 'task id', parseInteger)
+  .addArgument(new Argument('[state]', 'on or off').choices(['on', 'off']))
+  .action(async (id: number, state?: 'on' | 'off') => {
+    const api = client();
+    const task = state ? await api.setAutoApprove(id, state === 'on') : await api.getTask(id);
+    console.log(t(task.permission.autoApprove ? 'autoOn' : 'autoOff', { id }));
   });
 
 program
@@ -501,6 +544,7 @@ interface AddOptions {
   preset?: string[];
   allow?: string[];
   skipPermissions?: boolean;
+  autoApprove?: boolean;
   reviewer?: string;
   model?: string;
   reviewerModel?: string;

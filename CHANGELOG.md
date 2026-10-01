@@ -7,6 +7,14 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **Ask less about tools:**
+  - **Allow for all tasks** on a permission request (or `hb allow --global`) remembers the
+    rule in your settings for every task; edit the list under Settings or with
+    `hb global-tools`.
+  - **Auto-approve** per task (`--auto-approve`, `hb auto <id> on|off`, or a checkbox)
+    allows tools the rules do not cover without asking, but still asks, saying why, about
+    risky ones such as `git push`, `rm -r`, `sudo`, network commands and files outside the
+    worktree.
 - **Answer questions with a click:** when Claude proposes a plan or acceptance criteria,
   each of its questions comes with options you can pick (or write your own answer); your
   picks and notes are sent together as one reply.

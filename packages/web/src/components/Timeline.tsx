@@ -222,7 +222,9 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           : d.auto
             ? 'permissionAuto'
             : d.rules.length > 0
-              ? 'permissionAllowedRules'
+              ? d.scope === 'global'
+                ? 'permissionAllowedGlobal'
+                : 'permissionAllowedRules'
               : 'permissionAllowed';
       return (
         <li className={`step ${d.behavior === 'allow' ? 'step-good' : 'step-bad'}`}>

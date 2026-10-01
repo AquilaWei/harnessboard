@@ -58,7 +58,8 @@ hb done 1                            # 標記為已審核完成
 | `hb commits <id>`                                                                   | 列出任務分支上的 commit             |
 | `hb merge <id>`                                                                     | 把審核過的任務合併回基準分支        |
 | `hb delete <id>`                                                                    | 刪除沒在執行的任務（見下方）        |
-| `hb allow <id> [--suggested] [--rule 規則...]`／`hb deny <id> [原因]`               | 回覆 agent 正在等的工具請求         |
+| `hb allow <id> [--suggested] [--rule 規則...] [--global]`／`hb deny <id> [原因]`    | 回覆 agent 正在等的工具請求         |
+| `add`／`loop` 加上 `--auto-approve`；`hb auto <id> [on\|off]`；`hb global-tools`    | 減少詢問：見下方「權限」            |
 | `add`／`loop` 加上 `--preset git,node,...`；`hb tools <id> [規則...]`               | 選擇允許的工具；查看或修改          |
 
 **合併任務**（`hb merge`，或在待審核任務的面板按「合併到 main」）會用一個合併 commit
@@ -250,6 +251,14 @@ API 只接受 loopback 的 `Host` 標頭，而且每個寫入請求都必須帶�
   一律唯讀。
 - 任務沒在執行時可以修改規則：看板上是「詳細資料 → 允許的工具 → 編輯」，終端機用
   `hb tools <id> 規則...`。
+- **所有任務共用的規則：** 在權限詢問按「所有任務都允許」（或 `hb allow <id> --global`），
+  規則會存進你使用者設定裡的 `allowedTools`。每個任務的 session 除了自己的規則，也會帶上
+  這些規則。可以在「設定」或用 `hb global-tools [規則...]` 修改。
+- **自動允許**（建立任務時或在「詳細資料」勾選，`--auto-approve`，或 `hb auto <id> on|off`）：
+  規則沒涵蓋的工具會直接允許，只有有風險的才會詢問，並說明原因。有風險的包括 `git push`、
+  會改寫歷史的 git 指令、`rm -r`、`sudo`、網路指令（`curl`、`wget`、`ssh`…）、發佈套件、
+  容器、寫入 worktree 以外的檔案，以及 MCP 工具。這種清單不可能涵蓋所有風險，所以它只是
+  方便用，不等於沙盒。任務執行中也可以切換。
 - `--skip-permissions` 會關閉所有檢查，只能在沙盒環境使用。
 
 ## 開發

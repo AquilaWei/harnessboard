@@ -62,6 +62,7 @@ import { runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
 import { dueForRetry, quotaBlocks, startable } from './scheduler.js';
 import { Store } from './store.js';
+import { riskOf } from './risk.js';
 import { Workflow } from './workflow.js';
 import type { SessionPlan } from './workflow.js';
 import {
@@ -202,9 +203,10 @@ export class Harness {
 
   /**
    * Answers a tool use the agent is waiting on. Allowing with `rules` also adds them to the
-   * task, so this and later sessions use them without asking. The task goes back to
-   * `running` once nothing else is waiting. Throws when the request is not pending or a
-   * rule is invalid; nothing is answered then.
+   * task (or, with `scope: 'global'`, to the settings for every task), so this and later
+   * sessions use them without asking. The task goes back to `running` once nothing else is
+   * waiting. Throws when the request is not pending or a rule is invalid; nothing is
+   * answered then.
    */
   answerPermission(id: number, decision: PermissionDecision): Task {
     const task = this.requireTask(id);
@@ -216,7 +218,10 @@ export class Harness {
       ? [...new Set((decision.rules ?? []).map((r) => r.trim()).filter(Boolean))]
       : [];
     assertToolRules(rules);
-    if (rules.length > 0) {
+    const scope = decision.scope === 'global' ? 'global' : 'task';
+    if (rules.length > 0 && scope === 'global') {
+      this.updateSettings({ allowedTools: rules.reduce(withTool, this.config.allowedTools) });
+    } else if (rules.length > 0) {
       const allowedTools = rules.reduce(withTool, task.permission.allowedTools);
       this.store.updateTask(id, { permission: { ...task.permission, allowedTools } });
     }
@@ -224,6 +229,7 @@ export class Harness {
     this.settlePermission(id, pending, {
       behavior: decision.behavior,
       rules,
+      ...(rules.length > 0 ? { scope } : {}),
       message,
       auto: false,
     });
@@ -233,7 +239,14 @@ export class Harness {
   settings(): EditableSettings {
     const { maxConcurrent, quotaPauseUtilization, defaultContextPolicy, defaultReviewer } =
       this.config;
-    return { maxConcurrent, quotaPauseUtilization, defaultContextPolicy, defaultReviewer };
+    const allowedTools = [...this.config.allowedTools];
+    return {
+      maxConcurrent,
+      quotaPauseUtilization,
+      defaultContextPolicy,
+      defaultReviewer,
+      allowedTools,
+    };
   }
 
   /**
@@ -345,6 +358,7 @@ export class Harness {
             ? withTool(allowedTools, `Bash(${verifyCommand})`)
             : allowedTools,
         skipPermissions: input.skipPermissions ?? false,
+        autoApprove: input.autoApprove ?? false,
       },
       agents,
     });
@@ -399,6 +413,19 @@ export class Harness {
       agents.reviewerModel = modelOrNull(update.reviewerModel);
     this.checkProfiles(agents);
     const updated = this.store.updateTask(id, { agents });
+    this.emit({ type: 'task', taskId: id, status: updated.status });
+    return updated;
+  }
+
+  /**
+   * Turns auto-approve on or off for a task. Takes effect from the next tool the agent asks
+   * about, also while it runs.
+   */
+  setAutoApprove(id: number, on: boolean): Task {
+    const task = this.requireTask(id);
+    const updated = this.store.updateTask(id, {
+      permission: { ...task.permission, autoApprove: on },
+    });
     this.emit({ type: 'task', taskId: id, status: updated.status });
     return updated;
   }
@@ -842,7 +869,7 @@ export class Harness {
             ? task.verifyCommand
               ? [`Bash(${task.verifyCommand})`]
               : []
-            : task.permission.allowedTools,
+            : [...new Set([...task.permission.allowedTools, ...this.config.allowedTools])],
         skipPermissions: task.permission.skipPermissions,
         // Read-only sessions must not change anything, so they are never offered more tools.
         askPermission: plan.access === 'edit' && adapter.capabilities.permissionPrompts,
@@ -874,8 +901,9 @@ export class Harness {
   }
 
   /**
-   * Allows a tool use the task's rules already cover (they may have been added earlier in
-   * this session, after the CLI started); otherwise records it and waits for the user.
+   * Allows a tool use the task's or the global rules already cover (they may have been
+   * added after the CLI started), or that an auto-approving task may use because it does
+   * not look risky; otherwise records it and waits for the user.
    */
   private askPermission(
     taskId: number,
@@ -883,16 +911,22 @@ export class Harness {
     event: PermissionRequestEvent,
   ): Promise<PermissionReply> {
     const { requestId, toolName, summary, suggestedRules } = event;
+    const task = this.requireTask(taskId);
+    const auto = task.permission.autoApprove === true;
+    const risk = auto ? riskOf(toolName, event.input, task.worktreePath!) : null;
     const request: PermissionRequest = {
       requestId,
       sessionId,
       toolName,
       summary,
       suggestedRules,
+      risk,
       ts: Date.now(),
     };
-    const allowed = this.requireTask(taskId).permission.allowedTools;
-    if (suggestedRules.length > 0 && suggestedRules.every((rule) => allowed.includes(rule))) {
+    const allowed = [...task.permission.allowedTools, ...this.config.allowedTools];
+    const covered =
+      suggestedRules.length > 0 && suggestedRules.every((rule) => allowed.includes(rule));
+    if (covered || (auto && risk === null)) {
       this.recordDecision(taskId, request, {
         behavior: 'allow',
         rules: [],
