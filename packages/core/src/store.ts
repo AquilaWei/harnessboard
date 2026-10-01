@@ -72,6 +72,7 @@ const MIGRATIONS = [
    ALTER TABLE sessions ADD COLUMN agent_session_id TEXT;
    UPDATE sessions SET agent_session_id = id;`,
   `ALTER TABLE tasks ADD COLUMN confirm_plan INTEGER NOT NULL DEFAULT 0;`,
+  `CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);`,
 ];
 
 /**
@@ -97,12 +98,13 @@ export class Store {
   createTask(input: NewTask, now = Date.now()): Task {
     const result = this.db
       .prepare(
-        `INSERT INTO tasks (title, prompt, repo_path, base_ref, mode, verify_command,
+        `INSERT INTO tasks (id, title, prompt, repo_path, base_ref, mode, verify_command,
                             confirm_plan, status, context_policy, permission, agents,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
       )
       .run(
+        this.nextTaskId(),
         input.title,
         input.prompt,
         input.repoPath,
@@ -163,6 +165,12 @@ export class Store {
   deleteTask(id: number): void {
     this.db.exec('BEGIN');
     try {
+      this.db
+        .prepare(
+          `INSERT INTO counters (name, value) VALUES ('deleted_task_id', ?)
+           ON CONFLICT(name) DO UPDATE SET value = max(value, excluded.value)`,
+        )
+        .run(id);
       this.db.prepare('DELETE FROM events WHERE task_id = ?').run(id);
       this.db.prepare('DELETE FROM sessions WHERE task_id = ?').run(id);
       this.db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
@@ -287,6 +295,20 @@ export class Store {
       )
       .get(agentId);
     return row ? Number(row.context_window) : null;
+  }
+
+  /**
+   * Ids are never reused, even after the newest task is deleted: its branch is kept and is
+   * named after the id, so a new task with the same id could collide with it.
+   */
+  private nextTaskId(): number {
+    const row = this.db
+      .prepare(
+        `SELECT max(COALESCE((SELECT max(id) FROM tasks), 0),
+                    COALESCE((SELECT value FROM counters WHERE name = 'deleted_task_id'), 0)) AS top`,
+      )
+      .get() as { top: number };
+    return Number(row.top) + 1;
   }
 
   private migrate(): void {

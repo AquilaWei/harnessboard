@@ -19,6 +19,13 @@ const newTask = {
 };
 
 describe('Store', () => {
+  it('does not reuse the id of a deleted task', () => {
+    const store = new Store(':memory:');
+    const first = store.createTask(newTask);
+    store.deleteTask(first.id);
+    expect(store.createTask(newTask).id).toBe(first.id + 1);
+  });
+
   it('creates tasks in the backlog', () => {
     const store = new Store(':memory:');
     expect(store.createTask(newTask).status).toBe('backlog');
@@ -126,7 +133,9 @@ describe('Store', () => {
     const { id } = first.createTask({ ...newTask, mode: 'loop', verifyCommand: 'npm test' });
     first.close();
     const db = new DatabaseSync(file);
-    db.exec(`ALTER TABLE tasks DROP COLUMN confirm_plan; PRAGMA user_version = 3;`);
+    db.exec(
+      `DROP TABLE counters; ALTER TABLE tasks DROP COLUMN confirm_plan; PRAGMA user_version = 3;`,
+    );
     db.close();
     expect(new Store(file).getTask(id)!.confirmPlan).toBe(false);
   });
