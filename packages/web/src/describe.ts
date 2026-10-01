@@ -68,7 +68,7 @@ export function describeTask(task: TaskView): Description {
     case 'stopped':
       return d('stopped', 'attention');
     case 'done':
-      return d('done', 'done');
+      return task.merge ? d('merged', 'done', { base: task.merge.base }) : d('done', 'done');
   }
 }
 

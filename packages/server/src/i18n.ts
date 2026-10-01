@@ -39,6 +39,9 @@ const en = {
     'Reply with `hb feedback {id} "..."`, or start with `hb approve {id}` (`--criteria "..."` to approve your own).',
   noCriteria: 'Task {id} has no acceptance criteria.',
   chatEnded: '(the reply ended: {reason})',
+  merged: 'Task {id} merged into {base} ({commit}); its worktree and branch were removed.',
+  mergeConflicts:
+    'Task {id} conflicts with {base}. Its agent is resolving these files; review and merge again afterwards:',
   chatCompacted: '(context compacted: {preTokens} → {postTokens} tokens)',
   criteriaHeading: 'acceptance criteria:',
   noVerdict: 'no verdict',
@@ -84,6 +87,8 @@ const zhTW: Messages = {
     '用 `hb feedback {id} "..."` 回覆意見，或用 `hb approve {id}` 確認開工（加 `--criteria "..."` 改用你自己寫的標準）。',
   noCriteria: '任務 {id} 沒有驗收標準。',
   chatEnded: '（回覆中斷：{reason}）',
+  merged: '任務 {id} 已合併到 {base}（{commit}），它的 worktree 和分支已移除。',
+  mergeConflicts: '任務 {id} 和 {base} 有衝突。agent 正在解決以下檔案，完成並審核後再合併一次：',
   chatCompacted: '（上下文已壓縮：{preTokens} → {postTokens} tokens）',
   criteriaHeading: '驗收標準：',
   noVerdict: '沒有結論',

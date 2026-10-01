@@ -186,6 +186,19 @@ describe('describeTask for acceptance criteria', () => {
   });
 });
 
+describe('describeTask for merged tasks', () => {
+  it('says where a done task was merged', () => {
+    const merge = { base: 'main', branch: 'hb/1-x', commit: 'abc' };
+    const task = { ...base, status: 'done', merge } as unknown as TaskView;
+    expect(describeTask(task)).toEqual({ key: 'merged', tone: 'done', vars: { base: 'main' } });
+  });
+
+  it('just says done without a merge', () => {
+    const task = { ...base, status: 'done', merge: null } as unknown as TaskView;
+    expect(describeTask(task).key).toBe('done');
+  });
+});
+
 describe('describeTask for chats', () => {
   it('says the agent is replying to the user', () => {
     const task = {

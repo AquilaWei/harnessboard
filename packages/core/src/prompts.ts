@@ -234,3 +234,22 @@ export function parseCriteria(reply: string): string | null {
 
 /** Sent as a user message to compact the conversation; the CLI runs it as its own turn. */
 export const COMPACT_COMMAND = '/compact';
+
+/**
+ * A session that finishes merging the task's base into its branch: the harness has started
+ * the merge, so the worktree holds conflict markers in `files`.
+ */
+export function mergeConflictPrompt(goal: string, base: string, files: string[]): string {
+  return [
+    `[harness] The user wants to merge this branch into \`${base}\`, but \`${base}\` has`,
+    'changed in ways that conflict with it. The harness has started `git merge` of',
+    `\`${base}\` in this worktree. These files have conflicts:`,
+    ...files.map((file) => `- ${file}`),
+    '',
+    `Resolve every conflict so that both this task's changes and the changes on \`${base}\``,
+    'keep working, and run the checks you can. Then `git add` the files and `git commit` to',
+    'finish the merge. Do not abort the merge or rewrite history.',
+    '',
+    `The task this branch was made for:\n${goal}`,
+  ].join('\n');
+}

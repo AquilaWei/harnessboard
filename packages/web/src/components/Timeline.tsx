@@ -156,6 +156,27 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           <Markdown className="reply" text={entry.approval.criteria} />
         </li>
       );
+    case 'merge_conflict':
+      return (
+        <li className="step step-bad">
+          <StepHead
+            icon="⚠"
+            title={t('timeline.mergeConflict', { base: entry.conflict.base })}
+            meta={time}
+          />
+          <div className="reply mono">{entry.conflict.files.join('\n')}</div>
+        </li>
+      );
+    case 'merged':
+      return (
+        <li className="step step-good">
+          <StepHead
+            icon="⇢"
+            title={t('timeline.merged', { base: entry.merge.base })}
+            meta={`${entry.merge.commit.slice(0, 8)} · ${time}`}
+          />
+        </li>
+      );
     case 'chat_message':
       return (
         <li className="step step-user">

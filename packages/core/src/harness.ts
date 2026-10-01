@@ -25,6 +25,9 @@ import type {
   CreateTaskInput,
   CriteriaApproval,
   CriteriaProposal,
+  MergeConflict,
+  MergeRecord,
+  MergeResult,
   HarnessEvent,
   FeatureSnapshot,
   HarnessStatus,
@@ -63,12 +66,21 @@ import { Workflow } from './workflow.js';
 import type { SessionPlan } from './workflow.js';
 import {
   addWorktree,
+  advanceBranch,
   branchName,
   commitDiff,
   commitLog,
+  commitTree,
   currentRef,
+  deleteMergedBranch,
+  isLocalBranch,
+  isMergedInto,
+  mergeTree,
+  porcelainStatus,
   pruneWorktrees,
   removeWorktree,
+  resolveCommit,
+  startMerge,
   worktreeDiff,
   worktreePath,
 } from './worktree.js';
@@ -532,6 +544,7 @@ export class Harness {
         (s) => s.role === 'implementer' && s.agentSessionId !== null && s.contextTokens > 0,
       );
     if (!session) throw new Error(`task ${id} has no conversation to continue yet`);
+    if (!task.worktreePath) throw new Error(`task ${id} was merged; its worktree is gone`);
     const window = session.contextWindow ?? this.workflow.contextWindow(session.agentId);
     if (
       contextPct(session.contextTokens, window) >= resolveThresholds(task.contextPolicy).hardPct
@@ -597,6 +610,75 @@ export class Harness {
   ): void {
     this.store.appendEvent(taskId, sessionId, 'chat_end', { reason } satisfies ChatEnd);
     if (this.store.getTask(taskId)) this.setStatus(taskId, returnTo);
+  }
+
+  /**
+   * Merges a reviewed task's branch into its base branch with a merge commit (`Merge task
+   * #N: title`), then marks the task done, removes its worktree and deletes the merged
+   * branch. The merge is made without a worktree; the user's own checkout only changes when
+   * it has the base branch checked out, and is then fast-forwarded, which git refuses when
+   * local changes would be overwritten.
+   * When the base has conflicting changes, nothing on the base changes: the base is merged
+   * into the task's worktree instead, its agent is queued to resolve the conflicts and
+   * commit, and the task comes back for review (and another merge) afterwards.
+   * Throws when the task is not in review, has uncommitted changes or nothing to merge, its
+   * base is not a local branch, or git refuses.
+   */
+  async mergeTask(id: number): Promise<MergeResult> {
+    const task = this.requireTask(id);
+    if (task.status !== 'review') throw new Error(`task ${id} is ${task.status}, not review`);
+    const { repoPath: repo, baseRef: base, branch, worktreePath: dir } = task;
+    if (!branch || !dir) throw new Error(`task ${id} has no branch to merge`);
+    if ((await porcelainStatus(dir)) !== '') {
+      throw new Error(
+        `task ${id} has uncommitted changes in its worktree; commit or discard them first`,
+      );
+    }
+    if (!(await isLocalBranch(repo, base))) {
+      throw new Error(`the base ${base} is not a local branch, so there is nothing to merge into`);
+    }
+    if (await isMergedInto(repo, branch, base)) {
+      throw new Error(`${base} already has every commit of ${branch}`);
+    }
+    const merged = await mergeTree(repo, base, branch);
+    if ('conflicts' in merged) return this.resolveConflicts(task, dir, merged.conflicts);
+
+    const [from, head] = await Promise.all([
+      resolveCommit(repo, base),
+      resolveCommit(repo, branch),
+    ]);
+    const message = `Merge task #${id}: ${task.title}\n\nBranch ${branch}`;
+    const commit = await commitTree(repo, merged.tree, [from, head], message);
+    await advanceBranch(repo, base, from, commit);
+    const record: MergeRecord = { base, branch, commit };
+    this.store.appendEvent(id, null, 'merged', record);
+    this.notice(id, `merged ${branch} into ${base} (${commit.slice(0, 8)})`);
+    // The branch is in the base now; only the scratch copy and the branch name go.
+    await this.discardWorktree(repo, dir);
+    await deleteMergedBranch(repo, branch, base);
+    this.store.updateTask(id, { worktreePath: null });
+    this.setStatus(id, 'done');
+    return { status: 'merged', ...record };
+  }
+
+  private async resolveConflicts(task: Task, dir: string, files: string[]): Promise<MergeResult> {
+    const conflict: MergeConflict = { base: task.baseRef, files };
+    // Started here, not by the agent, so a task without `git merge` in its rules can resolve;
+    // awaited before queueing, so the agent finds the conflict markers.
+    await startMerge(dir, task.baseRef);
+    this.store.appendEvent(task.id, null, 'merge_conflict', conflict);
+    this.notice(
+      task.id,
+      `merging ${task.baseRef} conflicts in ${files.length} files; agent resolves`,
+    );
+    this.setStatus(task.id, 'queued');
+    this.tick();
+    return { status: 'conflicts', ...conflict };
+  }
+
+  /** Latest merge of the task's branch into its base, if it was merged. */
+  lastMerge(taskId: number): MergeRecord | null {
+    return (this.store.lastEvent(taskId, 'merged')?.data as MergeRecord | undefined) ?? null;
   }
 
   /** Marks a reviewed task as done. */

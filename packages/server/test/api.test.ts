@@ -167,6 +167,13 @@ describe('tasks API', () => {
     ]);
   });
 
+  it('refuses to merge a task that is not in review', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(`/api/tasks/${id}/merge`, undefined, { [CLIENT_HEADER]: 'test' });
+    expect(((await res.json()) as { error: string }).error).toMatch(/not review/);
+  });
+
   it('refuses a chat with a task that has not run', async () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };

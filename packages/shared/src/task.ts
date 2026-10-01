@@ -100,6 +100,27 @@ export interface CriteriaApproval {
   criteria: string;
 }
 
+/** Stored as the `merged` event when a task's branch was merged into its base. */
+export interface MergeRecord {
+  base: string;
+  branch: string;
+  /** The merge commit on `base`. */
+  commit: string;
+}
+
+/**
+ * Stored as the `merge_conflict` event when the base had conflicting changes: the harness
+ * started merging the base into the task's worktree, and its agent resolves `files`.
+ */
+export interface MergeConflict {
+  base: string;
+  files: string[];
+}
+
+/** Reply to `POST /api/tasks/:id/merge`. */
+export type MergeResult =
+  ({ status: 'merged' } & MergeRecord) | ({ status: 'conflicts' } & MergeConflict);
+
 export type SessionEndReason =
   'completed' | 'handoff' | 'context_hard_limit' | 'quota' | 'stopped' | 'error';
 

@@ -5,6 +5,14 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Merge a task into its base:** `hb merge <id>`, or **Merge into main** on a task in
+  review, merges the branch with a merge commit and keeps every commit; the task is then
+  done and its worktree and branch are removed. Conflicting changes on the base are sent to
+  the task's agent to resolve in its worktree, never in your checkout; review and merge
+  again afterwards.
+
 ## 0.0.3 - 2026-09-30
 
 ### Added

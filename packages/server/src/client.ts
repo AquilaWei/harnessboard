@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  MergeResult,
   ChatEntry,
   AgentInfo,
   AgentsUpdate,
@@ -39,6 +40,7 @@ export class ApiClient {
   queueTask = (id: number) => this.post<Task>(`/tasks/${id}/queue`);
   stopTask = (id: number) => this.post<Task>(`/tasks/${id}/stop`);
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);
+  mergeTask = (id: number) => this.post<MergeResult>(`/tasks/${id}/merge`);
   answerPermission = (id: number, decision: PermissionDecision) =>
     this.post<Task>(`/tasks/${id}/permission`, decision);
   setAgents = (id: number, update: AgentsUpdate) =>

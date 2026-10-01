@@ -438,6 +438,20 @@ program
   });
 
 program
+  .command('merge')
+  .description('merge a reviewed task into its base branch and mark it done')
+  .argument('<id>', 'task id', parseInteger)
+  .action(async (id: number) => {
+    const result = await client().mergeTask(id);
+    if (result.status === 'merged') {
+      console.log(t('merged', { id, base: result.base, commit: result.commit.slice(0, 8) }));
+    } else {
+      console.log(t('mergeConflicts', { id, base: result.base }));
+      for (const file of result.files) console.log(`  ${file}`);
+    }
+  });
+
+program
   .command('diff')
   .description('show what a task changed')
   .argument('<id>', 'task id', parseInteger)

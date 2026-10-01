@@ -60,9 +60,24 @@ hb done 1                            # mark it reviewed
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish      |
 | `hb chat <id> <message>`                                                              | Write to the task's agent; prints its reply  |
 | `hb commits <id>`                                                                     | List the commits on the task branch          |
+| `hb merge <id>`                                                                       | Merge a reviewed task into its base (below)  |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)    |
 | `hb allow <id> [--suggested] [--rule RULE...]` / `hb deny <id> [reason]`              | Answer a tool use the agent waits on         |
 | `--preset git,node,...` on `add` / `loop`; `hb tools <id> [RULE...]`                  | Choose allowed tools; show or change them    |
+
+**Merging a task** (`hb merge`, or **Merge into main** in the task panel of a task in
+review) merges its branch into the branch it started from with a merge commit,
+`Merge task #N: <title>`, keeping every commit of the task. The task is then done, and its
+worktree and branch are removed.
+
+- Your own checkout only changes if it has that branch checked out. It is then
+  fast-forwarded to the merge, and git refuses if your local changes would be overwritten.
+- If the base branch changed the same lines in the meantime, nothing on it changes. The
+  base is merged into the task's worktree instead, and the task's agent resolves the
+  conflicts and commits. The task comes back for review (by the reviewer too, if it has
+  one); merge again when you are happy with it.
+- **Mark done without merging** keeps the old behaviour: the branch stays for you to merge.
+- Needs git 2.38 or later.
 
 **Deleting a task** (`hb delete`, or **Delete** in the task panel) removes its history and
 its worktree folder, including edits that were not committed. The branch is kept, so

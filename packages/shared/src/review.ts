@@ -2,6 +2,8 @@
 import type {
   CriteriaApproval,
   CriteriaProposal,
+  MergeConflict,
+  MergeRecord,
   Session,
   SessionEndReason,
   TaskStatus,
@@ -89,5 +91,7 @@ export type TimelineEntry =
   | { kind: 'criteria'; ts: number; proposal: CriteriaProposal }
   | { kind: 'criteria_approved'; ts: number; approval: CriteriaApproval }
   | { kind: 'chat_message'; ts: number; message: ChatMessage }
+  | { kind: 'merge_conflict'; ts: number; conflict: MergeConflict }
+  | { kind: 'merged'; ts: number; merge: MergeRecord }
   | { kind: 'permission_request'; ts: number; request: PermissionRequest }
   | { kind: 'permission_decision'; ts: number; decision: PermissionDecisionRecord };

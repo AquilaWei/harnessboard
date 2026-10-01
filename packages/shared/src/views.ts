@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { ContextPolicy, CriteriaProposal, Session, Task, TaskMode } from './task.js';
+import type {
+  ContextPolicy,
+  CriteriaProposal,
+  MergeRecord,
+  Session,
+  Task,
+  TaskMode,
+} from './task.js';
 import type { Feature, LoopProgress } from './loop.js';
 import type { ReviewRecord, TaskActivity } from './review.js';
 import type { AgentProvider, TaskAgents } from './agents.js';
@@ -37,6 +44,8 @@ export interface TaskView extends Task {
   planFeedbackPending: boolean;
   /** Latest acceptance criteria a single task's agent proposed, until they are approved. */
   criteria: CriteriaProposal | null;
+  /** Set once the task's branch was merged into its base. */
+  merge: MergeRecord | null;
   /** Tool uses the running session waits on the user to allow or deny, oldest first. */
   permissionRequests: PermissionRequest[];
 }

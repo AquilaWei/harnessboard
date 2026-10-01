@@ -14,11 +14,7 @@ const execFileAsync = promisify(execFile);
  */
 export async function git(cwd: string, args: string[]): Promise<string> {
   try {
-    const { stdout } = await execFileAsync('git', ['-c', 'core.longpaths=true', ...args], {
-      cwd,
-      maxBuffer: 64 * 1024 * 1024,
-    });
-    return stdout;
+    return await gitRaw(cwd, args);
   } catch (err) {
     const e = err as { stderr?: string; message: string };
     throw new Error(`git ${args.join(' ')} failed: ${e.stderr?.trim() || e.message}`);
@@ -123,4 +119,120 @@ export async function porcelainStatus(dir: string): Promise<string> {
 /** Commit where HEAD branched off `ref`. */
 export async function mergeBase(dir: string, ref: string): Promise<string> {
   return (await git(dir, ['merge-base', ref, 'HEAD'])).trim();
+}
+
+/** Like {@link git}, but a non-zero exit is returned, not thrown, for commands that use it. */
+async function gitExit(cwd: string, args: string[]): Promise<{ code: number; stdout: string }> {
+  try {
+    return { code: 0, stdout: await gitRaw(cwd, args) };
+  } catch (err) {
+    const e = err as { code?: unknown; stdout?: string; stderr?: string; message: string };
+    if (typeof e.code !== 'number') throw err;
+    return { code: e.code, stdout: e.stdout ?? '' };
+  }
+}
+
+async function gitRaw(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync('git', ['-c', 'core.longpaths=true', ...args], {
+    cwd,
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  return stdout;
+}
+
+/**
+ * The tree of merging `branch` into `base`, computed without touching any worktree
+ * (`git merge-tree`, git 2.38 or later), or the paths that conflict.
+ */
+export async function mergeTree(
+  repo: string,
+  base: string,
+  branch: string,
+): Promise<{ tree: string } | { conflicts: string[] }> {
+  const args = ['merge-tree', '--write-tree', '--name-only', '--no-messages', base, branch];
+  const { code, stdout } = await gitExit(repo, args);
+  const [tree = '', ...paths] = stdout.split('\n').filter(Boolean);
+  if (code === 0) return { tree };
+  if (code === 1) return { conflicts: paths };
+  throw new Error(`git merge-tree failed (exit ${code}); it needs git 2.38 or later`);
+}
+
+/** Creates a commit object for `tree` with the given parents; no ref moves. */
+export async function commitTree(
+  repo: string,
+  tree: string,
+  parents: string[],
+  message: string,
+): Promise<string> {
+  const args = ['commit-tree', tree, ...parents.flatMap((p) => ['-p', p]), '-m', message];
+  return (await git(repo, args)).trim();
+}
+
+/** Commit a ref points at; throws when it does not exist. */
+export async function resolveCommit(repo: string, ref: string): Promise<string> {
+  return (await git(repo, ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`])).trim();
+}
+
+/** True when `ref` is a local branch name. */
+export async function isLocalBranch(repo: string, ref: string): Promise<boolean> {
+  const { code } = await gitExit(repo, ['show-ref', '--verify', '--quiet', `refs/heads/${ref}`]);
+  return code === 0;
+}
+
+/** The worktree that has `branch` checked out, or `null` when none has. */
+export async function worktreeOfBranch(repo: string, branch: string): Promise<string | null> {
+  const out = await git(repo, ['worktree', 'list', '--porcelain']);
+  for (const block of out.split('\n\n')) {
+    const lines = block.split('\n');
+    const dir = lines.find((l) => l.startsWith('worktree '))?.slice('worktree '.length);
+    if (dir && lines.includes(`branch refs/heads/${branch}`)) return path.resolve(dir);
+  }
+  return null;
+}
+
+/**
+ * Moves `branch` from `from` to `to`, where `to` descends from `from`. A worktree that has
+ * the branch checked out is fast-forwarded, which updates its files and refuses when local
+ * changes would be overwritten; otherwise only the ref moves, and only if it is still at
+ * `from`. Throws when either refuses.
+ */
+export async function advanceBranch(
+  repo: string,
+  branch: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  const checkedOut = await worktreeOfBranch(repo, branch);
+  if (checkedOut) await git(checkedOut, ['merge', '--ff-only', to]);
+  else await git(repo, ['update-ref', `refs/heads/${branch}`, to, from]);
+}
+
+/**
+ * Starts merging `ref` into the worktree's branch and leaves the result uncommitted, with
+ * conflict markers in the conflicting files, for an agent to resolve and commit.
+ */
+export async function startMerge(dir: string, ref: string): Promise<void> {
+  const { code } = await gitExit(dir, ['merge', '--no-ff', '--no-commit', ref]);
+  // 1 means conflicts, which is what this is for; anything else is a real failure.
+  if (code !== 0 && code !== 1) throw new Error(`git merge ${ref} failed (exit ${code})`);
+}
+
+/**
+ * Deletes `branch` once it is fully merged into `into`; throws when it is not. (`branch -d`
+ * would check against the repository's current branch instead, which may be another one.)
+ */
+export async function deleteMergedBranch(
+  repo: string,
+  branch: string,
+  into: string,
+): Promise<void> {
+  const { code } = await gitExit(repo, ['merge-base', '--is-ancestor', branch, into]);
+  if (code !== 0) throw new Error(`branch ${branch} is not merged into ${into}`);
+  await git(repo, ['branch', '-D', branch]);
+}
+
+/** True when every commit of `ref` is already in `into`. */
+export async function isMergedInto(repo: string, ref: string, into: string): Promise<boolean> {
+  const { code } = await gitExit(repo, ['merge-base', '--is-ancestor', ref, into]);
+  return code === 0;
 }

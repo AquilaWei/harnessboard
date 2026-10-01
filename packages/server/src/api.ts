@@ -162,6 +162,8 @@ export function createApi(harness: Harness): Hono {
     return c.json(harness.chat(taskId(c), message));
   });
 
+  app.post('/tasks/:id/merge', async (c) => c.json(await harness.mergeTask(taskId(c))));
+
   app.get('/tasks/:id/timeline', (c) => c.json(timeline(taskId(c), harness.store)));
 
   app.get('/tasks/:id/commits', async (c) => c.json(await harness.commits(taskId(c))));

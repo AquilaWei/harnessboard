@@ -7,6 +7,8 @@ import type {
   ContextView,
   CriteriaApproval,
   CriteriaProposal,
+  MergeConflict,
+  MergeRecord,
   FeatureSnapshot,
   LoopProgress,
   PermissionDecisionRecord,
@@ -42,6 +44,7 @@ export function taskView(task: Task, harness: Harness): TaskView {
     plan: task.mode === 'loop' ? planSummary(task.id, store) : null,
     planFeedbackPending: harness.pendingPlanFeedback(task.id) !== null,
     criteria: harness.criteriaProposal(task),
+    merge: harness.lastMerge(task.id),
     permissionRequests: harness.permissionRequests(task.id),
     lastNotice:
       (store.lastEvent(task.id, 'notice')?.data as { message?: string } | undefined)?.message ??
@@ -116,6 +119,8 @@ export function timeline(taskId: number, store: Store): TimelineEntry[] {
     'criteria',
     'criteria_approved',
     'chat_message',
+    'merge_conflict',
+    'merged',
     'permission_request',
     'permission_decision',
   ] as const;
@@ -140,6 +145,8 @@ function timelineEvent(
     | 'criteria'
     | 'criteria_approved'
     | 'chat_message'
+    | 'merge_conflict'
+    | 'merged'
     | 'permission_request'
     | 'permission_decision',
   ts: number,
@@ -166,6 +173,10 @@ function timelineEvent(
       return { kind, ts, approval: data as CriteriaApproval };
     case 'chat_message':
       return { kind, ts, message: data as ChatMessage };
+    case 'merge_conflict':
+      return { kind, ts, conflict: data as MergeConflict };
+    case 'merged':
+      return { kind, ts, merge: data as MergeRecord };
     case 'permission_request':
       return { kind, ts, request: data as PermissionRequest };
     case 'permission_decision':

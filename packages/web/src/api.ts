@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  MergeResult,
   ChatEntry,
   AgentInfo,
   AgentsUpdate,
@@ -79,6 +80,7 @@ export const api = {
     send<unknown>('POST', `/tasks/${id}/plan/approve`, { verifyCommand }),
   approveCriteria: (id: number, criteria: string) =>
     send<unknown>('POST', `/tasks/${id}/criteria/approve`, { criteria }),
+  mergeTask: (id: number) => send<MergeResult>('POST', `/tasks/${id}/merge`),
   chat: (id: number) => request<ChatEntry[]>(`/tasks/${id}/chat`),
   sendChat: (id: number, message: string) =>
     send<unknown>('POST', `/tasks/${id}/chat`, { message }),

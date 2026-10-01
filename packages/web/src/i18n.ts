@@ -98,6 +98,7 @@ const en = {
     failed: 'Stopped with a problem: {{reason}}',
     stopped: 'Stopped by you. Resume it when ready.',
     done: 'Done.',
+    merged: 'Done and merged into {{base}}.',
   },
   actions: {
     start: 'Start',
@@ -108,6 +109,7 @@ const en = {
     approveCriteria: 'Review criteria',
     answerPermission: 'Allow or deny',
     markDone: 'Mark done',
+    markDoneOnly: 'Mark done without merging',
     sendBack: 'Run again',
     copyOpen: 'Copy “open in terminal”',
     chat: 'Chat',
@@ -193,6 +195,12 @@ const en = {
     chat: 'Chat',
     details: 'Details',
   },
+  merge: {
+    action: 'Merge into {{base}}',
+    merging: 'Merging…',
+    conflicts:
+      '{{base}} has conflicting changes in {{files}}. The agent is resolving them; review the result and merge again.',
+  },
   chat: {
     empty:
       'Talk to the agent in this task’s conversation. It remembers the work so far and may change files, within the task’s tool rules.',
@@ -248,6 +256,8 @@ const en = {
     criteriaMissing: 'Questions before proposing criteria',
     criteriaApproved: 'You approved the acceptance criteria',
     chat: 'You wrote to the agent',
+    mergeConflict: 'Conflicts with {{base}}, sent to the agent to resolve',
+    merged: 'Merged into {{base}}',
     implementer: '{{agent}} · implementer',
     reviewer: '{{agent}} · reviewer',
     active: 'running…',
@@ -488,6 +498,7 @@ const zhTW: typeof en = {
     failed: '出了問題而停止：{{reason}}',
     stopped: '已由你停止，準備好再繼續。',
     done: '已完成。',
+    merged: '已完成，並合併到 {{base}}。',
   },
   actions: {
     start: '開始',
@@ -498,6 +509,7 @@ const zhTW: typeof en = {
     approveCriteria: '確認驗收標準',
     answerPermission: '允許／拒絕',
     markDone: '標為完成',
+    markDoneOnly: '只標為完成，不合併',
     sendBack: '再執行一次',
     copyOpen: '複製「在終端機開啟」',
     chat: '對話',
@@ -580,6 +592,11 @@ const zhTW: typeof en = {
     chat: '對話',
     details: '詳細資訊',
   },
+  merge: {
+    action: '合併到 {{base}}',
+    merging: '合併中…',
+    conflicts: '{{base}} 在 {{files}} 有衝突的修改。agent 正在解決，完成後請檢查結果再合併一次。',
+  },
   chat: {
     empty:
       '在這個任務的對話裡直接跟 agent 溝通。它記得目前為止的工作，也可以在任務的工具規則內修改檔案。',
@@ -634,6 +651,8 @@ const zhTW: typeof en = {
     criteriaMissing: '提出驗收標準前的問題',
     criteriaApproved: '你確認了驗收標準',
     chat: '你傳訊息給 agent',
+    mergeConflict: '與 {{base}} 有衝突，已交給 agent 解決',
+    merged: '已合併到 {{base}}',
     implementer: '{{agent}} · 實作者',
     reviewer: '{{agent}} · 審查者',
     active: '執行中…',

@@ -95,6 +95,23 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
 
   const act = (action: TaskAction) => task && void onAction(task, action).then(loadTask);
 
+  const [merging, setMerging] = useState(false);
+  const merge = async () => {
+    setMerging(true);
+    try {
+      const result = await api.mergeTask(taskId);
+      // A clean merge shows in the panel itself; conflicts need saying, since work goes on.
+      if (result.status === 'conflicts') {
+        onError(t('merge.conflicts', { base: result.base, files: result.files.join(', ') }));
+      }
+      await loadTask();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setMerging(false);
+    }
+  };
+
   const s = task?.status;
   const hasCriteria = task?.mode === 'single' && (task.confirmPlan || task.acceptance);
   const tabs: DrawerTab[] = [
@@ -150,8 +167,22 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
               <div className="actions">
                 {s === 'review' && (
                   <>
-                    <button type="button" className="btn primary" onClick={() => act('complete')}>
-                      {t('actions.markDone')}
+                    {task.branch && (
+                      <button
+                        type="button"
+                        className="btn primary"
+                        disabled={merging}
+                        onClick={() => void merge()}
+                      >
+                        {merging ? t('merge.merging') : t('merge.action', { base: task.baseRef })}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={`btn ${task.branch ? '' : 'primary'}`}
+                      onClick={() => act('complete')}
+                    >
+                      {t(task.branch ? 'actions.markDoneOnly' : 'actions.markDone')}
                     </button>
                     {tab !== 'changes' && (
                       <button type="button" className="btn" onClick={() => setTab('changes')}>

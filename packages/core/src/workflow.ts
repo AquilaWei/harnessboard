@@ -6,6 +6,7 @@ import type {
   AgentRole,
   CriteriaProposal,
   FeatureSnapshot,
+  MergeConflict,
   PlanProposal,
   ReviewRecord,
   ReviewRequest,
@@ -25,6 +26,7 @@ import {
   criteriaRevisionPrompt,
   initializerPrompt,
   loopSessionPrompt,
+  mergeConflictPrompt,
   parseCriteria,
   planRevisionPrompt,
   taskGoal,
@@ -72,6 +74,11 @@ export class Workflow {
     const last = this.host.store.listSessions(task.id).at(-1);
     const request = this.pendingReview(task.id);
     if (request) return this.reviewPlan(task, request, last);
+    const conflict = this.pendingMergeConflict(task.id);
+    if (conflict) {
+      const prompt = mergeConflictPrompt(this.goal(task), conflict.base, conflict.files);
+      return this.implement(task, prompt);
+    }
     if (!last) return this.implement(task, this.firstPrompt(task));
     const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
     if (feedback !== null) return this.revisePlan(task, feedback, last);
@@ -124,6 +131,13 @@ export class Workflow {
       this.inPlanning(task) ||
       (task.mode === 'loop' && !existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE)));
     return { phase: planning ? 'planning' : 'implementing', agentId: plan.agentId };
+  }
+
+  /** Conflicts from a merge the harness started that no session has worked on yet. */
+  private pendingMergeConflict(taskId: number): MergeConflict | null {
+    const event = this.host.store.lastEvent(taskId, 'merge_conflict');
+    if (!event || this.host.store.hasSessionEventsAfter(taskId, event.id)) return null;
+    return event.data as MergeConflict;
   }
 
   /** The review waiting to run, if the latest step was sent for review and not yet reviewed. */
