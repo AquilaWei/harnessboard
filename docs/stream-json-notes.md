@@ -87,3 +87,16 @@ Checked with Claude Code 2.1.285.
   and carries on.
 - No `initialize` control request is needed first.
 - A suggested rule such as `git add *` corresponds to the rule `Bash(git add *)`.
+
+## Compacting (`/compact`)
+
+Verified with Claude Code 2.1.286 in `-p --input-format stream-json` mode:
+
+- A `/compact` user message runs as a turn of its own. It prints a `system` line with
+  `subtype: "compact_boundary"` and `compact_metadata.pre_tokens` / `post_tokens`, then a
+  `result` with an empty `result`. The conversation then continues in the same process.
+- Sent while a turn is running, `/compact` waits until that turn has ended; plain messages
+  are read at the next tool boundary instead.
+- `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` did not make print mode compact, within or between turns.
+- Harnessboard therefore sends `/compact` after a turn that ended past the compact threshold,
+  and never interrupts work for it.

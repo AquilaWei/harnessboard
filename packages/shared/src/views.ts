@@ -11,6 +11,7 @@ export interface ContextView {
   tokens: number;
   window: number;
   pct: number;
+  compactPct: number | null;
   softPct: number;
   hardPct: number;
 }
@@ -94,6 +95,7 @@ export interface CreateTaskInput {
    */
   confirmPlan?: boolean;
   size?: ContextPolicy['size'];
+  compactPct?: number;
   softPct?: number;
   hardPct?: number;
   allowedTools?: string[];

@@ -3,7 +3,7 @@ import { contextPct } from '@harnessboard/shared';
 import type { AgentEvent, QuotaInfo, SessionEndReason, Thresholds } from '@harnessboard/shared';
 import type { AgentAdapter, PermissionReply, SessionSpec } from './agent.js';
 import { spawnLines } from './process.js';
-import { reportsDone, wrapUpPrompt } from './prompts.js';
+import { COMPACT_COMMAND, reportsDone, wrapUpPrompt } from './prompts.js';
 
 const STDERR_TAIL_LINES = 5;
 
@@ -28,6 +28,11 @@ export interface RunSessionOptions {
   thresholds: Thresholds;
   /** `false` never asks for a wrap-up (reviewers have nothing to commit); hard still applies. */
   wrapUp?: boolean;
+  /**
+   * Compact the conversation with `/compact` once the agent's turn has ended at or past
+   * `thresholds.compactPct`; only for CLIs with mid-turn input. Defaults to `false`.
+   */
+  compact?: boolean;
   /** Best known window for the model; replaced once the agent reports the real one. */
   contextWindow: number;
   /** Aborting stops the session and kills the agent's process tree. */
@@ -45,6 +50,12 @@ export interface RunSessionOptions {
 /**
  * Runs one agent session for a single prompt and reports why it ended.
  *
+ * Compaction: the agent is never interrupted for it. When a turn ends at or past the
+ * compact threshold, the runner sends `/compact` before closing the session, so the
+ * conversation is small when it is resumed later (a chat, a quota pause, the start of work
+ * after a criteria discussion). The outcome is the agent's own reply; the compaction's
+ * empty result is not reported, and a failed compaction only adds a notice.
+ *
  * Context budget: crossing the soft threshold asks the agent to wrap up. A CLI that reads
  * stdin mid-turn gets the request right away (at its next tool boundary); for any other CLI
  * the request is sent as a resumed turn once the current one finishes. Crossing the hard
@@ -60,6 +71,11 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   let wrapSent = false;
   let hardHit = false;
   let stopped = false;
+  const compactPct = streaming && options.compact ? thresholds.compactPct : null;
+  let lastPct = 0; // context use after the latest model call
+  let compacting = false;
+  let compacted = false; // the CLI reported the compaction asked for
+  let reply: ResultEvent | null = null; // the agent's own result, kept while compacting
   let quota: QuotaInfo | null = null;
   let result: ResultEvent | null = null;
   // Kept to explain an exit without a result; the CLI reports such failures on stderr.
@@ -132,15 +148,23 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
     else child.closeInput(); // the prompt went in as an argument
 
     function handle(event: AgentEvent): void {
+      if (compacting && event.kind === 'result') {
+        finishCompaction(event);
+        return;
+      }
       options.onEvent(event);
       if (event.kind === 'init' && event.sessionId) agentSessionId = event.sessionId;
       if (event.kind === 'quota') quota = event.quota;
       if (event.kind === 'context') checkBudget(event.tokens);
+      if (event.kind === 'compact' && compacting) {
+        compacted = true;
+        options.onNotice(`context compacted: ${event.preTokens} → ${event.postTokens} tokens`);
+      }
       if (event.kind === 'permission_request') answer(event);
       if (event.kind === 'result') {
         result = event;
         if (event.contextWindow) window = event.contextWindow;
-        child.closeInput();
+        if (!startCompaction(event)) child.closeInput();
       }
     }
 
@@ -158,8 +182,35 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
       );
     }
 
+    /**
+     * Sends `/compact` after a turn that ended normally past the compact threshold, unless
+     * the session is being handed off anyway; `true` when it did.
+     */
+    function startCompaction(event: ResultEvent): boolean {
+      const due = compactPct !== null && lastPct >= compactPct;
+      if (!due || event.isError || stopped || hardHit || wrapSent) return false;
+      options.onNotice(`context ${lastPct}% ≥ compact ${compactPct}%: compacting after the turn`);
+      compacting = true;
+      reply = event;
+      child.write(adapter.encodeMessage(COMPACT_COMMAND));
+      return true;
+    }
+
+    /** The compaction's own (empty) result: keep the agent's reply as the outcome. */
+    function finishCompaction(event: ResultEvent): void {
+      compacting = false;
+      if (!compacted) {
+        options.onNotice(
+          `the conversation was not compacted${event.isError ? `: ${event.text}` : ''}`,
+        );
+      }
+      result = reply;
+      child.closeInput();
+    }
+
     function checkBudget(tokens: number): void {
       const pct = contextPct(tokens, window);
+      lastPct = pct;
       if (options.wrapUp !== false && wrapPct === null && pct >= thresholds.softPct) {
         wrapPct = pct;
         const when = streaming

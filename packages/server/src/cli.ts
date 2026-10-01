@@ -64,6 +64,11 @@ function withTaskOptions(command: Command): Command {
         'large',
       ]),
     )
+    .option(
+      '--compact <pct>',
+      'compact the conversation at this context % (0: never)',
+      parseInteger,
+    )
     .option('--soft <pct>', 'soft context threshold in percent', parseInteger)
     .option('--hard <pct>', 'hard context threshold in percent', parseInteger)
     .option(
@@ -89,6 +94,7 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       title: o.title,
       baseRef: o.base,
       size: o.size,
+      compactPct: o.compact,
       softPct: o.soft,
       hardPct: o.hard,
       allowedTools: allowedTools(o.preset, o.allow),
@@ -223,6 +229,7 @@ program
       const line = t('contextLine', {
         pct: c.pct,
         window: formatTokens(c.window),
+        compact: c.compactPct ?? '-',
         soft: c.softPct,
         hard: c.hardPct,
       });
@@ -474,6 +481,7 @@ interface AddOptions {
   title?: string;
   base?: string;
   size?: TaskSize;
+  compact?: number;
   soft?: number;
   hard?: number;
   preset?: string[];

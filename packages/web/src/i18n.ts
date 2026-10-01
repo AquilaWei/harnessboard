@@ -182,6 +182,7 @@ const en = {
   overSoft: 'past the wrap-up point',
   overHard: 'past the limit',
   thresholds: 'wrap-up {{soft}}% · limit {{hard}}%',
+  compactAt: 'compact {{pct}}%',
   invalidMove: '“{{from}}” cannot be moved to {{to}}.',
   tabs: {
     timeline: 'Timeline',
@@ -568,6 +569,7 @@ const zhTW: typeof en = {
   overSoft: '已超過收尾門檻',
   overHard: '已超過上限',
   thresholds: '收尾門檻 {{soft}}% · 上限 {{hard}}%',
+  compactAt: '壓縮 {{pct}}%',
   invalidMove: '「{{from}}」的任務不能移到「{{to}}」。',
   tabs: {
     timeline: '時間軸',

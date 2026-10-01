@@ -231,3 +231,6 @@ export function parseCriteria(reply: string): string | null {
   while (blocks.length > 1 && !listed(blocks.at(-1)!)) blocks.pop();
   return blocks.join('\n\n').trim() || null;
 }
+
+/** Sent as a user message to compact the conversation; the CLI runs it as its own turn. */
+export const COMPACT_COMMAND = '/compact';

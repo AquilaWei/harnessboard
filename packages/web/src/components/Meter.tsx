@@ -33,7 +33,7 @@ export function MeterBar({ pct, severity, ticks = [], label }: BarProps) {
 }
 
 /**
- * Context usage with the task's soft and hard thresholds as ticks. The bar's scale
+ * Context usage with the task's compact, soft and hard thresholds as ticks. The bar's scale
  * is zoomed so the hard limit sits at 80 % of its width, which keeps small budgets readable.
  */
 export function ContextMeter({ context }: { context: ContextView | null }) {
@@ -51,13 +51,20 @@ export function ContextMeter({ context }: { context: ContextView | null }) {
       <MeterBar
         pct={context.pct * scale}
         severity={severity}
-        ticks={[context.softPct * scale, context.hardPct * scale]}
+        ticks={[
+          ...(context.compactPct !== null ? [context.compactPct * scale] : []),
+          context.softPct * scale,
+          context.hardPct * scale,
+        ]}
         label={t('context')}
       />
       <div className="meter-caption">
         <span>{t('contextValue', { pct: context.pct, window: formatTokens(context.window) })}</span>
         {severity === 'normal' ? (
-          <span>{t('thresholds', { soft: context.softPct, hard: context.hardPct })}</span>
+          <span>
+            {context.compactPct !== null && `${t('compactAt', { pct: context.compactPct })} · `}
+            {t('thresholds', { soft: context.softPct, hard: context.hardPct })}
+          </span>
         ) : (
           <span className={`flag ${severity}`}>
             ⚠ {t(severity === 'critical' ? 'overHard' : 'overSoft')}

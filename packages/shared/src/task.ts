@@ -31,6 +31,11 @@ export type TaskSize = 'small' | 'medium' | 'large';
  */
 export interface ContextPolicy {
   size?: TaskSize;
+  /**
+   * Context use at which a session is compacted (`/compact`) and carries on; 0 turns it off.
+   * Defaults to 30. Wrap-up at `softPct` and the hard limit still apply after compacting.
+   */
+  compactPct?: number;
   softPct?: number;
   hardPct?: number;
 }

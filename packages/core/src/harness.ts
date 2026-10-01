@@ -287,7 +287,12 @@ export class Harness {
     const contextPolicy = {
       ...this.config.defaultContextPolicy,
       ...project.contextPolicy,
-      ...definedOnly({ size: input.size, softPct: input.softPct, hardPct: input.hardPct }),
+      ...definedOnly({
+        size: input.size,
+        compactPct: input.compactPct,
+        softPct: input.softPct,
+        hardPct: input.hardPct,
+      }),
     };
     resolveThresholds(contextPolicy);
     const mode = input.mode ?? 'single';
@@ -560,8 +565,7 @@ export class Harness {
         prompt: text,
       };
       const adapter = this.adapterFor(session.agentId);
-      // No wrap-up: a chat is not handed off; it only stops at the hard limit.
-      const outcome = await this.runOne(task, session.id, plan, adapter, controller.signal, false);
+      const outcome = await this.runOne(task, session.id, plan, adapter, controller.signal, true);
       reason = outcome.reason;
     } catch (err) {
       this.notice(task.id, `chat failed: ${(err as Error).message}`);
@@ -726,9 +730,11 @@ export class Harness {
     plan: SessionPlan,
     adapter: AgentAdapter,
     signal: AbortSignal,
-    // A read-only session has nothing to commit or hand off; it only stops at the hard limit.
-    wrapUp = plan.access === 'edit',
+    chat = false,
   ): Promise<SessionOutcome> {
+    // A read-only session has nothing to commit or hand off, and a chat is the user's own
+    // turn: neither wraps up.
+    const wrapUp = !chat && plan.access === 'edit';
     const window = this.workflow.contextWindow(plan.agentId);
     const provider = adapter.provider;
     // A resumed turn may report no usage (e.g. `/compact`), so start from what is known.
@@ -761,6 +767,8 @@ export class Harness {
       },
       thresholds: resolveThresholds(task.contextPolicy),
       wrapUp,
+      // Every role: compacted only once its turn has ended, never in the middle of work.
+      compact: true,
       contextWindow: window,
       signal,
       onEvent: (event) => {

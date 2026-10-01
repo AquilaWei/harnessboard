@@ -142,6 +142,22 @@ describe('a chat reply that reports no usage', () => {
   });
 });
 
+describe('a chat reply past the compact threshold', () => {
+  beforeEach(() =>
+    scenario(session('done'), [
+      [init(), assistantText('long', 35_000), result('ok')],
+      [compactBoundary(35_000, 4_000), result('')],
+    ]),
+  );
+
+  it('is compacted once the reply has ended', async () => {
+    const task = await finishedTask();
+    harness.chat(task.id, 'Explain everything');
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]!.received).toEqual(['Explain everything', '/compact']);
+  });
+});
+
 describe('a chat that cannot be sent', () => {
   beforeEach(() => scenario(session('done')));
 

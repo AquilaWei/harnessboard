@@ -226,6 +226,7 @@ describe('handoffs in a long loop', () => {
       mode: 'loop',
       verifyCommand: VERIFY_OK,
       confirmPlan: false,
+      compactPct: 0,
       softPct: 30,
       hardPct: 60,
       queue: true,

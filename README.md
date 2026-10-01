@@ -216,6 +216,14 @@ write. A web page you visit cannot drive your agents through the browser.
 The next session starts fresh with the original task and the handoff note. Percentages are of
 the model's context window, which the CLI reports.
 
+**Compacting:** when an agent's turn ends at 30 % or more (the implementer finishing a step,
+the reviewer giving its verdict, a chat reply), Harnessboard sends `/compact` before the
+session closes. Work is never interrupted for it, and the agent's reply stays the result.
+The conversation is then small when it is continued later: in a chat, after a quota pause,
+or when work starts after the acceptance criteria were agreed. Change the level with
+`--compact <pct>` or `compactPct` in a context policy; `0` turns it off. The soft and hard
+thresholds still apply within a turn.
+
 ## Configuration
 
 Settings are layered, and later layers win: built-in defaults < user config file <

@@ -20,6 +20,11 @@ are test versions that have not been accepted on real machines yet.
     `hb feedback`), then approve with the verify command you confirm (`hb approve`).
   - The verify command is now optional when creating a Loop task.
 
+- **Compacting at a break:** when an implementer's or reviewer's turn ends at 30 % context
+  or more, the conversation is compacted with `/compact` before the session closes, never in
+  the middle of work. Set the level with `--compact <pct>` or `compactPct` (0 turns it off).
+  The context meter shows it as a tick.
+
 - **Chat with a task's agent:** the task panel's Chat tab (and `hb chat <id> <message>`)
   continues the task's own conversation once it has stopped or finished, replacing the
   copy-only "open in terminal" button. The agent remembers the work and may change files
