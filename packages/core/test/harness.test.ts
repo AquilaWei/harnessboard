@@ -471,6 +471,88 @@ describe('a tool the task does not allow', () => {
   });
 });
 
+describe('answering a tool use while the quota is used up', () => {
+  beforeEach(() => {
+    scenario([
+      [
+        init(),
+        rateLimit('allowed', 0.97, FUTURE_SEC),
+        askBash('r1', 'node hello.js', 'node *'),
+        result('done'),
+      ],
+    ]);
+  });
+
+  it('puts the task back in the queue instead of running on', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    expect(harness.store.getTask(task.id)!.status).toBe('queued');
+  });
+
+  it('records the answer straight away', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    expect(harness.store.lastEvent(task.id, 'permission_decision')!.data).toMatchObject({
+      requestId: 'r1',
+      behavior: 'allow',
+    });
+  });
+
+  it('does not let the agent go on before the window resets', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    harness.tick(FUTURE_SEC * 1000 - 1);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(harness.store.getTask(task.id)!.status).toBe('queued');
+  });
+
+  it('sends the answer once the window resets', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    harness.tick(FUTURE_SEC * 1000 + 1);
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.status).toBe('review');
+  });
+
+  it('stops a task whose answer is held', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    harness.stopTask(task.id);
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.status).toBe('stopped');
+  });
+});
+
 describe('a tool the task rules already cover', () => {
   it('is allowed without asking when the user added its rule earlier in the session', async () => {
     scenario([

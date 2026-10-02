@@ -225,7 +225,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                   </button>
                 )}
                 {/* A running task must be stopped first, so its agent is not left orphaned. */}
-                {s !== 'running' && s !== 'awaiting_permission' && (
+                {!task.activity && s !== 'running' && s !== 'awaiting_permission' && (
                   <DeleteTask task={task} onDeleted={onClose} onMessage={onError} />
                 )}
               </div>

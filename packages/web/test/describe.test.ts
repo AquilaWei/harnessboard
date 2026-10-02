@@ -58,6 +58,15 @@ describe('describeTask', () => {
     expect(describeTask(task).vars).toEqual({ command: 'npm test' });
   });
 
+  it('says a queued task whose agent is still open waits for quota', () => {
+    const task = {
+      ...base,
+      status: 'queued',
+      activity: { phase: 'implementing', agentId: 'claude' },
+    } as TaskView;
+    expect(describeTask(task)).toEqual({ key: 'answerHeld', tone: 'working', vars: {} });
+  });
+
   it('says a queued task waits for its reviewer', () => {
     const task = { ...base, status: 'queued', reviewPending: true } as TaskView;
     expect(describeTask(task).key).toBe('queuedForReview');

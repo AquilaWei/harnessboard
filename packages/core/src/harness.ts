@@ -105,7 +105,15 @@ type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }
 
 interface PendingPermission {
   request: PermissionRequest;
+  /** Whose quota the reply waits for when the user answers while it is used up. */
+  provider: AgentProvider;
   resolve: (reply: PermissionReply) => void;
+}
+
+/** Answers given while the provider's quota was used up, sent once it is free again. */
+interface HeldReplies {
+  provider: AgentProvider;
+  replies: { pending: PendingPermission; reply: PermissionReply }[];
 }
 
 const STARTABLE: TaskStatus[] = ['backlog', 'stopped', 'failed', 'review', 'waiting_quota'];
@@ -124,6 +132,8 @@ export class Harness {
   private readonly activities = new Map<number, TaskActivity>();
   /** Tool uses each running task waits on the user for, by request id. */
   private readonly permissions = new Map<number, Map<string, PendingPermission>>();
+  /** Answered tool uses whose reply waits for quota; the task shows as `queued`. */
+  private readonly held = new Map<number, HeldReplies>();
   private timer: NodeJS.Timeout | null = null;
   private readonly workflow: Workflow;
   private readonly settingsFile: string | null;
@@ -209,7 +219,8 @@ export class Harness {
    * task (or, with `scope: 'global'`, to the settings for every task), so this and later
    * sessions use them without asking. The task goes back to `running` once nothing else is
    * waiting. Throws when the request is not pending or a rule is invalid; nothing is
-   * answered then.
+   * answered then. While the provider's quota is used up the answer is recorded at once,
+   * but the agent only gets it once the quota is free again; the task is `queued` until then.
    */
   answerPermission(id: number, decision: PermissionDecision): Task {
     const task = this.requireTask(id);
@@ -825,6 +836,7 @@ export class Harness {
 
   /** Starts queued tasks up to the concurrency limit and wakes quota-paused ones. */
   tick(now = Date.now()): void {
+    this.releaseHeld(now);
     for (const task of dueForRetry(this.store.listTasks(), now)) {
       this.setStatus(task.id, 'queued', { resumeAt: null });
     }
@@ -971,7 +983,7 @@ export class Harness {
         }
         this.recordAgentEvent(task.id, sessionId, provider, event);
       },
-      onPermissionRequest: (event) => this.askPermission(task.id, sessionId, event),
+      onPermissionRequest: (event) => this.askPermission(task.id, sessionId, provider, event),
       onNotice: (message) => this.notice(task.id, message, sessionId),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
@@ -993,6 +1005,7 @@ export class Harness {
   private askPermission(
     taskId: number,
     sessionId: string,
+    provider: AgentProvider,
     event: PermissionRequestEvent,
   ): Promise<PermissionReply> {
     const { requestId, toolName, summary, suggestedRules } = event;
@@ -1023,7 +1036,7 @@ export class Harness {
     return new Promise((resolve) => {
       let waiting = this.permissions.get(taskId);
       if (!waiting) this.permissions.set(taskId, (waiting = new Map()));
-      waiting.set(requestId, { request, resolve });
+      waiting.set(requestId, { request, provider, resolve });
       this.store.appendEvent(taskId, sessionId, 'permission_request', request);
       this.setStatus(taskId, 'awaiting_permission');
     });
@@ -1037,12 +1050,31 @@ export class Harness {
     const waiting = this.permissions.get(taskId);
     waiting?.delete(pending.request.requestId);
     this.recordDecision(taskId, pending.request, outcome);
-    pending.resolve(
+    const reply: PermissionReply =
       outcome.behavior === 'allow'
         ? { behavior: 'allow' }
-        : { behavior: 'deny', ...(outcome.message ? { message: outcome.message } : {}) },
-    );
-    if (waiting?.size === 0 && this.running.has(taskId)) this.setStatus(taskId, 'running');
+        : { behavior: 'deny', ...(outcome.message ? { message: outcome.message } : {}) };
+    // Either answer lets the agent go on, so neither is sent past the quota limit.
+    if (this.held.has(taskId) || this.quotaBlocked(pending.provider, Date.now())) {
+      const held = this.held.get(taskId) ?? { provider: pending.provider, replies: [] };
+      held.replies.push({ pending, reply });
+      this.held.set(taskId, held);
+    } else {
+      pending.resolve(reply);
+    }
+    if (waiting?.size === 0 && this.running.has(taskId)) {
+      this.setStatus(taskId, this.held.has(taskId) ? 'queued' : 'running');
+    }
+  }
+
+  /** Sends held answers whose provider has quota again; the agents then go on. */
+  private releaseHeld(now: number): void {
+    for (const [taskId, held] of this.held) {
+      if (this.quotaBlocked(held.provider, now)) continue;
+      this.held.delete(taskId);
+      for (const { pending, reply } of held.replies) pending.resolve(reply);
+      if (!this.permissions.get(taskId)?.size) this.setStatus(taskId, 'running');
+    }
   }
 
   private recordDecision(
@@ -1058,10 +1090,11 @@ export class Harness {
 
   /** Denies whatever a task still waits on, e.g. when it is stopped; the agent is ending. */
   private dropPermissions(taskId: number): void {
+    const held = this.held.get(taskId)?.replies.map((r) => r.pending) ?? [];
+    this.held.delete(taskId);
     const waiting = this.permissions.get(taskId);
-    if (!waiting) return;
     this.permissions.delete(taskId);
-    for (const pending of waiting.values()) {
+    for (const pending of [...held, ...(waiting?.values() ?? [])]) {
       pending.resolve({ behavior: 'deny', message: 'The task was stopped.' });
     }
   }

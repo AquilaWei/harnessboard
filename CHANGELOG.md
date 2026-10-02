@@ -7,6 +7,9 @@ are test versions that have not been accepted on real machines yet.
 
 ### Fixed
 
+- Allowing or denying a tool while the five-hour usage was over the pause limit let the
+  task run on past the limit. The answer is now recorded at once, but the task waits as
+  queued and goes on by itself once quota is free again.
 - The published package now includes `NOTICE` and the licenses of the packages bundled in
   the web board (`THIRD-PARTY-NOTICES.md`), as their licenses require.
 
