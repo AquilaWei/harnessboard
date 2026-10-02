@@ -96,6 +96,7 @@ const en = {
     chatting: '{{agent}} is replying to your message.',
     waitingQuota: 'Paused for quota; continues at {{time}}.',
     waitingQuotaUnknown: 'Paused for quota; retries automatically.',
+    answerHeld: 'Your answer is recorded; the agent goes on once quota is free again.',
     finished: 'Finished. Look over the changes and mark it done.',
     loopFinished: 'All {{total}} features pass verification. Look over the changes.',
     approved: '{{agent}} approved the work. Look over the changes and mark it done.',
@@ -126,6 +127,8 @@ const en = {
   models: {
     profile: 'Profile default ({{model}})',
     profileShort: 'profile default',
+    liveHint:
+      'The agent is working: models apply from its next session, and agents can be changed once it stops.',
     custom: 'Other model id…',
     invalid: 'Not a model id: use letters, digits and - . : / @ [ ], e.g. claude-opus-5-5.',
     names: { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' },
@@ -540,6 +543,7 @@ const zhTW: typeof en = {
     chatting: '{{agent}} 正在回覆你的訊息。',
     waitingQuota: '額度不足暫停中，{{time}} 繼續。',
     waitingQuotaUnknown: '額度不足暫停中，會自動重試。',
+    answerHeld: '已記下你的回覆；額度恢復後代理程式會繼續。',
     finished: '已完成，請檢查變更後標為完成。',
     loopFinished: '{{total}} 項 feature 都通過驗證，請檢查變更。',
     approved: '{{agent}} 已核可，請檢查變更後標為完成。',
@@ -570,6 +574,7 @@ const zhTW: typeof en = {
   models: {
     profile: '設定檔預設（{{model}}）',
     profileShort: '設定檔預設',
+    liveHint: '代理程式正在工作：模型從下一個 session 開始套用；要換 agent 請先停止任務。',
     custom: '其他模型 ID…',
     invalid: '不是模型 ID：只能用英數字和 - . : / @ [ ]，例如 claude-opus-5-5。',
     names: { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' },

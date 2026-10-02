@@ -12,14 +12,16 @@ interface Props {
   onError: (message: string) => void;
 }
 
-/** A task's agents and models, editable while no session runs. */
+/** A task's agents and models; while a session is open only the models can change. */
 export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
   const { t } = useTranslation();
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [choice, setChoice] = useState<AgentChoice | null>(null);
   const [busy, setBusy] = useState(false);
   const a = task.agents;
-  const live = task.status === 'running' || task.status === 'awaiting_permission';
+  // An answered tool use waiting for quota is queued with its agent still open.
+  const live =
+    task.activity !== null || task.status === 'running' || task.status === 'awaiting_permission';
   const model = (m?: string | null) => m ?? t('models.profileShort');
 
   const edit = () => {
@@ -57,18 +59,19 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
             ? `${t('fields.reviewer')}: ${a.reviewer} · ${model(a.reviewerModel)}`
             : `${t('fields.reviewer')}: ${t('fields.none')}`}
         </span>
-        {!live && (
-          <button type="button" className="btn small" onClick={edit}>
-            {t('rules.edit')}
-          </button>
-        )}
+        <button type="button" className="btn small" onClick={edit}>
+          {t('rules.edit')}
+        </button>
       </div>
     );
   }
   return (
     <div className="agents-editor">
       {agents ? (
-        <AgentFields agents={agents} value={choice} onChange={setChoice} />
+        <>
+          <AgentFields agents={agents} value={choice} onChange={setChoice} lockAgents={live} />
+          {live && <small className="hint">{t('models.liveHint')}</small>}
+        </>
       ) : (
         <p className="empty">{t('commits.loading')}</p>
       )}

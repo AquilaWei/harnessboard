@@ -365,7 +365,7 @@ program
 
 program
   .command('models')
-  .description("show a task's agents and models, or change them while it is not running")
+  .description("show or change a task's agents and models (only models while it runs)")
   .argument('<id>', 'task id', parseInteger)
   .option('--model <model>', 'implementer model, or "default" for the profile model')
   .option('--reviewer <agent>', 'reviewer profile, or "none"')

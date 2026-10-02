@@ -471,6 +471,88 @@ describe('a tool the task does not allow', () => {
   });
 });
 
+describe('answering a tool use while the quota is used up', () => {
+  beforeEach(() => {
+    scenario([
+      [
+        init(),
+        rateLimit('allowed', 0.97, FUTURE_SEC),
+        askBash('r1', 'node hello.js', 'node *'),
+        result('done'),
+      ],
+    ]);
+  });
+
+  it('puts the task back in the queue instead of running on', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    expect(harness.store.getTask(task.id)!.status).toBe('queued');
+  });
+
+  it('records the answer straight away', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    expect(harness.store.lastEvent(task.id, 'permission_decision')!.data).toMatchObject({
+      requestId: 'r1',
+      behavior: 'allow',
+    });
+  });
+
+  it('does not let the agent go on before the window resets', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    harness.tick(FUTURE_SEC * 1000 - 1);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(harness.store.getTask(task.id)!.status).toBe('queued');
+  });
+
+  it('sends the answer once the window resets', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    harness.tick(FUTURE_SEC * 1000 + 1);
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.status).toBe('review');
+  });
+
+  it('stops a task whose answer is held', async () => {
+    const task = await harness.createTask({
+      prompt: 'Run it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
+    harness.stopTask(task.id);
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.status).toBe('stopped');
+  });
+});
+
 describe('a tool the task rules already cover', () => {
   it('is allowed without asking when the user added its rule earlier in the session', async () => {
     scenario([
@@ -552,6 +634,34 @@ describe('task models', () => {
     const task = await harness.createTask({ prompt: 'x', repo });
     expect(() => harness.setAgents(task.id, { reviewer: 'gemini' })).toThrow(
       /agent profile "gemini" is not configured/,
+    );
+  });
+});
+
+describe('task models while a session is open', () => {
+  beforeEach(() => {
+    scenario([[init(), askBash('r1', 'node hello.js', 'node *'), hang]]);
+  });
+
+  it('changes the model for the next session', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    const updated = harness.setAgents(task.id, { implementerModel: 'sonnet' });
+    expect(updated.agents.implementerModel).toBe('sonnet');
+  });
+
+  it('accepts the unchanged agent sent with a new model', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    const updated = harness.setAgents(task.id, { implementer: 'claude', reviewerModel: 'haiku' });
+    expect(updated.agents.reviewerModel).toBe('haiku');
+  });
+
+  it('rejects a different agent', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    expect(() => harness.setAgents(task.id, { reviewer: 'claude' })).toThrow(
+      /stop it before changing its agents/,
     );
   });
 });

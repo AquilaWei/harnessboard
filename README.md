@@ -16,8 +16,9 @@ work off to a fresh session, and it pauses when your subscription quota runs low
   from that note.
 - **Parallel and isolated:** one git worktree and branch per task, so you review a diff
   instead of a mess.
-- **Quota-aware:** it reads the usage the CLI reports, stops starting sessions near the limit,
-  and resumes automatically after the reset.
+- **Quota-aware:** it reads the usage the CLI reports, stops starting sessions near the limit
+  (and holds your answer to a tool request until then), and resumes automatically after the
+  reset.
 - **Uses your existing login:** it drives the `claude` CLI you are already signed in to.
   No API key is needed.
 

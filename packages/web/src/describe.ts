@@ -28,6 +28,8 @@ export function describeTask(task: TaskView): Description {
     case 'backlog':
       return d('draft', 'idle');
     case 'queued':
+      // Only an answered tool use waiting for quota is queued with its agent still open.
+      if (task.activity) return d('answerHeld', 'working');
       if (task.planFeedbackPending) {
         return d(
           task.mode === 'single' ? 'revisingCriteriaQueued' : 'revisingPlanQueued',
