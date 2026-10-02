@@ -15,10 +15,12 @@ interface Props {
   agents: AgentInfo[];
   value: AgentChoice;
   onChange: (next: AgentChoice) => void;
+  /** While a session is open only the models can change, not who runs it. */
+  lockAgents?: boolean;
 }
 
 /** Profile and model for the implementer, then for the optional reviewer. */
-export function AgentFields({ agents, value, onChange }: Props) {
+export function AgentFields({ agents, value, onChange, lockAgents = false }: Props) {
   const { t } = useTranslation();
   const set = (patch: Partial<AgentChoice>) => onChange({ ...value, ...patch });
   const byId = (id: string | null) => agents.find((a) => a.id === id);
@@ -37,6 +39,7 @@ export function AgentFields({ agents, value, onChange }: Props) {
           {/* A model belongs to a provider, so switching profile resets it. */}
           <select
             value={value.implementer}
+            disabled={lockAgents}
             onChange={(e) => set({ implementer: e.target.value, implementerModel: null })}
           >
             {options}
@@ -55,6 +58,7 @@ export function AgentFields({ agents, value, onChange }: Props) {
           <span>{t('form.reviewer')}</span>
           <select
             value={value.reviewer ?? ''}
+            disabled={lockAgents}
             onChange={(e) => set({ reviewer: e.target.value || null, reviewerModel: null })}
           >
             <option value="">{t('form.reviewerNone')}</option>

@@ -5,6 +5,12 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Changed
+
+- A task's models can be changed while it runs or waits for you (**Details → Agents and
+  models → Edit**, or `hb models`); they apply from its next session. Its agents still
+  change only once it is stopped.
+
 ### Fixed
 
 - Allowing or denying a tool while the five-hour usage was over the pause limit let the

@@ -409,12 +409,16 @@ export class Harness {
 
   /**
    * Changes who works on a task and with which models; fields left out stay as they are.
-   * Takes effect from its next session. Throws when the task is running, a profile is not
-   * configured or a model id is invalid.
+   * Takes effect from its next session, so models may change while a session is open, but
+   * the agents (and so the provider) may not. Throws when an agent changes while the task
+   * runs, a profile is not configured or a model id is invalid.
    */
   setAgents(id: number, update: AgentsUpdate): Task {
     const task = this.requireTask(id);
-    if (this.running.has(id) || task.status === 'running') {
+    const swapsAgent =
+      (update.implementer !== undefined && update.implementer !== task.agents.implementer) ||
+      (update.reviewer !== undefined && update.reviewer !== task.agents.reviewer);
+    if (swapsAgent && (this.running.has(id) || task.status === 'running')) {
       throw new Error(`task ${id} is running; stop it before changing its agents`);
     }
     const agents: TaskAgents = { ...task.agents };

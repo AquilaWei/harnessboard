@@ -638,6 +638,34 @@ describe('task models', () => {
   });
 });
 
+describe('task models while a session is open', () => {
+  beforeEach(() => {
+    scenario([[init(), askBash('r1', 'node hello.js', 'node *'), hang]]);
+  });
+
+  it('changes the model for the next session', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    const updated = harness.setAgents(task.id, { implementerModel: 'sonnet' });
+    expect(updated.agents.implementerModel).toBe('sonnet');
+  });
+
+  it('accepts the unchanged agent sent with a new model', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    const updated = harness.setAgents(task.id, { implementer: 'claude', reviewerModel: 'haiku' });
+    expect(updated.agents.reviewerModel).toBe('haiku');
+  });
+
+  it('rejects a different agent', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await waitForStatus(task.id, 'awaiting_permission');
+    expect(() => harness.setAgents(task.id, { reviewer: 'claude' })).toThrow(
+      /stop it before changing its agents/,
+    );
+  });
+});
+
 describe('setAllowedTools', () => {
   it('replaces the rules of a task that is not running', async () => {
     const task = await harness.createTask({ prompt: 'x', repo });
