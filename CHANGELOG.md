@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.9 - 2026-10-01
+
 ### Changed
 
 - A task's models can be changed while it runs or waits for you (**Details → Agents and
