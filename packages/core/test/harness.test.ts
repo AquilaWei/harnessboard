@@ -290,6 +290,7 @@ describe('a tool the task does not allow', () => {
 
   it('starts the agent so that it asks instead of refusing', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -303,6 +304,7 @@ describe('a tool the task does not allow', () => {
 
   it('pauses the task until the user answers', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -321,6 +323,7 @@ describe('a tool the task does not allow', () => {
 
   it('lets the agent go on once allowed', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -338,6 +341,7 @@ describe('a tool the task does not allow', () => {
   it('goes back to running once answered', async () => {
     scenario([[init(), askBash('r1', 'node hello.js', 'node *'), hang]]);
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -350,6 +354,7 @@ describe('a tool the task does not allow', () => {
 
   it('keeps the task rules unchanged when allowed once', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -363,6 +368,7 @@ describe('a tool the task does not allow', () => {
 
   it('adds the rules given with the answer to the task', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -380,6 +386,7 @@ describe('a tool the task does not allow', () => {
 
   it('passes the reason to the agent when denied', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -399,6 +406,7 @@ describe('a tool the task does not allow', () => {
 
   it('records the request and the answer in the history', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -426,6 +434,7 @@ describe('a tool the task does not allow', () => {
 
   it('rejects an invalid rule without answering the agent', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -439,7 +448,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('rejects an answer to a request that is not waiting', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo });
+    const task = await harness.createTask({ autoApprove: false, prompt: 'Run it', repo });
     expect(() => harness.answerPermission(task.id, { requestId: 'r9', behavior: 'allow' })).toThrow(
       /no pending permission request r9/,
     );
@@ -447,6 +456,7 @@ describe('a tool the task does not allow', () => {
 
   it('is stopped, not left waiting, when the user stops it', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -462,7 +472,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('is queued again after a restart', async () => {
-    const task = await harness.createTask({ prompt: 'Run it', repo });
+    const task = await harness.createTask({ autoApprove: false, prompt: 'Run it', repo });
     harness.store.updateTask(task.id, { status: 'awaiting_permission' });
     const restarted = new Harness(harness.config, harness.store);
     restarted.start();
@@ -485,6 +495,7 @@ describe('answering a tool use while the quota is used up', () => {
 
   it('puts the task back in the queue instead of running on', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -497,6 +508,7 @@ describe('answering a tool use while the quota is used up', () => {
 
   it('records the answer straight away', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -512,6 +524,7 @@ describe('answering a tool use while the quota is used up', () => {
 
   it('does not let the agent go on before the window resets', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -526,6 +539,7 @@ describe('answering a tool use while the quota is used up', () => {
 
   it('sends the answer once the window resets', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -540,6 +554,7 @@ describe('answering a tool use while the quota is used up', () => {
 
   it('stops a task whose answer is held', async () => {
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -564,6 +579,7 @@ describe('a tool the task rules already cover', () => {
       ],
     ]);
     const task = await harness.createTask({
+      autoApprove: false,
       prompt: 'Run it',
       repo,
       confirmPlan: false,
@@ -644,21 +660,39 @@ describe('task models while a session is open', () => {
   });
 
   it('changes the model for the next session', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await harness.createTask({
+      autoApprove: false,
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     const updated = harness.setAgents(task.id, { implementerModel: 'sonnet' });
     expect(updated.agents.implementerModel).toBe('sonnet');
   });
 
   it('accepts the unchanged agent sent with a new model', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await harness.createTask({
+      autoApprove: false,
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     const updated = harness.setAgents(task.id, { implementer: 'claude', reviewerModel: 'haiku' });
     expect(updated.agents.reviewerModel).toBe('haiku');
   });
 
   it('rejects a different agent', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await harness.createTask({
+      autoApprove: false,
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await waitForStatus(task.id, 'awaiting_permission');
     expect(() => harness.setAgents(task.id, { reviewer: 'claude' })).toThrow(
       /stop it before changing its agents/,

@@ -372,7 +372,7 @@ export class Harness {
             ? withTool(allowedTools, `Bash(${verifyCommand})`)
             : allowedTools,
         skipPermissions: input.skipPermissions ?? false,
-        autoApprove: input.autoApprove ?? false,
+        autoApprove: input.autoApprove ?? true,
       },
       agents,
     });
@@ -1003,8 +1003,8 @@ export class Harness {
 
   /**
    * Allows a tool use the task's or the global rules already cover (they may have been
-   * added after the CLI started), or that an auto-approving task may use because it does
-   * not look risky; otherwise records it and waits for the user.
+   * added after the CLI started), or that an auto-approving task (the default) may use because
+   * it is not dangerous; otherwise records it and waits for the user.
    */
   private askPermission(
     taskId: number,
@@ -1021,7 +1021,8 @@ export class Harness {
       sessionId,
       toolName,
       summary,
-      suggestedRules,
+      // A dangerous command is answered once; it must not become a standing rule.
+      suggestedRules: risk === null ? suggestedRules : [],
       risk,
       ts: Date.now(),
     };

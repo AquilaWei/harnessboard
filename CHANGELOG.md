@@ -5,6 +5,16 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Changed
+
+- **Tasks now allow almost everything by default.** Auto-approve is on for new tasks, and
+  only dangerous tool uses still ask: wiping the system or home directory, writing to a
+  disk, shutting down, writing to system paths (`/etc`, `~/.ssh`...), and deleting
+  recursively outside the task's worktree. `git push`, `sudo`, network commands, containers
+  and MCP tools no longer ask. A dangerous request can only be allowed once. Use
+  `--no-auto-approve` or untick the box to be asked about every tool again. Existing tasks
+  keep their setting.
+
 ## 0.0.9 - 2026-10-01
 
 ### Changed

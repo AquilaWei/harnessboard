@@ -43,7 +43,7 @@ const en = {
   criteriaNext:
     'Reply with `hb feedback {id} "..."`, or start with `hb approve {id}` (`--criteria "..."` to approve your own).',
   noCriteria: 'Task {id} has no acceptance criteria.',
-  autoOn: 'Task {id} allows unlisted tools without asking; risky ones still ask.',
+  autoOn: 'Task {id} allows unlisted tools without asking; dangerous ones still ask.',
   autoOff: 'Task {id} asks before every tool its rules do not allow.',
   chatEnded: '(the reply ended: {reason})',
   chatQueued:
@@ -102,7 +102,7 @@ const zhTW: Messages = {
   criteriaNext:
     '用 `hb feedback {id} "..."` 回覆意見，或用 `hb approve {id}` 確認開工（加 `--criteria "..."` 改用你自己寫的標準）。',
   noCriteria: '任務 {id} 沒有驗收標準。',
-  autoOn: '任務 {id} 會自動允許規則外的工具；有風險的仍會詢問。',
+  autoOn: '任務 {id} 會自動允許規則外的工具；危險的仍會詢問。',
   autoOff: '任務 {id} 遇到規則外的工具都會先詢問。',
   chatEnded: '（回覆中斷：{reason}）',
   chatQueued:

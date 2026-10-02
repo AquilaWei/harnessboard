@@ -63,7 +63,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   const [presets, setPresets] = useState<string[]>([DEFAULT_PRESET]);
   const [allow, setAllow] = useState('');
   const [skip, setSkip] = useState(false);
-  const [autoApprove, setAutoApprove] = useState(false);
+  const [autoApprove, setAutoApprove] = useState(true);
   const [queue, setQueue] = useState(true);
   const [confirmPlan, setConfirmPlan] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           hardPct: custom ? hard : undefined,
           allowedTools: allowedTools(),
           skipPermissions: skip || undefined,
-          autoApprove: autoApprove || undefined,
+          autoApprove,
           queue,
         }),
       );

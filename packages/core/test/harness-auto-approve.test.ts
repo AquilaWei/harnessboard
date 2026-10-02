@@ -79,11 +79,34 @@ describe('an auto-approving task', () => {
     });
   });
 
-  it('still asks about a risky tool, saying why', async () => {
-    scenario([[init(), askBash('r1', 'git push origin main', 'git push *'), result('done')]]);
+  it('still asks about a dangerous tool, saying why', async () => {
+    scenario([[init(), askBash('r1', 'rm -rf ~', 'rm *'), result('done')]]);
     const task = await create(true);
     await waitForStatus(task.id, 'awaiting_permission');
-    expect(harness.permissionRequests(task.id)[0]!.risk).toBe('pushes to a remote (git push)');
+    expect(harness.permissionRequests(task.id)[0]!.risk).toBe(
+      'deletes the system or your home directory',
+    );
+  });
+
+  it('offers no rule to remember for a dangerous tool', async () => {
+    scenario([[init(), askBash('r1', 'rm -rf ~', 'rm *'), result('done')]]);
+    const task = await create(true);
+    await waitForStatus(task.id, 'awaiting_permission');
+    expect(harness.permissionRequests(task.id)[0]!.suggestedRules).toEqual([]);
+  });
+
+  it('allows a command the old risky list stopped, such as git push', async () => {
+    scenario([[init(), askBash('r1', 'git push origin main', 'git push *'), result('done')]]);
+    const task = await create(true);
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.status).toBe('review');
+  });
+});
+
+describe('a task created without saying', () => {
+  it('auto-approves', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    expect(task.permission.autoApprove).toBe(true);
   });
 });
 

@@ -86,7 +86,10 @@ function withTaskOptions(command: Command): Command {
     )
     .option('--allow <rules...>', 'more tool rules the agent may use without asking')
     .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
-    .option('--auto-approve', 'allow unlisted tools without asking, except risky ones')
+    .option(
+      '--no-auto-approve',
+      'ask before every tool the rules do not allow, instead of only dangerous ones',
+    )
     .option('--model <model>', 'model for the implementer, e.g. opus, sonnet, haiku')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--reviewer-model <model>', 'model for the reviewer')
@@ -483,7 +486,7 @@ program
 program
   .command('auto')
   .description(
-    'show or set whether a task allows unlisted tools without asking (risky ones still ask)',
+    'show or set whether a task allows unlisted tools without asking (dangerous ones still ask)',
   )
   .argument('<id>', 'task id', parseInteger)
   .addArgument(new Argument('[state]', 'on or off').choices(['on', 'off']))

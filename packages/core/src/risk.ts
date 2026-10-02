@@ -1,21 +1,37 @@
 // SPDX-License-Identifier: Apache-2.0
+import os from 'node:os';
 import path from 'node:path';
 
-/** Shell commands auto-approve never allows on its own, with the reason shown to the user. */
-const RISKY_COMMANDS: [RegExp, string][] = [
-  [/\bsudo\b/, 'runs as root (sudo)'],
-  [/\bgit\s+push\b/, 'pushes to a remote (git push)'],
-  [
-    /\bgit\s+(reset\s+--hard|clean\b|rebase\b|filter-branch\b|branch\s+-D\b|checkout\s+--\s|restore\b)/,
-    'discards or rewrites git work',
-  ],
-  [/\brm\s+(-\w*[rR]\w*|--recursive)\b/, 'deletes recursively (rm -r)'],
-  [/\b(curl|wget|ssh|scp|rsync|ftp|nc|ncat|telnet)\b/, 'uses the network'],
-  [/\b(npm|pnpm|yarn)\s+publish\b|\bcargo\s+publish\b|\btwine\s+upload\b/, 'publishes a package'],
-  [/\b(chmod|chown)\s+-R\b/, 'changes permissions recursively'],
-  [/\bmkfs\b|\bdd\s+[^|;&]*\bof=/, 'writes to a disk'],
-  [/\b(shutdown|reboot|kill|pkill|killall)\b/, 'stops processes or the machine'],
-  [/\bdocker\b|\bpodman\b/, 'runs containers, which can reach the whole machine'],
+/** Directories no agent has any business changing; a write below one of them is dangerous. */
+const SYSTEM_DIRS = [
+  '/etc',
+  '/boot',
+  '/usr',
+  '/bin',
+  '/sbin',
+  '/lib',
+  '/lib64',
+  '/var',
+  '/sys',
+  '/proc',
+  '/dev',
+];
+
+/** Home-directory entries holding credentials or the user's own tool setup. */
+const PROTECTED_HOME = ['.ssh', '.claude'];
+
+/** Commands that stop or reboot the machine. */
+const SHUTDOWN_COMMANDS = new Set(['shutdown', 'reboot', 'halt', 'poweroff']);
+
+/** Words that may stand in front of the real command without changing what it does. */
+const PREFIX_COMMANDS = new Set(['sudo', 'command', 'exec', 'time', 'nohup']);
+
+/** Whole-command patterns, with the reason shown to the user. */
+const DANGEROUS_COMMANDS: [RegExp, string][] = [
+  [/--no-preserve-root/, 'deletes the system or your home directory'],
+  [/\bmkfs(\.\w+)?\b|\bdd\s+[^|;&]*\bof=\/dev\//, 'writes to a disk'],
+  [/>>?\s*\/dev\/(sd|hd|vd|nvme|mmcblk)/, 'writes to a disk'],
+  [/:\s*\(\s*\)\s*\{[^}]*:\s*\|\s*:/, 'is a fork bomb'],
 ];
 
 /** Tools that write a file named in their input. */
@@ -27,32 +43,90 @@ const FILE_TOOLS: Record<string, string> = {
 };
 
 /**
- * Why a tool use is too risky to allow without asking in auto-approve mode, or `null` when
- * it may be allowed. `worktree` is the task's directory; anything written outside it is
- * risky. A blocklist cannot catch everything, so this is a convenience, not a sandbox.
+ * Why a tool use is dangerous enough to need the user's answer even though the task
+ * auto-approves, or `null` when it may be allowed. Only things that could wreck the system or
+ * important data count: wiping the system or home directory, writing to a disk, shutting the
+ * machine down, changing system paths, and deleting recursively outside `worktree` (the
+ * task's directory). A pattern list cannot catch everything, so this is a safety net, not a sandbox.
  */
 export function riskOf(toolName: string, input: unknown, worktree: string): string | null {
   const fields = (input ?? {}) as Record<string, unknown>;
-  if (toolName.startsWith('mcp__')) return 'is an MCP tool, whose effects are unknown';
   const fileField = FILE_TOOLS[toolName];
   if (fileField) {
     const file = fields[fileField];
-    if (typeof file !== 'string') return 'writes a file it does not name';
-    return outside(file, worktree) ? "writes outside the task's worktree" : null;
+    return typeof file === 'string' && isProtectedPath(file, worktree)
+      ? 'writes to a system or credentials path'
+      : null;
   }
   if (toolName !== 'Bash') return null;
   const command = typeof fields.command === 'string' ? fields.command : '';
-  for (const [pattern, reason] of RISKY_COMMANDS) {
+  for (const [pattern, reason] of DANGEROUS_COMMANDS) {
     if (pattern.test(command)) return reason;
   }
+  for (const segment of command.split(/&&|\|\||[;|\n]/)) {
+    const reason = segmentRisk(segment.trim().split(/\s+/), worktree);
+    if (reason) return reason;
+  }
   for (const match of command.matchAll(/(?:^|[^<>&\d])>>?\s*([^\s;&|]+)/g)) {
-    const target = match[1]!;
-    if (target !== '/dev/null' && !target.startsWith('&') && outside(target, worktree)) {
-      return "writes outside the task's worktree";
+    if (isProtectedPath(match[1]!, worktree)) return 'writes to a system or credentials path';
+  }
+  return null;
+}
+
+/** Risk of one simple command, given as its words. */
+function segmentRisk(words: string[], worktree: string): string | null {
+  while (words.length > 0 && PREFIX_COMMANDS.has(words[0]!)) words = words.slice(1);
+  const [name, ...rest] = words;
+  if (!name) return null;
+  if (SHUTDOWN_COMMANDS.has(name)) return 'shuts down the machine';
+  const flags = rest.filter((word) => word.startsWith('-'));
+  const targets = rest.filter((word) => !word.startsWith('-'));
+  if (name === 'rm' && flags.some((flag) => /^-\w*[rR]|^--recursive$/.test(flag))) {
+    if (targets.some(isWipeTarget)) return 'deletes the system or your home directory';
+    if (targets.some((target) => outside(target, worktree))) {
+      return "deletes recursively outside the task's worktree";
     }
   }
-  if (/(^|[\s;&|])cd\s+(\/|~|\.\.)/.test(command)) return "leaves the task's worktree (cd)";
+  if (
+    (name === 'chmod' || name === 'chown') &&
+    flags.some((flag) => /^-\w*R|^--recursive$/.test(flag)) &&
+    targets.some(isWipeTarget)
+  ) {
+    return 'changes permissions of the system or your home directory';
+  }
   return null;
+}
+
+/** True for `/`, the home directory, a system directory, or an unexpanded variable. */
+function isWipeTarget(target: string): boolean {
+  if (target.startsWith('$')) return true;
+  const home = os.homedir();
+  const resolved = path.resolve(expandHome(target.replace(/\/\*$/, '') || '/'));
+  return resolved === path.parse(resolved).root || resolved === home || isSystemPath(resolved);
+}
+
+/** True when writing `file` would change a system directory or the user's credentials. */
+function isProtectedPath(file: string, worktree: string): boolean {
+  if (file === '/dev/null') return false;
+  const resolved = path.resolve(worktree, expandHome(file));
+  const home = os.homedir();
+  return (
+    isSystemPath(resolved) ||
+    PROTECTED_HOME.some((entry) => isInside(resolved, path.join(home, entry)))
+  );
+}
+
+function isSystemPath(resolved: string): boolean {
+  return SYSTEM_DIRS.some((dir) => isInside(resolved, dir));
+}
+
+function isInside(file: string, dir: string): boolean {
+  return file === dir || file.startsWith(`${dir}${path.sep}`);
+}
+
+function expandHome(file: string): string {
+  if (file === '~') return os.homedir();
+  return file.startsWith('~/') ? path.join(os.homedir(), file.slice(2)) : file;
 }
 
 /** True when `file` (relative to `worktree` unless absolute; `~` is home) lies outside it. */

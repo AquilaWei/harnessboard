@@ -87,7 +87,7 @@ export interface PermissionRequest {
   toolName: string;
   summary: string;
   suggestedRules: string[];
-  /** Why auto-approve did not allow it on its own; `null` when the task does not auto-approve. */
+  /** Why it is dangerous enough that auto-approve did not allow it on its own; `null` when the task does not auto-approve. */
   risk: string | null;
   /** Unix ms when the agent asked. */
   ts: number;

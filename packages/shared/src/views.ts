@@ -114,7 +114,7 @@ export interface CreateTaskInput {
   hardPct?: number;
   allowedTools?: string[];
   skipPermissions?: boolean;
-  /** Allow unlisted tools without asking unless they look risky; see `PermissionPolicy`. */
+  /** Allow unlisted tools without asking unless they are dangerous; see `PermissionPolicy`. */
   autoApprove?: boolean;
   /** Queue immediately instead of leaving the task in the backlog. */
   queue?: boolean;

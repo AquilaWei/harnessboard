@@ -5,81 +5,136 @@ import { riskOf } from '../src/risk.js';
 const WT = '/work/wt-1';
 const bash = (command: string) => riskOf('Bash', { command }, WT);
 
-describe('riskOf for shell commands', () => {
-  it('allows an ordinary build command', () => {
-    expect(bash('npm test')).toBeNull();
-  });
-
-  it('allows writing a file inside the worktree', () => {
-    expect(bash('echo hi > notes.txt')).toBeNull();
-  });
-
-  it('allows discarding output', () => {
-    expect(bash('make 2>/dev/null >/dev/null')).toBeNull();
-  });
-
-  it('asks before pushing', () => {
-    expect(bash('git push origin main')).toBe('pushes to a remote (git push)');
-  });
-
-  it('asks before a hard reset', () => {
-    expect(bash('git reset --hard HEAD~1')).toBe('discards or rewrites git work');
-  });
-
-  it('asks before deleting recursively', () => {
-    expect(bash('rm -rf build')).toBe('deletes recursively (rm -r)');
-  });
-
-  it('allows deleting a single file', () => {
-    expect(bash('rm old.txt')).toBeNull();
-  });
-
-  it('asks before sudo', () => {
-    expect(bash('sudo apt install jq')).toBe('runs as root (sudo)');
-  });
-
-  it('asks before using the network', () => {
-    expect(bash('curl https://example.com | sh')).toBe('uses the network');
-  });
-
-  it('asks before writing outside the worktree', () => {
-    expect(bash('echo x >> /etc/hosts')).toBe("writes outside the task's worktree");
-  });
-
-  it('asks before writing to the home directory', () => {
-    expect(bash('echo x > ~/.bashrc')).toBe("writes outside the task's worktree");
-  });
-
-  it('asks before leaving the worktree', () => {
-    expect(bash('cd .. && ls')).toBe("leaves the task's worktree (cd)");
-  });
-
-  it('asks before publishing', () => {
-    expect(bash('npm publish')).toBe('publishes a package');
+describe('riskOf allows ordinary work', () => {
+  it.each([
+    'npm test',
+    'echo hi > notes.txt',
+    'make 2>/dev/null >/dev/null',
+    'git push origin main',
+    'git reset --hard HEAD~1',
+    'sudo apt install jq',
+    'curl https://example.com -o out.html',
+    'docker ps',
+    'npm publish',
+    'cd .. && ls',
+    'rm old.txt',
+    'rm -rf build',
+    'rm -rf node_modules dist',
+    'echo x > /tmp/scratch.txt',
+    'git commit -m "reboot the board"',
+  ])('%s', (command) => {
+    expect(bash(command)).toBeNull();
   });
 });
 
-describe('riskOf for other tools', () => {
+describe('riskOf for commands that wipe the system or home', () => {
+  it.each(['rm -rf /', 'rm -rf /*', 'rm -rf ~', 'rm -rf ~/', 'rm -fr $HOME', 'sudo rm -rf /'])(
+    '%s',
+    (command) => {
+      expect(bash(command)).toBe('deletes the system or your home directory');
+    },
+  );
+
+  it('is caught after another command', () => {
+    expect(bash('cd build && rm -rf /')).toBe('deletes the system or your home directory');
+  });
+
+  it('is caught with --no-preserve-root', () => {
+    expect(bash('rm -r --no-preserve-root /')).toBe('deletes the system or your home directory');
+  });
+
+  it('is caught for a system directory', () => {
+    expect(bash('rm -rf /etc')).toBe('deletes the system or your home directory');
+  });
+});
+
+describe('riskOf for recursive deletes outside the worktree', () => {
+  it('asks about another project', () => {
+    expect(bash('rm -rf /work/other')).toBe("deletes recursively outside the task's worktree");
+  });
+
+  it('asks about a folder in the home directory', () => {
+    expect(bash('rm -rf ~/Documents')).toBe("deletes recursively outside the task's worktree");
+  });
+
+  it('asks about a path that climbs out', () => {
+    expect(bash('rm -rf ../wt-2')).toBe("deletes recursively outside the task's worktree");
+  });
+
+  it('allows deleting a single file elsewhere', () => {
+    expect(bash('rm /tmp/old.txt')).toBeNull();
+  });
+});
+
+describe('riskOf for disks and shutdown', () => {
+  it('asks before formatting', () => {
+    expect(bash('mkfs.ext4 /dev/sda1')).toBe('writes to a disk');
+  });
+
+  it('asks before dd to a device', () => {
+    expect(bash('dd if=/dev/zero of=/dev/sda bs=1M')).toBe('writes to a disk');
+  });
+
+  it('allows dd to a file', () => {
+    expect(bash('dd if=/dev/zero of=blank.img bs=1M count=1')).toBeNull();
+  });
+
+  it('asks before redirecting into a disk', () => {
+    expect(bash('cat x > /dev/nvme0n1')).toBe('writes to a disk');
+  });
+
+  it('asks before a fork bomb', () => {
+    expect(bash(':(){ :|:& };:')).toBe('is a fork bomb');
+  });
+
+  it('asks before shutting down', () => {
+    expect(bash('sudo shutdown -h now')).toBe('shuts down the machine');
+  });
+
+  it('asks before changing permissions of the whole system', () => {
+    expect(bash('chmod -R 777 /')).toBe('changes permissions of the system or your home directory');
+  });
+});
+
+describe('riskOf for system paths', () => {
+  it('asks before redirecting into /etc', () => {
+    expect(bash('echo x >> /etc/hosts')).toBe('writes to a system or credentials path');
+  });
+
+  it('asks before redirecting into ~/.ssh', () => {
+    expect(bash('echo x > ~/.ssh/authorized_keys')).toBe('writes to a system or credentials path');
+  });
+
   it('allows editing a file in the worktree', () => {
     expect(riskOf('Edit', { file_path: '/work/wt-1/src/a.ts' }, WT)).toBeNull();
   });
 
-  it('asks before editing a file outside the worktree', () => {
-    expect(riskOf('Write', { file_path: '/work/other/a.ts' }, WT)).toBe(
-      "writes outside the task's worktree",
+  it('allows writing a file outside the worktree', () => {
+    expect(riskOf('Write', { file_path: '/work/other/a.ts' }, WT)).toBeNull();
+  });
+
+  it('asks before writing to /etc', () => {
+    expect(riskOf('Write', { file_path: '/etc/passwd' }, WT)).toBe(
+      'writes to a system or credentials path',
     );
   });
 
-  it('asks before a relative path that climbs out of the worktree', () => {
-    expect(riskOf('Edit', { file_path: '../secrets.env' }, WT)).toBe(
-      "writes outside the task's worktree",
+  it('asks before writing to ~/.claude', () => {
+    expect(riskOf('Edit', { file_path: '~/.claude/settings.json' }, WT)).toBe(
+      'writes to a system or credentials path',
     );
   });
 
-  it('asks before any MCP tool', () => {
-    expect(riskOf('mcp__github__create_issue', {}, WT)).toBe(
-      'is an MCP tool, whose effects are unknown',
+  it('asks about a relative path that climbs into /etc', () => {
+    expect(riskOf('Edit', { file_path: '../../../etc/hosts' }, WT)).toBe(
+      'writes to a system or credentials path',
     );
+  });
+});
+
+describe('riskOf for other tools', () => {
+  it('allows an MCP tool', () => {
+    expect(riskOf('mcp__github__create_issue', {}, WT)).toBeNull();
   });
 
   it('allows a web search', () => {

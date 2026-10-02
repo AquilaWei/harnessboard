@@ -64,7 +64,7 @@ hb done 1                            # mark it reviewed
 | `hb merge <id>`                                                                       | Merge a reviewed task into its base (below)                          |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)                            |
 | `hb allow <id> [--suggested] [--rule RULE...] [--global]` / `hb deny <id> [reason]`   | Answer a tool use the agent waits on                                 |
-| `--auto-approve` on `add` / `loop`; `hb auto <id> [on\|off]`; `hb global-tools`       | Ask less: see Permissions below                                      |
+| `--no-auto-approve` on `add` / `loop`; `hb auto <id> [on\|off]`; `hb global-tools`    | Ask more or less: see Permissions below                              |
 | `--preset git,node,...` on `add` / `loop`; `hb tools <id> [RULE...]`                  | Choose allowed tools; show or change them                            |
 
 **Merging a task** (`hb merge`, or **Merge into main** in the task panel of a task in
@@ -284,8 +284,9 @@ rules such as `Bash(npm *)`:
   nearly unrestricted, because a container can mount any folder.
 - Add single rules with `--allow`. Entries that are not tool rules, such as a sentence, are
   rejected instead of being silently ignored.
-- **Anything else is asked, not refused:** when the agent wants a tool its rules do not
-  cover, the task pauses as **Needs permission** and waits for you. Allow it once, allow it
+- **Dangerous things are asked, not refused:** with auto-approve (the default, see below)
+  only dangerous tool uses pause the task; with it off, every tool the rules do not
+  cover does. The task pauses as **Needs permission** and waits for you. Allow it once, allow it
   and add a rule to the task (the agent's suggestion, e.g. `Bash(node *)`, is filled in), or
   deny it with a reason the agent is told. In the terminal: `hb allow <id> [--suggested]
 [--rule RULE...]` and `hb deny <id> [reason]`. A waiting task keeps its slot; reviewers are
@@ -295,13 +296,16 @@ rules such as `Bash(npm *)`:
 - **For every task:** **Allow for all tasks** on a request (or `hb allow <id> --global`)
   adds the rule to `allowedTools` in your user config. Every task's sessions get these rules
   on top of their own. Edit them under **Settings** or with `hb global-tools [RULE...]`.
-- **Auto-approve** (a checkbox when creating a task or under Details, `--auto-approve`, or
-  `hb auto <id> on|off`): tools the rules do not cover are allowed without asking, except
-  risky ones, which still ask and say why. Risky means `git push`, history-rewriting git
-  commands, `rm -r`, `sudo`, network commands (`curl`, `wget`, `ssh`…), publishing,
-  containers, writing outside the task's worktree, and MCP tools. A list like this cannot
-  catch everything, so it is a convenience, not a sandbox. It can be switched while the task
-  runs.
+- **Auto-approve** (on by default; a checkbox when creating a task or under Details,
+  `--no-auto-approve`, or `hb auto <id> on|off`): tools the rules do not cover are allowed
+  without asking, except dangerous ones, which still ask and say why. Dangerous means
+  wiping the system or your home directory (`rm -rf /`, `rm -rf ~`), writing to a disk
+  (`mkfs`, `dd of=/dev/...`), shutting the machine down, writing to system paths (`/etc`,
+  `/usr`, `~/.ssh`, `~/.claude`...), and deleting recursively outside the task's worktree.
+  `git push`, `sudo`, network commands, containers and MCP tools are allowed. A dangerous
+  request can only be allowed once; it offers no rule to remember. A list like this cannot
+  catch everything, so it is a safety net, not a sandbox. It can be switched while the task
+  runs. Tasks created before 0.0.10 keep their old setting.
 - `--skip-permissions` removes all checks; use it only in a sandbox.
 
 ## Development
