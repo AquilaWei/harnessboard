@@ -9,6 +9,7 @@ import type {
   ContextView,
   CriteriaApproval,
   DesignNote,
+  DocsRecord,
   TestReport,
   CriteriaProposal,
   MergeConflict,
@@ -199,6 +200,7 @@ export function timeline(taskId: number, store: Store): TimelineEntry[] {
     'criteria_approved',
     'design',
     'test_report',
+    'docs_done',
     'chat_message',
     'merge_conflict',
     'merged',
@@ -227,6 +229,7 @@ function timelineEvent(
     | 'criteria_approved'
     | 'design'
     | 'test_report'
+    | 'docs_done'
     | 'chat_message'
     | 'merge_conflict'
     | 'merged'
@@ -258,6 +261,8 @@ function timelineEvent(
       return { kind, ts, note: data as DesignNote };
     case 'test_report':
       return { kind, ts, report: data as TestReport };
+    case 'docs_done':
+      return { kind, ts, docs: data as DocsRecord };
     case 'chat_message':
       return { kind, ts, message: data as ChatMessage };
     case 'merge_conflict':

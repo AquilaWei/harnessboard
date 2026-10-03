@@ -126,6 +126,13 @@ two rounds as review, then to you); a pass goes on to the reviewer. It may only 
 files; anything else stops the task. Use `--tester codex --tester-model <model>`, the
 **Tester** menu, or `hb models <id> --tester <agent|none>`. It applies to single tasks.
 
+**Docs writer (optional):** add a **docs writer** and, after the tests (if there is a
+tester) and before review, it brings the README, changelog entry and `docs/` up to date with
+the change and commits them, so the reviewer sees code and docs together. It may only change
+documentation files, and it never bumps the version or tags a release. Use
+`--docs codex --docs-model <model>`, the **Docs writer** menu, or
+`hb models <id> --docs <agent|none>`. It applies to single tasks.
+
 Criteria given when creating the task are used as they are. `--no-discuss` (or unticking
 the box in the New task dialog) starts without criteria.
 

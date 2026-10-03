@@ -100,6 +100,8 @@ function withTaskOptions(command: Command): Command {
     .option('--designer-model <model>', 'model for the designer')
     .option('--tester <agent>', 'agent profile that writes and runs tests for each finished step')
     .option('--tester-model <model>', 'model for the tester')
+    .option('--docs <agent>', 'agent profile that updates the docs after each step')
+    .option('--docs-model <model>', 'model for the docs writer')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--reviewer-model <model>', 'model for the reviewer')
     .option('--no-queue', 'leave the task in the backlog');
@@ -127,6 +129,8 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       designModel: o.designerModel,
       tester: o.tester,
       testerModel: o.testerModel,
+      docs: o.docs,
+      docsModel: o.docsModel,
       reviewer: o.reviewer === 'none' ? null : o.reviewer,
       implementerModel: o.model,
       reviewerModel: o.reviewerModel,
@@ -392,6 +396,8 @@ program
   .option('--designer-model <model>', 'designer model, or "default" for the profile model')
   .option('--tester <agent>', 'tester profile, or "none" to skip testing')
   .option('--tester-model <model>', 'tester model, or "default" for the profile model')
+  .option('--docs <agent>', 'docs writer profile, or "none" to skip the docs step')
+  .option('--docs-model <model>', 'docs writer model, or "default" for the profile model')
   .option('--reviewer <agent>', 'reviewer profile, or "none"')
   .option('--reviewer-model <model>', 'reviewer model, or "default" for the profile model')
   .action(async (id: number, o: ModelsOptions) => {
@@ -405,6 +411,8 @@ program
       designModel: model(o.designerModel),
       tester: o.tester === undefined ? undefined : o.tester === 'none' ? null : o.tester,
       testerModel: model(o.testerModel),
+      docs: o.docs === undefined ? undefined : o.docs === 'none' ? null : o.docs,
+      docsModel: model(o.docsModel),
       reviewer: o.reviewer === undefined ? undefined : o.reviewer === 'none' ? null : o.reviewer,
       reviewerModel: model(o.reviewerModel),
     });
@@ -420,6 +428,7 @@ program
     console.log(`designer     ${a.design ?? '-'}  ${a.design ? shown(a.designModel) : ''}`);
     console.log(`implementer  ${a.implementer}  ${shown(a.implementerModel)}`);
     console.log(`tester       ${a.tester ?? '-'}  ${a.tester ? shown(a.testerModel) : ''}`);
+    console.log(`docs         ${a.docs ?? '-'}  ${a.docs ? shown(a.docsModel) : ''}`);
     console.log(`reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel) : ''}`);
   });
 
@@ -633,6 +642,8 @@ interface AddOptions {
   designerModel?: string;
   tester?: string;
   testerModel?: string;
+  docs?: string;
+  docsModel?: string;
   queue: boolean;
 }
 
@@ -644,6 +655,8 @@ interface ModelsOptions {
   designerModel?: string;
   tester?: string;
   testerModel?: string;
+  docs?: string;
+  docsModel?: string;
   reviewer?: string;
   reviewerModel?: string;
 }

@@ -360,6 +360,8 @@ export class Harness {
       designModel: modelOrNull(input.designModel),
       tester: input.tester ?? null,
       testerModel: modelOrNull(input.testerModel),
+      docs: input.docs ?? null,
+      docsModel: modelOrNull(input.docsModel),
     };
     this.checkProfiles(agents);
     const task = this.store.createTask({
@@ -427,7 +429,8 @@ export class Harness {
       (update.reviewer !== undefined && update.reviewer !== task.agents.reviewer) ||
       (update.spec !== undefined && update.spec !== (task.agents.spec ?? null)) ||
       (update.design !== undefined && update.design !== (task.agents.design ?? null)) ||
-      (update.tester !== undefined && update.tester !== (task.agents.tester ?? null));
+      (update.tester !== undefined && update.tester !== (task.agents.tester ?? null)) ||
+      (update.docs !== undefined && update.docs !== (task.agents.docs ?? null));
     if (swapsAgent && (this.running.has(id) || task.status === 'running')) {
       throw new Error(`task ${id} is running; stop it before changing its agents`);
     }
@@ -440,6 +443,8 @@ export class Harness {
     if (update.designModel !== undefined) agents.designModel = modelOrNull(update.designModel);
     if (update.tester !== undefined) agents.tester = update.tester;
     if (update.testerModel !== undefined) agents.testerModel = modelOrNull(update.testerModel);
+    if (update.docs !== undefined) agents.docs = update.docs;
+    if (update.docsModel !== undefined) agents.docsModel = modelOrNull(update.docsModel);
     if (update.implementerModel !== undefined) {
       agents.implementerModel = modelOrNull(update.implementerModel);
     }
@@ -1139,6 +1144,7 @@ export class Harness {
       agents.spec ?? null,
       agents.design ?? null,
       agents.tester ?? null,
+      agents.docs ?? null,
     ]) {
       if (id !== null && !this.config.agents[id]) {
         throw new Error(`agent profile "${id}" is not configured`);

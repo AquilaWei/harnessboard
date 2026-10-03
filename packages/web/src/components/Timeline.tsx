@@ -13,6 +13,7 @@ const ROLE_ICONS = {
   design: '📐',
   implementer: '🛠',
   tester: '🧪',
+  docs: '📚',
   reviewer: '🔍',
 } as const;
 
@@ -149,6 +150,22 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
         </li>
       );
     }
+    case 'docs_done':
+      return (
+        <li className="step">
+          <StepHead
+            icon="📚"
+            title={t('timeline.docsDone', { agent: entry.docs.agentId })}
+            meta={time}
+          />
+          {entry.docs.summary && (
+            <details>
+              <summary>{t('timeline.reply')}</summary>
+              <Markdown className="reply" text={entry.docs.summary} />
+            </details>
+          )}
+        </li>
+      );
     case 'plan': {
       const p = entry.proposal;
       return (

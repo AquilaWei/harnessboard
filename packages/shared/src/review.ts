@@ -49,6 +49,24 @@ export interface TestRequest {
   status: string;
 }
 
+/** Stored as the `docs_request` event when a finished step is sent to the docs writer. */
+export interface DocsRequest {
+  /** Commit the step is measured from: the last approved head, or the task's base. */
+  since: string;
+  head: string;
+  /** `git status --porcelain` output at request time. */
+  status: string;
+}
+
+/** Stored as the `docs_done` event after a docs session. */
+export interface DocsRecord {
+  agentId: string;
+  /** The docs writer's reply: what it updated, or why nothing needed it. */
+  summary: string;
+  /** HEAD after the session, so an unchanged step is not documented twice. */
+  head: string;
+}
+
 /** Stored as the `test_report` event after a tester session. */
 export interface TestReport {
   round: number;
@@ -65,7 +83,14 @@ export interface TestReport {
  * to the agent in the task's conversation, outside the workflow.
  */
 export type TaskPhase =
-  'planning' | 'designing' | 'implementing' | 'testing' | 'verifying' | 'reviewing' | 'chatting';
+  | 'planning'
+  | 'designing'
+  | 'implementing'
+  | 'testing'
+  | 'documenting'
+  | 'verifying'
+  | 'reviewing'
+  | 'chatting';
 
 export interface TaskActivity {
   phase: TaskPhase;
@@ -135,6 +160,7 @@ export type TimelineEntry =
   | { kind: 'criteria_approved'; ts: number; approval: CriteriaApproval }
   | { kind: 'design'; ts: number; note: DesignNote }
   | { kind: 'test_report'; ts: number; report: TestReport }
+  | { kind: 'docs_done'; ts: number; docs: DocsRecord }
   | { kind: 'chat_message'; ts: number; message: ChatMessage }
   | { kind: 'merge_conflict'; ts: number; conflict: MergeConflict }
   | { kind: 'merged'; ts: number; merge: MergeRecord }

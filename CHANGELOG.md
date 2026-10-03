@@ -7,6 +7,11 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **An optional docs writer.** Pick a docs writer (`--docs`, `--docs-model`, the **Docs
+  writer** menu, `hb models --docs`) and each step of a single task gets its README,
+  changelog entry and `docs/` updated and committed after testing and before review. It may
+  only change documentation files (otherwise the task stops) and never bumps the version.
+  Tasks without a docs writer behave as before.
 - **An optional tester.** Pick a tester (`--tester`, `--tester-model`, the **Tester** menu,
   `hb models --tester`) and each finished step of a single task goes to it before review.
   It writes the missing tests, runs the suite and commits the tests. Failures go back to the

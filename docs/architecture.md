@@ -47,6 +47,11 @@ profiles.
     against `maxReviewRounds`; a pass sends the step on to the reviewer. The harness checks
     the files changed since the request (`changedPaths`) and stops the task if any is not a
     test path (`isTestPath`).
+  - `docs`: optional, single tasks only. After the tester passed a step (or straight after
+    the implementer without one) one session with edit access updates the README, changelog
+    and `docs/` and commits. Events: `docs_request`, `docs_done`. It must change only
+    documentation paths (`isDocPath`), checked like the tester's; a step it already
+    documented (same HEAD, clean worktree) is not sent again.
   - `reviewer`: checks the implementer's latest step. It runs read-only and must answer
     with `VERDICT: APPROVE` or `VERDICT: CHANGES`.
 
@@ -62,6 +67,16 @@ implementer step done ──► review_request ──► reviewer session (read-
                                                   └─ no verdict, over the round limit,
                                                      or files changed → a human
 ```
+
+For a single task the optional roles slot in before the reviewer, in this order:
+
+```
+spec ─► design ─► implementer ─► tester ─► docs ─► reviewer
+```
+
+Each role other than the implementer is off unless the task names an agent for it. A
+failing test report or a `CHANGES` verdict returns to the implementer, and the step then
+passes through the later roles again.
 
 A step counts as done when a single task's session completes, or when the harness has
 verified a loop feature. `review_request` and `review` are events in the store, so a

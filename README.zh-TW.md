@@ -111,6 +111,11 @@ hb add "加上深色模式切換" --criteria "- 重新整理後仍保持設定" 
 任務就會停止。用法：`--tester codex --tester-model <model>`、**測試者**選單，或
 `hb models <id> --tester <agent|none>`。只適用於單一任務。
 
+**文件撰寫者（選用）**：加上**文件撰寫者**後，測試之後（若有測試者）、審查之前，它會依這次
+的變更更新 README、changelog 與 `docs/` 並提交，審查者就能同時看到程式與文件。它只能修改
+文件檔，也不會升版號或打 tag。用法：`--docs codex --docs-model <model>`、**文件撰寫者**選單，
+或 `hb models <id> --docs <agent|none>`。只適用於單一任務。
+
 建立任務時就填好的驗收標準會直接採用。`--no-discuss`（或在新增任務對話框取消勾選）
 則不設驗收標準直接開工。
 

@@ -18,6 +18,9 @@ export interface AgentChoice {
   /** Tests each finished step before review; `null` skips testing. */
   tester: string | null;
   testerModel: string | null;
+  /** Updates the docs after each step, before review; `null` skips it. */
+  docs: string | null;
+  docsModel: string | null;
 }
 
 interface Props {
@@ -131,6 +134,29 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
         )}
       </div>
       <small className="hint">{t('form.testerHint')}</small>
+      <div className="row">
+        <label className="field">
+          <span>{t('form.docs')}</span>
+          <select
+            value={value.docs ?? ''}
+            disabled={lockAgents}
+            onChange={(e) => set({ docs: e.target.value || null, docsModel: null })}
+          >
+            <option value="">{t('form.docsNone')}</option>
+            {options}
+          </select>
+        </label>
+        {value.docs && (
+          <ModelPicker
+            key={`docs-${value.docs}`}
+            label={t('form.docsModel')}
+            agent={byId(value.docs)}
+            value={value.docsModel}
+            onChange={(docsModel) => set({ docsModel })}
+          />
+        )}
+      </div>
+      <small className="hint">{t('form.docsHint')}</small>
       <div className="row">
         <label className="field">
           <span>{t('form.reviewer')}</span>

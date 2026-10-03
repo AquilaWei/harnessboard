@@ -140,3 +140,30 @@ export function testFeedback(report: TestReport): string {
     report.findings,
   ].join('\n');
 }
+
+/** True for a path the docs writer may change: Markdown-like files and `docs/` folders. */
+export function isDocPath(file: string): boolean {
+  return /(^|\/)docs?\//i.test(file) || /\.(md|mdx|rst|adoc)$/i.test(file);
+}
+
+/**
+ * First message of a docs session. It edits documentation only, in the implementer's
+ * worktree, so the reviewer sees code and docs together.
+ */
+export function docsPrompt(goal: string, since: string): string {
+  return [
+    'Another agent changed this repository to do the task below. Bring the documentation up',
+    'to date with what it did.',
+    '',
+    `Task given to the implementer:\n${goal}`,
+    '',
+    `Read the change: \`git log --oneline ${since}..HEAD\` and \`git diff ${since}..HEAD\`.`,
+    'Then update what a user or contributor would otherwise find wrong or missing: the README',
+    '(every language it has), the changelog entry for unreleased changes, and files under',
+    "`docs/`. Follow the repository's existing style and keep each change short.",
+    'Do not bump the version, tag a release, or touch anything but documentation files.',
+    'Commit your changes. If nothing needs documenting, change nothing.',
+    '',
+    'Reply with one or two lines: what you updated, or that nothing needed it.',
+  ].join('\n');
+}
