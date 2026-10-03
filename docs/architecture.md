@@ -1,7 +1,7 @@
 # Architecture
 
 This page is for contributors. It covers how Harnessboard is put together, how agents and
-roles fit in, and what adding another agent CLI (such as Codex or Gemini) involves.
+roles fit in, and what adding another agent CLI (such as Gemini) involves.
 
 ## Packages
 
@@ -25,8 +25,8 @@ profiles.
 
 ## Agents, profiles and roles
 
-- **Provider:** an agent CLI Harnessboard knows how to drive. Today there is one,
-  `claude-code`. Each provider has one `AgentAdapter`.
+- **Provider:** an agent CLI Harnessboard knows how to drive. Today there are two,
+  `claude-code` and `codex`. Each provider has one `AgentAdapter`.
 - **Profile:** a named way to run a provider, set in the user config. It holds a command,
   a model, and optionally a context window. `claude` always exists. Adding a second profile
   (for example the same CLI with another model) needs no code.
@@ -78,18 +78,29 @@ restart picks up exactly where the task was.
    `PromptArgAdapter` in `core/test/helpers.ts`, which already acts like a prompt-as-argument
    CLI).
 
+## The Codex adapter
+
+`core/src/codex.ts` drives `codex exec --json`, checked against Codex CLI 0.160:
+
+- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
+- The result's text is the turn's last `agent_message`. Adapters are shared by all sessions
+  of a profile, so this needs state per process: an adapter may provide `createParser()`,
+  which the runner calls once for each CLI process.
+- `exec resume` accepts `-c` but not `--sandbox`, so the sandbox is set with
+  `-c sandbox_mode=...` in both cases. Reviewers get `read-only`.
+- The workspace sandbox protects a worktree's git directory, which lies outside the
+  worktree, so an implementer there can not commit. Edit sessions that skip permissions
+  (the default for tasks) therefore run with `--dangerously-bypass-approvals-and-sandbox`.
+- `turn.completed` sums tokens over every model call of the turn, which is not the size of
+  the context, so no `context` events are emitted and Codex manages its own context.
+- Not seen in real output yet, so read defensively: `file_change` items and usage-limit
+  errors (a message containing "usage limit" or "rate limit" counts as 429).
+
 ## Notes for the planned providers
 
 These come from the vendors' documentation and have not been checked against real output
 yet. Check them against the real CLIs before relying on them.
 
-- **OpenAI Codex CLI:**
-  - `codex exec --json "<prompt>"` prints JSONL events: `thread.started` (with the thread id),
-    `turn.started`, `turn.completed` (with token usage), `turn.failed`, `item.*` (messages,
-    commands, file changes) and `error`.
-  - It resumes with `codex exec resume <id> "<prompt>"`.
-  - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
-  - It signs in with a ChatGPT plan, so no API key is needed.
 - **Google Gemini CLI:**
   - `gemini -p "<prompt>" --output-format stream-json` prints JSONL events: `init` (with the
     session id), `message`, `tool_use`, `tool_result`, `error` and `result` (with stats).
@@ -97,8 +108,8 @@ yet. Check them against the real CLIs before relying on them.
   - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
   - Read-only mode: check which approval mode or sandbox flag refuses edits.
 
-Neither CLI reports a subscription quota the way Claude Code's `rate_limit_event` does.
-Their adapters should report a usage-limit error as an error `result` with
+Gemini does not report a subscription quota the way Claude Code's `rate_limit_event` does.
+Its adapter should report a usage-limit error as an error `result` with
 `apiErrorStatus: 429`. The task then waits `quotaRetryMinutes` and retries.
 
 ## Data and state

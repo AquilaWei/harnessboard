@@ -151,8 +151,7 @@ hb add "Add input validation to the signup form" --reviewer opus
 
 **模型**：每個任務可以分別替執行者和審查者選模型，例如用 Haiku 實作、用 Opus 審查：
 `hb add "..." --model haiku --reviewer claude --reviewer-model opus`，或在「新增任務」對話框
-的模型選單選。目前審查者可以是任何 Claude Code 設定檔。之後計畫加入 Codex、
-Gemini 等 provider，就能讓不同廠商的 agent 互相檢查。
+的模型選單選。審查者可以是任何 Claude Code 或 Codex 設定檔，讓不同廠商的 agent 互相檢查（Gemini 規劃中）。
 
 ## 網頁看板
 
@@ -229,13 +228,16 @@ API 只接受 loopback 的 `Host` 標頭，而且每個寫入請求都必須帶�
 {
   "agents": {
     "claude": { "provider": "claude-code", "command": "claude", "model": null },
-    "opus": { "provider": "claude-code", "command": "claude", "model": "opus" }
+    "opus": { "provider": "claude-code", "command": "claude", "model": "opus" },
+    "codex": { "provider": "codex", "command": "codex", "model": null }
   }
 }
 ```
 
-目前支援的 provider：`claude-code`。之後要加入 Codex、Gemini 等其他 CLI 的設計，寫在
-[docs/architecture.md](docs/architecture.md)。
+目前支援的 provider：`claude-code` 和 `codex`。Codex 設定檔使用已登入的
+[Codex CLI](https://github.com/openai/codex)（`codex exec`），用 ChatGPT 方案登入就不需要 API 金鑰。
+Codex 不能逐項詢問工具權限，由它自己的沙箱決定，所以權限規則與提示對它不適用。之後要加入 Gemini
+等其他 CLI 的設計，寫在 [docs/architecture.md](docs/architecture.md)。
 
 **權限**：任務以 `--permission-mode acceptEdits` 執行，再加上一份允許的工具規則，例如
 `Bash(npm *)`：

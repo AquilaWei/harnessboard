@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /** Agent CLIs Harnessboard can drive. Each needs an adapter in `@harnessboard/core`. */
-export const AGENT_PROVIDERS = ['claude-code'] as const;
+export const AGENT_PROVIDERS = ['claude-code', 'codex'] as const;
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 
 /** A named way to run an agent, e.g. `claude` or a second profile using another model. */
@@ -24,6 +24,7 @@ export type AgentRole = 'implementer' | 'reviewer';
  */
 export const MODEL_SUGGESTIONS: Record<AgentProvider, readonly string[]> = {
   'claude-code': ['opus', 'sonnet', 'haiku'],
+  codex: [],
 };
 
 // Letters, digits and the punctuation model ids use, e.g. `claude-opus-5-5` or `opus[1m]`;

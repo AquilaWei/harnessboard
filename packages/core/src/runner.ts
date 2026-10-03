@@ -140,12 +140,13 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
 
   /** Runs one CLI process until it exits; rejects only when it cannot be started. */
   function runTurn(turnSpec: SessionSpec): Promise<number | null> {
+    const parse = adapter.createParser?.() ?? ((line: string) => adapter.parseLine(line));
     const child = spawnLines(
       adapter.command,
       adapter.buildArgs(turnSpec),
       turnSpec.cwd,
       (line) => {
-        for (const event of adapter.parseLine(line)) handle(event);
+        for (const event of parse(line)) handle(event);
       },
       (line) => {
         stderrTail.push(line);

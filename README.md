@@ -171,8 +171,7 @@ hb add "Add input validation to the signup form" --reviewer opus
 **Models:** each task can pick its own model for the implementer and for the reviewer, for
 example Haiku to build and Opus to review: `hb add "..." --model haiku --reviewer claude
 --reviewer-model opus`, or the model menus in the New task dialog. Today the reviewer can be
-any Claude Code profile. Codex and Gemini are planned as further providers, so different vendors can check each
-other.
+any Claude Code or Codex profile, so different vendors can check each other (Gemini is planned).
 
 ## Web board
 
@@ -268,13 +267,17 @@ add more in `config.json`, for example a second Claude with another model:
 {
   "agents": {
     "claude": { "provider": "claude-code", "command": "claude", "model": null },
-    "opus": { "provider": "claude-code", "command": "claude", "model": "opus" }
+    "opus": { "provider": "claude-code", "command": "claude", "model": "opus" },
+    "codex": { "provider": "codex", "command": "codex", "model": null }
   }
 }
 ```
 
-Supported providers: `claude-code`. The design for adding other CLIs, such as Codex or
-Gemini, is in [docs/architecture.md](docs/architecture.md).
+Supported providers: `claude-code` and `codex`. A Codex profile uses the signed-in
+[Codex CLI](https://github.com/openai/codex) (`codex exec`), so a ChatGPT plan works without
+an API key. Codex can not ask about a tool: its sandbox decides, so permission rules and
+prompts do not apply to it. The design for adding other CLIs, such as Gemini, is in
+[docs/architecture.md](docs/architecture.md).
 
 **Permissions:** tasks run with `--permission-mode acceptEdits` and a list of allowed tool
 rules such as `Bash(npm *)`:

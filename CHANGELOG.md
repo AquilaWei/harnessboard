@@ -5,6 +5,16 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Codex support.** Add a profile with `"provider": "codex"` to `config.json` and pick it
+  as a task's implementer or reviewer, so Claude and Codex can check each other's work.
+  Codex runs through `codex exec` on your ChatGPT sign-in. It does not report its context
+  size, so Harnessboard does not hand off its sessions, and it can not ask about a tool:
+  reviewers run in its read-only sandbox, and implementers run unsandboxed when
+  auto-approve is on, otherwise in its workspace sandbox, which can edit files but not
+  commit.
+
 ### Changed
 
 - **Tasks now allow almost everything by default.** Auto-approve is on for new tasks, and

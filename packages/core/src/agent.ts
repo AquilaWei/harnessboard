@@ -31,6 +31,9 @@ export interface SessionSpec {
   askPermission: boolean;
 }
 
+/** Turns CLI output lines into events; see {@link AgentAdapter.createParser}. */
+export type LineParser = (line: string) => AgentEvent[];
+
 /** The answer to a `permission_request` event. */
 export interface PermissionReply {
   behavior: 'allow' | 'deny';
@@ -77,6 +80,13 @@ export interface AgentAdapter {
   ): string;
   /** Normalises one stdout line; unknown or irrelevant lines yield no events. */
   parseLine(line: string): AgentEvent[];
+  /**
+   * A parser that remembers earlier lines of one CLI process, for CLIs whose final result
+   * has to be assembled from several lines. The runner uses it when present, one per
+   * process; adapters are shared by all sessions of a profile, so they can not keep that
+   * state themselves.
+   */
+  createParser?(): LineParser;
   /** Arguments that print the CLI version; used to check the CLI is installed. */
   readonly versionArgs: string[];
   /** Arguments that reopen a session in the CLI's own interactive UI (`hb open`). */
