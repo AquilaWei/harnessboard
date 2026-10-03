@@ -95,6 +95,9 @@ export interface CreateTaskInput {
   /** Models for this task only; omitted or `null` uses the profile's model. */
   implementerModel?: string | null;
   reviewerModel?: string | null;
+  /** Writes the acceptance criteria; omitted or `null` lets the implementer do it. */
+  spec?: string | null;
+  specModel?: string | null;
   /**
    * Loop tasks: optional while `confirmPlan` is on (the default), because it can be set
    * when the plan is approved; otherwise required unless `.harnessboard.json` sets one.
@@ -154,5 +157,8 @@ export interface CommitInfo {
 
 /** Body of `PUT /api/tasks/:id/agents`: only the given fields change. */
 export type AgentsUpdate = Partial<
-  Pick<TaskAgents, 'implementer' | 'reviewer' | 'implementerModel' | 'reviewerModel'>
+  Pick<
+    TaskAgents,
+    'implementer' | 'reviewer' | 'implementerModel' | 'reviewerModel' | 'spec' | 'specModel'
+  >
 >;

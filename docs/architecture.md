@@ -31,6 +31,10 @@ profiles.
   a model, and optionally a context window. `claude` always exists. Adding a second profile
   (for example the same CLI with another model) needs no code.
 - **Role:** what a session is asked to do.
+  - `spec`: agrees acceptance criteria with the user before anything is built. It runs
+    read-only. `task.agents.spec` is optional; without it the implementer plays this role.
+    When the same agent plays both roles the approved discussion is resumed with edit access;
+    otherwise the implementer starts a new session from the approved criteria.
   - `implementer`: edits files and commits.
   - `reviewer`: checks the implementer's latest step. It runs read-only and must answer
     with `VERDICT: APPROVE` or `VERDICT: CHANGES`.

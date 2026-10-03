@@ -30,6 +30,8 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
       implementerModel: a.implementerModel ?? null,
       reviewer: a.reviewer,
       reviewerModel: a.reviewerModel ?? null,
+      spec: a.spec ?? null,
+      specModel: a.specModel ?? null,
     });
     api.agents().then(setAgents, (e: Error) => onError(e.message));
   };
@@ -51,6 +53,9 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
   if (!choice) {
     return (
       <div className="tool-rules">
+        <span className="mono">
+          {t('fields.spec')}: {a.spec ? `${a.spec} · ${model(a.specModel)}` : t('form.specSame')}
+        </span>
         <span className="mono">
           {a.implementer} · {model(a.implementerModel)}
         </span>

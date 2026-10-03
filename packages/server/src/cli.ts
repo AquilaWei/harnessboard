@@ -91,6 +91,11 @@ function withTaskOptions(command: Command): Command {
       'ask before every tool the rules do not allow, instead of only dangerous ones',
     )
     .option('--model <model>', 'model for the implementer, e.g. opus, sonnet, haiku')
+    .option(
+      '--spec <agent>',
+      'agent profile that writes the acceptance criteria (default: implementer)',
+    )
+    .option('--spec-model <model>', 'model for the spec author')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--reviewer-model <model>', 'model for the reviewer')
     .option('--no-queue', 'leave the task in the backlog');
@@ -112,6 +117,8 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       allowedTools: allowedTools(o.preset, o.allow),
       skipPermissions: o.skipPermissions,
       autoApprove: o.autoApprove,
+      spec: o.spec,
+      specModel: o.specModel,
       reviewer: o.reviewer === 'none' ? null : o.reviewer,
       implementerModel: o.model,
       reviewerModel: o.reviewerModel,
@@ -371,13 +378,17 @@ program
   .description("show or change a task's agents and models (only models while it runs)")
   .argument('<id>', 'task id', parseInteger)
   .option('--model <model>', 'implementer model, or "default" for the profile model')
+  .option('--spec <agent>', 'spec author profile, or "implementer" to let the implementer write it')
+  .option('--spec-model <model>', 'spec author model, or "default" for the profile model')
   .option('--reviewer <agent>', 'reviewer profile, or "none"')
   .option('--reviewer-model <model>', 'reviewer model, or "default" for the profile model')
-  .action(async (id: number, o: { model?: string; reviewer?: string; reviewerModel?: string }) => {
+  .action(async (id: number, o: ModelsOptions) => {
     const api = client();
     const model = (m?: string) => (m === undefined ? undefined : m === 'default' ? null : m);
     const update = definedOnly({
       implementerModel: model(o.model),
+      spec: o.spec === undefined ? undefined : o.spec === 'implementer' ? null : o.spec,
+      specModel: model(o.specModel),
       reviewer: o.reviewer === undefined ? undefined : o.reviewer === 'none' ? null : o.reviewer,
       reviewerModel: model(o.reviewerModel),
     });
@@ -385,6 +396,11 @@ program
       Object.keys(update).length > 0 ? await api.setAgents(id, update) : await api.getTask(id);
     const a = task.agents;
     const shown = (m?: string | null) => m ?? t('defaultModel');
+    console.log(
+      a.spec
+        ? `spec         ${a.spec}  ${shown(a.specModel)}`
+        : `spec         ${t('sameAsImplementer')}`,
+    );
     console.log(`implementer  ${a.implementer}  ${shown(a.implementerModel)}`);
     console.log(`reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel) : ''}`);
   });
@@ -593,7 +609,17 @@ interface AddOptions {
   reviewer?: string;
   model?: string;
   reviewerModel?: string;
+  spec?: string;
+  specModel?: string;
   queue: boolean;
+}
+
+interface ModelsOptions {
+  model?: string;
+  spec?: string;
+  specModel?: string;
+  reviewer?: string;
+  reviewerModel?: string;
 }
 
 function indent(text: string): string {

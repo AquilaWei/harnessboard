@@ -7,6 +7,12 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **A spec author for the acceptance criteria.** The read-only discussion that agrees on
+  what "done" means can now be run by its own agent and model (`--spec`, `--spec-model`,
+  the **Spec author** menu, `hb models --spec`). It defaults to the implementer, so existing
+  tasks behave as before. With a different agent, the implementer starts a new session from
+  the approved criteria instead of continuing the discussion.
+
 - **Codex support.** Add a profile with `"provider": "codex"` to `config.json` and pick it
   as a task's implementer or reviewer, so Claude and Codex can check each other's work.
   Codex runs through `codex exec` on your ChatGPT sign-in. It does not report its context

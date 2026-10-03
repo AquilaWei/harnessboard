@@ -8,6 +8,8 @@ import { Markdown } from './Markdown';
  * The task's history as steps, so the harness's decisions are visible: who worked, when
  * context ran out, what verification and review said.
  */
+const ROLE_ICONS = { spec: '📝', implementer: '🛠', reviewer: '🔍' } as const;
+
 export function Timeline({ entries }: { entries: TimelineEntry[] | null }) {
   const { t } = useTranslation();
   if (!entries) return null;
@@ -39,7 +41,7 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
       return (
         <li className={`step step-${s.role}`}>
           <StepHead
-            icon={s.role === 'reviewer' ? '🔍' : '🛠'}
+            icon={ROLE_ICONS[s.role]}
             title={t(`timeline.${s.role}`, { agent: s.agentId })}
             meta={`${reason} · ${formatTokens(s.contextTokens)} · ${time}`}
           />

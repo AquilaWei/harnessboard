@@ -16,7 +16,7 @@ export interface AgentProfile {
 }
 
 /** What a session was asked to do. */
-export type AgentRole = 'implementer' | 'reviewer';
+export type AgentRole = 'spec' | 'implementer' | 'reviewer';
 
 /**
  * Models offered for each provider. Any other id the CLI accepts can be typed instead;
@@ -45,6 +45,13 @@ export interface TaskAgents {
   implementerModel?: string | null;
   /** Model for the reviewer; absent or `null` uses the profile's model. */
   reviewerModel?: string | null;
+  /**
+   * Agent that writes the spec (the acceptance criteria discussed with the user before
+   * anything is built); absent or `null` lets the implementer do it.
+   */
+  spec?: string | null;
+  /** Model for the spec author; absent or `null` uses the profile's model. */
+  specModel?: string | null;
   /** Review rounds per step before the task goes to a human anyway. */
   maxReviewRounds: number;
 }
@@ -57,4 +64,20 @@ export interface AgentInfo {
   /** CLI version line, when it ran. */
   version: string | null;
   error: string | null;
+}
+
+/** The agent profile that plays `role` in a task; `null` when the role is off (no reviewer). */
+export function roleAgent(agents: TaskAgents, role: AgentRole): string | null {
+  if (role === 'reviewer') return agents.reviewer;
+  if (role === 'spec') return agents.spec ?? agents.implementer;
+  return agents.implementer;
+}
+
+/** The model chosen for `role` in a task; `null` means the agent profile's own model. */
+export function roleModel(agents: TaskAgents, role: AgentRole): string | null {
+  if (role === 'reviewer') return agents.reviewerModel ?? null;
+  if (role === 'implementer') return agents.implementerModel ?? null;
+  // A spec author left unset is the implementer, so it keeps the implementer's model too.
+  if (agents.specModel) return agents.specModel;
+  return agents.spec ? null : (agents.implementerModel ?? null);
 }

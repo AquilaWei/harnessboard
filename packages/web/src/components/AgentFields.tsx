@@ -9,6 +9,9 @@ export interface AgentChoice {
   implementerModel: string | null;
   reviewer: string | null;
   reviewerModel: string | null;
+  /** Writes the acceptance criteria; `null` lets the implementer do it. */
+  spec: string | null;
+  specModel: string | null;
 }
 
 interface Props {
@@ -19,7 +22,7 @@ interface Props {
   lockAgents?: boolean;
 }
 
-/** Profile and model for the implementer, then for the optional reviewer. */
+/** Profile and model for the spec author, the implementer, then the optional reviewer. */
 export function AgentFields({ agents, value, onChange, lockAgents = false }: Props) {
   const { t } = useTranslation();
   const set = (patch: Partial<AgentChoice>) => onChange({ ...value, ...patch });
@@ -33,6 +36,29 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
 
   return (
     <>
+      <div className="row">
+        <label className="field">
+          <span>{t('form.spec')}</span>
+          <select
+            value={value.spec ?? ''}
+            disabled={lockAgents}
+            onChange={(e) => set({ spec: e.target.value || null, specModel: null })}
+          >
+            <option value="">{t('form.specSame')}</option>
+            {options}
+          </select>
+        </label>
+        {value.spec && (
+          <ModelPicker
+            key={`spec-${value.spec}`}
+            label={t('form.specModel')}
+            agent={byId(value.spec)}
+            value={value.specModel}
+            onChange={(specModel) => set({ specModel })}
+          />
+        )}
+      </div>
+      <small className="hint">{t('form.specHint')}</small>
       <div className="row">
         <label className="field">
           <span>{t('form.implementer')}</span>

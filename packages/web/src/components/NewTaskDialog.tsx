@@ -53,6 +53,8 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
     implementerModel: null,
     reviewer: settings.defaultReviewer,
     reviewerModel: null,
+    spec: null,
+    specModel: null,
   });
   const [title, setTitle] = useState('');
   const [base, setBase] = useState('');
@@ -107,6 +109,8 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           implementerModel: who.implementerModel,
           reviewer: who.reviewer,
           reviewerModel: who.reviewer ? who.reviewerModel : null,
+          spec: who.spec,
+          specModel: who.spec ? who.specModel : null,
           title: title.trim() || undefined,
           baseRef: base.trim() || undefined,
           size,

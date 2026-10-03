@@ -5,6 +5,7 @@ import {
   FEATURE_LIST_FILE,
   contextPct,
   resolveThresholds,
+  roleAgent,
   toQuestions,
 } from '@harnessboard/shared';
 import type {
@@ -95,12 +96,7 @@ export class Workflow {
     // Each loop feature starts from a clean context; its state lives in the worktree files.
     const loopStepDone = task.mode === 'loop' && last.endReason === 'completed';
     // A session that never reached the model was never saved by the CLI, so it can't be resumed.
-    const resumable =
-      !loopStepDone &&
-      last.role === 'implementer' &&
-      last.agentSessionId !== null &&
-      last.contextTokens > 0 &&
-      this.hasBudget(task, last);
+    const resumable = !loopStepDone && this.canResume(task, last, this.activeAgent(task));
     if (resumable) return this.implement(task, QUOTA_RESUME_PROMPT, last);
     return this.continuation(task, task.mode === 'single' ? this.handoffNote(task) : null);
   }
@@ -108,7 +104,8 @@ export class Workflow {
   /** Agent profile of the task's next session, for per-provider quota checks. */
   nextAgentId(task: Task): string {
     const reviewer = task.agents.reviewer;
-    return reviewer && this.pendingReview(task.id) ? reviewer : task.agents.implementer;
+    if (reviewer && this.pendingReview(task.id)) return reviewer;
+    return this.activeAgent(task);
   }
 
   private reviewPlan(task: Task, request: ReviewRequest, last: Session | undefined): SessionPlan {
@@ -167,9 +164,34 @@ export class Workflow {
     return this.host.store.eventsOfKind(taskId, 'review').map((e) => e.data as ReviewRecord);
   }
 
+  /** The spec author's session while criteria are discussed, the implementer's otherwise. */
   private implement(task: Task, prompt: string, resume: Session | null = null): SessionPlan {
-    const access = this.discussing(task) ? 'readOnly' : 'edit';
-    return { role: 'implementer', agentId: task.agents.implementer, access, resume, prompt };
+    if (this.discussing(task)) {
+      const agentId = roleAgent(task.agents, 'spec')!;
+      return { role: 'spec', agentId, access: 'readOnly', resume, prompt };
+    }
+    const agentId = task.agents.implementer;
+    return { role: 'implementer', agentId, access: 'edit', resume, prompt };
+  }
+
+  /** The agent that works on the task when no review is pending. */
+  private activeAgent(task: Task): string {
+    return roleAgent(task.agents, this.discussing(task) ? 'spec' : 'implementer')!;
+  }
+
+  /**
+   * `last` can be continued by `agentId`: it is that agent's own conversation (not a
+   * reviewer's), it reached the model, and it still has context budget. The discussion and
+   * the implementation share a conversation only when one agent plays both roles.
+   */
+  private canResume(task: Task, last: Session, agentId: string): boolean {
+    return (
+      last.role !== 'reviewer' &&
+      last.agentId === agentId &&
+      last.agentSessionId !== null &&
+      last.contextTokens > 0 &&
+      this.hasBudget(task, last)
+    );
   }
 
   /** The task as the agents are given it: the request plus any agreed criteria. */
@@ -215,11 +237,7 @@ export class Workflow {
    * allowed to edit; starts afresh with the agreed goal when that is not possible.
    */
   private startAfterDiscussion(task: Task, last: Session): SessionPlan {
-    const resumable =
-      last.role === 'implementer' &&
-      last.agentSessionId !== null &&
-      last.contextTokens > 0 &&
-      this.hasBudget(task, last);
+    const resumable = this.canResume(task, last, task.agents.implementer);
     if (resumable) return this.implement(task, criteriaApprovedPrompt(task.acceptance!), last);
     return this.implement(task, this.goal(task));
   }
@@ -249,11 +267,7 @@ export class Workflow {
    * it already discussed; starts over from the plan files only when that is not possible.
    */
   private revisePlan(task: Task, message: string, last: Session): SessionPlan {
-    const resumable =
-      last.role === 'implementer' &&
-      last.agentSessionId !== null &&
-      last.contextTokens > 0 &&
-      this.hasBudget(task, last);
+    const resumable = this.canResume(task, last, this.activeAgent(task));
     const revision =
       task.mode === 'loop' ? planRevisionPrompt(message) : criteriaRevisionPrompt(message);
     if (resumable) return this.implement(task, revision, last);

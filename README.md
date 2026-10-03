@@ -107,6 +107,12 @@ hb add "Add a dark mode toggle" --criteria "- toggle persists after reload"   # 
 3. **Checked against them:** the criteria are saved on the task. The implementer works
    towards them, and a reviewer checks each one.
 
+The discussion is run by the **spec author**, which is the implementer unless you pick
+another agent: `hb add "..." --spec codex --spec-model <model>`, the **Spec author** menu in
+the New task dialog, or `hb models <id> --spec <agent>`. With a different agent the
+conversation does not carry over: after you approve, the implementer starts a new session
+from the approved criteria.
+
 Criteria given when creating the task are used as they are. `--no-discuss` (or unticking
 the box in the New task dialog) starts without criteria.
 

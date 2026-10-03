@@ -12,6 +12,7 @@ import {
   isModelId,
   presetRules,
   resolveThresholds,
+  roleModel,
 } from '@harnessboard/shared';
 import type {
   AgentEvent,
@@ -353,6 +354,8 @@ export class Harness {
       maxReviewRounds: DEFAULT_REVIEW_ROUNDS,
       implementerModel: modelOrNull(input.implementerModel),
       reviewerModel: modelOrNull(input.reviewerModel),
+      spec: input.spec ?? null,
+      specModel: modelOrNull(input.specModel),
     };
     this.checkProfiles(agents);
     const task = this.store.createTask({
@@ -417,13 +420,16 @@ export class Harness {
     const task = this.requireTask(id);
     const swapsAgent =
       (update.implementer !== undefined && update.implementer !== task.agents.implementer) ||
-      (update.reviewer !== undefined && update.reviewer !== task.agents.reviewer);
+      (update.reviewer !== undefined && update.reviewer !== task.agents.reviewer) ||
+      (update.spec !== undefined && update.spec !== (task.agents.spec ?? null));
     if (swapsAgent && (this.running.has(id) || task.status === 'running')) {
       throw new Error(`task ${id} is running; stop it before changing its agents`);
     }
     const agents: TaskAgents = { ...task.agents };
     if (update.implementer !== undefined) agents.implementer = update.implementer;
     if (update.reviewer !== undefined) agents.reviewer = update.reviewer;
+    if (update.spec !== undefined) agents.spec = update.spec;
+    if (update.specModel !== undefined) agents.specModel = modelOrNull(update.specModel);
     if (update.implementerModel !== undefined) {
       agents.implementerModel = modelOrNull(update.implementerModel);
     }
@@ -952,9 +958,7 @@ export class Harness {
             : null,
         resume: plan.resume !== null,
         prompt: plan.prompt,
-        model:
-          (plan.role === 'reviewer' ? task.agents.reviewerModel : task.agents.implementerModel) ??
-          this.config.agents[plan.agentId]!.model,
+        model: roleModel(task.agents, plan.role) ?? this.config.agents[plan.agentId]!.model,
         access: plan.access,
         // A read-only session may run the task's own check, but nothing that edits.
         allowedTools:
@@ -1119,7 +1123,7 @@ export class Harness {
   }
 
   private checkProfiles(agents: TaskAgents): void {
-    for (const id of [agents.implementer, agents.reviewer]) {
+    for (const id of [agents.implementer, agents.reviewer, agents.spec ?? null]) {
       if (id !== null && !this.config.agents[id]) {
         throw new Error(`agent profile "${id}" is not configured`);
       }
