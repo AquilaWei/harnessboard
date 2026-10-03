@@ -5,7 +5,15 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
-import { assistantText, init, makeRepo, result, tempDir, writeScenario } from './helpers.js';
+import {
+  assistantText,
+  init,
+  makeRepo,
+  result,
+  tempDir,
+  writeFile,
+  writeScenario,
+} from './helpers.js';
 import { FAKE_CLAUDE } from './helpers.js';
 
 interface FakeRun {
@@ -50,6 +58,16 @@ function fakeRuns(): FakeRun[] {
 
 /** An agent session that reports some context use and replies. */
 const session = (reply: string) => [[init(), assistantText(reply, 10_000), result(reply)]];
+
+/** The spec author's session after approval: it writes the spec file for the first task. */
+const specFile = [
+  [
+    init(),
+    assistantText('spec written', 10_000),
+    writeFile('docs/specs/001-add-a-greeting.md', '# Spec'),
+    result('spec written'),
+  ],
+];
 
 const PROPOSAL = 'I read main.js.\n## Acceptance criteria\n- prints hi\n## Questions\n- Colour?';
 
@@ -153,7 +171,7 @@ describe('feedback on proposed criteria', () => {
 });
 
 describe('approving criteria', () => {
-  beforeEach(() => scenario(session(PROPOSAL), session('done')));
+  beforeEach(() => scenario(session(PROPOSAL), specFile, session('done')));
 
   it('saves the proposed criteria on the task', async () => {
     const task = await createDiscussed();
@@ -165,7 +183,7 @@ describe('approving criteria', () => {
     expect(harness.approveCriteria(task.id, '- prints hello').acceptance).toBe('- prints hello');
   });
 
-  it('resumes the discussion, now allowed to edit', async () => {
+  it('resumes the discussion to write the spec, now allowed to edit', async () => {
     const task = await createDiscussed();
     harness.approveCriteria(task.id);
     await harness.waitForIdle();
@@ -177,7 +195,8 @@ describe('approving criteria', () => {
     const task = await createDiscussed();
     harness.approveCriteria(task.id, '- prints hello');
     await harness.waitForIdle();
-    expect(fakeRuns()[1]!.received[0]).toContain(
+    await runQueued();
+    expect(fakeRuns()[2]!.received[0]).toContain(
       'approved these acceptance criteria:\n\n- prints hello',
     );
   });
@@ -186,6 +205,7 @@ describe('approving criteria', () => {
     const task = await createDiscussed();
     harness.approveCriteria(task.id);
     await harness.waitForIdle();
+    await runQueued();
     expect(status(task.id)).toBe('review');
   });
 
@@ -225,6 +245,7 @@ describe('a session cut off after approval', () => {
   beforeEach(() =>
     scenario(
       session(PROPOSAL),
+      specFile,
       [[init(), assistantText('x', 10_000), { __hang: true }]],
       session('done'),
     ),
@@ -233,11 +254,13 @@ describe('a session cut off after approval', () => {
   it('resumes the implementation, not the discussion', async () => {
     const task = await createDiscussed();
     harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    harness.tick(); // the implementer starts and hangs
     await new Promise((r) => setTimeout(r, 300));
     harness.stopTask(task.id);
     await harness.waitForIdle();
     harness.queueTask(task.id);
     await runQueued();
-    expect(fakeRuns()[2]!.received[0]).toContain('usage limit has reset');
+    expect(fakeRuns()[3]!.received[0]).toContain('usage limit has reset');
   });
 });

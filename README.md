@@ -102,10 +102,15 @@ hb add "Add a dark mode toggle" --criteria "- toggle persists after reload"   # 
    - **reply** (`hb feedback <id> "..."`): Claude answers and revises the criteria in the
      same conversation.
    - **approve** (`hb approve <id>`, or `--criteria "..."` for your own wording): edit the
-     criteria if you like, then approve. The same conversation continues, now allowed to
-     change files.
-3. **Checked against them:** the criteria are saved on the task. The implementer works
-   towards them, and a reviewer checks each one.
+     criteria if you like, then approve.
+3. **The spec is committed:** after you approve, the spec author writes what you agreed
+   (goal, requirements, out of scope, your criteria) to `docs/specs/<id>-<title>.md` and
+   commits it, changing nothing else. It continues the discussion when it can, so every
+   decision makes it into the file. If it leaves the file uncommitted, Harnessboard commits
+   it.
+4. **Checked against them:** the criteria are saved on the task. Every later agent is told
+   to read the spec file, the implementer works towards the criteria, and a reviewer checks
+   each one.
 
 The discussion is run by the **spec author**, which is the implementer unless you pick
 another agent: `hb add "..." --spec codex --spec-model <model>`, the **Spec author** menu in

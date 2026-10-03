@@ -17,6 +17,7 @@ import type {
   PlanProposal,
   ReviewRecord,
   DocsRecord,
+  SpecRecord,
   DocsRequest,
   ReviewRequest,
   TestReport,
@@ -42,6 +43,7 @@ import {
   parseCriteria,
   parseQuestions,
   planRevisionPrompt,
+  specFilePrompt,
   taskGoal,
 } from './prompts.js';
 import {
@@ -57,7 +59,14 @@ import {
 } from './review.js';
 import type { SessionOutcome } from './runner.js';
 import type { Store } from './store.js';
-import { changedPaths, headCommit, mergeBase, porcelainStatus } from './worktree.js';
+import {
+  changedPaths,
+  commitFile,
+  headCommit,
+  isCommitted,
+  mergeBase,
+  porcelainStatus,
+} from './worktree.js';
 
 /** Who runs the next session of a task, what it is asked, and whether it resumes one. */
 export interface SessionPlan {
@@ -106,12 +115,13 @@ export class Workflow {
       const prompt = mergeConflictPrompt(this.goal(task), conflict.base, conflict.files);
       return this.implement(task, prompt);
     }
+    if (this.needsSpecFile(task)) return this.specFilePlan(task, last);
     if (this.needsDesign(task)) return this.designPlan(task);
     // The designer's session is not the implementer's to continue.
     if (!last || last.role === 'design') return this.implement(task, this.firstPrompt(task));
     const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
     if (feedback !== null) return this.revisePlan(task, feedback, last);
-    if (this.justApproved(task)) return this.startAfterDiscussion(task, last);
+    if (this.justSpecced(task)) return this.startAfterDiscussion(task, last);
     if (last.endReason === 'handoff' || last.endReason === 'context_hard_limit') {
       return this.continuation(task, this.handoffNote(task));
     }
@@ -129,6 +139,7 @@ export class Workflow {
     if (reviewer && this.pendingReview(task.id)) return reviewer;
     if (task.agents.tester && this.pendingTest(task.id)) return task.agents.tester;
     if (task.agents.docs && this.pendingDocs(task.id)) return task.agents.docs;
+    if (this.needsSpecFile(task)) return roleAgent(task.agents, 'spec')!;
     if (this.needsDesign(task)) return task.agents.design!;
     return this.activeAgent(task);
   }
@@ -155,6 +166,9 @@ export class Workflow {
   phaseOf(task: Task, plan: SessionPlan): TaskActivity {
     if (plan.role === 'reviewer') return { phase: 'reviewing', agentId: plan.agentId };
     if (plan.role === 'design') return { phase: 'designing', agentId: plan.agentId };
+    if (plan.role === 'spec' && plan.access === 'edit') {
+      return { phase: 'writingSpec', agentId: plan.agentId };
+    }
     if (plan.role === 'tester') return { phase: 'testing', agentId: plan.agentId };
     if (plan.role === 'docs') return { phase: 'documenting', agentId: plan.agentId };
     // Planning lasts until the plan is approved, including revisions after feedback.
@@ -290,7 +304,7 @@ export class Workflow {
   /** The task as the agents are given it: the request plus any agreed criteria and design. */
   private goal(task: Task): string {
     const design = this.host.store.lastEvent(task.id, 'design')?.data as DesignNote | undefined;
-    return taskGoal(task.prompt, task.acceptance, design?.text ?? null);
+    return taskGoal(task.prompt, task.acceptance, design?.text ?? null, this.specFile(task.id));
   }
 
   /** A single task with a designer, past its spec discussion, that has no design note yet. */
@@ -340,10 +354,101 @@ export class Workflow {
    * The criteria were approved and no session has run since, so `last` was the discussion.
    * A resumed session keeps its record, so this is told by events rather than sessions.
    */
-  private justApproved(task: Task): boolean {
+  private justSpecced(task: Task): boolean {
     if (task.mode !== 'single') return false;
-    const approval = this.host.store.lastEvent(task.id, 'criteria_approved');
-    return !!approval && !this.host.store.hasSessionEventsAfter(task.id, approval.id);
+    const written = this.host.store.lastEvent(task.id, 'spec_written');
+    return !!written && !this.host.store.hasSessionEventsAfter(task.id, written.id);
+  }
+
+  /** Repository-relative path of the committed spec, once the spec author has written it. */
+  private specFile(taskId: number): string | null {
+    const written = this.host.store.lastEvent(taskId, 'spec_written')?.data as
+      SpecRecord | undefined;
+    return written?.path ?? null;
+  }
+
+  /** Where a task's spec is written: `docs/specs/<id>-<title>.md`. */
+  specPath(task: Task): string {
+    const slug = task.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40)
+      .replace(/-$/, '');
+    return `docs/specs/${String(task.id).padStart(3, '0')}-${slug || 'task'}.md`;
+  }
+
+  /** The criteria were approved after a discussion, and the spec is not in the repository yet. */
+  private needsSpecFile(task: Task): boolean {
+    return (
+      task.mode === 'single' &&
+      !!this.host.store.lastEvent(task.id, 'criteria_approved') &&
+      !this.host.store.lastEvent(task.id, 'spec_written')
+    );
+  }
+
+  /**
+   * The spec author writes the agreed spec to a file and commits it. It continues the
+   * discussion when it can, because that conversation holds every decision.
+   */
+  private specFilePlan(task: Task, last: Session | undefined): SessionPlan {
+    const agentId = roleAgent(task.agents, 'spec')!;
+    const resume = last && this.canResume(task, last, agentId) ? last : null;
+    const proposal = this.host.store.lastEvent(task.id, 'criteria')?.data as
+      CriteriaProposal | undefined;
+    // A session cut off while writing continues; the finished discussion is asked to write.
+    const prompt =
+      resume && resume.endReason !== 'completed'
+        ? QUOTA_RESUME_PROMPT
+        : specFilePrompt(
+            this.specPath(task),
+            task.prompt,
+            task.acceptance ?? '',
+            resume ? null : (proposal?.reply ?? null),
+          );
+    return { role: 'spec', agentId, access: 'edit', resume, prompt };
+  }
+
+  /**
+   * Checks the spec author wrote the file and nothing else, commits the file itself if the
+   * author left it uncommitted, and records it for the agents after it.
+   */
+  private async finishSpecFile(task: Task, outcome: SessionOutcome): Promise<void> {
+    if (outcome.reason === 'handoff' || outcome.reason === 'context_hard_limit') {
+      this.host.notice(task.id, 'the spec author ran out of context before writing the spec');
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    if (outcome.reason !== 'completed') {
+      this.interrupted(task, outcome); // the spec is still unwritten, so it is asked again
+      return;
+    }
+    const dir = task.worktreePath!;
+    const file = this.specPath(task);
+    const stray = (await changedPaths(dir, await mergeBase(dir, task.baseRef))).filter(
+      (p) => p !== file,
+    );
+    if (stray.length > 0) {
+      this.host.notice(
+        task.id,
+        `the spec author changed files other than the spec: ${stray.join(', ')}; stopping for a human`,
+      );
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    if (!existsSync(path.join(dir, file))) {
+      this.host.notice(task.id, `the spec author did not write ${file}`);
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    if (!(await isCommitted(dir, file))) {
+      await commitFile(dir, file, `docs: add spec for ${task.title.slice(0, 50)}`);
+      this.host.notice(task.id, `the spec author left ${file} uncommitted; committed it`);
+    }
+    const record: SpecRecord = { path: file, head: await headCommit(dir) };
+    this.host.store.appendEvent(task.id, null, 'spec_written', record);
+    this.host.notice(task.id, `spec committed in ${file}`);
+    this.host.setStatus(task.id, 'queued');
   }
 
   /**
@@ -352,7 +457,12 @@ export class Workflow {
    */
   private startAfterDiscussion(task: Task, last: Session): SessionPlan {
     const resumable = this.canResume(task, last, task.agents.implementer);
-    if (resumable) return this.implement(task, criteriaApprovedPrompt(task.acceptance!), last);
+    if (resumable)
+      return this.implement(
+        task,
+        criteriaApprovedPrompt(task.acceptance!, this.specFile(task.id)),
+        last,
+      );
     return this.implement(task, this.goal(task));
   }
 
@@ -447,6 +557,10 @@ export class Workflow {
     );
     if (plan.role === 'reviewer') {
       await this.finishReview(task, plan, outcome);
+      return;
+    }
+    if (plan.role === 'spec' && plan.access === 'edit') {
+      await this.finishSpecFile(task, outcome);
       return;
     }
     if (plan.role === 'design') {

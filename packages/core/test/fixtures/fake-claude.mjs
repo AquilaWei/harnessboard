@@ -11,7 +11,8 @@
 // With `--prompt <text>` it acts like a CLI without stdin input: it answers that one prompt
 // with turns[0] and exits (`--resume <id>` is only logged).
 // FAKE_CLAUDE_LOG: file that receives one JSON line per run with the args and messages.
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
 
 const scenarioFile = process.env.FAKE_CLAUDE_SCENARIO;
@@ -66,6 +67,7 @@ async function emit(lines) {
       process.exit(line.__exit);
     }
     if (line.__write) {
+      mkdirSync(dirname(line.__write.path), { recursive: true });
       writeFileSync(line.__write.path, line.__write.content);
       continue;
     }

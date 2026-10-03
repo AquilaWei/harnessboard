@@ -13,6 +13,7 @@ import {
   makeRepo,
   result,
   tempDir,
+  writeFile,
   writeScenario,
 } from './helpers.js';
 
@@ -65,6 +66,14 @@ function fakeRuns(): FakeRun[] {
 
 const session = (reply: string) => [[init(), assistantText(reply, 10_000), result(reply)]];
 const CRITERIA = 'I read main.js.\n## Acceptance criteria\n- prints hi';
+const specFile = [
+  [
+    init(),
+    assistantText('spec written', 10_000),
+    writeFile('docs/specs/001-add-a-greeting.md', '# Spec'),
+    result('spec written'),
+  ],
+];
 const DESIGN = '## Approach\n- Print in main.js';
 
 const sessions = (id: number) => harness.store.listSessions(id);
@@ -151,7 +160,7 @@ describe('a task with a designer', () => {
 
 describe('a task that agrees on criteria first', () => {
   it('designs only after the criteria are approved', async () => {
-    scenario(session(CRITERIA), session(DESIGN), session('done'));
+    scenario(session(CRITERIA), specFile, session(DESIGN), session('done'));
     const task = await harness.createTask({
       prompt: 'Add a greeting',
       repo,
@@ -163,6 +172,7 @@ describe('a task that agrees on criteria first', () => {
     const before = roles(task.id);
     harness.approveCriteria(task.id);
     await harness.waitForIdle();
+    await runQueued();
     await runQueued();
     expect([before, roles(task.id)]).toEqual([['spec'], ['spec', 'design', 'implementer']]);
   });

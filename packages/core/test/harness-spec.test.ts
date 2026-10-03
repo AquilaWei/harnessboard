@@ -7,6 +7,7 @@ import { roleAgent, roleModel } from '@harnessboard/shared';
 import type { CreateTaskInput, TaskAgents } from '@harnessboard/shared';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
+import { isCommitted } from '../src/worktree.js';
 import {
   FAKE_CLAUDE,
   assistantText,
@@ -14,6 +15,7 @@ import {
   makeRepo,
   result,
   tempDir,
+  writeFile,
   writeScenario,
 } from './helpers.js';
 
@@ -61,6 +63,21 @@ function fakeRuns(): FakeRun[] {
 }
 
 const session = (reply: string) => [[init(), assistantText(reply, 10_000), result(reply)]];
+/** The spec author's session after approval: it writes the spec file for the first task. */
+const specFile = [
+  [
+    init(),
+    assistantText('spec written', 10_000),
+    writeFile('docs/specs/001-add-a-greeting.md', '# Spec'),
+    result('spec written'),
+  ],
+];
+
+async function runQueued(): Promise<void> {
+  harness.tick();
+  await harness.waitForIdle();
+}
+
 const PROPOSAL = 'I read main.js.\n## Acceptance criteria\n- prints hi';
 
 const sessions = (id: number) => harness.store.listSessions(id);
@@ -107,36 +124,112 @@ describe('the discussion session', () => {
 });
 
 describe('after the criteria are approved', () => {
-  beforeEach(() => scenario(session(PROPOSAL), session('done')));
+  beforeEach(() => scenario(session(PROPOSAL), specFile, session('done')));
 
-  it('hands the work to the implementer in a new session when another agent wrote the spec', async () => {
-    const task = await discuss({ spec: 'writer' });
+  async function approved(extra: Partial<CreateTaskInput> = {}) {
+    const task = await discuss(extra);
     harness.approveCriteria(task.id);
     await harness.waitForIdle();
-    expect([
-      sessions(task.id).map((s) => [s.role, s.agentId]),
-      fakeRuns()[1]!.args.includes('--resume'),
-    ]).toEqual([
-      [
-        ['spec', 'writer'],
-        ['implementer', 'claude'],
-      ],
-      false,
+    await runQueued();
+    return task;
+  }
+
+  it('has the implementer start in a session of its own after the spec is written', async () => {
+    const task = await approved({ spec: 'writer' });
+    expect(sessions(task.id).map((s) => [s.role, s.agentId])).toEqual([
+      ['spec', 'writer'],
+      ['implementer', 'claude'],
     ]);
   });
 
-  it('gives that implementer the approved criteria', async () => {
-    const task = await discuss({ spec: 'writer' });
-    harness.approveCriteria(task.id);
-    await harness.waitForIdle();
-    expect(fakeRuns()[1]!.received[0]).toContain('- prints hi');
+  it('continues the discussion to write the spec, with the right to edit', async () => {
+    await approved({ spec: 'writer' });
+    const args = fakeRuns()[1]!.args;
+    expect([args.includes('--resume'), args.includes('acceptEdits')]).toEqual([true, true]);
   });
 
-  it('continues the discussion when the same agent wrote the spec', async () => {
-    const task = await discuss({ spec: 'claude' });
+  it('asks for the spec file at its path with the approved criteria', async () => {
+    await approved({ spec: 'writer' });
+    const prompt = fakeRuns()[1]!.received[0] as string;
+    expect([
+      prompt.includes('docs/specs/001-add-a-greeting.md'),
+      prompt.includes('- prints hi'),
+    ]).toEqual([true, true]);
+  });
+
+  it('records the committed spec on the task', async () => {
+    const task = await approved({ spec: 'writer' });
+    expect(harness.store.eventsOfKind(task.id, 'spec_written').map((e) => e.data)).toEqual([
+      expect.objectContaining({ path: 'docs/specs/001-add-a-greeting.md' }),
+    ]);
+  });
+
+  it('commits the spec file itself when the author left it uncommitted', async () => {
+    const task = await approved({ spec: 'writer' });
+    expect(
+      await isCommitted(
+        harness.store.getTask(task.id)!.worktreePath!,
+        'docs/specs/001-add-a-greeting.md',
+      ),
+    ).toBe(true);
+  });
+
+  it('hands the work to the implementer in a new session when another agent wrote the spec', async () => {
+    await approved({ spec: 'writer' });
+    expect(fakeRuns()[2]!.args.includes('--resume')).toBe(false);
+  });
+
+  it('points the implementer at the spec file and gives it the criteria', async () => {
+    await approved({ spec: 'writer' });
+    const prompt = fakeRuns()[2]!.received[0] as string;
+    expect([
+      prompt.includes('committed in `docs/specs/001-add-a-greeting.md`'),
+      prompt.includes('- prints hi'),
+    ]).toEqual([true, true]);
+  });
+
+  it('continues the same conversation when the same agent wrote the spec', async () => {
+    await approved({ spec: 'claude' });
+    expect(fakeRuns()[2]!.args).toContain('--resume');
+  });
+
+  it('ends at review once the implementer is done', async () => {
+    const task = await approved();
+    expect(harness.store.getTask(task.id)!.status).toBe('review');
+  });
+});
+
+describe('a spec author that does not write the spec properly', () => {
+  async function approve() {
+    const task = await discuss();
     harness.approveCriteria(task.id);
     await harness.waitForIdle();
-    expect(fakeRuns()[1]!.args).toContain('--resume');
+    return task;
+  }
+
+  it('stops the task when it changes other files', async () => {
+    scenario(session(PROPOSAL), [
+      [
+        init(),
+        writeFile('docs/specs/001-add-a-greeting.md', 'x'),
+        writeFile('main.js', 'oops'),
+        result('done'),
+      ],
+    ]);
+    const task = await approve();
+    expect(harness.store.getTask(task.id)!.status).toBe('failed');
+  });
+
+  it('stops the task when it writes no file', async () => {
+    scenario(session(PROPOSAL), session('nothing written'));
+    const task = await approve();
+    expect(harness.store.getTask(task.id)!.status).toBe('failed');
+  });
+
+  it('does not start the implementer', async () => {
+    scenario(session(PROPOSAL), session('nothing written'));
+    const task = await approve();
+    expect(sessions(task.id).map((s) => s.role)).toEqual(['spec']);
   });
 });
 

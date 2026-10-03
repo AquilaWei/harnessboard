@@ -7,6 +7,12 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **The agreed spec is committed to the repository.** After you approve the criteria, the
+  spec author writes the goal, requirements, out-of-scope items and criteria to
+  `docs/specs/<id>-<title>.md` and commits it, changing nothing else (the task stops if it
+  does). Every later agent is told to read that file. The discussion now also asks for
+  concrete requirements, not only criteria. Tasks created with criteria and no discussion
+  have no spec file.
 - **An optional docs writer.** Pick a docs writer (`--docs`, `--docs-model`, the **Docs
   writer** menu, `hb models --docs`) and each step of a single task gets its README,
   changelog entry and `docs/` updated and committed after testing and before review. It may

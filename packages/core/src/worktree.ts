@@ -128,6 +128,22 @@ export async function changedPaths(dir: string, head: string): Promise<string[]>
   return [...tracked.split('\n'), ...untracked.split('\n')].filter((p) => p !== '');
 }
 
+/** Whether `file` is part of the commit at HEAD. */
+export async function isCommitted(dir: string, file: string): Promise<boolean> {
+  try {
+    await gitRaw(dir, ['cat-file', '-e', `HEAD:${file}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Commits only `file`, whatever else is staged. Throws when git has no identity to commit with. */
+export async function commitFile(dir: string, file: string, message: string): Promise<void> {
+  await git(dir, ['add', '--', file]);
+  await git(dir, ['commit', '-m', message, '--', file]);
+}
+
 /** Commit where HEAD branched off `ref`. */
 export async function mergeBase(dir: string, ref: string): Promise<string> {
   return (await git(dir, ['merge-base', ref, 'HEAD'])).trim();

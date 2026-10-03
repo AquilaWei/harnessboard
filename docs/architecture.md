@@ -31,10 +31,13 @@ profiles.
   a model, and optionally a context window. `claude` always exists. Adding a second profile
   (for example the same CLI with another model) needs no code.
 - **Role:** what a session is asked to do.
-  - `spec`: agrees acceptance criteria with the user before anything is built. It runs
-    read-only. `task.agents.spec` is optional; without it the implementer plays this role.
-    When the same agent plays both roles the approved discussion is resumed with edit access;
-    otherwise the implementer starts a new session from the approved criteria.
+  - `spec`: agrees acceptance criteria with the user before anything is built. The
+    discussion runs read-only. After approval the same role writes the agreed spec to
+    `docs/specs/<id>-<title>.md` and commits it (edit access; `spec_written` event). The
+    harness stops the task if anything else changed, and commits the file itself when the
+    author left it uncommitted. `Workflow.goal()` tells later agents to read the file. `task.agents.spec` is optional; without it the implementer plays this role.
+    When the same agent plays both roles the spec-writing session is also what the implementer
+    resumes; otherwise the implementer starts a new session from the approved criteria.
   - `design`: optional, single tasks only. After the spec is settled, one read-only session
     writes a design note, stored as the `design` event. `Workflow.goal()` adds the note to
     the prompts of the implementer and the reviewer. It has no human gate, and it runs once;
@@ -71,7 +74,7 @@ implementer step done ──► review_request ──► reviewer session (read-
 For a single task the optional roles slot in before the reviewer, in this order:
 
 ```
-spec ─► design ─► implementer ─► tester ─► docs ─► reviewer
+spec ─► spec file ─► design ─► implementer ─► tester ─► docs ─► reviewer
 ```
 
 Each role other than the implementer is off unless the task names an agent for it. A

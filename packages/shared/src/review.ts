@@ -49,6 +49,14 @@ export interface TestRequest {
   status: string;
 }
 
+/** Stored as the `spec_written` event once the agreed spec is committed to the repository. */
+export interface SpecRecord {
+  /** Repository-relative path of the spec file. */
+  path: string;
+  /** HEAD after the spec was committed. */
+  head: string;
+}
+
 /** Stored as the `docs_request` event when a finished step is sent to the docs writer. */
 export interface DocsRequest {
   /** Commit the step is measured from: the last approved head, or the task's base. */
@@ -85,6 +93,7 @@ export interface TestReport {
 export type TaskPhase =
   | 'planning'
   | 'designing'
+  | 'writingSpec'
   | 'implementing'
   | 'testing'
   | 'documenting'
@@ -161,6 +170,7 @@ export type TimelineEntry =
   | { kind: 'design'; ts: number; note: DesignNote }
   | { kind: 'test_report'; ts: number; report: TestReport }
   | { kind: 'docs_done'; ts: number; docs: DocsRecord }
+  | { kind: 'spec_written'; ts: number; spec: SpecRecord }
   | { kind: 'chat_message'; ts: number; message: ChatMessage }
   | { kind: 'merge_conflict'; ts: number; conflict: MergeConflict }
   | { kind: 'merged'; ts: number; merge: MergeRecord }

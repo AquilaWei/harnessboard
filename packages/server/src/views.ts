@@ -10,6 +10,7 @@ import type {
   CriteriaApproval,
   DesignNote,
   DocsRecord,
+  SpecRecord,
   TestReport,
   CriteriaProposal,
   MergeConflict,
@@ -201,6 +202,7 @@ export function timeline(taskId: number, store: Store): TimelineEntry[] {
     'design',
     'test_report',
     'docs_done',
+    'spec_written',
     'chat_message',
     'merge_conflict',
     'merged',
@@ -230,6 +232,7 @@ function timelineEvent(
     | 'design'
     | 'test_report'
     | 'docs_done'
+    | 'spec_written'
     | 'chat_message'
     | 'merge_conflict'
     | 'merged'
@@ -263,6 +266,8 @@ function timelineEvent(
       return { kind, ts, report: data as TestReport };
     case 'docs_done':
       return { kind, ts, docs: data as DocsRecord };
+    case 'spec_written':
+      return { kind, ts, spec: data as SpecRecord };
     case 'chat_message':
       return { kind, ts, message: data as ChatMessage };
     case 'merge_conflict':

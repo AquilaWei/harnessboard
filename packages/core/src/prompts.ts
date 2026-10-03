@@ -157,8 +157,16 @@ export function taskGoal(
   prompt: string,
   acceptance: string | null,
   design: string | null = null,
+  specPath: string | null = null,
 ): string {
   const lines = [prompt];
+  if (specPath) {
+    lines.push(
+      '',
+      `The spec agreed with the user is committed in \`${specPath}\`. Read it first; it is the`,
+      'reference for what to build.',
+    );
+  }
   if (acceptance) {
     lines.push(
       '',
@@ -205,6 +213,9 @@ export function criteriaPrompt(request: string, draft: string | null): string {
   lines.push(
     '',
     'Reply in this shape:',
+    '## Requirements',
+    '- What to build and how it should behave, concretely: inputs, outputs, edge cases,',
+    '  constraints, and what is out of scope.',
     CRITERIA_HEADING,
     '- One concrete, observable check per line (behaviour, tests that pass, edge cases',
     '  handled). Prefer checks a test or a command can show.',
@@ -232,11 +243,12 @@ export function criteriaRevisionPrompt(message: string): string {
 }
 
 /** Sent when resuming the discussion session after the user approved the criteria. */
-export function criteriaApprovedPrompt(criteria: string): string {
+export function criteriaApprovedPrompt(criteria: string, specPath: string | null): string {
   return [
     '[harness] The user approved these acceptance criteria:',
     '',
     criteria,
+    ...(specPath ? ['', `The full spec is committed in \`${specPath}\`.`] : []),
     '',
     'You may now change files. Implement the task so that every criterion holds, check them',
     'as far as you can, and commit your work.',
@@ -308,4 +320,35 @@ export function parseQuestions(reply: string): PlanQuestion[] {
     else questions.at(-1)?.options.push(text.trim());
   }
   return questions.filter((q) => q.question !== '');
+}
+
+/**
+ * Sent to the spec author after the user approved the criteria: write the agreed spec to a
+ * file and commit it, so the agents after it can read what was decided. `context` is the
+ * latest proposal, for an author that does not remember the discussion.
+ */
+export function specFilePrompt(
+  specPath: string,
+  request: string,
+  criteria: string,
+  context: string | null,
+): string {
+  const lines = [
+    '[harness] The user approved the criteria. Now write the spec you agreed on to a file and',
+    `commit it. Create \`${specPath}\` and change nothing else.`,
+    '',
+    `Task:\n${request}`,
+    '',
+    `Approved acceptance criteria:\n${criteria}`,
+  ];
+  if (context) lines.push('', `Your latest proposal in the discussion:\n${context}`);
+  lines.push(
+    '',
+    'Write the file in Markdown with these sections: Goal, Requirements (the decisions made in',
+    'the discussion, concrete), Out of scope, Acceptance criteria (exactly as approved above).',
+    'Another agent will build from this file without having seen the discussion, so include',
+    'every decision the user made. Keep it short.',
+    `Then commit only that file with the message \`docs: add spec for ${request.split('\n')[0]!.slice(0, 50)}\`.`,
+  );
+  return lines.join('\n');
 }

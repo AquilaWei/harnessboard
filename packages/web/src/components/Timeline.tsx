@@ -150,6 +150,16 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
         </li>
       );
     }
+    case 'spec_written':
+      return (
+        <li className="step step-good">
+          <StepHead
+            icon="📝"
+            title={t('timeline.specWritten', { path: entry.spec.path })}
+            meta={time}
+          />
+        </li>
+      );
     case 'docs_done':
       return (
         <li className="step">
