@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.13 - 2026-10-03
+
 ### Fixed
 
 - On Windows, writes to system folders (`C:\Windows`, `Program Files`, `ProgramData`) and
