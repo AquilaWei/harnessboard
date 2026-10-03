@@ -113,7 +113,14 @@ export function createApi(harness: Harness): Hono {
       update.reviewer = body.reviewer;
     if (typeof body.spec === 'string' || body.spec === null) update.spec = body.spec;
     if (typeof body.design === 'string' || body.design === null) update.design = body.design;
-    for (const key of ['implementerModel', 'reviewerModel', 'specModel', 'designModel'] as const) {
+    if (typeof body.tester === 'string' || body.tester === null) update.tester = body.tester;
+    for (const key of [
+      'implementerModel',
+      'reviewerModel',
+      'specModel',
+      'designModel',
+      'testerModel',
+    ] as const) {
       const value = body[key];
       if (typeof value === 'string' || value === null) update[key] = value;
     }

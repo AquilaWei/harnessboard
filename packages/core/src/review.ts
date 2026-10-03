@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { ReviewRecord, ReviewRequest, Verdict, VerifyResult } from '@harnessboard/shared';
+import type {
+  ReviewRecord,
+  ReviewRequest,
+  TestReport,
+  TestRequest,
+  Verdict,
+  VerifyResult,
+} from '@harnessboard/shared';
 
 export const VERDICT_APPROVE = 'VERDICT: APPROVE';
 export const VERDICT_CHANGES = 'VERDICT: CHANGES';
@@ -61,5 +68,75 @@ export function reviewFeedback(record: ReviewRecord): string {
     `A reviewer (${record.agentId}) checked your last step and requested changes.`,
     'Address every point before anything else, run the checks again, and commit:',
     record.findings,
+  ].join('\n');
+}
+
+export const TESTS_PASS = 'TESTS: PASS';
+export const TESTS_FAIL = 'TESTS: FAIL';
+
+/** Reads the verdict from the first line of a tester's reply; `null` when there is none. */
+export function parseTestVerdict(reply: string): {
+  verdict: TestReport['verdict'];
+  findings: string;
+} {
+  const [first = '', ...rest] = reply.trimStart().split('\n');
+  const line = first.trim().toUpperCase();
+  const verdict = line.startsWith(TESTS_PASS)
+    ? 'pass'
+    : line.startsWith(TESTS_FAIL)
+      ? 'fail'
+      : null;
+  return { verdict, findings: (verdict ? rest.join('\n') : reply).trim() };
+}
+
+/** True for a path the tester may change: a test directory or a `*.test.*` / `*_test.*` file. */
+export function isTestPath(file: string): boolean {
+  return (
+    /(^|\/)(tests?|__tests__|spec|specs)\//i.test(file) || /[._-](test|spec)\.[^/]+$/i.test(file)
+  );
+}
+
+/**
+ * First message of a tester session. It edits test files only, in the implementer's
+ * worktree, and ends with a verdict the harness reads.
+ */
+export function testPrompt(
+  goal: string,
+  request: TestRequest,
+  verifyCommand: string | null,
+  hasCriteria: boolean,
+): string {
+  const lines = [
+    'You are the tester for work another agent did in this repository. Decide whether it',
+    'works, by writing the tests it is missing and running them.',
+    '',
+    `Task given to the implementer:\n${goal}`,
+    '',
+    `The implementer's work is everything between ${request.since} and HEAD:`,
+    `- \`git log --oneline ${request.since}..HEAD\` and \`git diff ${request.since}..HEAD\``,
+    '- `git status` for anything left uncommitted',
+    '',
+    hasCriteria
+      ? 'Make sure every acceptance criterion is covered by a test that would fail without it.'
+      : 'Make sure the behaviour the task asked for is covered by tests that would fail without it.',
+    'Add or extend tests, then run the whole test suite' +
+      (verifyCommand ? ` (\`${verifyCommand}\`)` : '') +
+      ' and commit the tests you wrote.',
+    'You may change test files only (test directories, `*.test.*`, `*.spec.*`). Do not touch',
+    'the implementation: if a test shows a bug, report it instead of fixing it.',
+    '',
+    `Make the first line of your reply exactly \`${TESTS_PASS}\` or \`${TESTS_FAIL}\`.`,
+    `Use ${TESTS_FAIL} when the suite fails or a criterion has no passing test. After it, list`,
+    'each failure or bug with the test, the command to reproduce it and what is wrong.',
+  ];
+  return lines.join('\n');
+}
+
+/** Section added to the implementer's next prompt when the tester reported failures. */
+export function testFeedback(report: TestReport): string {
+  return [
+    `A tester (${report.agentId}) checked your last step and reported failures.`,
+    'Fix every one before anything else, run the tests again, and commit:',
+    report.findings,
   ].join('\n');
 }

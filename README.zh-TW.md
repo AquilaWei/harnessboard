@@ -105,6 +105,12 @@ hb add "加上深色模式切換" --criteria "- 重新整理後仍保持設定" 
 `hb add "..." --designer codex --designer-model <model>`、新增任務對話框的**設計者**選單，
 或 `hb models <id> --designer <agent|none>`。這一步不需要你核准，只適用於單一任務。
 
+**測試者（選用）**：加上**測試者**後，執行者每完成一步都會先交給它，再進入審查。它會補寫
+該步缺少的測試、執行測試、提交測試，並回覆 `TESTS: PASS` 或 `TESTS: FAIL`。失敗會退回給執行者
+（與審查相同，最多兩輪，之後交給你）；通過才進入審查者。它只能修改測試檔，動到其他檔案
+任務就會停止。用法：`--tester codex --tester-model <model>`、**測試者**選單，或
+`hb models <id> --tester <agent|none>`。只適用於單一任務。
+
 建立任務時就填好的驗收標準會直接採用。`--no-discuss`（或在新增任務對話框取消勾選）
 則不設驗收標準直接開工。
 

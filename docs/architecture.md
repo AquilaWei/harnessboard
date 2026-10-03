@@ -40,6 +40,13 @@ profiles.
     the prompts of the implementer and the reviewer. It has no human gate, and it runs once;
     the implementer then starts a new session, never a continuation of the designer's.
   - `implementer`: edits files and commits.
+  - `tester`: optional, single tasks only. After an implementer step, one session with edit
+    access writes the missing tests, runs them and commits them, then answers
+    `TESTS: PASS` or `TESTS: FAIL`. Events: `test_request`, `test_report`. A failure is
+    open feedback for the implementer like a review's `CHANGES` (`openFeedback`), counted
+    against `maxReviewRounds`; a pass sends the step on to the reviewer. The harness checks
+    the files changed since the request (`changedPaths`) and stops the task if any is not a
+    test path (`isTestPath`).
   - `reviewer`: checks the implementer's latest step. It runs read-only and must answer
     with `VERDICT: APPROVE` or `VERDICT: CHANGES`.
 

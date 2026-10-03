@@ -15,6 +15,9 @@ export interface AgentChoice {
   /** Writes a design note before the implementer starts; `null` skips it. */
   design: string | null;
   designModel: string | null;
+  /** Tests each finished step before review; `null` skips testing. */
+  tester: string | null;
+  testerModel: string | null;
 }
 
 interface Props {
@@ -105,6 +108,29 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
           onChange={(implementerModel) => set({ implementerModel })}
         />
       </div>
+      <div className="row">
+        <label className="field">
+          <span>{t('form.tester')}</span>
+          <select
+            value={value.tester ?? ''}
+            disabled={lockAgents}
+            onChange={(e) => set({ tester: e.target.value || null, testerModel: null })}
+          >
+            <option value="">{t('form.testerNone')}</option>
+            {options}
+          </select>
+        </label>
+        {value.tester && (
+          <ModelPicker
+            key={`tester-${value.tester}`}
+            label={t('form.testerModel')}
+            agent={byId(value.tester)}
+            value={value.testerModel}
+            onChange={(testerModel) => set({ testerModel })}
+          />
+        )}
+      </div>
+      <small className="hint">{t('form.testerHint')}</small>
       <div className="row">
         <label className="field">
           <span>{t('form.reviewer')}</span>

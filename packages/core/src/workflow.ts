@@ -17,6 +17,8 @@ import type {
   PlanProposal,
   ReviewRecord,
   ReviewRequest,
+  TestReport,
+  TestRequest,
   Session,
   Task,
   TaskActivity,
@@ -40,10 +42,18 @@ import {
   planRevisionPrompt,
   taskGoal,
 } from './prompts.js';
-import { parseVerdict, reviewFeedback, reviewPrompt } from './review.js';
+import {
+  isTestPath,
+  parseTestVerdict,
+  parseVerdict,
+  reviewFeedback,
+  reviewPrompt,
+  testFeedback,
+  testPrompt,
+} from './review.js';
 import type { SessionOutcome } from './runner.js';
 import type { Store } from './store.js';
-import { headCommit, mergeBase, porcelainStatus } from './worktree.js';
+import { changedPaths, headCommit, mergeBase, porcelainStatus } from './worktree.js';
 
 /** Who runs the next session of a task, what it is asked, and whether it resumes one. */
 export interface SessionPlan {
@@ -83,6 +93,8 @@ export class Workflow {
     const last = this.host.store.listSessions(task.id).at(-1);
     const request = this.pendingReview(task.id);
     if (request) return this.reviewPlan(task, request, last);
+    const testing = this.pendingTest(task.id);
+    if (testing) return this.testPlan(task, testing, last);
     const conflict = this.pendingMergeConflict(task.id);
     if (conflict) {
       const prompt = mergeConflictPrompt(this.goal(task), conflict.base, conflict.files);
@@ -109,6 +121,7 @@ export class Workflow {
   nextAgentId(task: Task): string {
     const reviewer = task.agents.reviewer;
     if (reviewer && this.pendingReview(task.id)) return reviewer;
+    if (task.agents.tester && this.pendingTest(task.id)) return task.agents.tester;
     if (this.needsDesign(task)) return task.agents.design!;
     return this.activeAgent(task);
   }
@@ -135,6 +148,7 @@ export class Workflow {
   phaseOf(task: Task, plan: SessionPlan): TaskActivity {
     if (plan.role === 'reviewer') return { phase: 'reviewing', agentId: plan.agentId };
     if (plan.role === 'design') return { phase: 'designing', agentId: plan.agentId };
+    if (plan.role === 'tester') return { phase: 'testing', agentId: plan.agentId };
     // Planning lasts until the plan is approved, including revisions after feedback.
     const planning =
       this.inPlanning(task) ||
@@ -157,13 +171,57 @@ export class Workflow {
     return request.data as ReviewRequest;
   }
 
-  /** Requested changes the implementer has not submitted a new step for yet. */
+  /** The test run waiting to happen: the latest step was sent to the tester and not yet tested. */
+  pendingTest(taskId: number): TestRequest | null {
+    const request = this.host.store.lastEvent(taskId, 'test_request');
+    const report = this.host.store.lastEvent(taskId, 'test_report');
+    if (!request || (report && report.id > request.id)) return null;
+    return request.data as TestRequest;
+  }
+
+  private testPlan(task: Task, request: TestRequest, last: Session | undefined): SessionPlan {
+    const tester = task.agents.tester!;
+    const resumable =
+      last?.role === 'tester' &&
+      last.endReason !== 'completed' &&
+      last.agentSessionId !== null &&
+      last.contextTokens > 0 &&
+      this.hasBudget(task, last);
+    const base = { role: 'tester', agentId: tester, access: 'edit' } as const;
+    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    const prompt = testPrompt(
+      this.goal(task),
+      request,
+      task.verifyCommand,
+      task.acceptance !== null,
+    );
+    return { ...base, resume: null, prompt };
+  }
+
+  /**
+   * What the implementer still has to fix: the latest review that asked for changes or test
+   * report that failed, unless a newer step was already sent to that reviewer or tester.
+   */
   private openFeedback(taskId: number): string | null {
-    const review = this.host.store.lastEvent(taskId, 'review');
-    const request = this.host.store.lastEvent(taskId, 'review_request');
-    if (!review || (request && request.id > review.id)) return null;
-    const record = review.data as ReviewRecord;
-    return record.verdict === 'changes' ? reviewFeedback(record) : null;
+    const store = this.host.store;
+    const open: { id: number; text: string }[] = [];
+    const review = store.lastEvent(taskId, 'review');
+    const request = store.lastEvent(taskId, 'review_request');
+    if (review && !(request && request.id > review.id)) {
+      const record = review.data as ReviewRecord;
+      if (record.verdict === 'changes') open.push({ id: review.id, text: reviewFeedback(record) });
+    }
+    const report = store.lastEvent(taskId, 'test_report');
+    const testRequest = store.lastEvent(taskId, 'test_request');
+    if (report && !(testRequest && testRequest.id > report.id)) {
+      const record = report.data as TestReport;
+      if (record.verdict === 'fail') open.push({ id: report.id, text: testFeedback(record) });
+    }
+    return open.sort((a, b) => b.id - a.id)[0]?.text ?? null;
+  }
+
+  private testReports(taskId: number): TestReport[] {
+    return this.host.store.eventsOfKind(taskId, 'test_report').map((e) => e.data as TestReport);
   }
 
   private reviews(taskId: number): ReviewRecord[] {
@@ -366,6 +424,10 @@ export class Workflow {
       this.finishDesign(task, outcome);
       return;
     }
+    if (plan.role === 'tester') {
+      await this.finishTest(task, plan, outcome);
+      return;
+    }
     switch (outcome.reason) {
       case 'completed':
         if (this.discussing(task)) this.proposeCriteria(task, outcome.finalText);
@@ -446,6 +508,106 @@ export class Workflow {
    * With a reviewer, new commits are sent for review first; otherwise the task moves on.
    */
   private async stepDone(task: Task): Promise<void> {
+    if (task.agents.tester && task.mode === 'single') await this.requestTest(task);
+    else await this.requestReview(task);
+  }
+
+  /** Commit the next review or test of a step is measured from. */
+  private async stepBase(task: Task): Promise<string> {
+    const approved = this.reviews(task.id).findLast((r) => r.verdict === 'approve');
+    return approved?.head ?? (await mergeBase(task.worktreePath!, task.baseRef));
+  }
+
+  /**
+   * Sends the finished step to the tester. A step the tester already passed goes straight
+   * on; one it failed and the implementer did not change goes to a human.
+   */
+  private async requestTest(task: Task): Promise<void> {
+    const dir = task.worktreePath!;
+    const [head, status] = await Promise.all([headCommit(dir), porcelainStatus(dir)]);
+    const reports = this.testReports(task.id);
+    const last = reports.at(-1);
+    if (last && last.head === head && status === '') {
+      if (last.verdict === 'pass') {
+        await this.requestReview(task);
+      } else {
+        this.host.notice(task.id, 'no new commits since the tester reported failures');
+        this.host.setStatus(task.id, 'review');
+      }
+      return;
+    }
+    const passedAt = reports.findLastIndex((r) => r.verdict === 'pass');
+    const round = reports.slice(passedAt + 1).length + 1;
+    const request: TestRequest = { round, since: await this.stepBase(task), head, status };
+    this.host.store.appendEvent(task.id, null, 'test_request', request);
+    this.host.notice(task.id, `sent to ${task.agents.tester} for testing (round ${round})`);
+    this.host.setStatus(task.id, 'queued');
+  }
+
+  private async finishTest(task: Task, plan: SessionPlan, outcome: SessionOutcome): Promise<void> {
+    const request = this.pendingTest(task.id)!;
+    const record = (verdict: TestReport['verdict'], findings: string, head: string) =>
+      this.host.store.appendEvent(task.id, null, 'test_report', {
+        round: request.round,
+        agentId: plan.agentId,
+        verdict,
+        findings,
+        head,
+      } satisfies TestReport);
+
+    if (outcome.reason === 'context_hard_limit' || outcome.reason === 'handoff') {
+      record(null, 'The tester ran out of context before giving a verdict.', request.head);
+      this.host.notice(task.id, 'tester ran out of context; needs a human');
+      this.host.setStatus(task.id, 'review');
+      return;
+    }
+    if (outcome.reason !== 'completed') {
+      this.interrupted(task, outcome); // the test run stays pending and starts again
+      return;
+    }
+    const dir = task.worktreePath!;
+    const head = await headCommit(dir);
+    const stray = await this.nonTestChanges(dir, request);
+    if (stray.length > 0) {
+      record(null, `The tester changed files that are not tests: ${stray.join(', ')}`, head);
+      this.host.notice(task.id, 'tester changed more than tests; stopping for a human');
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    const { verdict, findings } = parseTestVerdict(outcome.finalText);
+    record(verdict, findings, head);
+    if (verdict === 'pass') {
+      this.host.notice(task.id, `${plan.agentId} passed round ${request.round}`);
+      await this.requestReview(task);
+    } else if (verdict === null) {
+      this.host.notice(task.id, 'tester gave no verdict line; needs a human');
+      this.host.setStatus(task.id, 'review');
+    } else if (request.round >= task.agents.maxReviewRounds) {
+      this.host.notice(
+        task.id,
+        `${plan.agentId} still reports failures after ${request.round} rounds; needs a human`,
+      );
+      this.host.setStatus(task.id, 'review');
+    } else {
+      this.host.notice(task.id, `${plan.agentId} reported failures (round ${request.round})`);
+      this.host.setStatus(task.id, 'queued');
+    }
+  }
+
+  /** Files the tester changed that are not tests; what was already changed at the request is not its doing. */
+  private async nonTestChanges(dir: string, request: TestRequest): Promise<string[]> {
+    const before = new Set(
+      request.status
+        .split('\n')
+        .filter((line) => line !== '')
+        .map((line) => line.slice(3).trim()),
+    );
+    const changed = await changedPaths(dir, request.head);
+    return changed.filter((file) => !before.has(file) && !isTestPath(file));
+  }
+
+  /** Sends new commits to the reviewer, or moves on when there is none. */
+  private async requestReview(task: Task): Promise<void> {
     if (!task.agents.reviewer) {
       this.afterApproval(task);
       return;
@@ -465,7 +627,7 @@ export class Workflow {
     }
     const approvedAt = reviews.findLastIndex((r) => r.verdict === 'approve');
     const round = reviews.slice(approvedAt + 1).length + 1;
-    const since = reviews[approvedAt]?.head ?? (await mergeBase(dir, task.baseRef));
+    const since = await this.stepBase(task);
     const request: ReviewRequest = { round, since, head, status };
     this.host.store.appendEvent(task.id, null, 'review_request', request);
     this.host.notice(task.id, `sent for review to ${task.agents.reviewer} (round ${round})`);

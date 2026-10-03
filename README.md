@@ -119,6 +119,13 @@ the reviewer are then given: `hb add "..." --designer codex --designer-model <mo
 **Designer** menu in the New task dialog, or `hb models <id> --designer <agent|none>`.
 It needs no approval from you, and it applies to single tasks.
 
+**Tester (optional):** add a **tester** and every finished implementer step goes to it
+before review. It writes the tests the step is missing, runs the suite, commits the tests and
+answers `TESTS: PASS` or `TESTS: FAIL`. A failure goes back to the implementer (up to the same
+two rounds as review, then to you); a pass goes on to the reviewer. It may only change test
+files; anything else stops the task. Use `--tester codex --tester-model <model>`, the
+**Tester** menu, or `hb models <id> --tester <agent|none>`. It applies to single tasks.
+
 Criteria given when creating the task are used as they are. `--no-discuss` (or unticking
 the box in the New task dialog) starts without criteria.
 

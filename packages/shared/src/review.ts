@@ -39,12 +39,33 @@ export interface ReviewRecord {
   head: string;
 }
 
+/** Stored as the `test_request` event when a finished step is sent to the tester. */
+export interface TestRequest {
+  round: number;
+  /** Commit the step is measured from: the last approved head, or the task's base. */
+  since: string;
+  head: string;
+  /** `git status --porcelain` output at request time. */
+  status: string;
+}
+
+/** Stored as the `test_report` event after a tester session. */
+export interface TestReport {
+  round: number;
+  agentId: string;
+  /** `null` when the reply had no verdict line; the task then goes to a human. */
+  verdict: 'pass' | 'fail' | null;
+  /** The tester's reply without the verdict line. */
+  findings: string;
+  head: string;
+}
+
 /**
  * What a task's current session is doing, while it runs. `chatting`: the user is talking
  * to the agent in the task's conversation, outside the workflow.
  */
 export type TaskPhase =
-  'planning' | 'designing' | 'implementing' | 'verifying' | 'reviewing' | 'chatting';
+  'planning' | 'designing' | 'implementing' | 'testing' | 'verifying' | 'reviewing' | 'chatting';
 
 export interface TaskActivity {
   phase: TaskPhase;
@@ -113,6 +134,7 @@ export type TimelineEntry =
   | { kind: 'criteria'; ts: number; proposal: CriteriaProposal }
   | { kind: 'criteria_approved'; ts: number; approval: CriteriaApproval }
   | { kind: 'design'; ts: number; note: DesignNote }
+  | { kind: 'test_report'; ts: number; report: TestReport }
   | { kind: 'chat_message'; ts: number; message: ChatMessage }
   | { kind: 'merge_conflict'; ts: number; conflict: MergeConflict }
   | { kind: 'merged'; ts: number; merge: MergeRecord }

@@ -8,7 +8,13 @@ import { Markdown } from './Markdown';
  * The task's history as steps, so the harness's decisions are visible: who worked, when
  * context ran out, what verification and review said.
  */
-const ROLE_ICONS = { spec: '📝', design: '📐', implementer: '🛠', reviewer: '🔍' } as const;
+const ROLE_ICONS = {
+  spec: '📝',
+  design: '📐',
+  implementer: '🛠',
+  tester: '🧪',
+  reviewer: '🔍',
+} as const;
 
 export function Timeline({ entries }: { entries: TimelineEntry[] | null }) {
   const { t } = useTranslation();
@@ -112,6 +118,30 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           />
           {r.findings && (
             <details open={r.verdict !== 'approve'}>
+              <summary>{t('timeline.reply')}</summary>
+              <Markdown className="reply" text={r.findings} />
+            </details>
+          )}
+        </li>
+      );
+    }
+    case 'test_report': {
+      const r = entry.report;
+      const key =
+        r.verdict === 'pass'
+          ? 'testsPassed'
+          : r.verdict === 'fail'
+            ? 'testsFailed'
+            : 'noTestVerdict';
+      return (
+        <li className={`step ${r.verdict === 'pass' ? 'step-good' : 'step-bad'}`}>
+          <StepHead
+            icon={r.verdict === 'pass' ? '✓' : '!'}
+            title={t(`timeline.${key}`, { agent: r.agentId, round: r.round })}
+            meta={time}
+          />
+          {r.findings && (
+            <details open={r.verdict !== 'pass'}>
               <summary>{t('timeline.reply')}</summary>
               <Markdown className="reply" text={r.findings} />
             </details>

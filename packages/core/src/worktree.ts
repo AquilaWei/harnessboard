@@ -116,6 +116,18 @@ export async function porcelainStatus(dir: string): Promise<string> {
   return git(dir, ['status', '--porcelain']);
 }
 
+/**
+ * Paths whose content differs from commit `head`, committed or not, plus untracked files.
+ * Renames count as the old path removed and the new one added.
+ */
+export async function changedPaths(dir: string, head: string): Promise<string[]> {
+  const [tracked, untracked] = await Promise.all([
+    git(dir, ['diff', '--name-only', '--no-renames', head]),
+    git(dir, ['ls-files', '--others', '--exclude-standard']),
+  ]);
+  return [...tracked.split('\n'), ...untracked.split('\n')].filter((p) => p !== '');
+}
+
 /** Commit where HEAD branched off `ref`. */
 export async function mergeBase(dir: string, ref: string): Promise<string> {
   return (await git(dir, ['merge-base', ref, 'HEAD'])).trim();

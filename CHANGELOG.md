@@ -7,6 +7,11 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **An optional tester.** Pick a tester (`--tester`, `--tester-model`, the **Tester** menu,
+  `hb models --tester`) and each finished step of a single task goes to it before review.
+  It writes the missing tests, runs the suite and commits the tests. Failures go back to the
+  implementer, and a pass goes on to the reviewer. It may only change test files; if it
+  changes anything else the task stops. Tasks without a tester behave as before.
 - **An optional designer.** Pick a designer (`--designer`, `--designer-model`, the
   **Designer** menu, `hb models --designer`) and a single task gets a short read-only design
   note after its criteria are settled. The implementer and the reviewer are given the note.

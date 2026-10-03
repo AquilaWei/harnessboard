@@ -34,6 +34,8 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
       specModel: a.specModel ?? null,
       design: a.design ?? null,
       designModel: a.designModel ?? null,
+      tester: a.tester ?? null,
+      testerModel: a.testerModel ?? null,
     });
     api.agents().then(setAgents, (e: Error) => onError(e.message));
   };
@@ -64,6 +66,10 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
         </span>
         <span className="mono">
           {a.implementer} · {model(a.implementerModel)}
+        </span>
+        <span className="mono">
+          {t('fields.tester')}:{' '}
+          {a.tester ? `${a.tester} · ${model(a.testerModel)}` : t('fields.none')}
         </span>
         <span className="mono">
           {a.reviewer
