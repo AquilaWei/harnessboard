@@ -5,6 +5,13 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.12 - 2026-10-03
+
+### Fixed
+
+- CI installs corepack on Windows without colliding with the runner's yarn, and the tests
+  pass on macOS, where the temp folder is a symlink.
+
 ## 0.0.11 - 2026-10-03
 
 ### Fixed
