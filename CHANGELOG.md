@@ -5,6 +5,13 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.11 - 2026-10-03
+
+### Fixed
+
+- The CI workflow no longer fails while setting up Node, and it runs only when a version tag
+  is pushed.
+
 ## 0.0.10 - 2026-10-03
 
 ### Added
