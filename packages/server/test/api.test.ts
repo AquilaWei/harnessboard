@@ -15,7 +15,7 @@ let app: Hono;
 let repo: string;
 
 beforeEach(() => {
-  const dir = mkdtempSync(path.join(realpathSync(tmpdir()), 'hb-api-'));
+  const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-api-'));
   repo = path.join(dir, 'repo');
   execFileSync('git', ['init', '-q', '-b', 'main', repo]);
   writeFileSync(path.join(repo, 'a.txt'), 'a\n');

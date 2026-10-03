@@ -15,7 +15,7 @@ describe('userConfigFile', () => {
   });
 
   it('lives in the platform config folder without HARNESSBOARD_HOME', () => {
-    expect(userConfigFile({})).toMatch(/harnessboard[/\\]config\.json$/);
+    expect(userConfigFile({})).toMatch(/harnessboard[/\\](Config[/\\])?config\.json$/);
   });
 });
 

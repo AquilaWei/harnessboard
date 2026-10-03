@@ -101,7 +101,7 @@ export const featureList = (...passes: boolean[]) =>
   );
 
 export function tempDir(prefix: string): string {
-  return mkdtempSync(path.join(realpathSync(tmpdir()), `hb-${prefix}-`));
+  return mkdtempSync(path.join(realpathSync.native(tmpdir()), `hb-${prefix}-`));
 }
 
 /** A git repository with one commit on `main`. */
@@ -111,6 +111,8 @@ export function makeRepo(): string {
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 'test@example.com');
   git('config', 'user.name', 'Test');
+  // Windows runners default to autocrlf=true, which would turn the files' \n into \r\n.
+  git('config', 'core.autocrlf', 'false');
   writeFileSync(path.join(repo, 'README.md'), 'hello\n');
   git('add', '.');
   git('commit', '-q', '-m', 'init');
