@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.10 - 2026-10-03
+
 ### Added
 
 - **The agreed spec is committed to the repository.** After you approve the criteria, the
