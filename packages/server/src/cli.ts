@@ -96,6 +96,8 @@ function withTaskOptions(command: Command): Command {
       'agent profile that writes the acceptance criteria (default: implementer)',
     )
     .option('--spec-model <model>', 'model for the spec author')
+    .option('--designer <agent>', 'agent profile that writes a design note before the work starts')
+    .option('--designer-model <model>', 'model for the designer')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--reviewer-model <model>', 'model for the reviewer')
     .option('--no-queue', 'leave the task in the backlog');
@@ -119,6 +121,8 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       autoApprove: o.autoApprove,
       spec: o.spec,
       specModel: o.specModel,
+      design: o.designer,
+      designModel: o.designerModel,
       reviewer: o.reviewer === 'none' ? null : o.reviewer,
       implementerModel: o.model,
       reviewerModel: o.reviewerModel,
@@ -380,6 +384,8 @@ program
   .option('--model <model>', 'implementer model, or "default" for the profile model')
   .option('--spec <agent>', 'spec author profile, or "implementer" to let the implementer write it')
   .option('--spec-model <model>', 'spec author model, or "default" for the profile model')
+  .option('--designer <agent>', 'designer profile, or "none" to skip the design note')
+  .option('--designer-model <model>', 'designer model, or "default" for the profile model')
   .option('--reviewer <agent>', 'reviewer profile, or "none"')
   .option('--reviewer-model <model>', 'reviewer model, or "default" for the profile model')
   .action(async (id: number, o: ModelsOptions) => {
@@ -389,6 +395,8 @@ program
       implementerModel: model(o.model),
       spec: o.spec === undefined ? undefined : o.spec === 'implementer' ? null : o.spec,
       specModel: model(o.specModel),
+      design: o.designer === undefined ? undefined : o.designer === 'none' ? null : o.designer,
+      designModel: model(o.designerModel),
       reviewer: o.reviewer === undefined ? undefined : o.reviewer === 'none' ? null : o.reviewer,
       reviewerModel: model(o.reviewerModel),
     });
@@ -401,6 +409,7 @@ program
         ? `spec         ${a.spec}  ${shown(a.specModel)}`
         : `spec         ${t('sameAsImplementer')}`,
     );
+    console.log(`designer     ${a.design ?? '-'}  ${a.design ? shown(a.designModel) : ''}`);
     console.log(`implementer  ${a.implementer}  ${shown(a.implementerModel)}`);
     console.log(`reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel) : ''}`);
   });
@@ -611,6 +620,8 @@ interface AddOptions {
   reviewerModel?: string;
   spec?: string;
   specModel?: string;
+  designer?: string;
+  designerModel?: string;
   queue: boolean;
 }
 
@@ -618,6 +629,8 @@ interface ModelsOptions {
   model?: string;
   spec?: string;
   specModel?: string;
+  designer?: string;
+  designerModel?: string;
   reviewer?: string;
   reviewerModel?: string;
 }

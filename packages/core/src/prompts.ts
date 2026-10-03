@@ -153,13 +153,40 @@ export function loopSessionPrompt(
 export const CRITERIA_HEADING = '## Acceptance criteria';
 
 /** The task as every implementer and reviewer sees it: the request plus agreed criteria. */
-export function taskGoal(prompt: string, acceptance: string | null): string {
-  if (!acceptance) return prompt;
+export function taskGoal(
+  prompt: string,
+  acceptance: string | null,
+  design: string | null = null,
+): string {
+  const lines = [prompt];
+  if (acceptance) {
+    lines.push(
+      '',
+      'Acceptance criteria, agreed with the user (the work is done when all of them hold):',
+      acceptance,
+    );
+  }
+  if (design) lines.push('', 'Design note, written for this task before the work started:', design);
+  return lines.join('\n');
+}
+
+/** First and only session of the designer: a read-only note the implementer will be given. */
+export function designPrompt(goal: string): string {
   return [
-    prompt,
+    'Before the work below is built, write a short design for it.',
+    'This session is read-only: study the repository, but do not change anything.',
     '',
-    'Acceptance criteria, agreed with the user (the work is done when all of them hold):',
-    acceptance,
+    `Task:\n${goal}`,
+    '',
+    'Reply with the design note only, in this shape:',
+    '## Approach',
+    '- How the change fits the existing code, in a few lines.',
+    '## Changes',
+    '- One line per file or module to change, and what changes in it.',
+    '## Risks',
+    '- Interfaces, data or behaviour that could break, and how to check them.',
+    '',
+    'Keep it short and concrete. Do not write the implementation.',
   ].join('\n');
 }
 

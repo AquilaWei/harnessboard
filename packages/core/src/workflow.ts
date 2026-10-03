@@ -11,6 +11,7 @@ import {
 import type {
   AgentRole,
   CriteriaProposal,
+  DesignNote,
   FeatureSnapshot,
   MergeConflict,
   PlanProposal,
@@ -30,6 +31,7 @@ import {
   criteriaApprovedPrompt,
   criteriaPrompt,
   criteriaRevisionPrompt,
+  designPrompt,
   initializerPrompt,
   loopSessionPrompt,
   mergeConflictPrompt,
@@ -86,7 +88,9 @@ export class Workflow {
       const prompt = mergeConflictPrompt(this.goal(task), conflict.base, conflict.files);
       return this.implement(task, prompt);
     }
-    if (!last) return this.implement(task, this.firstPrompt(task));
+    if (this.needsDesign(task)) return this.designPlan(task);
+    // The designer's session is not the implementer's to continue.
+    if (!last || last.role === 'design') return this.implement(task, this.firstPrompt(task));
     const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
     if (feedback !== null) return this.revisePlan(task, feedback, last);
     if (this.justApproved(task)) return this.startAfterDiscussion(task, last);
@@ -105,6 +109,7 @@ export class Workflow {
   nextAgentId(task: Task): string {
     const reviewer = task.agents.reviewer;
     if (reviewer && this.pendingReview(task.id)) return reviewer;
+    if (this.needsDesign(task)) return task.agents.design!;
     return this.activeAgent(task);
   }
 
@@ -129,6 +134,7 @@ export class Workflow {
   /** The phase a planned session works in. */
   phaseOf(task: Task, plan: SessionPlan): TaskActivity {
     if (plan.role === 'reviewer') return { phase: 'reviewing', agentId: plan.agentId };
+    if (plan.role === 'design') return { phase: 'designing', agentId: plan.agentId };
     // Planning lasts until the plan is approved, including revisions after feedback.
     const planning =
       this.inPlanning(task) ||
@@ -186,7 +192,7 @@ export class Workflow {
    */
   private canResume(task: Task, last: Session, agentId: string): boolean {
     return (
-      last.role !== 'reviewer' &&
+      (last.role === 'implementer' || last.role === 'spec') &&
       last.agentId === agentId &&
       last.agentSessionId !== null &&
       last.contextTokens > 0 &&
@@ -194,9 +200,30 @@ export class Workflow {
     );
   }
 
-  /** The task as the agents are given it: the request plus any agreed criteria. */
+  /** The task as the agents are given it: the request plus any agreed criteria and design. */
   private goal(task: Task): string {
-    return taskGoal(task.prompt, task.acceptance);
+    const design = this.host.store.lastEvent(task.id, 'design')?.data as DesignNote | undefined;
+    return taskGoal(task.prompt, task.acceptance, design?.text ?? null);
+  }
+
+  /** A single task with a designer, past its spec discussion, that has no design note yet. */
+  private needsDesign(task: Task): boolean {
+    return (
+      task.mode === 'single' &&
+      !!task.agents.design &&
+      !this.discussing(task) &&
+      !this.host.store.lastEvent(task.id, 'design')
+    );
+  }
+
+  private designPlan(task: Task): SessionPlan {
+    return {
+      role: 'design',
+      agentId: task.agents.design!,
+      access: 'readOnly',
+      resume: null,
+      prompt: designPrompt(this.goal(task)),
+    };
   }
 
   private firstPrompt(task: Task): string {
@@ -335,6 +362,10 @@ export class Workflow {
       await this.finishReview(task, plan, outcome);
       return;
     }
+    if (plan.role === 'design') {
+      this.finishDesign(task, outcome);
+      return;
+    }
     switch (outcome.reason) {
       case 'completed':
         if (this.discussing(task)) this.proposeCriteria(task, outcome.finalText);
@@ -348,6 +379,29 @@ export class Workflow {
       default:
         this.interrupted(task, outcome);
     }
+  }
+
+  /** Keeps the designer's reply for the sessions after it; the task then goes on unasked. */
+  private finishDesign(task: Task, outcome: SessionOutcome): void {
+    if (outcome.reason !== 'completed') {
+      if (outcome.reason === 'handoff' || outcome.reason === 'context_hard_limit') {
+        this.host.notice(task.id, 'the designer ran out of context before it finished');
+        this.host.setStatus(task.id, 'failed');
+      } else {
+        this.interrupted(task, outcome);
+      }
+      return;
+    }
+    const text = outcome.finalText.trim();
+    if (!text) {
+      this.host.notice(task.id, 'the designer finished without writing a design');
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    const note: DesignNote = { text };
+    this.host.store.appendEvent(task.id, null, 'design', note);
+    this.host.notice(task.id, `design note written by ${task.agents.design}`);
+    this.host.setStatus(task.id, 'queued');
   }
 
   /** Nothing is changed until the user approves the criteria or replies to them. */

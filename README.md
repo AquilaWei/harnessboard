@@ -113,6 +113,12 @@ the New task dialog, or `hb models <id> --spec <agent>`. With a different agent 
 conversation does not carry over: after you approve, the implementer starts a new session
 from the approved criteria.
 
+**Design note (optional):** add a **designer** and, once the criteria are settled, it
+writes a short read-only design (approach, files to change, risks) that the implementer and
+the reviewer are then given: `hb add "..." --designer codex --designer-model <model>`, the
+**Designer** menu in the New task dialog, or `hb models <id> --designer <agent|none>`.
+It needs no approval from you, and it applies to single tasks.
+
 Criteria given when creating the task are used as they are. `--no-discuss` (or unticking
 the box in the New task dialog) starts without criteria.
 

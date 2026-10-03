@@ -7,6 +7,10 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **An optional designer.** Pick a designer (`--designer`, `--designer-model`, the
+  **Designer** menu, `hb models --designer`) and a single task gets a short read-only design
+  note after its criteria are settled. The implementer and the reviewer are given the note.
+  Nothing needs your approval, and tasks without a designer behave as before.
 - **A spec author for the acceptance criteria.** The read-only discussion that agrees on
   what "done" means can now be run by its own agent and model (`--spec`, `--spec-model`,
   the **Spec author** menu, `hb models --spec`). It defaults to the implementer, so existing

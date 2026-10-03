@@ -35,6 +35,10 @@ profiles.
     read-only. `task.agents.spec` is optional; without it the implementer plays this role.
     When the same agent plays both roles the approved discussion is resumed with edit access;
     otherwise the implementer starts a new session from the approved criteria.
+  - `design`: optional, single tasks only. After the spec is settled, one read-only session
+    writes a design note, stored as the `design` event. `Workflow.goal()` adds the note to
+    the prompts of the implementer and the reviewer. It has no human gate, and it runs once;
+    the implementer then starts a new session, never a continuation of the designer's.
   - `implementer`: edits files and commits.
   - `reviewer`: checks the implementer's latest step. It runs read-only and must answer
     with `VERDICT: APPROVE` or `VERDICT: CHANGES`.

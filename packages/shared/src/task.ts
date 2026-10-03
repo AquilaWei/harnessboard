@@ -103,6 +103,12 @@ export interface CriteriaProposal {
   questions: PlanQuestion[];
 }
 
+/** Stored as the `design` event when the designer finishes; later sessions are given it. */
+export interface DesignNote {
+  /** The designer's reply: files to change, interfaces, risks. */
+  text: string;
+}
+
 /** Stored as the `criteria_approved` event; the criteria are saved on the task too. */
 export interface CriteriaApproval {
   criteria: string;

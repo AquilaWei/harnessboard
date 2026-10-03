@@ -8,6 +8,7 @@ import type {
   ChatQueued,
   ContextView,
   CriteriaApproval,
+  DesignNote,
   CriteriaProposal,
   MergeConflict,
   MergeRecord,
@@ -195,6 +196,7 @@ export function timeline(taskId: number, store: Store): TimelineEntry[] {
     'plan_approved',
     'criteria',
     'criteria_approved',
+    'design',
     'chat_message',
     'merge_conflict',
     'merged',
@@ -221,6 +223,7 @@ function timelineEvent(
     | 'plan_approved'
     | 'criteria'
     | 'criteria_approved'
+    | 'design'
     | 'chat_message'
     | 'merge_conflict'
     | 'merged'
@@ -248,6 +251,8 @@ function timelineEvent(
       return { kind, ts, proposal: data as CriteriaProposal };
     case 'criteria_approved':
       return { kind, ts, approval: data as CriteriaApproval };
+    case 'design':
+      return { kind, ts, note: data as DesignNote };
     case 'chat_message':
       return { kind, ts, message: data as ChatMessage };
     case 'merge_conflict':

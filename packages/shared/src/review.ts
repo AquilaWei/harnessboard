@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
   CriteriaApproval,
+  DesignNote,
   CriteriaProposal,
   MergeConflict,
   MergeRecord,
@@ -42,7 +43,8 @@ export interface ReviewRecord {
  * What a task's current session is doing, while it runs. `chatting`: the user is talking
  * to the agent in the task's conversation, outside the workflow.
  */
-export type TaskPhase = 'planning' | 'implementing' | 'verifying' | 'reviewing' | 'chatting';
+export type TaskPhase =
+  'planning' | 'designing' | 'implementing' | 'verifying' | 'reviewing' | 'chatting';
 
 export interface TaskActivity {
   phase: TaskPhase;
@@ -110,6 +112,7 @@ export type TimelineEntry =
   | { kind: 'plan_approved'; ts: number; approval: PlanApproval }
   | { kind: 'criteria'; ts: number; proposal: CriteriaProposal }
   | { kind: 'criteria_approved'; ts: number; approval: CriteriaApproval }
+  | { kind: 'design'; ts: number; note: DesignNote }
   | { kind: 'chat_message'; ts: number; message: ChatMessage }
   | { kind: 'merge_conflict'; ts: number; conflict: MergeConflict }
   | { kind: 'merged'; ts: number; merge: MergeRecord }

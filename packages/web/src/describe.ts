@@ -85,6 +85,8 @@ function describeRunning(task: TaskView): Description {
         return d(task.criteria ? 'revisingCriteria' : 'discussing', 'working', { agent });
       }
       return d(task.plan ? 'revisingPlan' : 'planning', 'working', { agent });
+    case 'designing':
+      return d('designing', 'working', { agent });
     case 'implementing':
       if (task.lastReview?.verdict === 'changes') {
         return d('fixingReview', 'working', { agent, reviewer: task.lastReview.agentId });

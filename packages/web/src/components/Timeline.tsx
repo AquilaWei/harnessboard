@@ -8,7 +8,7 @@ import { Markdown } from './Markdown';
  * The task's history as steps, so the harness's decisions are visible: who worked, when
  * context ran out, what verification and review said.
  */
-const ROLE_ICONS = { spec: '📝', implementer: '🛠', reviewer: '🔍' } as const;
+const ROLE_ICONS = { spec: '📝', design: '📐', implementer: '🛠', reviewer: '🔍' } as const;
 
 export function Timeline({ entries }: { entries: TimelineEntry[] | null }) {
   const { t } = useTranslation();
@@ -148,6 +148,16 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
           <details>
             <summary>{t('timeline.reply')}</summary>
             <Markdown className="reply" text={entry.proposal.reply} />
+          </details>
+        </li>
+      );
+    case 'design':
+      return (
+        <li className="step">
+          <StepHead icon="📐" title={t('timeline.designNote')} meta={time} />
+          <details>
+            <summary>{t('timeline.reply')}</summary>
+            <Markdown className="reply" text={entry.note.text} />
           </details>
         </li>
       );

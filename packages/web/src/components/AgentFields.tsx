@@ -12,6 +12,9 @@ export interface AgentChoice {
   /** Writes the acceptance criteria; `null` lets the implementer do it. */
   spec: string | null;
   specModel: string | null;
+  /** Writes a design note before the implementer starts; `null` skips it. */
+  design: string | null;
+  designModel: string | null;
 }
 
 interface Props {
@@ -59,6 +62,29 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
         )}
       </div>
       <small className="hint">{t('form.specHint')}</small>
+      <div className="row">
+        <label className="field">
+          <span>{t('form.design')}</span>
+          <select
+            value={value.design ?? ''}
+            disabled={lockAgents}
+            onChange={(e) => set({ design: e.target.value || null, designModel: null })}
+          >
+            <option value="">{t('form.designNone')}</option>
+            {options}
+          </select>
+        </label>
+        {value.design && (
+          <ModelPicker
+            key={`design-${value.design}`}
+            label={t('form.designModel')}
+            agent={byId(value.design)}
+            value={value.designModel}
+            onChange={(designModel) => set({ designModel })}
+          />
+        )}
+      </div>
+      <small className="hint">{t('form.designHint')}</small>
       <div className="row">
         <label className="field">
           <span>{t('form.implementer')}</span>
