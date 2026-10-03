@@ -16,7 +16,7 @@ export interface AgentProfile {
 }
 
 /** What a session was asked to do. */
-export type AgentRole = 'spec' | 'design' | 'implementer' | 'tester' | 'docs' | 'reviewer';
+export type AgentRole = 'spec' | 'implementer' | 'tester' | 'reviewer';
 
 /**
  * Models offered for each provider. Any other id the CLI accepts can be typed instead;
@@ -53,26 +53,12 @@ export interface TaskAgents {
   /** Model for the spec author; absent or `null` uses the profile's model. */
   specModel?: string | null;
   /**
-   * Agent that writes a design note after the spec is agreed and before the implementer
-   * starts; absent or `null` skips the design step.
-   */
-  design?: string | null;
-  /** Model for the designer; absent or `null` uses the profile's model. */
-  designModel?: string | null;
-  /**
    * Agent that tests each finished implementer step before it is reviewed: it writes the
    * missing tests and runs them. Absent or `null` skips testing.
    */
   tester?: string | null;
   /** Model for the tester; absent or `null` uses the profile's model. */
   testerModel?: string | null;
-  /**
-   * Agent that brings the README, changelog and docs up to date after each tested step,
-   * before review. Absent or `null` skips it.
-   */
-  docs?: string | null;
-  /** Model for the docs writer; absent or `null` uses the profile's model. */
-  docsModel?: string | null;
   /** Review rounds per step before the task goes to a human anyway. */
   maxReviewRounds: number;
 }
@@ -87,12 +73,10 @@ export interface AgentInfo {
   error: string | null;
 }
 
-/** The agent profile that plays `role` in a task; `null` when the role is off (no reviewer, designer, tester or docs writer). */
+/** The agent profile that plays `role` in a task; `null` when the role is off (no reviewer or tester). */
 export function roleAgent(agents: TaskAgents, role: AgentRole): string | null {
   if (role === 'reviewer') return agents.reviewer;
-  if (role === 'design') return agents.design ?? null;
   if (role === 'tester') return agents.tester ?? null;
-  if (role === 'docs') return agents.docs ?? null;
   if (role === 'spec') return agents.spec ?? agents.implementer;
   return agents.implementer;
 }
@@ -101,9 +85,7 @@ export function roleAgent(agents: TaskAgents, role: AgentRole): string | null {
 export function roleModel(agents: TaskAgents, role: AgentRole): string | null {
   if (role === 'reviewer') return agents.reviewerModel ?? null;
   if (role === 'implementer') return agents.implementerModel ?? null;
-  if (role === 'design') return agents.designModel ?? null;
   if (role === 'tester') return agents.testerModel ?? null;
-  if (role === 'docs') return agents.docsModel ?? null;
   // A spec author left unset is the implementer, so it keeps the implementer's model too.
   if (agents.specModel) return agents.specModel;
   return agents.spec ? null : (agents.implementerModel ?? null);

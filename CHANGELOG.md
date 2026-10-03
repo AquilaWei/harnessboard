@@ -8,31 +8,24 @@ are test versions that have not been accepted on real machines yet.
 ### Added
 
 - **The agreed spec is committed to the repository.** After you approve the criteria, the
-  spec author writes the goal, requirements, out-of-scope items and criteria to
-  `docs/specs/<id>-<title>.md` and commits it, changing nothing else (the task stops if it
-  does). Every later agent is told to read that file. The discussion now also asks for
-  concrete requirements, not only criteria. Tasks created with criteria and no discussion
-  have no spec file.
-- **An optional docs writer.** Pick a docs writer (`--docs`, `--docs-model`, the **Docs
-  writer** menu, `hb models --docs`) and each step of a single task gets its README,
-  changelog entry and `docs/` updated and committed after testing and before review. It may
-  only change documentation files (otherwise the task stops) and never bumps the version.
-  Tasks without a docs writer behave as before.
+  spec author writes the goal, requirements, design (files to change, interfaces, risks),
+  out-of-scope items and criteria to `docs/specs/<id>-<title>.md` and commits it, changing
+  nothing else (the task stops if it does). Every later agent is told to read that file.
+  The discussion now also asks for concrete requirements and a short design, not only
+  criteria. Tasks created with criteria and no discussion have no spec file.
+- **The implementer keeps the docs in step.** For a task with a spec file, the implementer
+  is told to update the README, the changelog entry and any docs the change makes wrong in
+  the same work, and the reviewer checks that they are.
 - **An optional tester.** Pick a tester (`--tester`, `--tester-model`, the **Tester** menu,
   `hb models --tester`) and each finished step of a single task goes to it before review.
   It writes the missing tests, runs the suite and commits the tests. Failures go back to the
   implementer, and a pass goes on to the reviewer. It may only change test files; if it
   changes anything else the task stops. Tasks without a tester behave as before.
-- **An optional designer.** Pick a designer (`--designer`, `--designer-model`, the
-  **Designer** menu, `hb models --designer`) and a single task gets a short read-only design
-  note after its criteria are settled. The implementer and the reviewer are given the note.
-  Nothing needs your approval, and tasks without a designer behave as before.
 - **A spec author for the acceptance criteria.** The read-only discussion that agrees on
   what "done" means can now be run by its own agent and model (`--spec`, `--spec-model`,
   the **Spec author** menu, `hb models --spec`). It defaults to the implementer, so existing
   tasks behave as before. With a different agent, the implementer starts a new session from
   the approved criteria instead of continuing the discussion.
-
 - **Codex support.** Add a profile with `"provider": "codex"` to `config.json` and pick it
   as a task's implementer or reviewer, so Claude and Codex can check each other's work.
   Codex runs through `codex exec` on your ChatGPT sign-in. It does not report its context

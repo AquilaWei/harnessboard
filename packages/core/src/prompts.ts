@@ -152,11 +152,14 @@ export function loopSessionPrompt(
 /** Heading the discussion session puts its proposed criteria under; see {@link parseCriteria}. */
 export const CRITERIA_HEADING = '## Acceptance criteria';
 
+/** Told to the implementer of a task with a spec file; the reviewer checks it. */
+export const DOCS_DUTY =
+  'Keep the README, the changelog entry for unreleased changes and any docs the change makes wrong in step with it, in the same work.';
+
 /** The task as every implementer and reviewer sees it: the request plus agreed criteria. */
 export function taskGoal(
   prompt: string,
   acceptance: string | null,
-  design: string | null = null,
   specPath: string | null = null,
 ): string {
   const lines = [prompt];
@@ -165,6 +168,8 @@ export function taskGoal(
       '',
       `The spec agreed with the user is committed in \`${specPath}\`. Read it first; it is the`,
       'reference for what to build.',
+      '',
+      DOCS_DUTY,
     );
   }
   if (acceptance) {
@@ -174,28 +179,7 @@ export function taskGoal(
       acceptance,
     );
   }
-  if (design) lines.push('', 'Design note, written for this task before the work started:', design);
   return lines.join('\n');
-}
-
-/** First and only session of the designer: a read-only note the implementer will be given. */
-export function designPrompt(goal: string): string {
-  return [
-    'Before the work below is built, write a short design for it.',
-    'This session is read-only: study the repository, but do not change anything.',
-    '',
-    `Task:\n${goal}`,
-    '',
-    'Reply with the design note only, in this shape:',
-    '## Approach',
-    '- How the change fits the existing code, in a few lines.',
-    '## Changes',
-    '- One line per file or module to change, and what changes in it.',
-    '## Risks',
-    '- Interfaces, data or behaviour that could break, and how to check them.',
-    '',
-    'Keep it short and concrete. Do not write the implementation.',
-  ].join('\n');
 }
 
 /**
@@ -216,6 +200,9 @@ export function criteriaPrompt(request: string, draft: string | null): string {
     '## Requirements',
     '- What to build and how it should behave, concretely: inputs, outputs, edge cases,',
     '  constraints, and what is out of scope.',
+    '## Design',
+    '- How the change fits the existing code: the files or modules to change and what changes',
+    '  in each, interfaces that must stay compatible, and risks. A few lines.',
     CRITERIA_HEADING,
     '- One concrete, observable check per line (behaviour, tests that pass, edge cases',
     '  handled). Prefer checks a test or a command can show.',
@@ -345,7 +332,8 @@ export function specFilePrompt(
   lines.push(
     '',
     'Write the file in Markdown with these sections: Goal, Requirements (the decisions made in',
-    'the discussion, concrete), Out of scope, Acceptance criteria (exactly as approved above).',
+    'the discussion, concrete), Design (files to change, interfaces, risks), Out of scope,',
+    'Acceptance criteria (exactly as approved above).',
     'Another agent will build from this file without having seen the discussion, so include',
     'every decision the user made. Keep it short.',
     `Then commit only that file with the message \`docs: add spec for ${request.split('\n')[0]!.slice(0, 50)}\`.`,

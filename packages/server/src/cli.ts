@@ -96,12 +96,8 @@ function withTaskOptions(command: Command): Command {
       'agent profile that writes the acceptance criteria (default: implementer)',
     )
     .option('--spec-model <model>', 'model for the spec author')
-    .option('--designer <agent>', 'agent profile that writes a design note before the work starts')
-    .option('--designer-model <model>', 'model for the designer')
     .option('--tester <agent>', 'agent profile that writes and runs tests for each finished step')
     .option('--tester-model <model>', 'model for the tester')
-    .option('--docs <agent>', 'agent profile that updates the docs after each step')
-    .option('--docs-model <model>', 'model for the docs writer')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--reviewer-model <model>', 'model for the reviewer')
     .option('--no-queue', 'leave the task in the backlog');
@@ -125,12 +121,8 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
       autoApprove: o.autoApprove,
       spec: o.spec,
       specModel: o.specModel,
-      design: o.designer,
-      designModel: o.designerModel,
       tester: o.tester,
       testerModel: o.testerModel,
-      docs: o.docs,
-      docsModel: o.docsModel,
       reviewer: o.reviewer === 'none' ? null : o.reviewer,
       implementerModel: o.model,
       reviewerModel: o.reviewerModel,
@@ -392,12 +384,8 @@ program
   .option('--model <model>', 'implementer model, or "default" for the profile model')
   .option('--spec <agent>', 'spec author profile, or "implementer" to let the implementer write it')
   .option('--spec-model <model>', 'spec author model, or "default" for the profile model')
-  .option('--designer <agent>', 'designer profile, or "none" to skip the design note')
-  .option('--designer-model <model>', 'designer model, or "default" for the profile model')
   .option('--tester <agent>', 'tester profile, or "none" to skip testing')
   .option('--tester-model <model>', 'tester model, or "default" for the profile model')
-  .option('--docs <agent>', 'docs writer profile, or "none" to skip the docs step')
-  .option('--docs-model <model>', 'docs writer model, or "default" for the profile model')
   .option('--reviewer <agent>', 'reviewer profile, or "none"')
   .option('--reviewer-model <model>', 'reviewer model, or "default" for the profile model')
   .action(async (id: number, o: ModelsOptions) => {
@@ -407,12 +395,8 @@ program
       implementerModel: model(o.model),
       spec: o.spec === undefined ? undefined : o.spec === 'implementer' ? null : o.spec,
       specModel: model(o.specModel),
-      design: o.designer === undefined ? undefined : o.designer === 'none' ? null : o.designer,
-      designModel: model(o.designerModel),
       tester: o.tester === undefined ? undefined : o.tester === 'none' ? null : o.tester,
       testerModel: model(o.testerModel),
-      docs: o.docs === undefined ? undefined : o.docs === 'none' ? null : o.docs,
-      docsModel: model(o.docsModel),
       reviewer: o.reviewer === undefined ? undefined : o.reviewer === 'none' ? null : o.reviewer,
       reviewerModel: model(o.reviewerModel),
     });
@@ -425,10 +409,8 @@ program
         ? `spec         ${a.spec}  ${shown(a.specModel)}`
         : `spec         ${t('sameAsImplementer')}`,
     );
-    console.log(`designer     ${a.design ?? '-'}  ${a.design ? shown(a.designModel) : ''}`);
     console.log(`implementer  ${a.implementer}  ${shown(a.implementerModel)}`);
     console.log(`tester       ${a.tester ?? '-'}  ${a.tester ? shown(a.testerModel) : ''}`);
-    console.log(`docs         ${a.docs ?? '-'}  ${a.docs ? shown(a.docsModel) : ''}`);
     console.log(`reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel) : ''}`);
   });
 
@@ -638,12 +620,8 @@ interface AddOptions {
   reviewerModel?: string;
   spec?: string;
   specModel?: string;
-  designer?: string;
-  designerModel?: string;
   tester?: string;
   testerModel?: string;
-  docs?: string;
-  docsModel?: string;
   queue: boolean;
 }
 
@@ -651,12 +629,8 @@ interface ModelsOptions {
   model?: string;
   spec?: string;
   specModel?: string;
-  designer?: string;
-  designerModel?: string;
   tester?: string;
   testerModel?: string;
-  docs?: string;
-  docsModel?: string;
   reviewer?: string;
   reviewerModel?: string;
 }

@@ -35,14 +35,13 @@ profiles.
     discussion runs read-only. After approval the same role writes the agreed spec to
     `docs/specs/<id>-<title>.md` and commits it (edit access; `spec_written` event). The
     harness stops the task if anything else changed, and commits the file itself when the
-    author left it uncommitted. `Workflow.goal()` tells later agents to read the file. `task.agents.spec` is optional; without it the implementer plays this role.
-    When the same agent plays both roles the spec-writing session is also what the implementer
+    author left it uncommitted. `Workflow.goal()` tells later agents to read the file.
+    The proposal also carries a short design (files, interfaces, risks), which goes into the
+    file, so there is no separate designer. `task.agents.spec` is optional; without it the
+    implementer plays this role. When the same agent plays both roles the spec-writing session is also what the implementer
     resumes; otherwise the implementer starts a new session from the approved criteria.
-  - `design`: optional, single tasks only. After the spec is settled, one read-only session
-    writes a design note, stored as the `design` event. `Workflow.goal()` adds the note to
-    the prompts of the implementer and the reviewer. It has no human gate, and it runs once;
-    the implementer then starts a new session, never a continuation of the designer's.
-  - `implementer`: edits files and commits.
+  - `implementer`: edits files and commits. For a task with a spec file it is also told to
+    keep the README, changelog and docs in step (`DOCS_DUTY`), and the reviewer checks that.
   - `tester`: optional, single tasks only. After an implementer step, one session with edit
     access writes the missing tests, runs them and commits them, then answers
     `TESTS: PASS` or `TESTS: FAIL`. Events: `test_request`, `test_report`. A failure is
@@ -50,11 +49,6 @@ profiles.
     against `maxReviewRounds`; a pass sends the step on to the reviewer. The harness checks
     the files changed since the request (`changedPaths`) and stops the task if any is not a
     test path (`isTestPath`).
-  - `docs`: optional, single tasks only. After the tester passed a step (or straight after
-    the implementer without one) one session with edit access updates the README, changelog
-    and `docs/` and commits. Events: `docs_request`, `docs_done`. It must change only
-    documentation paths (`isDocPath`), checked like the tester's; a step it already
-    documented (same HEAD, clean worktree) is not sent again.
   - `reviewer`: checks the implementer's latest step. It runs read-only and must answer
     with `VERDICT: APPROVE` or `VERDICT: CHANGES`.
 
@@ -71,13 +65,14 @@ implementer step done ──► review_request ──► reviewer session (read-
                                                      or files changed → a human
 ```
 
-For a single task the optional roles slot in before the reviewer, in this order:
+For a single task the roles run in this order:
 
 ```
-spec ─► spec file ─► design ─► implementer ─► tester ─► docs ─► reviewer
+spec ─► spec file ─► implementer ─► tester ─► reviewer
 ```
 
-Each role other than the implementer is off unless the task names an agent for it. A
+The tester is off unless the task names an agent for it; the spec author defaults to the
+implementer, and the reviewer to `defaultReviewer`. A
 failing test report or a `CHANGES` verdict returns to the implementer, and the step then
 passes through the later roles again.
 

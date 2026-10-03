@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
-import { parseCriteria, parseQuestions, taskGoal } from '../src/prompts.js';
+import {
+  criteriaPrompt,
+  parseCriteria,
+  parseQuestions,
+  specFilePrompt,
+  taskGoal,
+} from '../src/prompts.js';
 import { reviewPrompt } from '../src/review.js';
 
 describe('parseCriteria', () => {
@@ -78,11 +84,61 @@ describe('taskGoal', () => {
   });
 });
 
+describe('taskGoal with a spec file', () => {
+  it('points the agent at the committed spec', () => {
+    expect(taskGoal('Add a greeting', null, 'docs/specs/001-x.md')).toContain(
+      'committed in `docs/specs/001-x.md`. Read it first',
+    );
+  });
+
+  it('asks the agent to keep the docs in step with the change', () => {
+    expect(taskGoal('Add a greeting', null, 'docs/specs/001-x.md')).toContain(
+      'Keep the README, the changelog entry',
+    );
+  });
+
+  it('does not mention the docs for a task without a spec file', () => {
+    expect(taskGoal('Add a greeting', '- prints hi')).not.toContain('README');
+  });
+});
+
+describe('criteriaPrompt', () => {
+  it('asks for requirements and a design as well as criteria', () => {
+    const prompt = criteriaPrompt('Add a greeting', null);
+    expect([prompt.includes('## Requirements'), prompt.includes('## Design')]).toEqual([
+      true,
+      true,
+    ]);
+  });
+});
+
+describe('specFilePrompt', () => {
+  const prompt = specFilePrompt('docs/specs/001-x.md', 'Add a greeting', '- prints hi', null);
+
+  it('names the file to write', () => {
+    expect(prompt).toContain('Create `docs/specs/001-x.md`');
+  });
+
+  it('asks for a design section in the file', () => {
+    expect(prompt).toContain('Design (files to change, interfaces, risks)');
+  });
+
+  it('includes the latest proposal for an author that does not remember it', () => {
+    expect(
+      specFilePrompt('docs/specs/001-x.md', 'Add a greeting', '- prints hi', 'My proposal'),
+    ).toContain('Your latest proposal in the discussion:\nMy proposal');
+  });
+});
+
 describe('reviewPrompt', () => {
   const request = { round: 1, since: 'abc', head: 'def', status: '' };
 
   it('asks the reviewer to check every criterion when the task has them', () => {
     expect(reviewPrompt('goal', request, null, true)).toContain('Check every acceptance criterion');
+  });
+
+  it('asks the reviewer to check that the docs are up to date', () => {
+    expect(reviewPrompt('goal', request, null)).toContain('the README, changelog and docs');
   });
 
   it('does not mention criteria when the task has none', () => {

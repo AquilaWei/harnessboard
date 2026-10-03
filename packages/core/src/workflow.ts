@@ -11,14 +11,11 @@ import {
 import type {
   AgentRole,
   CriteriaProposal,
-  DesignNote,
   FeatureSnapshot,
   MergeConflict,
   PlanProposal,
   ReviewRecord,
-  DocsRecord,
   SpecRecord,
-  DocsRequest,
   ReviewRequest,
   TestReport,
   TestRequest,
@@ -36,7 +33,6 @@ import {
   criteriaApprovedPrompt,
   criteriaPrompt,
   criteriaRevisionPrompt,
-  designPrompt,
   initializerPrompt,
   loopSessionPrompt,
   mergeConflictPrompt,
@@ -47,8 +43,6 @@ import {
   taskGoal,
 } from './prompts.js';
 import {
-  docsPrompt,
-  isDocPath,
   isTestPath,
   parseTestVerdict,
   parseVerdict,
@@ -108,17 +102,13 @@ export class Workflow {
     if (request) return this.reviewPlan(task, request, last);
     const testing = this.pendingTest(task.id);
     if (testing) return this.testPlan(task, testing, last);
-    const documenting = this.pendingDocs(task.id);
-    if (documenting) return this.docsPlan(task, documenting, last);
     const conflict = this.pendingMergeConflict(task.id);
     if (conflict) {
       const prompt = mergeConflictPrompt(this.goal(task), conflict.base, conflict.files);
       return this.implement(task, prompt);
     }
     if (this.needsSpecFile(task)) return this.specFilePlan(task, last);
-    if (this.needsDesign(task)) return this.designPlan(task);
-    // The designer's session is not the implementer's to continue.
-    if (!last || last.role === 'design') return this.implement(task, this.firstPrompt(task));
+    if (!last) return this.implement(task, this.firstPrompt(task));
     const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
     if (feedback !== null) return this.revisePlan(task, feedback, last);
     if (this.justSpecced(task)) return this.startAfterDiscussion(task, last);
@@ -138,9 +128,7 @@ export class Workflow {
     const reviewer = task.agents.reviewer;
     if (reviewer && this.pendingReview(task.id)) return reviewer;
     if (task.agents.tester && this.pendingTest(task.id)) return task.agents.tester;
-    if (task.agents.docs && this.pendingDocs(task.id)) return task.agents.docs;
     if (this.needsSpecFile(task)) return roleAgent(task.agents, 'spec')!;
-    if (this.needsDesign(task)) return task.agents.design!;
     return this.activeAgent(task);
   }
 
@@ -165,12 +153,10 @@ export class Workflow {
   /** The phase a planned session works in. */
   phaseOf(task: Task, plan: SessionPlan): TaskActivity {
     if (plan.role === 'reviewer') return { phase: 'reviewing', agentId: plan.agentId };
-    if (plan.role === 'design') return { phase: 'designing', agentId: plan.agentId };
     if (plan.role === 'spec' && plan.access === 'edit') {
       return { phase: 'writingSpec', agentId: plan.agentId };
     }
     if (plan.role === 'tester') return { phase: 'testing', agentId: plan.agentId };
-    if (plan.role === 'docs') return { phase: 'documenting', agentId: plan.agentId };
     // Planning lasts until the plan is approved, including revisions after feedback.
     const planning =
       this.inPlanning(task) ||
@@ -242,27 +228,6 @@ export class Workflow {
     return open.sort((a, b) => b.id - a.id)[0]?.text ?? null;
   }
 
-  /** The docs update waiting to happen: the step was sent to the docs writer and not yet documented. */
-  pendingDocs(taskId: number): DocsRequest | null {
-    const request = this.host.store.lastEvent(taskId, 'docs_request');
-    const done = this.host.store.lastEvent(taskId, 'docs_done');
-    if (!request || (done && done.id > request.id)) return null;
-    return request.data as DocsRequest;
-  }
-
-  private docsPlan(task: Task, request: DocsRequest, last: Session | undefined): SessionPlan {
-    const writer = task.agents.docs!;
-    const resumable =
-      last?.role === 'docs' &&
-      last.endReason !== 'completed' &&
-      last.agentSessionId !== null &&
-      last.contextTokens > 0 &&
-      this.hasBudget(task, last);
-    const base = { role: 'docs', agentId: writer, access: 'edit' } as const;
-    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
-    return { ...base, resume: null, prompt: docsPrompt(this.goal(task), request.since) };
-  }
-
   private testReports(taskId: number): TestReport[] {
     return this.host.store.eventsOfKind(taskId, 'test_report').map((e) => e.data as TestReport);
   }
@@ -301,30 +266,9 @@ export class Workflow {
     );
   }
 
-  /** The task as the agents are given it: the request plus any agreed criteria and design. */
+  /** The task as the agents are given it: the request plus any agreed criteria and spec file. */
   private goal(task: Task): string {
-    const design = this.host.store.lastEvent(task.id, 'design')?.data as DesignNote | undefined;
-    return taskGoal(task.prompt, task.acceptance, design?.text ?? null, this.specFile(task.id));
-  }
-
-  /** A single task with a designer, past its spec discussion, that has no design note yet. */
-  private needsDesign(task: Task): boolean {
-    return (
-      task.mode === 'single' &&
-      !!task.agents.design &&
-      !this.discussing(task) &&
-      !this.host.store.lastEvent(task.id, 'design')
-    );
-  }
-
-  private designPlan(task: Task): SessionPlan {
-    return {
-      role: 'design',
-      agentId: task.agents.design!,
-      access: 'readOnly',
-      resume: null,
-      prompt: designPrompt(this.goal(task)),
-    };
+    return taskGoal(task.prompt, task.acceptance, this.specFile(task.id));
   }
 
   private firstPrompt(task: Task): string {
@@ -563,16 +507,8 @@ export class Workflow {
       await this.finishSpecFile(task, outcome);
       return;
     }
-    if (plan.role === 'design') {
-      this.finishDesign(task, outcome);
-      return;
-    }
     if (plan.role === 'tester') {
       await this.finishTest(task, plan, outcome);
-      return;
-    }
-    if (plan.role === 'docs') {
-      await this.finishDocs(task, plan, outcome);
       return;
     }
     switch (outcome.reason) {
@@ -588,29 +524,6 @@ export class Workflow {
       default:
         this.interrupted(task, outcome);
     }
-  }
-
-  /** Keeps the designer's reply for the sessions after it; the task then goes on unasked. */
-  private finishDesign(task: Task, outcome: SessionOutcome): void {
-    if (outcome.reason !== 'completed') {
-      if (outcome.reason === 'handoff' || outcome.reason === 'context_hard_limit') {
-        this.host.notice(task.id, 'the designer ran out of context before it finished');
-        this.host.setStatus(task.id, 'failed');
-      } else {
-        this.interrupted(task, outcome);
-      }
-      return;
-    }
-    const text = outcome.finalText.trim();
-    if (!text) {
-      this.host.notice(task.id, 'the designer finished without writing a design');
-      this.host.setStatus(task.id, 'failed');
-      return;
-    }
-    const note: DesignNote = { text };
-    this.host.store.appendEvent(task.id, null, 'design', note);
-    this.host.notice(task.id, `design note written by ${task.agents.design}`);
-    this.host.setStatus(task.id, 'queued');
   }
 
   /** Nothing is changed until the user approves the criteria or replies to them. */
@@ -656,7 +569,7 @@ export class Workflow {
    */
   private async stepDone(task: Task): Promise<void> {
     if (task.agents.tester && task.mode === 'single') await this.requestTest(task);
-    else await this.afterTests(task);
+    else await this.requestReview(task);
   }
 
   /** Commit the next review or test of a step is measured from. */
@@ -676,7 +589,7 @@ export class Workflow {
     const last = reports.at(-1);
     if (last && last.head === head && status === '') {
       if (last.verdict === 'pass') {
-        await this.afterTests(task);
+        await this.requestReview(task);
       } else {
         this.host.notice(task.id, 'no new commits since the tester reported failures');
         this.host.setStatus(task.id, 'review');
@@ -725,7 +638,7 @@ export class Workflow {
     record(verdict, findings, head);
     if (verdict === 'pass') {
       this.host.notice(task.id, `${plan.agentId} passed round ${request.round}`);
-      await this.afterTests(task);
+      await this.requestReview(task);
     } else if (verdict === null) {
       this.host.notice(task.id, 'tester gave no verdict line; needs a human');
       this.host.setStatus(task.id, 'review');
@@ -760,58 +673,6 @@ export class Workflow {
     );
     const changed = await changedPaths(dir, request.head);
     return changed.filter((file) => !before.has(file) && !allowed(file));
-  }
-
-  /** What follows a step the tester passed (or that has no tester): docs, then review. */
-  private async afterTests(task: Task): Promise<void> {
-    if (task.agents.docs && task.mode === 'single') await this.requestDocs(task);
-    else await this.requestReview(task);
-  }
-
-  /** Sends the step to the docs writer once; a step it already documented goes straight on. */
-  private async requestDocs(task: Task): Promise<void> {
-    const dir = task.worktreePath!;
-    const [head, status] = await Promise.all([headCommit(dir), porcelainStatus(dir)]);
-    const last = this.host.store.lastEvent(task.id, 'docs_done')?.data as DocsRecord | undefined;
-    if (last && last.head === head && status === '') {
-      await this.requestReview(task);
-      return;
-    }
-    const request: DocsRequest = { since: await this.stepBase(task), head, status };
-    this.host.store.appendEvent(task.id, null, 'docs_request', request);
-    this.host.notice(task.id, `sent to ${task.agents.docs} to update the docs`);
-    this.host.setStatus(task.id, 'queued');
-  }
-
-  private async finishDocs(task: Task, plan: SessionPlan, outcome: SessionOutcome): Promise<void> {
-    const request = this.pendingDocs(task.id)!;
-    if (outcome.reason === 'context_hard_limit' || outcome.reason === 'handoff') {
-      this.host.notice(task.id, 'the docs writer ran out of context; needs a human');
-      this.host.setStatus(task.id, 'review');
-      return;
-    }
-    if (outcome.reason !== 'completed') {
-      this.interrupted(task, outcome); // the docs update stays pending and starts again
-      return;
-    }
-    const dir = task.worktreePath!;
-    const stray = await this.changesOutside(dir, request, isDocPath);
-    if (stray.length > 0) {
-      this.host.notice(
-        task.id,
-        `the docs writer changed files that are not docs: ${stray.join(', ')}; stopping for a human`,
-      );
-      this.host.setStatus(task.id, 'failed');
-      return;
-    }
-    const record: DocsRecord = {
-      agentId: plan.agentId,
-      summary: outcome.finalText.trim(),
-      head: await headCommit(dir),
-    };
-    this.host.store.appendEvent(task.id, null, 'docs_done', record);
-    this.host.notice(task.id, `${plan.agentId} updated the docs`);
-    await this.requestReview(task);
   }
 
   /** Sends new commits to the reviewer, or moves on when there is none. */

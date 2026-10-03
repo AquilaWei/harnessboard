@@ -32,12 +32,8 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
       reviewerModel: a.reviewerModel ?? null,
       spec: a.spec ?? null,
       specModel: a.specModel ?? null,
-      design: a.design ?? null,
-      designModel: a.designModel ?? null,
       tester: a.tester ?? null,
       testerModel: a.testerModel ?? null,
-      docs: a.docs ?? null,
-      docsModel: a.docsModel ?? null,
     });
     api.agents().then(setAgents, (e: Error) => onError(e.message));
   };
@@ -63,18 +59,11 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
           {t('fields.spec')}: {a.spec ? `${a.spec} · ${model(a.specModel)}` : t('form.specSame')}
         </span>
         <span className="mono">
-          {t('fields.design')}:{' '}
-          {a.design ? `${a.design} · ${model(a.designModel)}` : t('fields.none')}
-        </span>
-        <span className="mono">
           {a.implementer} · {model(a.implementerModel)}
         </span>
         <span className="mono">
           {t('fields.tester')}:{' '}
           {a.tester ? `${a.tester} · ${model(a.testerModel)}` : t('fields.none')}
-        </span>
-        <span className="mono">
-          {t('fields.docs')}: {a.docs ? `${a.docs} · ${model(a.docsModel)}` : t('fields.none')}
         </span>
         <span className="mono">
           {a.reviewer

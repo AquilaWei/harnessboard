@@ -8,8 +8,6 @@ import type {
   ChatQueued,
   ContextView,
   CriteriaApproval,
-  DesignNote,
-  DocsRecord,
   SpecRecord,
   TestReport,
   CriteriaProposal,
@@ -199,9 +197,7 @@ export function timeline(taskId: number, store: Store): TimelineEntry[] {
     'plan_approved',
     'criteria',
     'criteria_approved',
-    'design',
     'test_report',
-    'docs_done',
     'spec_written',
     'chat_message',
     'merge_conflict',
@@ -229,9 +225,7 @@ function timelineEvent(
     | 'plan_approved'
     | 'criteria'
     | 'criteria_approved'
-    | 'design'
     | 'test_report'
-    | 'docs_done'
     | 'spec_written'
     | 'chat_message'
     | 'merge_conflict'
@@ -260,12 +254,8 @@ function timelineEvent(
       return { kind, ts, proposal: data as CriteriaProposal };
     case 'criteria_approved':
       return { kind, ts, approval: data as CriteriaApproval };
-    case 'design':
-      return { kind, ts, note: data as DesignNote };
     case 'test_report':
       return { kind, ts, report: data as TestReport };
-    case 'docs_done':
-      return { kind, ts, docs: data as DocsRecord };
     case 'spec_written':
       return { kind, ts, spec: data as SpecRecord };
     case 'chat_message':

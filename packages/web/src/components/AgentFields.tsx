@@ -12,15 +12,9 @@ export interface AgentChoice {
   /** Writes the acceptance criteria; `null` lets the implementer do it. */
   spec: string | null;
   specModel: string | null;
-  /** Writes a design note before the implementer starts; `null` skips it. */
-  design: string | null;
-  designModel: string | null;
   /** Tests each finished step before review; `null` skips testing. */
   tester: string | null;
   testerModel: string | null;
-  /** Updates the docs after each step, before review; `null` skips it. */
-  docs: string | null;
-  docsModel: string | null;
 }
 
 interface Props {
@@ -70,29 +64,6 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
       <small className="hint">{t('form.specHint')}</small>
       <div className="row">
         <label className="field">
-          <span>{t('form.design')}</span>
-          <select
-            value={value.design ?? ''}
-            disabled={lockAgents}
-            onChange={(e) => set({ design: e.target.value || null, designModel: null })}
-          >
-            <option value="">{t('form.designNone')}</option>
-            {options}
-          </select>
-        </label>
-        {value.design && (
-          <ModelPicker
-            key={`design-${value.design}`}
-            label={t('form.designModel')}
-            agent={byId(value.design)}
-            value={value.designModel}
-            onChange={(designModel) => set({ designModel })}
-          />
-        )}
-      </div>
-      <small className="hint">{t('form.designHint')}</small>
-      <div className="row">
-        <label className="field">
           <span>{t('form.implementer')}</span>
           {/* A model belongs to a provider, so switching profile resets it. */}
           <select
@@ -134,29 +105,6 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
         )}
       </div>
       <small className="hint">{t('form.testerHint')}</small>
-      <div className="row">
-        <label className="field">
-          <span>{t('form.docs')}</span>
-          <select
-            value={value.docs ?? ''}
-            disabled={lockAgents}
-            onChange={(e) => set({ docs: e.target.value || null, docsModel: null })}
-          >
-            <option value="">{t('form.docsNone')}</option>
-            {options}
-          </select>
-        </label>
-        {value.docs && (
-          <ModelPicker
-            key={`docs-${value.docs}`}
-            label={t('form.docsModel')}
-            agent={byId(value.docs)}
-            value={value.docsModel}
-            onChange={(docsModel) => set({ docsModel })}
-          />
-        )}
-      </div>
-      <small className="hint">{t('form.docsHint')}</small>
       <div className="row">
         <label className="field">
           <span>{t('form.reviewer')}</span>
