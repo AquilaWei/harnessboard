@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Synthetic stream-json lines shaped like real Claude Code output (docs/stream-json-notes.md).
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,7 +101,7 @@ export const featureList = (...passes: boolean[]) =>
   );
 
 export function tempDir(prefix: string): string {
-  return mkdtempSync(path.join(tmpdir(), `hb-${prefix}-`));
+  return mkdtempSync(path.join(realpathSync(tmpdir()), `hb-${prefix}-`));
 }
 
 /** A git repository with one commit on `main`. */

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
@@ -15,7 +15,7 @@ let app: Hono;
 let repo: string;
 
 beforeEach(() => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'hb-api-'));
+  const dir = mkdtempSync(path.join(realpathSync(tmpdir()), 'hb-api-'));
   repo = path.join(dir, 'repo');
   execFileSync('git', ['init', '-q', '-b', 'main', repo]);
   writeFileSync(path.join(repo, 'a.txt'), 'a\n');
