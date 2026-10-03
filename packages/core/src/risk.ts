@@ -15,6 +15,11 @@ const SYSTEM_DIRS = [
   '/sys',
   '/proc',
   '/dev',
+  // Windows: compared without the drive letter and case, see `comparable`.
+  '/windows',
+  '/program files',
+  '/program files (x86)',
+  '/programdata',
 ];
 
 /** Home-directory entries holding credentials or the user's own tool setup. */
@@ -117,7 +122,19 @@ function isProtectedPath(file: string, worktree: string): boolean {
 }
 
 function isSystemPath(resolved: string): boolean {
-  return SYSTEM_DIRS.some((dir) => isInside(resolved, dir));
+  const file = comparable(resolved);
+  return SYSTEM_DIRS.some((dir) => file === dir || file.startsWith(`${dir}/`));
+}
+
+/**
+ * `resolved` with forward slashes, no drive letter and in lower case, so one list matches on
+ * every OS: on Windows `/etc` resolves to `C:\etc` and system folders differ only in case.
+ */
+function comparable(resolved: string): string {
+  return resolved
+    .replace(/\\/g, '/')
+    .replace(/^[a-z]:/i, '')
+    .toLowerCase();
 }
 
 function isInside(file: string, dir: string): boolean {

@@ -132,6 +132,25 @@ describe('riskOf for system paths', () => {
   });
 });
 
+// Windows paths only resolve as absolute on Windows; CI runs these on its Windows runners.
+describe.runIf(process.platform === 'win32')('riskOf for Windows system folders', () => {
+  it('asks before writing into the Windows folder', () => {
+    expect(riskOf('Write', { file_path: 'C:\\Windows\\System32\\drivers\\etc\\hosts' }, WT)).toBe(
+      'writes to a system or credentials path',
+    );
+  });
+
+  it('asks before writing into Program Files', () => {
+    expect(riskOf('Edit', { file_path: 'C:\\Program Files\\Git\\etc\\profile' }, WT)).toBe(
+      'writes to a system or credentials path',
+    );
+  });
+
+  it('asks before deleting the Windows folder', () => {
+    expect(bash('rm -rf C:/Windows')).toBe('deletes the system or your home directory');
+  });
+});
+
 describe('riskOf for other tools', () => {
   it('allows an MCP tool', () => {
     expect(riskOf('mcp__github__create_issue', {}, WT)).toBeNull();

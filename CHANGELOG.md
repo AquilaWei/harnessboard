@@ -5,6 +5,12 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Fixed
+
+- On Windows, writes to system folders (`C:\Windows`, `Program Files`, `ProgramData`) and
+  to Unix-style paths such as `/etc` now ask you first, as they do on Linux and macOS.
+  Before, these checks never matched on Windows.
+
 ## 0.0.12 - 2026-10-03
 
 ### Fixed
