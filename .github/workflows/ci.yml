@@ -1,9 +1,9 @@
 name: CI
 
+# Runs only when a version tag is pushed, so a release is never published on red.
 on:
   push:
-    branches: [main]
-  pull_request:
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -22,6 +22,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
+          # Corepack provides pnpm only after this step; the packageManager field would
+          # otherwise make setup-node look for pnpm to cache and fail.
+          package-manager-cache: false
       # Installs the pnpm version pinned in package.json's packageManager field.
       - run: npm install --global corepack@latest && corepack enable
       - run: pnpm install --frozen-lockfile
