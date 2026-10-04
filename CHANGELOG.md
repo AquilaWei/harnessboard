@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.18 - 2026-10-04
+
 ### Added
 
 - **Reviewers follow your coding rules.** List rule files in `reviewGuidelines` (config file
