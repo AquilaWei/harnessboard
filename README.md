@@ -93,7 +93,8 @@ in its own window. **Click the icon and the board is there.**
 
 - **Download:** every version has installers on the
   [Releases](https://github.com/AquilaWei/harnessboard/releases) page, with a
-  `SHA256SUMS.txt` to check them against.
+  `SHA256SUMS.txt` to check them against. A downloaded AppImage needs `chmod +x` before it
+  runs.
 - **Or build them yourself:** see [Building the installers](#building-the-installers)
   below.
 - **Builds:** AppImage and .deb on Linux, .dmg (Intel and Apple silicon) on macOS, an
@@ -113,29 +114,79 @@ in its own window. **Click the icon and the board is there.**
 
 ### Building the installers
 
-Each OS builds only its own installers: a .dmg needs a Mac, an .exe needs Windows. You need
-the [Requirements](#requirements) above and a clone of this repository.
+Each OS builds only its own installers: a .dmg needs a Mac, an .exe needs Windows. CI runs
+the same steps on all three for every version tag. The files land in
+**`packages/desktop/release/`**, named after the version (`Harnessboard-0.0.19-…`).
+
+**Every OS first needs:** Node.js ≥ 22.13, Git, and a clone of this repository. If
+`corepack` is missing (it is no longer bundled from Node 25 on), install it with
+`npm install --global corepack@latest`. After pulling changes, run `pnpm build` again before
+`dist`: it packages what the last build produced. The first `dist` downloads Electron
+(~100 MB).
+
+#### Linux: Ubuntu / Debian
 
 ```bash
-corepack enable                               # provides the pinned pnpm version
+corepack enable
 pnpm install && pnpm build
-pnpm --filter @harnessboard/desktop dist      # every installer for this OS; the first run downloads Electron (~100 MB)
-pnpm --filter @harnessboard/desktop dist --linux AppImage   # or just one kind
+pnpm --filter @harnessboard/desktop dist      # → .AppImage and .deb
+V=$(node -p "require('./packages/server/package.json').version")
+sudo apt install ./packages/desktop/release/Harnessboard-$V-linux-amd64.deb
 ```
 
-The files land in **`packages/desktop/release/`**, named after the version, for example
-`Harnessboard-0.0.19-linux-x86_64.AppImage`. Run `pnpm build` again after pulling changes;
-`dist` packages what the last build produced.
+- **Use the .deb here.** It adds Harnessboard to the app menu and installs what it needs.
+- The AppImage needs `libfuse2` (`libfuse2t64` on 24.04). On 24.04 it may also be stopped by
+  the AppArmor sandbox rules, which the .deb is not.
 
-| OS      | File                               | Install                                                                |
-| ------- | ---------------------------------- | ---------------------------------------------------------------------- |
-| Linux   | `…-linux-x86_64.AppImage`          | `chmod +x` it and run it. Ubuntu 22.04 and later also need `libfuse2`. |
-| Linux   | `…-linux-amd64.deb`                | `sudo apt install ./Harnessboard-…-linux-amd64.deb`                    |
-| macOS   | `…-mac-arm64.dmg`, `…-mac-x64.dmg` | Open it and drag Harnessboard to Applications.                         |
-| Windows | `…-win-x64.exe`                    | Run it and follow the steps; it installs for your user only.           |
+#### Linux: Fedora
 
-The .deb is built with `fpm`, which electron-builder downloads. On distributions without
-`libcrypt.so.1` (recent Fedora) it fails; build the AppImage alone there, as above.
+```bash
+corepack enable
+pnpm install && pnpm build
+pnpm --filter @harnessboard/desktop dist --linux AppImage   # → .AppImage only
+V=$(node -p "require('./packages/server/package.json').version")
+./packages/desktop/release/Harnessboard-$V-linux-x86_64.AppImage
+```
+
+- **Build the AppImage alone.** A .deb is of no use on Fedora, and building one fails with
+  `libcrypt.so.1: cannot open shared object file`, because the downloaded `fpm` needs a
+  library Fedora does not install. The AppImage is already done when that happens.
+- Move the AppImage wherever you keep programs (for example `~/Applications`) and start it
+  from there.
+
+#### macOS
+
+```bash
+xcode-select --install                        # Git and the build tools, if not installed yet
+corepack enable
+pnpm install && pnpm build
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @harnessboard/desktop dist   # → two .dmg
+V=$(node -p "require('./packages/server/package.json').version")
+open packages/desktop/release/Harnessboard-$V-mac-arm64.dmg   # Apple silicon; -mac-x64 for Intel
+```
+
+- Drag **Harnessboard** to **Applications**.
+- `CSC_IDENTITY_AUTO_DISCOVERY=false` keeps electron-builder from signing with a developer
+  certificate it finds in your keychain; the build is signed ad hoc, as the released one is.
+
+#### Windows
+
+In PowerShell, with [Git for Windows](https://git-scm.com/download/win) installed:
+
+```powershell
+corepack enable                               # run PowerShell as administrator for this line
+pnpm install; pnpm build
+pnpm --filter @harnessboard/desktop dist      # → .exe installer
+$V = node -p "require('./packages/server/package.json').version"
+.\packages\desktop\release\Harnessboard-$V-win-x64.exe
+```
+
+- `corepack enable` writes into the Node.js folder, so it needs an administrator
+  PowerShell once; the other lines do not.
+- The installer installs for your user only and lets you pick the folder.
+
+Only the Fedora steps have been run on a real machine so far. The Ubuntu, macOS and Windows
+steps are what CI runs.
 
 ## Acceptance criteria: agree first
 

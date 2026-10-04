@@ -84,7 +84,7 @@ hb done 1                            # 標記為已審核完成
 
 - **下載**：每個版本的安裝檔都放在
   [Releases](https://github.com/AquilaWei/harnessboard/releases) 頁面，附有
-  `SHA256SUMS.txt` 可以核對。
+  `SHA256SUMS.txt` 可以核對。下載的 AppImage 要先 `chmod +x` 才能執行。
 - **或自己打包**：步驟見下方的[自己打包安裝檔](#自己打包安裝檔)。
 - **安裝檔**：Linux 有 AppImage 和 .deb，macOS 有 .dmg（Intel 和 Apple 晶片），
   Windows 有安裝程式（.exe）。
@@ -104,28 +104,75 @@ hb done 1                            # 標記為已審核完成
 ### 自己打包安裝檔
 
 每個作業系統只能打包自己的安裝檔：.dmg 要在 Mac 上打包，.exe 要在 Windows 上打包。
-需要上面[需求](#需求)列的工具，以及這個 repo 的 clone。
+每次打版本 tag，CI 都會在三個平台跑同樣的步驟。檔案會放在 **`packages/desktop/release/`**，
+檔名帶版號（`Harnessboard-0.0.19-…`）。
+
+**每個作業系統都要先有**：Node.js ≥ 22.13、Git，以及這個 repo 的 clone。如果找不到
+`corepack`（Node 25 起不再內建），用 `npm install --global corepack@latest` 裝上。
+拉了新的程式碼後，打包前要再跑一次 `pnpm build`：`dist` 打包的是最後一次建置的結果。
+第一次執行 `dist` 會下載 Electron（約 100 MB）。
+
+#### Linux：Ubuntu / Debian
 
 ```bash
-corepack enable                               # 提供專案指定版本的 pnpm
+corepack enable
 pnpm install && pnpm build
-pnpm --filter @harnessboard/desktop dist      # 打包這個作業系統的所有安裝檔；第一次會下載 Electron（約 100 MB）
-pnpm --filter @harnessboard/desktop dist --linux AppImage   # 或只打包一種
+pnpm --filter @harnessboard/desktop dist      # → .AppImage 和 .deb
+V=$(node -p "require('./packages/server/package.json').version")
+sudo apt install ./packages/desktop/release/Harnessboard-$V-linux-amd64.deb
 ```
 
-檔案會放在 **`packages/desktop/release/`**，檔名帶版號，例如
-`Harnessboard-0.0.19-linux-x86_64.AppImage`。拉了新的程式碼後要再跑一次 `pnpm build`，
-`dist` 打包的是最後一次建置的結果。
+- **這裡用 .deb**：會把 Harnessboard 加到應用程式選單，並裝好需要的套件。
+- AppImage 需要 `libfuse2`（24.04 是 `libfuse2t64`）。在 24.04 上還可能被 AppArmor 的沙箱規則
+  擋下，.deb 不會。
 
-| 作業系統 | 檔案                               | 安裝方式                                                    |
-| -------- | ---------------------------------- | ----------------------------------------------------------- |
-| Linux    | `…-linux-x86_64.AppImage`          | `chmod +x` 後直接執行。Ubuntu 22.04 以後還需要 `libfuse2`。 |
-| Linux    | `…-linux-amd64.deb`                | `sudo apt install ./Harnessboard-…-linux-amd64.deb`         |
-| macOS    | `…-mac-arm64.dmg`、`…-mac-x64.dmg` | 打開後把 Harnessboard 拖到「應用程式」。                    |
-| Windows  | `…-win-x64.exe`                    | 照安裝精靈的步驟走；只安裝給你的帳號。                      |
+#### Linux：Fedora
 
-.deb 是用 electron-builder 自動下載的 `fpm` 打包的。在沒有 `libcrypt.so.1` 的發行版
-（較新的 Fedora）上會失敗，這時照上面的寫法只打包 AppImage。
+```bash
+corepack enable
+pnpm install && pnpm build
+pnpm --filter @harnessboard/desktop dist --linux AppImage   # → 只打包 .AppImage
+V=$(node -p "require('./packages/server/package.json').version")
+./packages/desktop/release/Harnessboard-$V-linux-x86_64.AppImage
+```
+
+- **只打包 AppImage。** .deb 在 Fedora 上用不到，而且打包時會停在
+  `libcrypt.so.1: cannot open shared object file`：自動下載的 `fpm` 需要 Fedora 預設沒裝的函式庫。
+  出現這個錯誤時 AppImage 已經打包好了。
+- 把 AppImage 搬到你放程式的地方（例如 `~/Applications`），從那裡執行。
+
+#### macOS
+
+```bash
+xcode-select --install                        # 還沒裝的話：Git 和建置工具
+corepack enable
+pnpm install && pnpm build
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @harnessboard/desktop dist   # → 兩個 .dmg
+V=$(node -p "require('./packages/server/package.json').version")
+open packages/desktop/release/Harnessboard-$V-mac-arm64.dmg   # Apple 晶片；Intel 用 -mac-x64
+```
+
+- 把 **Harnessboard** 拖到「應用程式」。
+- `CSC_IDENTITY_AUTO_DISCOVERY=false` 讓 electron-builder 不去用鑰匙圈裡找到的開發者憑證簽章；
+  打包出來的是 ad hoc 簽章，跟發佈的版本一樣。
+
+#### Windows
+
+在 PowerShell 裡執行，需要先裝好 [Git for Windows](https://git-scm.com/download/win)：
+
+```powershell
+corepack enable                               # 這一行要用系統管理員身分開 PowerShell
+pnpm install; pnpm build
+pnpm --filter @harnessboard/desktop dist      # → .exe 安裝程式
+$V = node -p "require('./packages/server/package.json').version"
+.\packages\desktop\release\Harnessboard-$V-win-x64.exe
+```
+
+- `corepack enable` 會寫入 Node.js 的安裝資料夾，所以要用系統管理員身分的 PowerShell 跑一次；
+  其他指令不用。
+- 安裝程式只安裝給你自己的帳號，可以選安裝資料夾。
+
+目前只有 Fedora 的步驟在實機上跑過；Ubuntu、macOS 和 Windows 的步驟是 CI 跑的那一套。
 
 ## 驗收標準：先討論再開工
 
