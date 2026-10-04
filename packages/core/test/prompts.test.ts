@@ -134,19 +134,45 @@ describe('reviewPrompt', () => {
   const request = { round: 1, since: 'abc', head: 'def', status: '' };
 
   it('asks the reviewer to check every criterion when the task has them', () => {
-    expect(reviewPrompt('goal', request, null, true)).toContain('Check every acceptance criterion');
+    expect(reviewPrompt('goal', request, { hasCriteria: true })).toContain(
+      'Check every acceptance criterion',
+    );
   });
 
   it('asks the reviewer to check that the docs are up to date', () => {
-    expect(reviewPrompt('goal', request, null)).toContain('the README, changelog and docs');
+    expect(reviewPrompt('goal', request)).toContain('the README, changelog and docs');
   });
 
   it('does not mention criteria when the task has none', () => {
-    expect(reviewPrompt('goal', request, null)).not.toContain('acceptance criterion');
+    expect(reviewPrompt('goal', request)).not.toContain('acceptance criterion');
   });
 
   it('does not mention later steps for a single task', () => {
-    expect(reviewPrompt('goal', request, null)).not.toContain('later steps');
+    expect(reviewPrompt('goal', request)).not.toContain('later steps');
+  });
+});
+
+describe('reviewPrompt with review guidelines', () => {
+  const request = { round: 1, since: 'abc', head: 'def', status: '' };
+  const guidelines = [{ file: '~/rules.md', text: '- tests contain no logic\n' }];
+  const prompt = reviewPrompt('goal', request, { guidelines });
+
+  it('quotes each file whole under its name', () => {
+    expect(prompt).toContain(
+      '===== ~/rules.md =====\n- tests contain no logic\n===== end of ~/rules.md =====',
+    );
+  });
+
+  it('makes a broken rule a required change', () => {
+    expect(prompt).toContain('Something the\nchange does that breaks a rule is a required change.');
+  });
+
+  it('asks the reviewer to follow how the rules say to review', () => {
+    expect(prompt).toContain('Where the rules say how to review');
+  });
+
+  it('says nothing about rules when there are none', () => {
+    expect(reviewPrompt('goal', request)).not.toContain('Also review against the rules');
   });
 });
 
@@ -156,7 +182,7 @@ describe('reviewPrompt for a loop step', () => {
     { id: 'F1', description: 'stops are tappable', passes: true },
     { id: 'F2', description: 'light rail', passes: false },
   ];
-  const prompt = reviewPrompt('goal', request, null, false, features);
+  const prompt = reviewPrompt('goal', request, { features });
 
   it('lists the features marked done for review', () => {
     expect(prompt).toContain(
@@ -177,7 +203,7 @@ describe('reviewPrompt for a loop step', () => {
 
   it('says so when no feature is done yet', () => {
     const none = [{ id: 'F1', description: 'stops are tappable', passes: false }];
-    expect(reviewPrompt('goal', request, null, false, none)).toContain(
+    expect(reviewPrompt('goal', request, { features: none })).toContain(
       'Features marked done, which must work and be tested:\n- (none)',
     );
   });

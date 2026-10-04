@@ -174,6 +174,13 @@ hb add "Add input validation to the signup form" --reviewer opus
 - **逐項完成的任務**：每一步只審查已標為完成的 feature，還沒輪到的不算缺失。
 - **預設審查者**：設定裡的 `defaultReviewer`（網頁設定也能改）會套用到新任務；
   單一任務可以用 `--reviewer none` 關閉審查。
+- **你的開發規範**：在 `reviewGuidelines`（設定檔或網頁設定）列出規範檔，例如
+  coding-standards skill。每次審查都會引用檔案當下的內容，違反規範就算必須修改。
+  任何 agent 都適用，Codex 也一樣：
+
+  ```json
+  { "reviewGuidelines": ["~/.claude/skills/coding-standards/SKILL.md"] }
+  ```
 
 **模型**：每個任務可以分別替執行者和審查者選模型，例如用 Haiku 實作、用 Opus 審查：
 `hb add "..." --model haiku --reviewer claude --reviewer-model opus`，或在「新增任務」對話框

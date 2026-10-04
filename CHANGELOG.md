@@ -5,6 +5,12 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Reviewers follow your coding rules.** List rule files in `reviewGuidelines` (config file
+  or the web settings), for example `~/.claude/skills/coding-standards/SKILL.md`. Every review
+  quotes them and treats a broken rule as a required change, for Claude and Codex alike.
+
 ## 0.0.17 - 2026-10-03
 
 ### Changed

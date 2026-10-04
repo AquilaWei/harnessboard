@@ -87,6 +87,12 @@ implementer, and the reviewer to `defaultReviewer`. A
 failing test report or a `CHANGES` verdict returns to the implementer, and the step then
 passes through the later roles again.
 
+`reviewGuidelines` (user config) names files with the user's rules. `reviewPlan` reads them
+for every review (`core/src/guidelines.ts`) and `reviewPrompt` quotes them whole, so the
+rules reach any agent CLI without it loading anything itself. A file that can not be read
+fails the review session rather than letting it run without the rules; saving the setting
+checks the files first.
+
 A step counts as done when a single task's session completes, or when the harness has
 verified a loop feature. `review_request` and `review` are events in the store, so a
 restart picks up exactly where the task was. A loop step's reviewer gets the latest feature

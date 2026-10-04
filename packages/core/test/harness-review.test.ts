@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Reviewer sessions against real git worktrees and the fake agent CLI.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
@@ -194,6 +194,44 @@ describe('a task a human sends back after the last allowed round', () => {
     await harness.waitForIdle();
     await runQueued();
     expect(status(task.id)).toBe('queued');
+  });
+});
+
+describe('a reviewer with review guidelines', () => {
+  it('is given the rules from the guideline file', async () => {
+    const rules = path.join(dir, 'rules.md');
+    writeFileSync(rules, '- tests contain no logic\n');
+    harness.updateSettings({ reviewGuidelines: [rules] });
+    scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
+    await createReviewed();
+    await runQueued();
+    expect(fakeRuns()[1]!.received[0]).toContain('- tests contain no logic');
+  });
+
+  it('stops the task when the file is gone by the time of the review', async () => {
+    const rules = path.join(dir, 'rules.md');
+    writeFileSync(rules, '- tests contain no logic\n');
+    harness.updateSettings({ reviewGuidelines: [rules] });
+    scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
+    const task = await createReviewed();
+    rmSync(rules);
+    await runQueued();
+    expect([status(task.id), roles(task.id)]).toEqual(['failed', ['implementer']]);
+  });
+});
+
+describe('setting review guidelines', () => {
+  it('is refused for a file that can not be read', () => {
+    const missing = path.join(dir, 'missing.md');
+    expect(() => harness.updateSettings({ reviewGuidelines: [missing] })).toThrow(
+      `review guideline ${missing} can not be read`,
+    );
+  });
+
+  it('leaves the settings unchanged when refused', () => {
+    const missing = path.join(dir, 'missing.md');
+    expect(() => harness.updateSettings({ reviewGuidelines: [missing] })).toThrow();
+    expect(harness.settings().reviewGuidelines).toEqual([]);
   });
 });
 

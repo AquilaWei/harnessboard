@@ -8,6 +8,7 @@ import type {
   Verdict,
   VerifyResult,
 } from '@harnessboard/shared';
+import type { Guideline } from './guidelines.js';
 
 export const VERDICT_APPROVE = 'VERDICT: APPROVE';
 export const VERDICT_CHANGES = 'VERDICT: CHANGES';
@@ -24,18 +25,26 @@ export function parseVerdict(reply: string): { verdict: Verdict | null; findings
   return { verdict, findings: (verdict ? rest.join('\n') : reply).trim() };
 }
 
-/**
- * First message of a reviewer session. It runs read-only in the implementer's worktree.
- * `goal` includes the task's acceptance criteria when `hasCriteria` is true. `features` is a
- * loop task's feature list: the step is judged on the features marked done, since the rest
- * are built in later steps and would otherwise be held against every step.
- */
+/** What a review is checked against besides the task itself. */
+export interface ReviewContext {
+  /** The harness's verify run of a loop step. */
+  verify?: VerifyResult | null;
+  /** True when `goal` includes acceptance criteria. */
+  hasCriteria?: boolean;
+  /**
+   * A loop task's feature list: the step is judged on the features marked done, since the
+   * rest are built in later steps and would otherwise be held against every step.
+   */
+  features?: Feature[] | null;
+  /** The user's rules (`reviewGuidelines`), checked like the task's own requirements. */
+  guidelines?: Guideline[];
+}
+
+/** First message of a reviewer session. It runs read-only in the implementer's worktree. */
 export function reviewPrompt(
   goal: string,
   request: ReviewRequest,
-  verify: VerifyResult | null,
-  hasCriteria = false,
-  features: Feature[] | null = null,
+  { verify = null, hasCriteria = false, features = null, guidelines = [] }: ReviewContext = {},
 ): string {
   const lines = [
     'You are reviewing work another agent did in this repository. You cannot edit files;',
@@ -62,12 +71,30 @@ export function reviewPrompt(
     ...(hasCriteria
       ? ['Check every acceptance criterion; one that does not hold is a required change.']
       : []),
+    ...guidelinesSection(guidelines),
     '',
     `Make the first line of your reply exactly \`${VERDICT_APPROVE}\` or \`${VERDICT_CHANGES}\`.`,
     `After ${VERDICT_CHANGES}, list each required change with the file and what to do,`,
     'most important first. Only request changes that matter; the implementer gets your list.',
   );
   return lines.join('\n');
+}
+
+/** The user's rules, quoted whole, so any agent CLI reviews by them without loading anything. */
+function guidelinesSection(guidelines: Guideline[]): string[] {
+  if (guidelines.length === 0) return [];
+  return [
+    '',
+    'Also review against the rules below, which the user set for all work. Something the',
+    'change does that breaks a rule is a required change. Where the rules say how to review',
+    '(an order to check in, how to mark minor points), follow them.',
+    ...guidelines.flatMap((g) => [
+      '',
+      `===== ${g.file} =====`,
+      g.text.trim(),
+      `===== end of ${g.file} =====`,
+    ]),
+  ];
 }
 
 /** What a loop step is reviewed on: the features done so far, not the ones still to come. */

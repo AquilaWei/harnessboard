@@ -27,6 +27,7 @@ import type {
 } from '@harnessboard/shared';
 import type { SessionAccess } from './agent.js';
 import type { HarnessConfig } from './config.js';
+import { readGuidelines } from './guidelines.js';
 import { missingFeatures, readPlan, runVerify } from './loop.js';
 import { notesPrompt, parseNotes, renderNotes, writeNotes } from './notes.js';
 import {
@@ -156,13 +157,13 @@ export class Workflow {
     return {
       ...base,
       resume: null,
-      prompt: reviewPrompt(
-        this.goal(task),
-        request,
-        snapshot?.verify ?? null,
-        task.acceptance !== null,
-        snapshot?.features ?? null,
-      ),
+      prompt: reviewPrompt(this.goal(task), request, {
+        verify: snapshot?.verify ?? null,
+        hasCriteria: task.acceptance !== null,
+        features: snapshot?.features ?? null,
+        // Read for every review, so an edited rules file applies from the next one.
+        guidelines: readGuidelines(this.host.config.reviewGuidelines),
+      }),
     };
   }
 

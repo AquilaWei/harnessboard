@@ -83,6 +83,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow(/defaultReviewer "ghost"/);
   });
 
+  it('rejects review guidelines that are not a list of paths', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ reviewGuidelines: '~/rules.md' }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      'config reviewGuidelines must be a list of file paths',
+    );
+  });
+
   it('reports which config file has invalid JSON', () => {
     const file = path.join(tempDir('cfg'), 'config.json');
     writeFileSync(file, '{ nope');

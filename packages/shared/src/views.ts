@@ -78,6 +78,8 @@ export interface Settings {
   defaultReviewer: string | null;
   /** Tool rules every task may use without asking, on top of its own. */
   allowedTools: string[];
+  /** Files with the rules every reviewer checks the work against; `~` is the home folder. */
+  reviewGuidelines: string[];
 }
 
 /** Body of `POST /api/tasks`. */

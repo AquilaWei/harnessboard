@@ -5,6 +5,7 @@ export * from './codex.js';
 export * from './codex-quota.js';
 export * from './config.js';
 export * from './folders.js';
+export * from './guidelines.js';
 export * from './harness.js';
 export * from './loop.js';
 export * from './models.js';

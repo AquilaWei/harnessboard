@@ -28,6 +28,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [reviewer, setReviewer] = useState(settings.defaultReviewer ?? '');
   const [globalRules, setGlobalRules] = useState(settings.allowedTools.join('\n'));
   const parsedRules = parseRules(globalRules);
+  const [guidelines, setGuidelines] = useState(settings.reviewGuidelines.join('\n'));
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [notify, setNotify] = useState(notificationsEnabled);
   const [permission, setPermission] = useState(notificationPermission);
@@ -47,6 +48,10 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           defaultContextPolicy: { ...settings.defaultContextPolicy, size },
           defaultReviewer: reviewer === '' ? null : reviewer,
           allowedTools: parsedRules.rules,
+          reviewGuidelines: guidelines
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line !== ''),
         }),
       );
     } catch (err) {
@@ -129,6 +134,18 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           ) : (
             <small className="hint">{t('settingsForm.globalRulesHint')}</small>
           )}
+        </label>
+
+        <label className="field">
+          <span>{t('settingsForm.reviewGuidelines')}</span>
+          <textarea
+            rows={2}
+            className="mono"
+            value={guidelines}
+            placeholder="~/.claude/skills/coding-standards/SKILL.md"
+            onChange={(e) => setGuidelines(e.target.value)}
+          />
+          <small className="hint">{t('settingsForm.reviewGuidelinesHint')}</small>
         </label>
 
         <section className="detail-section">

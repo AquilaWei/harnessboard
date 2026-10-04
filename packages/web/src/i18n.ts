@@ -468,6 +468,9 @@ const en = {
     globalRules: 'Tools every task may use without asking',
     globalRulesHint:
       'One rule per line, added to each task’s own rules. "Allow for all tasks" on a request adds here.',
+    reviewGuidelines: 'Rules every reviewer checks the work against',
+    reviewGuidelinesHint:
+      'One file per line, for example ~/.claude/skills/coding-standards/SKILL.md. Each review quotes the files as they are then, for every agent.',
     agents: 'Agents',
     agentsHint: 'Profiles are defined in {{file}}.',
     agentsHintNoFile: 'Profiles are defined in your config file.',
@@ -933,6 +936,9 @@ const zhTW: typeof en = {
     globalRules: '所有任務都不必詢問就允許的工具',
     globalRulesHint:
       '一行一條規則，會加在每個任務自己的規則之上。權限詢問按「所有任務都允許」時也會加到這裡。',
+    reviewGuidelines: '審查者依循的規範檔',
+    reviewGuidelinesHint:
+      '一行一個檔案，例如 ~/.claude/skills/coding-standards/SKILL.md。每次審查都會引用檔案當下的內容，任何 agent 都適用。',
     agents: 'Agents',
     agentsHint: '設定檔定義在 {{file}}。',
     agentsHintNoFile: '設定檔定義在你的設定檔中。',

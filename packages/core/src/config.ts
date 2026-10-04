@@ -37,6 +37,11 @@ export interface HarnessConfig {
   defaultContextPolicy: ContextPolicy;
   /** Tool rules every task's sessions may use without asking, on top of the task's own. */
   allowedTools: string[];
+  /**
+   * Text files (for example a coding-standards skill) whose rules every reviewer checks the
+   * work against. Read at each review, so edits apply to the next one; `~` is the home folder.
+   */
+  reviewGuidelines: string[];
 }
 
 /** Settings the web UI may change at runtime; they are saved to the user config file. */
@@ -47,6 +52,7 @@ export type EditableSettings = Pick<
   | 'defaultContextPolicy'
   | 'defaultReviewer'
   | 'allowedTools'
+  | 'reviewGuidelines'
 >;
 export const EDITABLE_SETTINGS = [
   'maxConcurrent',
@@ -54,6 +60,7 @@ export const EDITABLE_SETTINGS = [
   'defaultContextPolicy',
   'defaultReviewer',
   'allowedTools',
+  'reviewGuidelines',
 ] as const;
 
 /** Profile every config has; tasks use it unless they name another implementer. */
@@ -86,6 +93,7 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     loopStallSessions: 3,
     defaultContextPolicy: { size: 'medium' },
     allowedTools: [],
+    reviewGuidelines: [],
   };
 }
 
@@ -195,6 +203,12 @@ export function validate(config: HarnessConfig): void {
   resolveThresholds(config.defaultContextPolicy);
   if (!Array.isArray(config.allowedTools)) throw new Error('config allowedTools must be a list');
   assertToolRules(config.allowedTools);
+  if (
+    !Array.isArray(config.reviewGuidelines) ||
+    !config.reviewGuidelines.every((f) => typeof f === 'string' && f.trim() !== '')
+  ) {
+    throw new Error('config reviewGuidelines must be a list of file paths');
+  }
   if (!config.agents[DEFAULT_AGENT]) {
     throw new Error(`config agents must include "${DEFAULT_AGENT}"`);
   }

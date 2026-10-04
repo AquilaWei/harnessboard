@@ -200,6 +200,13 @@ hb add "Add input validation to the signup form" --reviewer opus
   ones still to come are not held against it.
 - **Default reviewer:** `defaultReviewer` in the config (or the web settings) applies to
   new tasks. `--reviewer none` turns review off for one task.
+- **Your coding rules:** list files in `reviewGuidelines` (config or web settings), for
+  example a coding-standards skill. Every review quotes them, as they are at that moment, and
+  a broken rule counts as a required change. This works for any agent, Codex included:
+
+  ```json
+  { "reviewGuidelines": ["~/.claude/skills/coding-standards/SKILL.md"] }
+  ```
 
 **Models:** each task can pick its own model for the implementer and for the reviewer, for
 example Haiku to build and Opus to review: `hb add "..." --model haiku --reviewer claude

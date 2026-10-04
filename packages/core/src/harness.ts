@@ -66,6 +66,7 @@ import {
 } from './config.js';
 import type { EditableSettings, HarnessConfig } from './config.js';
 import { resolveRepository } from './folders.js';
+import { readGuidelines } from './guidelines.js';
 import { readPlan } from './loop.js';
 import { probe } from './process.js';
 import { createAdapter } from './providers.js';
@@ -339,18 +340,20 @@ export class Harness {
     const { maxConcurrent, quotaPauseUtilization, defaultContextPolicy, defaultReviewer } =
       this.config;
     const allowedTools = [...this.config.allowedTools];
+    const reviewGuidelines = [...this.config.reviewGuidelines];
     return {
       maxConcurrent,
       quotaPauseUtilization,
       defaultContextPolicy,
       defaultReviewer,
       allowedTools,
+      reviewGuidelines,
     };
   }
 
   /**
-   * Applies and saves setting changes. Throws on unknown keys or invalid values,
-   * leaving the current settings untouched.
+   * Applies and saves setting changes. Throws on unknown keys, invalid values or a review
+   * guideline file that can not be read, leaving the current settings untouched.
    */
   updateSettings(patch: Partial<EditableSettings>): EditableSettings {
     const unknown = Object.keys(patch).filter(
@@ -358,6 +361,7 @@ export class Harness {
     );
     if (unknown.length > 0) throw new Error(`unknown settings: ${unknown.join(', ')}`);
     validate({ ...this.config, ...patch });
+    if (patch.reviewGuidelines) readGuidelines(patch.reviewGuidelines);
     Object.assign(this.config, patch);
     if (this.settingsFile) saveUserConfig(patch, this.settingsFile);
     this.tick(); // a higher concurrency limit may let queued tasks start now
