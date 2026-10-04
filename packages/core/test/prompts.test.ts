@@ -144,4 +144,41 @@ describe('reviewPrompt', () => {
   it('does not mention criteria when the task has none', () => {
     expect(reviewPrompt('goal', request, null)).not.toContain('acceptance criterion');
   });
+
+  it('does not mention later steps for a single task', () => {
+    expect(reviewPrompt('goal', request, null)).not.toContain('later steps');
+  });
+});
+
+describe('reviewPrompt for a loop step', () => {
+  const request = { round: 1, since: 'abc', head: 'def', status: '' };
+  const features = [
+    { id: 'F1', description: 'stops are tappable', passes: true },
+    { id: 'F2', description: 'light rail', passes: false },
+  ];
+  const prompt = reviewPrompt('goal', request, null, false, features);
+
+  it('lists the features marked done for review', () => {
+    expect(prompt).toContain(
+      'Features marked done, which must work and be tested:\n- F1: stops are tappable',
+    );
+  });
+
+  it('tells the reviewer not to request the features still to come', () => {
+    expect(prompt).toContain(
+      'Features still to come are built in later steps. Do not request them, and do not\n' +
+        'hold their open questions against this step:\n- F2: light rail',
+    );
+  });
+
+  it('asks for what the done features need, not everything the task asked for', () => {
+    expect(prompt).toContain('anything the done features need that is');
+  });
+
+  it('says so when no feature is done yet', () => {
+    const none = [{ id: 'F1', description: 'stops are tappable', passes: false }];
+    expect(reviewPrompt('goal', request, null, false, none)).toContain(
+      'Features marked done, which must work and be tested:\n- (none)',
+    );
+  });
 });

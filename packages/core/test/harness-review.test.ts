@@ -173,6 +173,20 @@ describe('a reviewer of a loop task', () => {
     await runQueued();
     expect(fakeRuns()[2]!.args).toContain('Bash(node -e "process.exit(0)")');
   });
+
+  it('is told the features still to come are not part of the step', async () => {
+    scenario(
+      session('planned', featureList(false, false)),
+      session('F1 done', featureList(true, false)),
+      session('VERDICT: APPROVE'),
+    );
+    await createReviewed('loop');
+    await runQueued();
+    await runQueued();
+    expect(fakeRuns()[2]!.received[0]).toContain(
+      'Do not request them, and do not\nhold their open questions against this step:\n- F2: feature 2',
+    );
+  });
 });
 
 describe('a reviewer reply without a verdict line', () => {

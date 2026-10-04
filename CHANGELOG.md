@@ -5,6 +5,13 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Fixed
+
+- **Reviews of a feature list no longer demand the features still to come.** The reviewer of
+  a loop task judged each step against the whole goal, so it asked for changes until every
+  feature was built and stopped the task after two rounds. It now reviews the features marked
+  done, and is told the rest belong to later steps.
+
 ## 0.0.16 - 2026-10-03
 
 ### Added

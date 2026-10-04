@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  Feature,
   ReviewRecord,
   ReviewRequest,
   TestReport,
@@ -25,13 +26,16 @@ export function parseVerdict(reply: string): { verdict: Verdict | null; findings
 
 /**
  * First message of a reviewer session. It runs read-only in the implementer's worktree.
- * `goal` includes the task's acceptance criteria when `hasCriteria` is true.
+ * `goal` includes the task's acceptance criteria when `hasCriteria` is true. `features` is a
+ * loop task's feature list: the step is judged on the features marked done, since the rest
+ * are built in later steps and would otherwise be held against every step.
  */
 export function reviewPrompt(
   goal: string,
   request: ReviewRequest,
   verify: VerifyResult | null,
   hasCriteria = false,
+  features: Feature[] | null = null,
 ): string {
   const lines = [
     'You are reviewing work another agent did in this repository. You cannot edit files;',
@@ -47,9 +51,12 @@ export function reviewPrompt(
   if (verify) {
     lines.push('', `The harness ran \`${verify.command}\` after this step and it passed.`);
   }
+  if (features) lines.push('', ...stepScope(features));
   lines.push(
     '',
-    'Check correctness, missing tests, edge cases, and anything the task asked for that is',
+    features
+      ? 'Check correctness, missing tests, edge cases, and anything the done features need that is'
+      : 'Check correctness, missing tests, edge cases, and anything the task asked for that is',
     'not done, including the README, changelog and docs the change makes wrong or stale.',
     'Ignore style that a formatter would settle.',
     ...(hasCriteria
@@ -61,6 +68,25 @@ export function reviewPrompt(
     'most important first. Only request changes that matter; the implementer gets your list.',
   );
   return lines.join('\n');
+}
+
+/** What a loop step is reviewed on: the features done so far, not the ones still to come. */
+function stepScope(features: Feature[]): string[] {
+  const line = (f: Feature) => `- ${f.id}: ${f.description}`;
+  const done = features.filter((f) => f.passes);
+  const later = features.filter((f) => !f.passes);
+  return [
+    'This task is built one feature at a time; this review covers the latest step.',
+    'Features marked done, which must work and be tested:',
+    ...(done.length > 0 ? done.map(line) : ['- (none)']),
+    ...(later.length > 0
+      ? [
+          'Features still to come are built in later steps. Do not request them, and do not',
+          'hold their open questions against this step:',
+          ...later.map(line),
+        ]
+      : []),
+  ];
 }
 
 /** Section added to the implementer's next prompt when the reviewer asked for changes. */

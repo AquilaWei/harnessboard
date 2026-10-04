@@ -89,7 +89,9 @@ passes through the later roles again.
 
 A step counts as done when a single task's session completes, or when the harness has
 verified a loop feature. `review_request` and `review` are events in the store, so a
-restart picks up exactly where the task was.
+restart picks up exactly where the task was. A loop step's reviewer gets the latest feature
+snapshot: the features marked done are what it judges, and the features still to come are
+listed as out of scope, so an unfinished list is never a reason to ask for changes.
 
 ## Adding an agent CLI
 

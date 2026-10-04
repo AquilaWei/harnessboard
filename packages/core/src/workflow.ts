@@ -152,11 +152,17 @@ export class Workflow {
       this.hasBudget(task, last);
     const base = { role: 'reviewer', agentId: reviewer, access: 'readOnly' } as const;
     if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
-    const verify = task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.verify ?? null) : null;
+    const snapshot = task.mode === 'loop' ? this.snapshots(task.id).at(-1) : undefined;
     return {
       ...base,
       resume: null,
-      prompt: reviewPrompt(this.goal(task), request, verify, task.acceptance !== null),
+      prompt: reviewPrompt(
+        this.goal(task),
+        request,
+        snapshot?.verify ?? null,
+        task.acceptance !== null,
+        snapshot?.features ?? null,
+      ),
     };
   }
 
