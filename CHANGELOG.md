@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.14 - 2026-10-03
+
 ### Added
 
 - **Notes between roles.** Each role ends its reply with a `## Notes` section for the roles
