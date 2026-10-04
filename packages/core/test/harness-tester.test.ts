@@ -133,6 +133,33 @@ describe('a finished step with a tester', () => {
   });
 });
 
+describe('a reviewer that requests changes after the tests passed', () => {
+  it('sends the fix through the tester again before the reviewer sees it', async () => {
+    scenario(
+      implemented,
+      passing,
+      session('VERDICT: CHANGES\n- greet() ignores the name'),
+      session('fixed', writeFile('hello.txt', 'hi, name')),
+      passing,
+      session('VERDICT: APPROVE'),
+    );
+    const task = await tested({ reviewer: 'checker' });
+    await runQueued(); // tester
+    await runQueued(); // reviewer asks for changes
+    await runQueued(); // implementer fixes
+    await runQueued(); // tester again
+    await runQueued(); // reviewer again
+    expect(roles(task.id)).toEqual([
+      'implementer',
+      'tester',
+      'reviewer',
+      'implementer',
+      'tester',
+      'reviewer',
+    ]);
+  });
+});
+
 describe('a tester that reports failures', () => {
   const failing = session('TESTS: FAIL\n- greet() returns nothing');
 
