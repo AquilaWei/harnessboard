@@ -16,7 +16,6 @@ import {
 } from '@harnessboard/shared';
 import type {
   AgentProvider,
-  DetectedAgent,
   PermissionRequest,
   PlanQuestion,
   TaskSize,
@@ -26,7 +25,7 @@ import type {
 import { ApiClient, ServerUnavailableError } from './client.js';
 import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
 import { t } from './i18n.js';
-import { startServer } from './serve.js';
+import { printUnconfigured, runServer } from './run.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const FOLLOW_INTERVAL_MS = 500;
@@ -41,16 +40,6 @@ function config(): HarnessConfig {
   return loadConfig(port ? { overrides: { port } } : {});
 }
 
-/** Points out agent CLIs found on this machine that no profile uses yet. */
-function printUnconfigured(detected: DetectedAgent[]): void {
-  for (const d of detected) {
-    if (d.profileId !== null) continue;
-    console.log(
-      t('agentDetected', { command: d.command, version: d.version, provider: d.provider }),
-    );
-  }
-}
-
 function client(): ApiClient {
   return new ApiClient(`http://127.0.0.1:${config().port}`);
 }
@@ -58,20 +47,7 @@ function client(): ApiClient {
 program
   .command('serve')
   .description('start the scheduler and the local API')
-  .action(async () => {
-    const cfg = config();
-    const server = await startServer(cfg);
-    for (const agent of server.agents) {
-      const vars = { id: agent.id, command: agent.profile.command, file: userConfigFile() };
-      if (agent.ok) console.log(t('agentFound', { ...vars, version: agent.version ?? '' }));
-      else console.warn(t('agentMissing', { ...vars, error: agent.error ?? '' }));
-    }
-    printUnconfigured(server.detected);
-    console.log(t('serverStarted', { version: `v${pkg.version}`, url: server.url }));
-    const shutdown = () => void server.close().then(() => process.exit(0));
-    process.once('SIGINT', shutdown);
-    process.once('SIGTERM', shutdown);
-  });
+  .action(() => runServer(config()));
 
 /** Options shared by `add` and `loop`. */
 function withTaskOptions(command: Command): Command {

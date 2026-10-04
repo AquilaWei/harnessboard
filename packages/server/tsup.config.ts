@@ -3,7 +3,8 @@ import { defineConfig } from 'tsup';
 
 // Internal workspace packages are bundled in, so only `harnessboard` is published.
 export default defineConfig({
-  entry: ['src/cli.ts'],
+  // desktop.js is what the desktop app runs; it shares chunks with the CLI.
+  entry: ['src/cli.ts', 'src/desktop.ts'],
   format: ['esm'],
   platform: 'node',
   target: 'node22',
