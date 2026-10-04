@@ -67,7 +67,7 @@ program
       else console.warn(t('agentMissing', { ...vars, error: agent.error ?? '' }));
     }
     printUnconfigured(server.detected);
-    console.log(t('serverStarted', { url: server.url }));
+    console.log(t('serverStarted', { version: `v${pkg.version}`, url: server.url }));
     const shutdown = () => void server.close().then(() => process.exit(0));
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);

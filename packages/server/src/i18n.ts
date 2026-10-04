@@ -2,7 +2,7 @@
 import { ENV_PREFIX } from '@harnessboard/shared';
 
 const en = {
-  serverStarted: 'Harnessboard is running at {url} (Ctrl+C to stop)',
+  serverStarted: 'Harnessboard {version} is running at {url} (Ctrl+C to stop)',
   serverUnavailable: 'No Harnessboard server at {url}. Start one with `hb serve`.',
   taskCreated: 'Created task {id} ({status}).',
   noTasks: 'No tasks yet. Add one with `hb add "<prompt>"`.',
@@ -67,7 +67,7 @@ const en = {
 type Messages = typeof en;
 
 const zhTW: Messages = {
-  serverStarted: 'Harnessboard 已啟動：{url}（按 Ctrl+C 停止）',
+  serverStarted: 'Harnessboard {version} 已啟動：{url}（按 Ctrl+C 停止）',
   serverUnavailable: '{url} 沒有正在執行的 Harnessboard。請先執行 `hb serve`。',
   taskCreated: '已建立任務 {id}（{status}）。',
   noTasks: '還沒有任務。用 `hb add "<提示>"` 新增。',

@@ -5,6 +5,10 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Changed
+
+- `hb serve` shows the version it runs, e.g. `Harnessboard v0.0.14 is running at …`.
+
 ## 0.0.14 - 2026-10-03
 
 ### Added
