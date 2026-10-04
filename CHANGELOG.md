@@ -5,6 +5,14 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Agent CLIs are found for you.** Harnessboard looks for `claude` and `codex` on your PATH
+  and points out any without a profile when the server starts, in `hb agents` and under
+  **Settings → Agents**. Add one with the **Add** button or `hb agents --add codex`
+  (`--id`, `--model`); it is saved to your config file and can be picked for tasks at once,
+  without a restart.
+
 ## 0.0.13 - 2026-10-03
 
 ### Fixed

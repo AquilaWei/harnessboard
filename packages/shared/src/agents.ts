@@ -15,6 +15,20 @@ export interface AgentProfile {
   contextWindow?: number;
 }
 
+/** The command each provider's CLI installs as; detection looks for these on PATH. */
+export const DEFAULT_COMMANDS: Record<AgentProvider, string> = {
+  'claude-code': 'claude',
+  codex: 'codex',
+};
+
+/** Profile ids: a letter or digit, then letters, digits, `-` and `_`. */
+const PROFILE_ID = /^[A-Za-z0-9][\w-]*$/;
+
+/** True for a string that can name an agent profile. */
+export function isProfileId(id: string): boolean {
+  return PROFILE_ID.test(id);
+}
+
 /** What a session was asked to do. */
 export type AgentRole = 'spec' | 'implementer' | 'tester' | 'reviewer';
 
@@ -71,6 +85,24 @@ export interface AgentInfo {
   /** CLI version line, when it ran. */
   version: string | null;
   error: string | null;
+}
+
+/** An agent CLI found on this machine (`GET /api/agents/detect`). */
+export interface DetectedAgent {
+  provider: AgentProvider;
+  command: string;
+  /** CLI version line. */
+  version: string;
+  /** Profile that already runs this CLI, or `null` when one can still be added. */
+  profileId: string | null;
+}
+
+/** A profile to add to the user config (`POST /api/agents`). */
+export interface NewAgentProfile {
+  id: string;
+  provider: AgentProvider;
+  command: string;
+  model: string | null;
 }
 
 /** The agent profile that plays `role` in a task; `null` when the role is off (no reviewer or tester). */

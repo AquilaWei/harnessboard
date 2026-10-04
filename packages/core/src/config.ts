@@ -143,6 +143,16 @@ export function saveUserConfig(patch: Partial<HarnessConfig>, file = userConfigF
   writeFileSync(file, JSON.stringify({ ...current, ...patch }, null, 2) + '\n');
 }
 
+/**
+ * Adds or replaces one agent profile in the user config file, keeping the other profiles
+ * and keys it holds. Only the file's own profiles are written, so defaults and environment
+ * overrides never end up saved there.
+ */
+export function saveUserAgent(id: string, profile: AgentProfile, file = userConfigFile()): void {
+  const current = (readJsonIfExists(file) as Partial<HarnessConfig> | undefined) ?? {};
+  saveUserConfig({ agents: { ...current.agents, [id]: profile } }, file);
+}
+
 /** Environment variables override the file; `CLAUDE_PATH` and `MODEL` apply to `claude`. */
 function applyEnv(config: HarnessConfig, env: Env): void {
   const get = (name: string) => env[`${ENV_PREFIX}${name}`];

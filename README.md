@@ -54,7 +54,7 @@ hb done 1                            # mark it reviewed
 | `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> [--verify <command>]`   | Review, discuss and approve criteria or plan                         |
 | `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)                          |
 | `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them                          |
-| `hb agents`                                                                           | List agent profiles and whether they run                             |
+| `hb agents`                                                                           | List agent profiles, and agent CLIs found without one                |
 | `hb ls` / `hb show <id>`                                                              | List tasks / show sessions, context, tokens, estimated cost and time |
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                                              |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                                                 |
@@ -278,8 +278,18 @@ environment < CLI flags.
 - **Per repository:** `.harnessboard.json` with `baseRef`, `allowedTools`, `contextPolicy` and
   `verifyCommand`.
 
-**Agent profiles:** each profile names an agent CLI and how to run it. `claude` always exists;
-add more in `config.json`, for example a second Claude with another model:
+**Agent profiles:** each profile names an agent CLI and how to run it. `claude` always exists.
+Harnessboard looks for the `claude` and `codex` commands on your PATH and points out any that
+have no profile yet (in `hb serve`'s output, `hb agents` and **Settings → Agents**). Add one
+with one click in **Settings**, or:
+
+```bash
+hb agents --add codex                  # profile "codex" with the CLI's default model
+hb agents --add codex --id fast --model gpt-6-luna
+```
+
+Profiles are saved in `config.json`, where you can also write them by hand, for example a
+second Claude with another model:
 
 ```json
 {

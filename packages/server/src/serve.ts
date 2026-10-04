@@ -5,7 +5,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { Harness, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
-import type { AgentInfo } from '@harnessboard/shared';
+import type { AgentInfo, DetectedAgent } from '@harnessboard/shared';
 import { createApi, localOnly } from './api.js';
 import { serveWeb } from './static.js';
 
@@ -16,6 +16,8 @@ export interface RunningServer {
   url: string;
   /** Each agent profile's CLI version, or why it could not run (its tasks fail until fixed). */
   agents: AgentInfo[];
+  /** Agent CLIs found on this machine, with or without a profile. */
+  detected: DetectedAgent[];
   close(): Promise<void>;
 }
 
@@ -25,7 +27,7 @@ export interface RunningServer {
  */
 export async function startServer(config: HarnessConfig): Promise<RunningServer> {
   const harness = Harness.open(config, { settingsFile: userConfigFile() });
-  const agents = await harness.probeAgents();
+  const [agents, detected] = await Promise.all([harness.probeAgents(), harness.detectAgents()]);
   const app = new Hono();
   app.use('*', localOnly(config.port));
   app.route('/api', createApi(harness));
@@ -41,6 +43,7 @@ export async function startServer(config: HarnessConfig): Promise<RunningServer>
   return {
     url: `http://127.0.0.1:${config.port}`,
     agents,
+    detected,
     close: async () => {
       await harness.shutdown();
       await new Promise<void>((resolve) => {

@@ -9,6 +9,7 @@ import type {
   CreateTaskInput,
   DeletedTask,
   HarnessEvent,
+  NewAgentProfile,
   PermissionDecision,
 } from '@harnessboard/shared';
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
@@ -50,6 +51,10 @@ export function createApi(harness: Harness): Hono {
   app.get('/folders/inspect', async (c) => c.json(await inspectFolder(c.req.query('path') ?? '')));
 
   app.get('/agents', async (c) => c.json(await harness.probeAgents()));
+  app.get('/agents/detect', async (c) => c.json(await harness.detectAgents()));
+  app.post('/agents', async (c) =>
+    c.json(harness.addAgent(await c.req.json<NewAgentProfile>()), 201),
+  );
 
   app.get('/settings', (c) => c.json(harness.settings()));
   app.put('/settings', async (c) =>

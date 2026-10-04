@@ -4,7 +4,9 @@ import { Argument, Command, InvalidArgumentError, Option } from 'commander';
 import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import {
+  AGENT_PROVIDERS,
   APP_NAME,
+  DEFAULT_COMMANDS,
   DEFAULT_PRESET,
   PERMISSION_PRESETS,
   definedOnly,
@@ -13,6 +15,8 @@ import {
   presetRules,
 } from '@harnessboard/shared';
 import type {
+  AgentProvider,
+  DetectedAgent,
   PermissionRequest,
   PlanQuestion,
   TaskSize,
@@ -37,6 +41,16 @@ function config(): HarnessConfig {
   return loadConfig(port ? { overrides: { port } } : {});
 }
 
+/** Points out agent CLIs found on this machine that no profile uses yet. */
+function printUnconfigured(detected: DetectedAgent[]): void {
+  for (const d of detected) {
+    if (d.profileId !== null) continue;
+    console.log(
+      t('agentDetected', { command: d.command, version: d.version, provider: d.provider }),
+    );
+  }
+}
+
 function client(): ApiClient {
   return new ApiClient(`http://127.0.0.1:${config().port}`);
 }
@@ -52,6 +66,7 @@ program
       if (agent.ok) console.log(t('agentFound', { ...vars, version: agent.version ?? '' }));
       else console.warn(t('agentMissing', { ...vars, error: agent.error ?? '' }));
     }
+    printUnconfigured(server.detected);
     console.log(t('serverStarted', { url: server.url }));
     const shutdown = () => void server.close().then(() => process.exit(0));
     process.once('SIGINT', shutdown);
@@ -212,17 +227,45 @@ program
     console.log(t('taskStatus', { id, status: task.status }));
   });
 
+interface AgentsOptions {
+  add?: AgentProvider;
+  id?: string;
+  model?: string;
+}
+
 program
   .command('agents')
-  .description('list agent profiles and whether their CLIs run')
-  .action(async () => {
-    for (const a of await client().agents()) {
+  .description('list agent profiles, and agent CLIs found on this machine without one')
+  .addOption(
+    new Option('--add <provider>', 'add a profile for a CLI found on this machine').choices(
+      AGENT_PROVIDERS,
+    ),
+  )
+  .option('--id <id>', 'profile id for --add (default: the command name)')
+  .option('--model <model>', 'model for --add (default: the CLI default)')
+  .action(async (o: AgentsOptions) => {
+    const api = client();
+    if (o.add) {
+      const provider = o.add;
+      const found = (await api.detectAgents()).find((d) => d.provider === provider);
+      if (!found) {
+        throw new Error(t('agentNotDetected', { provider, command: DEFAULT_COMMANDS[provider] }));
+      }
+      const id = o.id ?? found.command;
+      await api.addAgent({ id, provider, command: found.command, model: o.model ?? null });
+      console.log(
+        t('agentAdded', { id, provider, command: found.command, file: userConfigFile() }),
+      );
+      return;
+    }
+    for (const a of await api.agents()) {
       const state = a.ok ? `✓ ${a.version ?? ''}` : `✗ ${a.error ?? ''}`;
       const model = a.profile.model ?? t('defaultModel');
       console.log(
         `${a.id.padEnd(12)} ${a.profile.provider.padEnd(12)} ${model.padEnd(14)} ${state}`,
       );
     }
+    printUnconfigured(await api.detectAgents());
   });
 
 program

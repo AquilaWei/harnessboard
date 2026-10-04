@@ -5,11 +5,13 @@ import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
   AGENT_PROVIDERS,
+  DEFAULT_COMMANDS,
   DEFAULT_PRESET,
   assertToolRules,
   contextPct,
   definedOnly,
   isModelId,
+  isProfileId,
   presetRules,
   resolveThresholds,
   roleModel,
@@ -17,7 +19,10 @@ import {
 import type {
   AgentEvent,
   AgentInfo,
+  AgentProfile,
   AgentProvider,
+  DetectedAgent,
+  NewAgentProfile,
   Session,
   AgentsUpdate,
   ChatEnd,
@@ -53,6 +58,7 @@ import {
   DEFAULT_AGENT,
   EDITABLE_SETTINGS,
   loadProjectConfig,
+  saveUserAgent,
   saveUserConfig,
   validate,
 } from './config.js';
@@ -101,6 +107,8 @@ export interface HarnessOptions {
   settingsFile?: string | null;
   /** Builds agent adapters from profiles; tests substitute fake CLIs. */
   adapterFactory?: AdapterFactory;
+  /** Commands {@link Harness.detectAgents} looks for; tests point them at fake CLIs. */
+  detectCommands?: Record<AgentProvider, string>;
 }
 type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }>;
 
@@ -139,6 +147,7 @@ export class Harness {
   private readonly workflow: Workflow;
   private readonly settingsFile: string | null;
   private readonly adapterFactory: AdapterFactory;
+  private readonly detectCommands: Record<AgentProvider, string>;
 
   constructor(
     readonly config: HarnessConfig,
@@ -147,6 +156,7 @@ export class Harness {
   ) {
     this.settingsFile = options.settingsFile ?? null;
     this.adapterFactory = options.adapterFactory ?? createAdapter;
+    this.detectCommands = options.detectCommands ?? DEFAULT_COMMANDS;
     this.workflow = new Workflow({
       store,
       config,
@@ -193,6 +203,53 @@ export class Harness {
         }
       }),
     );
+  }
+
+  /**
+   * Looks for each provider's CLI under its usual command and reports the ones that run,
+   * with the profile already using it, if any. A CLI that is missing or fails is left out.
+   */
+  async detectAgents(): Promise<DetectedAgent[]> {
+    const found = await Promise.all(
+      AGENT_PROVIDERS.map(async (provider): Promise<DetectedAgent | null> => {
+        const command = this.detectCommands[provider];
+        const adapter = this.adapterFactory({ provider, command, model: null });
+        try {
+          const version = await probe(adapter.command, adapter.versionArgs);
+          const profile = Object.entries(this.config.agents).find(
+            ([, p]) => p.provider === provider && p.command === command,
+          );
+          return { provider, command, version, profileId: profile?.[0] ?? null };
+        } catch {
+          return null; // not installed here: nothing to offer
+        }
+      }),
+    );
+    return found.filter((agent) => agent !== null);
+  }
+
+  /**
+   * Adds an agent profile and saves it to the user config file, so it can be picked for
+   * tasks at once. Throws when the id is invalid or taken, the provider is unknown, the
+   * command is empty, or the model is not a model id; nothing changes then.
+   */
+  addAgent(input: NewAgentProfile): AgentProfile {
+    // Input comes from HTTP as well, so its field types are checked rather than trusted.
+    const { id, provider } = input;
+    if (typeof id !== 'string' || !isProfileId(id)) {
+      throw new Error(`invalid agent profile id: ${JSON.stringify(id)}`);
+    }
+    if (this.config.agents[id]) throw new Error(`agent profile "${id}" already exists`);
+    const command = typeof input.command === 'string' ? input.command.trim() : '';
+    const model = typeof input.model === 'string' ? input.model.trim() || null : null;
+    if (model !== null && !isModelId(model)) {
+      throw new Error(`invalid model id: ${JSON.stringify(model)}`);
+    }
+    const profile: AgentProfile = { provider, command, model };
+    validate({ ...this.config, agents: { ...this.config.agents, [id]: profile } });
+    this.config.agents[id] = profile;
+    if (this.settingsFile) saveUserAgent(id, profile, this.settingsFile);
+    return profile;
   }
 
   /** What a running task is doing right now; `null` when it is not running. */

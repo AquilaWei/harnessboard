@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentInfo, Settings, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
+import { DetectedAgents } from './DetectedAgents';
 import { LANGUAGES, setLanguage } from '../i18n';
 import { parseRules } from '../rules';
 import type { Language } from '../i18n';
@@ -33,9 +34,8 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.agents().then(setAgents, (e: Error) => setError(e.message));
-  }, []);
+  const loadAgents = () => api.agents().then(setAgents, (e: Error) => setError(e.message));
+  useEffect(() => void loadAgents(), []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -157,6 +157,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
               </tbody>
             </table>
           )}
+          <DetectedAgents onAdded={() => void loadAgents()} onError={setError} />
           <p className="hint">
             {configFile
               ? t('settingsForm.agentsHint', { file: configFile })

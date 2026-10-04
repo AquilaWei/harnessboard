@@ -336,6 +336,28 @@ describe('agents API', () => {
       ['checker', true],
     ]);
   });
+
+  it('adds a profile that the agent list then shows', async () => {
+    const res = await post(
+      '/api/agents',
+      { id: 'runner', provider: 'codex', command: 'node', model: null },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(res.status).toBe(201);
+    const agents = (await (await app.request('/api/agents', { headers: local })).json()) as {
+      id: string;
+    }[];
+    expect(agents.map((a) => a.id)).toEqual(['claude', 'checker', 'runner']);
+  });
+
+  it('rejects a profile whose id is taken', async () => {
+    const res = await post(
+      '/api/agents',
+      { id: 'checker', provider: 'codex', command: 'node', model: null },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(await res.json()).toEqual({ error: 'agent profile "checker" already exists' });
+  });
 });
 
 describe('reviewed tasks', () => {

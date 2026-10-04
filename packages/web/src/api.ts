@@ -3,6 +3,9 @@ import type {
   MergeResult,
   ChatEntry,
   AgentInfo,
+  AgentProfile,
+  DetectedAgent,
+  NewAgentProfile,
   AgentsUpdate,
   CommitInfo,
   CreateTaskInput,
@@ -58,6 +61,8 @@ export const api = {
   diff: (id: number) => request<WorktreeDiff>(`/tasks/${id}/diff`),
   timeline: (id: number) => request<TimelineEntry[]>(`/tasks/${id}/timeline`),
   agents: () => request<AgentInfo[]>('/agents'),
+  detectAgents: () => request<DetectedAgent[]>('/agents/detect'),
+  addAgent: (input: NewAgentProfile) => send<AgentProfile>('POST', '/agents', input),
   folders: (path?: string) =>
     request<FolderListing>(`/folders${path ? `?path=${encodeURIComponent(path)}` : ''}`),
   inspectFolder: (path: string) =>

@@ -4,6 +4,9 @@ import type {
   MergeResult,
   ChatEntry,
   AgentInfo,
+  AgentProfile,
+  DetectedAgent,
+  NewAgentProfile,
   AgentsUpdate,
   CommitInfo,
   CreateTaskInput,
@@ -43,6 +46,8 @@ export class ApiClient {
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);
   setAutoApprove = (id: number, on: boolean) =>
     this.send<Task>('PUT', `/tasks/${id}/auto-approve`, { on });
+  detectAgents = () => this.get<DetectedAgent[]>('/agents/detect');
+  addAgent = (input: NewAgentProfile) => this.post<AgentProfile>('/agents', input);
   settings = () => this.get<Settings>('/settings');
   saveSettings = (patch: Partial<Settings>) => this.send<Settings>('PUT', '/settings', patch);
   mergeTask = (id: number) => this.post<MergeResult>(`/tasks/${id}/merge`);

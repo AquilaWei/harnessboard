@@ -36,6 +36,10 @@ const en = {
   agentMissing:
     'Warning: agent {id} cannot run {command} ({error}). Its tasks will fail until it works; fix agents.{id}.command in {file} (or HARNESSBOARD_CLAUDE_PATH for claude).',
   unknownAgent: 'Agent profile "{agent}" is not in your config.',
+  agentDetected:
+    'Found {command} {version} with no profile. Add it with `hb agents --add {provider}`.',
+  agentNotDetected: 'No {provider} CLI ({command}) found on PATH.',
+  agentAdded: 'Added agent profile {id} ({provider}, {command}) to {file}.',
   defaultModel: '(default)',
   sameAsImplementer: '(the implementer)',
   suggestedVerify: 'Suggested verify command (not active until you approve): {command}',
@@ -96,6 +100,10 @@ const zhTW: Messages = {
   agentMissing:
     '警告：agent {id} 無法執行 {command}（{error}）。修好之前它的任務都會失敗；請修改 {file} 裡的 agents.{id}.command（claude 也可以設定 HARNESSBOARD_CLAUDE_PATH）。',
   unknownAgent: '設定檔裡沒有名為「{agent}」的 agent。',
+  agentDetected:
+    '找到 {command} {version}，但還沒有 profile。用 `hb agents --add {provider}` 加入。',
+  agentNotDetected: 'PATH 上找不到 {provider} 的 CLI（{command}）。',
+  agentAdded: '已將 agent profile {id}（{provider}，{command}）加入 {file}。',
   defaultModel: '（預設）',
   sameAsImplementer: '（執行者）',
   suggestedVerify: '建議的驗證指令（你確認後才生效）：{command}',
