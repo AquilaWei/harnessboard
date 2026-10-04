@@ -10,3 +10,5 @@ coverage/
 CLAUDE.md
 .claude/
 notes/
+# Desktop installers built by electron-builder
+packages/desktop/release/

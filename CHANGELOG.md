@@ -5,6 +5,14 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Desktop app.** Harnessboard can be built as an app for Linux (AppImage, .deb), macOS
+  (.dmg) and Windows (installer): it starts the server itself and shows the board in its own
+  window. Closing the window keeps it running in the tray so tasks go on; Quit stops the
+  agents cleanly. It uses an `hb serve` that is already running instead of starting another,
+  and finds `claude`, `codex` and git the way your terminal does. Builds are not signed yet.
+
 ## 0.0.18 - 2026-10-04
 
 ### Added

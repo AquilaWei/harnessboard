@@ -78,6 +78,30 @@ hb done 1                            # 標記為已審核完成
 還沒 commit 的修改也會一起消失。分支會保留，已經 commit 的成果仍然可以合併；不需要時再用
 `git branch -D` 刪除。執行中的任務要先停止才能刪除。
 
+## 桌面程式
+
+不想開終端機？桌面程式會自己啟動伺服器，並在獨立視窗裡顯示看板。**點圖示，看板就出來了。**
+
+```bash
+pnpm install && pnpm build
+pnpm --filter @harnessboard/desktop dist   # 產生這台電腦作業系統的安裝檔，在 packages/desktop/release/
+```
+
+- **安裝檔**：Linux 有 AppImage 和 .deb，macOS 有 .dmg（Intel 和 Apple 晶片），
+  Windows 有安裝程式（.exe）。
+- **仍然需要**：git 和 agent CLI（`claude`、`codex`）。程式會用跟終端機一樣的方式找到它們，
+  包括 `~/.local/bin`、nvm 和 Homebrew 安裝的。
+- **關掉視窗會繼續在背景執行**，留在系統匣／選單列，任務照跑。要結束請在那裡按
+  **結束 Harnessboard**，執行中的 agent 會被正常停止。沒有系統匣的桌面（例如原生 GNOME），
+  再開一次程式就會把視窗叫回來。
+- **可以和 `hb` 一起用**：如果 `hb serve` 已經在跑，程式會直接顯示那個伺服器，不會再開第二個。
+  `hb` 指令也能操作程式啟動的伺服器。
+- **伺服器記錄檔**：`<資料資料夾>/logs/desktop-server.log`。
+- **目前還沒有簽章**，第一次開啟時：
+  - **macOS**：在程式上按右鍵 → **打開** → **打開**（或到「系統設定」→「隱私權與安全性」→
+    **強制打開**）。
+  - **Windows**：SmartScreen 提示出現時，按**其他資訊** → **仍要執行**。
+
 ## 驗收標準：先討論再開工
 
 沒有驗收標準的任務不會馬上開始改程式。Claude 會先跟你確認「怎樣才算完成」。

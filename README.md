@@ -86,6 +86,31 @@ its worktree folder, including edits that were not committed. The branch is kept
 committed work can still be merged; remove it with `git branch -D` when you no longer need
 it. Stop a running task first.
 
+## Desktop app
+
+Prefer an app to a terminal? The desktop app starts the server for you and shows the board
+in its own window. **Click the icon and the board is there.**
+
+```bash
+pnpm install && pnpm build
+pnpm --filter @harnessboard/desktop dist   # installers for this OS, in packages/desktop/release/
+```
+
+- **Builds:** AppImage and .deb on Linux, .dmg (Intel and Apple silicon) on macOS, an
+  installer (.exe) on Windows.
+- **Still needed:** git and the agent CLIs (`claude`, `codex`). The app finds them the way
+  your terminal does, including `~/.local/bin`, nvm and Homebrew.
+- **Closing the window keeps it running** in the tray / menu bar, so tasks go on. Use
+  **Quit Harnessboard** there to stop it; running agents are stopped cleanly. On a desktop
+  without a tray (plain GNOME), launch the app again to bring the window back.
+- **Works with `hb`:** if `hb serve` is already running, the app shows that server instead
+  of starting a second one. The `hb` commands work against the app's server too.
+- **Server log:** `<data folder>/logs/desktop-server.log`.
+- **Not signed yet.** The first time you open it:
+  - **macOS:** right-click the app → **Open** → **Open** (or System Settings → Privacy &
+    Security → **Open Anyway**).
+  - **Windows:** on the SmartScreen notice, **More info** → **Run anyway**.
+
 ## Acceptance criteria: agree first
 
 A task without acceptance criteria does not start changing code right away. Claude first

@@ -4,3 +4,5 @@ packages:
 # esbuild's install script only verifies its platform binary.
 allowBuilds:
   esbuild: true
+  # Only for Squirrel installers, which the desktop build does not make (it uses NSIS).
+  electron-winstaller: false

@@ -1,0 +1,42 @@
+# Installers for the desktop app. Build with `pnpm --filter @harnessboard/desktop dist`
+# after `pnpm build`; the version comes from packages/server/package.json (scripts/dist.mjs).
+appId: dev.harnessboard.desktop
+productName: Harnessboard
+executableName: harnessboard
+copyright: Copyright © Harnessboard contributors
+directories:
+  output: release
+  buildResources: build
+# Everything the app runs is bundled into dist/, so no node_modules are packed.
+files:
+  - dist/**
+  - assets/**
+  - package.json
+extraResources:
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../NOTICE
+    to: NOTICE
+  - from: ../../THIRD-PARTY-NOTICES.md
+    to: THIRD-PARTY-NOTICES.md
+artifactName: Harnessboard-${version}-${os}-${arch}.${ext}
+linux:
+  target: [AppImage, deb]
+  # Lets desktops tie the running window to the launcher entry.
+  syncDesktopName: true
+  category: Development
+  maintainer: AquilaWei <AquilaWei@users.noreply.github.com>
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.developer-tools
+  # Not signed yet (0.0.x test builds); see the README for opening it the first time.
+  identity: null
+win:
+  target: [nsis]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+publish: null

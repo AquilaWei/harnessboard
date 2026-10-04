@@ -23,6 +23,25 @@ web (React) ──REST/SSE── server (Hono, `hb` CLI)
 `shared` holds the types that cross package boundaries: the API views, events, and
 profiles.
 
+`desktop` is the Electron app. Its main process (`src/main.ts`) does four things:
+
+- It reads the PATH from a login shell (`shell-path.ts`), so agent CLIs are found when the
+  app starts from a launcher.
+- It asks the configured port whether Harnessboard already runs there (`probePort`). If
+  nothing is there, it starts the server in Electron's own Node, through
+  `utilityProcess.fork`.
+- It shows the board in a window.
+- It stays in the tray when the window is closed.
+
+The server it starts is `server/src/desktop.ts`, bundled with all its dependencies into
+`dist/server.mjs`. That entry takes no arguments, because Commander misreads argv in a
+utility process. Quit sends it a `shutdown` message over the parent port
+(`runServer` in `server/src/run.ts`). Windows has no SIGTERM for that process, so the
+message is how it stops cleanly; after 10 s the app kills it.
+
+The installers come from `electron-builder`. They take their version from
+`packages/server/package.json`, through `scripts/dist.mjs`.
+
 ## Agents, profiles and roles
 
 - **Provider:** an agent CLI Harnessboard knows how to drive. Today there are two,

@@ -1,0 +1,25 @@
+{
+  "name": "@harnessboard/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Harnessboard desktop app: starts the local server and shows the board in its own window",
+  "desktopName": "harnessboard.desktop",
+  "license": "Apache-2.0",
+  "author": "AquilaWei <AquilaWei@users.noreply.github.com>",
+  "homepage": "https://github.com/AquilaWei/harnessboard",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsup",
+    "start": "electron .",
+    "dist": "node scripts/dist.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@harnessboard/core": "workspace:*",
+    "@harnessboard/shared": "workspace:*",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "harnessboard": "workspace:*"
+  }
+}
