@@ -97,7 +97,8 @@ in its own window. **Click the icon and the board is there.**
   runs.
 - **Or build them yourself:** see [Building the installers](#building-the-installers)
   below.
-- **Builds:** AppImage and .deb on Linux, .dmg (Intel and Apple silicon) on macOS, an
+- **Builds:** .deb (Debian, Ubuntu), .rpm (Fedora, openSUSE) and AppImage (any distribution)
+  on Linux, .dmg (Intel and Apple silicon) on macOS, an
   installer (.exe) on Windows.
 - **Still needed:** git and the agent CLIs (`claude`, `codex`). The app finds them the way
   your terminal does, including `~/.local/bin`, nvm and Homebrew.
@@ -129,7 +130,7 @@ the same steps on all three for every version tag. The files land in
 ```bash
 corepack enable
 pnpm install && pnpm build
-pnpm --filter @harnessboard/desktop dist      # → .AppImage and .deb
+pnpm --filter @harnessboard/desktop dist --linux deb AppImage   # → .deb and .AppImage
 V=$(node -p "require('./packages/server/package.json').version")
 sudo apt install ./packages/desktop/release/Harnessboard-$V-linux-amd64.deb
 ```
@@ -141,18 +142,22 @@ sudo apt install ./packages/desktop/release/Harnessboard-$V-linux-amd64.deb
 #### Linux: Fedora
 
 ```bash
+sudo dnf install rpm-build libxcrypt-compat   # rpmbuild, and libcrypt.so.1 for the fpm tool
 corepack enable
 pnpm install && pnpm build
-pnpm --filter @harnessboard/desktop dist --linux AppImage   # → .AppImage only
+pnpm --filter @harnessboard/desktop dist --linux rpm      # → .rpm
 V=$(node -p "require('./packages/server/package.json').version")
-./packages/desktop/release/Harnessboard-$V-linux-x86_64.AppImage
+sudo dnf install ./packages/desktop/release/Harnessboard-$V-linux-x86_64.rpm
 ```
 
-- **Build the AppImage alone.** A .deb is of no use on Fedora, and building one fails with
-  `libcrypt.so.1: cannot open shared object file`, because the downloaded `fpm` needs a
-  library Fedora does not install. The AppImage is already done when that happens.
-- Move the AppImage wherever you keep programs (for example `~/Applications`) and start it
-  from there.
+- Harnessboard is then in the app menu. Remove it with `sudo dnf remove Harnessboard`; your
+  tasks stay in the data folder.
+- Without `libxcrypt-compat` the build stops with
+  `libcrypt.so.1: cannot open shared object file`: the `fpm` tool electron-builder downloads
+  needs it. `--linux AppImage` builds without it.
+- **Why not Flatpak?** Harnessboard runs `claude`, `codex`, git and your projects' own tools.
+  Flatpak's sandbox hides all of them from the app, so it would have to leave the sandbox for
+  every command anyway.
 
 #### macOS
 
@@ -185,7 +190,7 @@ $V = node -p "require('./packages/server/package.json').version"
   PowerShell once; the other lines do not.
 - The installer installs for your user only and lets you pick the folder.
 
-Only the Fedora steps have been run on a real machine so far. The Ubuntu, macOS and Windows
+Only the Fedora steps have been run on a real machine so far (building the .rpm). The Ubuntu, macOS and Windows
 steps are what CI runs.
 
 ## Acceptance criteria: agree first

@@ -5,6 +5,13 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **An .rpm installer** for Fedora, openSUSE and other rpm-based distributions: install it
+  with `dnf`, and Harnessboard is in the app menu and can be removed like any package. Every
+  release now has it next to the .deb and the AppImage. The README gives the build and
+  install steps for each OS.
+
 ## 0.0.19 - 2026-10-04
 
 ### Added

@@ -86,7 +86,7 @@ hb done 1                            # 標記為已審核完成
   [Releases](https://github.com/AquilaWei/harnessboard/releases) 頁面，附有
   `SHA256SUMS.txt` 可以核對。下載的 AppImage 要先 `chmod +x` 才能執行。
 - **或自己打包**：步驟見下方的[自己打包安裝檔](#自己打包安裝檔)。
-- **安裝檔**：Linux 有 AppImage 和 .deb，macOS 有 .dmg（Intel 和 Apple 晶片），
+- **安裝檔**：Linux 有 .deb（Debian、Ubuntu）、.rpm（Fedora、openSUSE）和 AppImage（任何發行版），macOS 有 .dmg（Intel 和 Apple 晶片），
   Windows 有安裝程式（.exe）。
 - **仍然需要**：git 和 agent CLI（`claude`、`codex`）。程式會用跟終端機一樣的方式找到它們，
   包括 `~/.local/bin`、nvm 和 Homebrew 安裝的。
@@ -117,7 +117,7 @@ hb done 1                            # 標記為已審核完成
 ```bash
 corepack enable
 pnpm install && pnpm build
-pnpm --filter @harnessboard/desktop dist      # → .AppImage 和 .deb
+pnpm --filter @harnessboard/desktop dist --linux deb AppImage   # → .deb 和 .AppImage
 V=$(node -p "require('./packages/server/package.json').version")
 sudo apt install ./packages/desktop/release/Harnessboard-$V-linux-amd64.deb
 ```
@@ -129,17 +129,20 @@ sudo apt install ./packages/desktop/release/Harnessboard-$V-linux-amd64.deb
 #### Linux：Fedora
 
 ```bash
+sudo dnf install rpm-build libxcrypt-compat   # rpmbuild，以及 fpm 工具需要的 libcrypt.so.1
 corepack enable
 pnpm install && pnpm build
-pnpm --filter @harnessboard/desktop dist --linux AppImage   # → 只打包 .AppImage
+pnpm --filter @harnessboard/desktop dist --linux rpm      # → .rpm
 V=$(node -p "require('./packages/server/package.json').version")
-./packages/desktop/release/Harnessboard-$V-linux-x86_64.AppImage
+sudo dnf install ./packages/desktop/release/Harnessboard-$V-linux-x86_64.rpm
 ```
 
-- **只打包 AppImage。** .deb 在 Fedora 上用不到，而且打包時會停在
-  `libcrypt.so.1: cannot open shared object file`：自動下載的 `fpm` 需要 Fedora 預設沒裝的函式庫。
-  出現這個錯誤時 AppImage 已經打包好了。
-- 把 AppImage 搬到你放程式的地方（例如 `~/Applications`），從那裡執行。
+- 裝好後 Harnessboard 會出現在應用程式選單。用 `sudo dnf remove Harnessboard` 移除；
+  任務資料留在資料資料夾，不會被刪。
+- 沒裝 `libxcrypt-compat` 的話，打包會停在 `libcrypt.so.1: cannot open shared object file`：
+  electron-builder 下載的 `fpm` 工具需要它。`--linux AppImage` 則不需要。
+- **為什麼不用 Flatpak？** Harnessboard 要執行 `claude`、`codex`、git 和你專案自己的工具，
+  Flatpak 的沙箱會把這些全部擋在外面，結果每個指令都得跳出沙箱執行。
 
 #### macOS
 
@@ -172,7 +175,7 @@ $V = node -p "require('./packages/server/package.json').version"
   其他指令不用。
 - 安裝程式只安裝給你自己的帳號，可以選安裝資料夾。
 
-目前只有 Fedora 的步驟在實機上跑過；Ubuntu、macOS 和 Windows 的步驟是 CI 跑的那一套。
+目前只有 Fedora 的步驟在實機上跑過（打包 .rpm）；Ubuntu、macOS 和 Windows 的步驟是 CI 跑的那一套。
 
 ## 驗收標準：先討論再開工
 

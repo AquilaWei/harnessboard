@@ -54,6 +54,9 @@ jobs:
       - run: npm install --global --force corepack@latest && corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # rpmbuild, for the .rpm installer.
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
       - run: pnpm --filter @harnessboard/desktop dist
         env:
           # Not signed yet; keeps electron-builder from looking for a certificate.
@@ -64,6 +67,7 @@ jobs:
           path: |
             packages/desktop/release/*.AppImage
             packages/desktop/release/*.deb
+            packages/desktop/release/*.rpm
             packages/desktop/release/*.dmg
             packages/desktop/release/*.exe
           if-no-files-found: error

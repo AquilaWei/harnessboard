@@ -21,7 +21,9 @@ extraResources:
     to: THIRD-PARTY-NOTICES.md
 artifactName: Harnessboard-${version}-${os}-${arch}.${ext}
 linux:
-  target: [AppImage, deb]
+  # .deb for Debian/Ubuntu, .rpm for Fedora/openSUSE, AppImage for the rest. Not Flatpak:
+  # its sandbox hides the agent CLIs, git and the projects' tools the app has to run.
+  target: [AppImage, deb, rpm]
   # Lets desktops tie the running window to the launcher entry.
   syncDesktopName: true
   category: Development
