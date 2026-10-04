@@ -93,6 +93,11 @@ restart picks up exactly where the task was. A loop step's reviewer gets the lat
 snapshot: the features marked done are what it judges, and the features still to come are
 listed as out of scope, so an unfinished list is never a reason to ask for changes.
 
+Rounds count from the step's last pass (`APPROVE`, `TESTS: PASS`) or from the last
+`sent_back` event, which `Harness.queueTask` records when a human sends a task in review back
+to work. The implementer then gets the last review's feedback, and the reviewer and tester
+get `maxReviewRounds` again.
+
 ## Adding an agent CLI
 
 1. Add the provider id to `AGENT_PROVIDERS` in `shared/src/agents.ts`.

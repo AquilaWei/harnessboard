@@ -161,6 +161,42 @@ describe('a reviewer that requests changes', () => {
   });
 });
 
+describe('a task a human sends back after the last allowed round', () => {
+  const twoRoundsOfChanges = [
+    session('done', writeFile('hello.txt', 'hi')),
+    session('VERDICT: CHANGES\n- greet by name'),
+    session('fixed', writeFile('hello.txt', 'hi Ada')),
+    session('VERDICT: CHANGES\n- greet by full name'),
+  ];
+
+  it('gives the implementer the last review', async () => {
+    scenario(...twoRoundsOfChanges, session('fixed again', writeFile('hello.txt', 'hi Ada L')));
+    const task = await createReviewed();
+    await runQueued();
+    await runQueued();
+    await runQueued();
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    expect(fakeRuns()[4]!.received[0]).toContain('- greet by full name');
+  });
+
+  it('lets the reviewer ask for changes again instead of stopping', async () => {
+    scenario(
+      ...twoRoundsOfChanges,
+      session('fixed again', writeFile('hello.txt', 'hi Ada L')),
+      session('VERDICT: CHANGES\n- add a comma'),
+    );
+    const task = await createReviewed();
+    await runQueued();
+    await runQueued();
+    await runQueued();
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    await runQueued();
+    expect(status(task.id)).toBe('queued');
+  });
+});
+
 describe('a reviewer of a loop task', () => {
   it('may run the verify command', async () => {
     scenario(

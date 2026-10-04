@@ -11,6 +11,10 @@ are test versions that have not been accepted on real machines yet.
   a loop task judged each step against the whole goal, so it asked for changes until every
   feature was built and stopped the task after two rounds. It now reviews the features marked
   done, and is told the rest belong to later steps.
+- **Sending a task back from review starts the review rounds again.** Before, a task that had
+  used its rounds went back to review after one more step, whatever the reviewer said. Now
+  the implementer works on the last review's points, and the reviewer and tester get their
+  full number of rounds again.
 
 ## 0.0.16 - 2026-10-03
 

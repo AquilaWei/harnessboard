@@ -192,6 +192,25 @@ describe('a tester that reports failures', () => {
     ]);
   });
 
+  it('gets fresh rounds when a human sends the task back', async () => {
+    scenario(
+      implemented,
+      failing,
+      session('fixed', writeFile('hello2.txt', 'x')),
+      failing,
+      session('fixed again', writeFile('hello3.txt', 'x')),
+      failing,
+    );
+    const task = await tested();
+    await runQueued(); // tester fails
+    await runQueued(); // implementer fixes
+    await runQueued(); // tester fails again: to a human
+    harness.queueTask(task.id); // implementer fixes again
+    await harness.waitForIdle();
+    await runQueued(); // tester fails, round 1 after the send-back
+    expect(status(task.id)).toBe('queued');
+  });
+
   it('hands the task to a human when the reply has no verdict line', async () => {
     scenario(implemented, session('Looks fine to me'));
     const task = await tested();

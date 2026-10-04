@@ -194,7 +194,10 @@ hb add "Add input validation to the signup form" --reviewer opus
 - **Verdict:** the reviewer answers `VERDICT: APPROVE` or `VERDICT: CHANGES` followed by
   what to fix. Requested changes go to the implementer's next session.
 - **Bounded:** after `maxReviewRounds` (2) rounds of requested changes, or a reply without
-  a verdict, the task goes to Review for you to decide.
+  a verdict, the task goes to Review for you to decide. Sending it back to work from there
+  passes on the last review's points and gives the reviewer its rounds again.
+- **Feature lists:** in a loop task each step is reviewed on the features marked done; the
+  ones still to come are not held against it.
 - **Default reviewer:** `defaultReviewer` in the config (or the web settings) applies to
   new tasks. `--reviewer none` turns review off for one task.
 

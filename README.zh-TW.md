@@ -169,7 +169,9 @@ hb add "Add input validation to the signup form" --reviewer opus
 - **結論**：審查者回覆的開頭必須是 `VERDICT: APPROVE` 或 `VERDICT: CHANGES`，
   後面接要修改的內容。要求修改的內容會交給實作者的下一個 session。
 - **有上限**：要求修改超過 `maxReviewRounds`（2）輪，或回覆裡沒有結論時，
-  任務會進入「待審核」，由你決定。
+  任務會進入「待審核」，由你決定。從那裡送回繼續做時，會帶著最後一次審查的意見，
+  審查者的輪數也重新計算。
+- **逐項完成的任務**：每一步只審查已標為完成的 feature，還沒輪到的不算缺失。
 - **預設審查者**：設定裡的 `defaultReviewer`（網頁設定也能改）會套用到新任務；
   單一任務可以用 `--reviewer none` 關閉審查。
 

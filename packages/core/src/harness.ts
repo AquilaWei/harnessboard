@@ -470,11 +470,18 @@ export class Harness {
     return task;
   }
 
-  /** Puts a task in line to run. Throws when it is missing, running, queued or done. */
+  /**
+   * Puts a task in line to run. A task in review is sent back to work with the last review's
+   * feedback and fresh review rounds. Throws when it is missing, running, queued or done.
+   */
   queueTask(id: number): Task {
     const task = this.requireTask(id);
     if (!STARTABLE.includes(task.status)) {
       throw new Error(`task ${id} is ${task.status} and cannot be queued`);
+    }
+    if (task.status === 'review') {
+      this.workflow.sendBack(id);
+      this.notice(id, 'sent back to work by you; review rounds start again');
     }
     const queued = this.setStatus(id, 'queued', { resumeAt: null });
     this.tick();

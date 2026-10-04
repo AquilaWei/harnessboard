@@ -659,8 +659,7 @@ export class Workflow {
       }
       return;
     }
-    const passedAt = reports.findLastIndex((r) => r.verdict === 'pass');
-    const round = reports.slice(passedAt + 1).length + 1;
+    const round = this.roundsSince(task.id, 'test_report', 'pass') + 1;
     const request: TestRequest = { round, since: await this.stepBase(task), head, status };
     this.host.store.appendEvent(task.id, null, 'test_request', request);
     this.host.notice(task.id, `sent to ${task.agents.tester} for testing (round ${round})`);
@@ -757,13 +756,32 @@ export class Workflow {
       }
       return;
     }
-    const approvedAt = reviews.findLastIndex((r) => r.verdict === 'approve');
-    const round = reviews.slice(approvedAt + 1).length + 1;
+    const round = this.roundsSince(task.id, 'review', 'approve') + 1;
     const since = await this.stepBase(task);
     const request: ReviewRequest = { round, since, head, status };
     this.host.store.appendEvent(task.id, null, 'review_request', request);
     this.host.notice(task.id, `sent for review to ${task.agents.reviewer} (round ${round})`);
     this.host.setStatus(task.id, 'queued');
+  }
+
+  /**
+   * Records that a human sent a task in review back to work. The reviewer's and tester's
+   * rounds count again from here, so the task does not stop after a single further step.
+   */
+  sendBack(taskId: number): void {
+    this.host.store.appendEvent(taskId, null, 'sent_back', {});
+  }
+
+  /**
+   * Reviews (or test reports) since the step last passed or a human sent the task back;
+   * these are the rounds counted against `maxReviewRounds`.
+   */
+  private roundsSince(taskId: number, kind: 'review' | 'test_report', passed: string): number {
+    const store = this.host.store;
+    const records = store.eventsOfKind(taskId, kind);
+    const passedAt = records.findLast((e) => (e.data as { verdict: string }).verdict === passed);
+    const start = Math.max(passedAt?.id ?? 0, store.lastEvent(taskId, 'sent_back')?.id ?? 0);
+    return records.filter((e) => e.id > start).length;
   }
 
   /** Where an approved (or unreviewed) step leads: the next loop feature or human review. */
