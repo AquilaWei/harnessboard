@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.19 - 2026-10-04
+
 ### Added
 
 - **Desktop app.** Harnessboard can be built as an app for Linux (AppImage, .deb), macOS
