@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent, ModelInfo, RunUsage } from '@harnessboard/shared';
+import type { AgentEvent, ModelInfo, QuotaInfo, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, LineParser, SessionSpec } from './agent.js';
+import { readCodexQuota } from './codex-quota.js';
 import { parseCodexModels } from './models.js';
 import { output } from './process.js';
 
@@ -22,6 +23,11 @@ export class CodexAdapter implements AgentAdapter {
   };
 
   constructor(readonly command: string) {}
+
+  /** The account's usage as Codex last recorded it in a session log. */
+  readQuota(): Promise<QuotaInfo | null> {
+    return Promise.resolve(readCodexQuota());
+  }
 
   /** The models Codex offers in its own picker, from its model catalog. */
   async listModels(): Promise<ModelInfo[]> {

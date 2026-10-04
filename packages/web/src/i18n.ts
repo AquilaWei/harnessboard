@@ -7,9 +7,9 @@ const en = {
     running: '{{count}} running',
     attention_one: '{{count}} needs you',
     attention_other: '{{count}} need you',
-    quota: 'Quota',
     quotaPaused: 'Paused for quota',
     quotaUnknown: 'Quota: not reported yet',
+    quotaUnknownFor: '{{name}} quota: not reported yet',
   },
   folders: {
     placeholder: '/path/to/project',
@@ -25,8 +25,9 @@ const en = {
     notRepo: 'Not inside a git repository. Pick another folder, or run this in it:',
     noCommits: 'This repository has no commits yet. Make a first commit, then try again.',
   },
+  providers: { 'claude-code': 'Claude', codex: 'Codex' },
   quota: {
-    title: 'Subscription quota',
+    titleFor: '{{name}} subscription quota',
     fiveHour: '5-hour window',
     sevenDay: '7-day window',
     resetsAt: 'resets {{time}}',
@@ -485,9 +486,9 @@ const zhTW: typeof en = {
     running: '{{count}} 個執行中',
     attention_one: '{{count}} 個需要你處理',
     attention_other: '{{count}} 個需要你處理',
-    quota: '額度',
     quotaPaused: '額度不足，暫停中',
     quotaUnknown: '額度：尚未回報',
+    quotaUnknownFor: '{{name}} 額度：尚未回報',
   },
   folders: {
     placeholder: '/path/to/project',
@@ -503,8 +504,9 @@ const zhTW: typeof en = {
     notRepo: '不在 git repository 裡。請換一個資料夾，或在這個資料夾執行：',
     noCommits: '這個 repository 還沒有任何 commit，請先 commit 一次再試。',
   },
+  providers: { 'claude-code': 'Claude', codex: 'Codex' },
   quota: {
-    title: '訂閱額度',
+    titleFor: '{{name}} 訂閱額度',
     fiveHour: '5 小時區間',
     sevenDay: '7 天區間',
     resetsAt: '{{time}} 重置',

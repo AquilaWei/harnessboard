@@ -5,6 +5,13 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Codex usage on the board.** The header shows a quota reading for each platform you use,
+  so Codex's 5-hour and 7-day usage appears next to Claude's, and Codex sessions pause near
+  the limit like Claude's do. `codex exec` does not report usage, so it is read every minute
+  from Codex's own session logs, which include what you used in Codex yourself.
+
 ## 0.0.15 - 2026-10-03
 
 ### Changed

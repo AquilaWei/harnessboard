@@ -102,6 +102,8 @@ import {
 export const DEFAULT_ALLOWED_TOOLS = presetRules([DEFAULT_PRESET]);
 
 const TICK_MS = 5_000;
+/** How often usage that CLIs record themselves (rather than report) is read again. */
+const QUOTA_READ_MS = 60_000;
 /** How long a profile's model list is reused before its CLI is asked again. */
 const MODELS_TTL_MS = 10 * 60_000;
 const DEFAULT_REVIEW_ROUNDS = 2;
@@ -142,6 +144,7 @@ export class Harness {
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   private readonly adapters = new Map<string, AgentAdapter>();
+  private quotaReadAt = 0;
   private readonly modelLists = new Map<string, { at: number; models: ModelInfo[] }>();
   private readonly activities = new Map<number, TaskActivity>();
   /** Tool uses each running task waits on the user for, by request id. */
@@ -937,6 +940,7 @@ export class Harness {
 
   /** Starts queued tasks up to the concurrency limit and wakes quota-paused ones. */
   tick(now = Date.now()): void {
+    if (now - this.quotaReadAt >= QUOTA_READ_MS) void this.readQuotas(now);
     this.releaseHeld(now);
     for (const task of dueForRetry(this.store.listTasks(), now)) {
       this.setStatus(task.id, 'queued', { resumeAt: null });
@@ -966,6 +970,28 @@ export class Harness {
   private quotaBlocked(provider: AgentProvider, now: number): boolean {
     const quota = this.quotas.get(provider) ?? null;
     return quotaBlocks(quota, now, this.config.quotaPauseUtilization);
+  }
+
+  /**
+   * Reads usage from the records of CLIs that keep it there instead of reporting it while
+   * they run (Codex), so it shows and pauses sessions like Claude Code's. Usage the user ran
+   * up outside Harnessboard counts too.
+   */
+  private async readQuotas(now: number): Promise<void> {
+    this.quotaReadAt = now;
+    for (const provider of AGENT_PROVIDERS) {
+      const agentId = this.profilesOf(provider)[0];
+      const adapter = agentId ? this.adapterFor(agentId) : null;
+      if (!adapter?.readQuota) continue;
+      try {
+        const quota = await adapter.readQuota();
+        if (!quota) continue;
+        this.quotas.set(provider, quota);
+        this.emit({ type: 'quota', provider, quota });
+      } catch {
+        // Its records could not be read this time; the last reading stays until the next.
+      }
+    }
   }
 
   private profilesOf(provider: AgentProvider): string[] {

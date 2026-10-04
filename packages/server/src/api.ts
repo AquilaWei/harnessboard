@@ -195,7 +195,8 @@ export function createApi(harness: Harness): Hono {
     const only = c.req.query('task');
     return streamSSE(c, async (stream) => {
       const unsubscribe = harness.subscribe((event: HarnessEvent) => {
-        if (only && String(event.taskId) !== only) return;
+        // A task's stream carries only that task's events, not account-wide ones like quota.
+        if (only && !('taskId' in event && String(event.taskId) === only)) return;
         void stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
       });
       stream.onAbort(unsubscribe);

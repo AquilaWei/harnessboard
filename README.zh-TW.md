@@ -212,7 +212,9 @@ hb add "Add input validation to the signup form" --reviewer opus
   （並提示修正指令），或還沒有任何 commit。
 - **上下文條**：session 執行中才顯示。預算內是藍色，超過收尾門檻變黃色，超過上限變紅色，
   兩個門檻都有刻度。Loop 任務另外顯示已驗證的 feature 進度。
-- **額度**：頁首顯示 5 小時的用量，點開可以看兩個區間的用量和暫停門檻。
+- **額度**：頁首分別顯示你用到的每個平台（Claude、Codex）的 5 小時用量，點開可以看兩個區間的
+  用量和暫停門檻；各平台各自暫停。Claude Code 執行時會回報用量；Codex 不會，所以 Harnessboard
+  每分鐘從 Codex 自己存在 `~/.codex/sessions` 的紀錄讀取，你自己在 Codex 裡用掉的也會算進去。
 - **設定**：
   - 同時執行數、額度暫停比例、預設任務大小、預設審查者，會存到使用者設定檔。
   - 列出各 agent 設定檔，以及它的 CLI 能不能執行。

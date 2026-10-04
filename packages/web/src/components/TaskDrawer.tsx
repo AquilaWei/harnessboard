@@ -86,7 +86,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
     void loadTask();
   }, 400);
   useLiveEvents((event: HarnessEvent) => {
-    if (event.taskId === taskId) refresh();
+    if ('taskId' in event && event.taskId === taskId) refresh();
   });
 
   useEffect(() => {

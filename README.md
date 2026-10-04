@@ -249,8 +249,11 @@ still be typed. On the command line: `hb agents --models <profile>`.
 - **Context meter** while a session runs. It is blue under budget, amber past the wrap-up
   point and red past the limit, with ticks at both. Loop tasks also show verified feature
   progress.
-- **Quota:** the header shows the 5-hour usage; click it for both windows and the pause
-  level.
+- **Quota:** the header shows the 5-hour usage of each platform you use (Claude, Codex);
+  click one for both windows and the pause level. Each platform pauses on its own. Claude
+  Code reports usage while it runs; Codex does not, so Harnessboard reads it every minute
+  from the session logs Codex keeps under `~/.codex/sessions`, which also counts what you
+  used in Codex yourself.
 - **Settings:**
   - Concurrency, quota pause level, default task size and default reviewer. These are saved
     to your user config file.

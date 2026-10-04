@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent, AgentProvider, ModelInfo } from '@harnessboard/shared';
+import type { AgentEvent, AgentProvider, ModelInfo, QuotaInfo } from '@harnessboard/shared';
 
 /** Tools a session may use: `edit` implements, `readOnly` only inspects (reviewers). */
 export type SessionAccess = 'edit' | 'readOnly';
@@ -92,6 +92,11 @@ export interface AgentAdapter {
    * list them; then any model id can still be typed. Rejects when listing fails.
    */
   listModels?(): Promise<ModelInfo[]>;
+  /**
+   * The account's latest usage, read from the CLI's own records, for CLIs whose output does
+   * not report it as `quota` events. `null` when nothing is recorded yet.
+   */
+  readQuota?(): Promise<QuotaInfo | null>;
   /** Arguments that print the CLI version; used to check the CLI is installed. */
   readonly versionArgs: string[];
   /** Arguments that reopen a session in the CLI's own interactive UI (`hb open`). */

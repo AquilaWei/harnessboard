@@ -13,7 +13,7 @@ export function useLiveEvents(onEvent: (event: HarnessEvent) => void): void {
     const source = new EventSource('/api/events');
     const listener = (e: MessageEvent<string>) =>
       handler.current(JSON.parse(e.data) as HarnessEvent);
-    for (const type of ['agent', 'task', 'deleted', 'harness'])
+    for (const type of ['agent', 'task', 'deleted', 'harness', 'quota'])
       source.addEventListener(type, listener);
     return () => source.close();
   }, []);

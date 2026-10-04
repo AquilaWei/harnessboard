@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { RunUsage } from './usage.js';
+import type { AgentProvider } from './agents.js';
 
 /** Subscription quota snapshot reported by the agent CLI. */
 export interface QuotaInfo {
@@ -58,4 +59,6 @@ export type HarnessEvent =
   | { type: 'agent'; taskId: number; sessionId: string; event: AgentEvent }
   | { type: 'task'; taskId: number; status: string }
   | { type: 'deleted'; taskId: number }
-  | { type: 'harness'; taskId: number; message: string };
+  | { type: 'harness'; taskId: number; message: string }
+  /** A provider's usage, read from the CLI's own records rather than from a session. */
+  | { type: 'quota'; provider: AgentProvider; quota: QuotaInfo };

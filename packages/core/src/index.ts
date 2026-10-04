@@ -2,6 +2,7 @@
 export * from './agent.js';
 export * from './claude-code.js';
 export * from './codex.js';
+export * from './codex-quota.js';
 export * from './config.js';
 export * from './folders.js';
 export * from './harness.js';

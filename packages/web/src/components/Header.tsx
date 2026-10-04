@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { HarnessStatus, QuotaInfo, Settings } from '@harnessboard/shared';
+import { AGENT_PROVIDERS } from '@harnessboard/shared';
+import type { AgentProvider, HarnessStatus, QuotaInfo, Settings } from '@harnessboard/shared';
 import { windowAt } from '../quota';
 import { QuotaMeter } from './Meter';
 
@@ -17,8 +18,9 @@ interface Props {
 /** Brand, a one-line summary of the board, the quota, and the two global actions. */
 export function Header({ running, attention, status, settings, onNewTask, onSettings }: Props) {
   const { t } = useTranslation();
-  const quota = status?.quotas['claude-code'] ?? null;
-  const paused = (status?.quotaPaused.length ?? 0) > 0;
+  // One reading per platform that has reported its usage, in a fixed order.
+  const providers = AGENT_PROVIDERS.filter((p) => status?.quotas[p]);
+  const pauseAt = settings?.quotaPauseUtilization ?? 0.95;
 
   const jumpToAttention = () =>
     document.getElementById('stage-attention')?.scrollIntoView({ behavior: 'smooth' });
@@ -39,11 +41,16 @@ export function Header({ running, attention, status, settings, onNewTask, onSett
             ! {t('summary.attention', { count: attention })}
           </button>
         )}
-        <QuotaButton
-          quota={quota}
-          paused={paused}
-          pauseAt={settings?.quotaPauseUtilization ?? 0.95}
-        />
+        {providers.length === 0 && <span className="chip muted">{t('summary.quotaUnknown')}</span>}
+        {providers.map((provider) => (
+          <QuotaButton
+            key={provider}
+            provider={provider}
+            quota={status!.quotas[provider]!}
+            paused={status!.quotaPaused.includes(provider)}
+            pauseAt={pauseAt}
+          />
+        ))}
       </div>
       <div className="header-actions">
         <button type="button" className="btn" onClick={onSettings} disabled={!settings}>
@@ -57,8 +64,13 @@ export function Header({ running, attention, status, settings, onNewTask, onSett
   );
 }
 
-/** Compact quota reading that opens the full breakdown. */
-function QuotaButton(props: { quota: QuotaInfo | null; paused: boolean; pauseAt: number }) {
+/** Compact quota reading of one platform that opens the full breakdown. */
+function QuotaButton(props: {
+  provider: AgentProvider;
+  quota: QuotaInfo;
+  paused: boolean;
+  pauseAt: number;
+}) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -80,9 +92,10 @@ function QuotaButton(props: { quota: QuotaInfo | null; paused: boolean; pauseAt:
     };
   }, [open]);
 
-  const { quota, paused, pauseAt } = props;
-  if (quota?.fiveHourUtilization == null) {
-    return <span className="chip muted">{t('summary.quotaUnknown')}</span>;
+  const { provider, quota, paused, pauseAt } = props;
+  const name = t(`providers.${provider}`);
+  if (quota.fiveHourUtilization == null) {
+    return <span className="chip muted">{t('summary.quotaUnknownFor', { name })}</span>;
   }
   const now = Date.now();
   // Snapshots from before 0.0.5 have no per-window reset; the top-level one is the best guess.
@@ -104,11 +117,11 @@ function QuotaButton(props: { quota: QuotaInfo | null; paused: boolean; pauseAt:
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
-        {paused ? `⏸ ${t('summary.quotaPaused')}` : `${t('summary.quota')} 5h ${pct}%`}
+        {paused ? `⏸ ${name} ${t('summary.quotaPaused')}` : `${name} 5h ${pct}%`}
       </button>
       {open && (
-        <div className="popover" role="dialog" aria-label={t('quota.title')}>
-          <h3>{t('quota.title')}</h3>
+        <div className="popover" role="dialog" aria-label={t('quota.titleFor', { name })}>
+          <h3>{t('quota.titleFor', { name })}</h3>
           <QuotaMeter
             label={t('quota.fiveHour')}
             utilization={fiveHour.utilization}
