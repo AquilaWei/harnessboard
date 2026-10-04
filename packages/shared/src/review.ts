@@ -10,6 +10,7 @@ import type {
 } from './task.js';
 import type { FeatureSnapshot, PlanApproval, PlanProposal } from './loop.js';
 import type { PermissionDecisionRecord, PermissionRequest } from './permissions.js';
+import type { AgentRole } from './agents.js';
 
 export type Verdict = 'approve' | 'changes';
 
@@ -65,6 +66,20 @@ export interface TestReport {
   /** The tester's reply without the verdict line. */
   findings: string;
   head: string;
+}
+
+/**
+ * Stored as the `role_note` event after each finished workflow session: what that role
+ * reports to the roles after it. The harness writes these to the task's notes file; the
+ * agents only read it.
+ */
+export interface RoleNote {
+  role: AgentRole;
+  agentId: string;
+  /** A tester's or reviewer's verdict, as recorded in its report or review. */
+  verdict: 'pass' | 'fail' | 'approve' | 'changes' | null;
+  /** The reply's notes section, or the whole reply when it has none. */
+  text: string;
 }
 
 /**

@@ -19,6 +19,7 @@ import type {
   StoredEvent,
   TaskDetail,
   TaskView,
+  TaskNotes,
   TimelineEntry,
   WorktreeDiff,
 } from '@harnessboard/shared';
@@ -60,6 +61,7 @@ export const api = {
     request<{ show: string }>(`/tasks/${id}/commits/${encodeURIComponent(hash)}`),
   diff: (id: number) => request<WorktreeDiff>(`/tasks/${id}/diff`),
   timeline: (id: number) => request<TimelineEntry[]>(`/tasks/${id}/timeline`),
+  notes: (id: number) => request<TaskNotes>(`/tasks/${id}/notes`),
   agents: () => request<AgentInfo[]>('/agents'),
   detectAgents: () => request<DetectedAgent[]>('/agents/detect'),
   addAgent: (input: NewAgentProfile) => send<AgentProfile>('POST', '/agents', input),

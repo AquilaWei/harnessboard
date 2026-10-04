@@ -181,6 +181,8 @@ export function createApi(harness: Harness): Hono {
 
   app.get('/tasks/:id/timeline', (c) => c.json(timeline(taskId(c), harness.store)));
 
+  app.get('/tasks/:id/notes', (c) => c.json(harness.notes(taskId(c))));
+
   app.get('/tasks/:id/commits', async (c) => c.json(await harness.commits(taskId(c))));
   app.get('/tasks/:id/commits/:hash', async (c) =>
     c.json({ show: await harness.commitDiff(taskId(c), c.req.param('hash')) }),

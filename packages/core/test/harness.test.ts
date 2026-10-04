@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
+  ASK_FOR_NOTES,
   FAKE_CLAUDE,
   askBash,
   assistantText,
@@ -110,7 +111,7 @@ describe('a task whose session completes', () => {
   it('sends the task prompt as the first message', async () => {
     await harness.createTask({ prompt: 'Fix the bug', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
-    expect(fakeRuns()[0]!.received).toEqual(['Fix the bug']);
+    expect(fakeRuns()[0]!.received).toEqual([`Fix the bug${ASK_FOR_NOTES}`]);
   });
 
   it('records the context window the agent reported', async () => {

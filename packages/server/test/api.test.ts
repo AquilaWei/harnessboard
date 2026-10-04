@@ -408,6 +408,15 @@ describe('reviewed tasks', () => {
   });
 });
 
+describe('notes API', () => {
+  it('reports no notes for a task no role has reported on', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}/notes`, { headers: local });
+    expect(await res.json()).toEqual({ markdown: null });
+  });
+});
+
 describe('folders API', () => {
   it('lists subfolders and marks git repositories', async () => {
     const parent = path.dirname(repo);

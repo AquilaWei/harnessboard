@@ -127,6 +127,11 @@ export interface CreateTaskInput {
 }
 
 /** One entry of a task's event log (`GET /api/tasks/:id/events`). */
+/** A task's notes file (`GET /api/tasks/:id/notes`); `markdown` is `null` before any role reported. */
+export interface TaskNotes {
+  markdown: string | null;
+}
+
 export interface StoredEvent {
   id: number;
   taskId: number;

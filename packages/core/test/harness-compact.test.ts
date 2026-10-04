@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
+  ASK_FOR_NOTES,
   FAKE_CLAUDE,
   assistantText,
   compactBoundary,
@@ -78,7 +79,7 @@ describe('a turn that ends past the compact threshold', () => {
 
   it('is followed by /compact in the same process', async () => {
     await create();
-    expect(fakeRuns()[0]!.received).toEqual(['Build it', '/compact']);
+    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`, '/compact']);
   });
 
   it('ends as completed', async () => {
@@ -114,7 +115,7 @@ describe('a turn that crosses the compact threshold mid-work', () => {
 
   it('is not interrupted: /compact only follows the end of the turn', async () => {
     await create();
-    expect(fakeRuns()[0]!.received).toEqual(['Build it', '/compact']);
+    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`, '/compact']);
   });
 });
 
@@ -123,7 +124,7 @@ describe('a turn that ends under the compact threshold', () => {
 
   it('is not compacted', async () => {
     await create();
-    expect(fakeRuns()[0]!.received).toEqual(['Build it']);
+    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`]);
   });
 });
 
@@ -134,7 +135,7 @@ describe('a turn that ends in an error past the compact threshold', () => {
 
   it('is not compacted', async () => {
     await create();
-    expect(fakeRuns()[0]!.received).toEqual(['Build it']);
+    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`]);
   });
 });
 
@@ -161,6 +162,6 @@ describe('a task with compaction turned off', () => {
       queue: true,
     });
     await harness.waitForIdle();
-    expect(fakeRuns()[0]!.received).toEqual(['Build it']);
+    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`]);
   });
 });

@@ -6,6 +6,7 @@ export * from './config.js';
 export * from './folders.js';
 export * from './harness.js';
 export * from './loop.js';
+export * from './notes.js';
 export * from './process.js';
 export * from './providers.js';
 export * from './review.js';

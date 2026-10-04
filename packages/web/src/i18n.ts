@@ -206,8 +206,13 @@ const en = {
     log: 'Log',
     features: 'Plan',
     criteria: 'Criteria',
+    notes: 'Notes',
     chat: 'Chat',
     details: 'Details',
+  },
+  notes: {
+    empty:
+      'No notes yet. Each role reports here when its session ends, for the roles after it to read.',
   },
   questions: {
     heading: 'My answers to your questions:',
@@ -672,8 +677,12 @@ const zhTW: typeof en = {
     log: '紀錄',
     features: '規格',
     criteria: '驗收標準',
+    notes: '交接',
     chat: '對話',
     details: '詳細資訊',
+  },
+  notes: {
+    empty: '還沒有交接紀錄。每個角色的工作階段結束時會在這裡留下交接，給之後的角色閱讀。',
   },
   questions: {
     heading: '我對你的問題的回答：',

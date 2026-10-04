@@ -7,6 +7,13 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **Notes between roles.** Each role ends its reply with a `## Notes` section for the roles
+  after it (what it did, its decisions, its doubts, what to check). Harnessboard records them
+  and keeps them in `.harnessboard/notes.md` in the task's worktree, which every later role
+  reads first; see them on the task's **Notes** tab. Only Harnessboard writes the file: it is
+  rebuilt from its own records before each session, so no agent can change another's report,
+  and git ignores it.
+
 - **Agent CLIs are found for you.** Harnessboard looks for `claude` and `codex` on your PATH
   and points out any without a profile when the server starts, in `hb agents` and under
   **Settings → Agents**. Add one with the **Add** button or `hb agents --add codex`

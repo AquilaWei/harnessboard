@@ -15,6 +15,7 @@ import type {
   MergeConflict,
   PlanProposal,
   ReviewRecord,
+  RoleNote,
   SpecRecord,
   ReviewRequest,
   TestReport,
@@ -27,6 +28,7 @@ import type {
 import type { SessionAccess } from './agent.js';
 import type { HarnessConfig } from './config.js';
 import { missingFeatures, readPlan, runVerify } from './loop.js';
+import { notesPrompt, parseNotes, renderNotes, writeNotes } from './notes.js';
 import {
   QUOTA_RESUME_PROMPT,
   continuationPrompt,
@@ -97,6 +99,14 @@ export class Workflow {
    * that session still has budget.
    */
   plan(task: Task): SessionPlan {
+    const plan = this.nextSession(task);
+    // A resumed session was already told; the discussion is with the user, not other roles.
+    if (plan.prompt === QUOTA_RESUME_PROMPT || !this.keepsNotes(plan)) return plan;
+    const hasNotes = this.notes(task.id).length > 0;
+    return { ...plan, prompt: `${plan.prompt}\n\n${notesPrompt(hasNotes)}` };
+  }
+
+  private nextSession(task: Task): SessionPlan {
     const last = this.host.store.listSessions(task.id).at(-1);
     const request = this.pendingReview(task.id);
     if (request) return this.reviewPlan(task, request, last);
@@ -499,6 +509,9 @@ export class Workflow {
       task.id,
       `session ended: ${outcome.reason}${outcome.detail ? ` (${outcome.detail})` : ''}`,
     );
+    if (outcome.reason === 'completed' && this.keepsNotes(plan)) {
+      await this.recordNote(task, plan, outcome.finalText);
+    }
     if (plan.role === 'reviewer') {
       await this.finishReview(task, plan, outcome);
       return;
@@ -524,6 +537,50 @@ export class Workflow {
       default:
         this.interrupted(task, outcome);
     }
+  }
+
+  /** Every workflow session reports to the notes file, except the discussion with the user. */
+  private keepsNotes(plan: SessionPlan): boolean {
+    return !(plan.role === 'spec' && plan.access === 'readOnly');
+  }
+
+  private notes(taskId: number): { note: RoleNote; at: number }[] {
+    return this.host.store
+      .eventsOfKind(taskId, 'role_note')
+      .map((e) => ({ note: e.data as RoleNote, at: e.ts }));
+  }
+
+  /** The task's notes file as the agents see it, rendered from the stored notes; `null` before any. */
+  renderedNotes(task: Task): string | null {
+    const notes = this.notes(task.id);
+    return notes.length > 0 ? renderNotes(task.id, task.title, notes) : null;
+  }
+
+  /**
+   * Rewrites the task's notes file from the stored notes. Runs before every session, so a
+   * file an agent changed or deleted is restored before the next role reads it.
+   */
+  async syncNotes(task: Task): Promise<void> {
+    const content = this.renderedNotes(task);
+    if (task.worktreePath && content !== null) await writeNotes(task.worktreePath, content);
+  }
+
+  /** Stores what a finished session reports for the roles after it, and updates the file. */
+  private async recordNote(task: Task, plan: SessionPlan, reply: string): Promise<void> {
+    const verdict =
+      plan.role === 'reviewer'
+        ? parseVerdict(reply).verdict
+        : plan.role === 'tester'
+          ? parseTestVerdict(reply).verdict
+          : null;
+    const note: RoleNote = {
+      role: plan.role,
+      agentId: plan.agentId,
+      verdict,
+      text: parseNotes(reply),
+    };
+    this.host.store.appendEvent(task.id, null, 'role_note', note);
+    await this.syncNotes(task);
   }
 
   /** Nothing is changed until the user approves the criteria or replies to them. */

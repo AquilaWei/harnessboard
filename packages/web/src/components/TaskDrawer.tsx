@@ -22,13 +22,14 @@ import { UsageLine } from './UsageSummary';
 import { DiffView } from './DiffView';
 import { FeatureList } from './FeatureList';
 import { LogView } from './LogView';
+import { NotesView } from './NotesView';
 import { FeatureProgress } from './Meter';
 import { PermissionPrompt } from './PermissionPrompt';
 import { PlanReview } from './PlanReview';
 import { Timeline } from './Timeline';
 
 export type DrawerTab =
-  'timeline' | 'chat' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
+  'timeline' | 'notes' | 'chat' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
 
 interface Props {
   taskId: number;
@@ -119,6 +120,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
     'timeline',
     ...(task?.mode === 'loop' ? (['features'] as const) : []),
     ...(hasCriteria ? (['criteria'] as const) : []),
+    ...(task?.latestSessionId ? (['notes'] as const) : []),
     // A chat continues the task's conversation, so there must be one.
     ...(task?.latestSessionId ? (['chat'] as const) : []),
     'changes',
@@ -248,6 +250,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
         </div>
         <div className="drawer-body">
           {tab === 'timeline' && <Timeline entries={timeline} />}
+          {tab === 'notes' && task && (
+            <NotesView taskId={taskId} version={task.updatedAt} onError={onError} />
+          )}
           {tab === 'chat' && task && (
             <ChatPanel task={task} onSent={() => void loadTask()} onError={onError} />
           )}

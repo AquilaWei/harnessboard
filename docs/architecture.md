@@ -54,6 +54,17 @@ profiles.
 
   A task names a profile for each role (`task.agents`).
 
+  **Notes between roles.** Every workflow session except the discussion with the user is
+  asked (`notesPrompt`) to end its reply with a `## Notes` section. When it completes,
+  `Workflow.recordNote` stores the section (or the whole reply) as a `role_note` event with
+  the role, agent and verdict, and renders all notes into `.harnessboard/notes.md` in the
+  worktree (`core/src/notes.ts`). Later sessions are told to read that file first. The
+  events are the record: `syncNotes` rewrites the file from them before every session, so an
+  agent's edit to it never reaches the next role, and the directory is listed in the
+  repository's `info/exclude`, so the file is never a change (the reviewer's unchanged-worktree
+  check and the tester's test-paths-only check do not see it). `GET /api/tasks/:id/notes`
+  renders the same notes for the web UI.
+
 The reviewer loop lives in `core/src/workflow.ts`:
 
 ```

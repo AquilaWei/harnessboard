@@ -125,6 +125,18 @@ two rounds as review, then to you); a pass goes on to the reviewer. It may only 
 files; anything else stops the task. Use `--tester codex --tester-model <model>`, the
 **Tester** menu, or `hb models <id> --tester <agent|none>`. It applies to single tasks.
 
+**Notes between roles:** every role ends its reply with a `## Notes` section for the roles
+after it: what it did, the decisions it made, what it is unsure of and what to check next.
+Harnessboard records each one and keeps them in `.harnessboard/notes.md` in the task's
+worktree, oldest first, which the next role is told to read before it starts. Only
+Harnessboard writes this file: it is rebuilt from its own records before every session, so
+no agent can change another's report, and git ignores it, so it never reaches a commit. Read
+it on the task's **Notes** tab. A role that writes no notes section is recorded with its
+whole reply. The discussion with you is not part of it; its outcome is the spec file.
+
+When the reviewer asks for changes, the fix goes back through the tester (if there is one)
+before the reviewer sees it again.
+
 Criteria given when creating the task are used as they are. `--no-discuss` (or unticking
 the box in the New task dialog) starts without criteria.
 

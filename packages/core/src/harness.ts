@@ -50,6 +50,7 @@ import type {
   Task,
   TaskActivity,
   TaskAgents,
+  TaskNotes,
   TaskStatus,
   WorktreeDiff,
 } from '@harnessboard/shared';
@@ -871,6 +872,11 @@ export class Harness {
     return worktreeDiff(task.worktreePath, task.baseRef);
   }
 
+  /** The task's notes file: what each role reported, kept even after the worktree is gone. */
+  notes(id: number): TaskNotes {
+    return { markdown: this.workflow.renderedNotes(this.requireTask(id)) };
+  }
+
   /** Commits on the task's branch since its base, newest first; none before it has a worktree. */
   async commits(id: number): Promise<CommitInfo[]> {
     const task = this.requireTask(id);
@@ -951,6 +957,7 @@ export class Harness {
     try {
       const ready = await this.ensureWorktree(task);
       const plan = this.workflow.plan(ready);
+      await this.workflow.syncNotes(ready);
       const adapter = this.adapterFor(plan.agentId);
       const sessionId = plan.resume?.id ?? randomUUID();
       if (!plan.resume) {

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
+  ASK_FOR_NOTES,
   assistantText,
   init,
   makeRepo,
@@ -236,7 +237,8 @@ describe('a task created with criteria', () => {
     });
     await harness.waitForIdle();
     expect(fakeRuns()[0]!.received[0]).toBe(
-      'Add a greeting\n\nAcceptance criteria, agreed with the user (the work is done when all of them hold):\n- prints hi',
+      'Add a greeting\n\nAcceptance criteria, agreed with the user (the work is done when all of them hold):\n- prints hi' +
+        ASK_FOR_NOTES,
     );
   });
 });

@@ -100,6 +100,11 @@ export const featureList = (...passes: boolean[]) =>
     }),
   );
 
+/** What the harness adds to every workflow prompt while the task has no notes yet. */
+export const ASK_FOR_NOTES =
+  '\n\nEnd your reply with a `## Notes` section for the roles after you: what you did,\n' +
+  'the decisions you made and why, what you are unsure of, and what the next role should check.';
+
 export function tempDir(prefix: string): string {
   return mkdtempSync(path.join(realpathSync.native(tmpdir()), `hb-${prefix}-`));
 }

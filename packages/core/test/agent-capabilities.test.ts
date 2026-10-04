@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
+  ASK_FOR_NOTES,
   FAKE_CLAUDE,
   PromptArgAdapter,
   assistantText,
@@ -73,7 +74,7 @@ describe('a CLI that assigns its own session ids', () => {
     scenario([[init('agent-7'), result('done')]]);
     await harness.createTask({ prompt: 'Build it', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
-    expect(fakeRuns()[0]!.args).toEqual(['--prompt', 'Build it']);
+    expect(fakeRuns()[0]!.args).toEqual(['--prompt', `Build it${ASK_FOR_NOTES}`]);
   });
 });
 
