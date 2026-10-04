@@ -5,6 +5,12 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **The board shows its version** next to the name in the header, in the browser and in
+  the desktop app. With the desktop app attached to an `hb serve`, it is that server's
+  version.
+
 ### Fixed
 
 - **The app menu shows Harnessboard's icon** after installing the .rpm or .deb. The

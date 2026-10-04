@@ -162,6 +162,12 @@ pre,
   font-size: 16px;
 }
 
+.brand .version {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .brand img {
   width: 22px;
   height: 22px;

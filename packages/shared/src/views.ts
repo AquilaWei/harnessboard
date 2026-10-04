@@ -59,6 +59,11 @@ export interface TaskDetail extends TaskView {
   features: Feature[] | null;
 }
 
+/** The server's version, for showing next to the board's name. */
+export interface VersionInfo {
+  version: string;
+}
+
 export interface HarnessStatus {
   running: number[];
   /** Latest quota snapshot per provider that has reported one. */

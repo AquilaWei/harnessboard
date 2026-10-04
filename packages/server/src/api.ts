@@ -11,7 +11,9 @@ import type {
   HarnessEvent,
   NewAgentProfile,
   PermissionDecision,
+  VersionInfo,
 } from '@harnessboard/shared';
+import pkg from '../package.json' with { type: 'json' };
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
 
 /** Header every state-changing request must carry; see {@link localOnly}. */
@@ -45,6 +47,8 @@ export function createApi(harness: Harness): Hono {
   app.onError((err, c) => c.json({ error: err.message }, 400));
 
   app.get('/status', (c) => c.json(harness.status()));
+  // The server's version: with the desktop app attached to an `hb serve`, this is that server's.
+  app.get('/version', (c) => c.json({ version: pkg.version } satisfies VersionInfo));
 
   // Read-only: folder names on this machine, for picking a repository in the web UI.
   app.get('/folders', async (c) => c.json(await listFolders(c.req.query('path'))));

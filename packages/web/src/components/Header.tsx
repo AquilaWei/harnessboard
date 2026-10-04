@@ -11,12 +11,22 @@ interface Props {
   attention: number;
   status: HarnessStatus | null;
   settings: Settings | null;
+  /** The server's version; `null` until it is known. */
+  version: string | null;
   onNewTask: () => void;
   onSettings: () => void;
 }
 
-/** Brand, a one-line summary of the board, the quota, and the two global actions. */
-export function Header({ running, attention, status, settings, onNewTask, onSettings }: Props) {
+/** Brand with the server's version, a one-line summary of the board, the quota, and the two global actions. */
+export function Header({
+  running,
+  attention,
+  status,
+  settings,
+  version,
+  onNewTask,
+  onSettings,
+}: Props) {
   const { t } = useTranslation();
   // One reading per platform that has reported its usage, in a fixed order.
   const providers = AGENT_PROVIDERS.filter((p) => status?.quotas[p]);
@@ -30,6 +40,7 @@ export function Header({ running, attention, status, settings, onNewTask, onSett
       <div className="brand">
         <img src="/favicon.svg" alt="" />
         <span>Harnessboard</span>
+        {version && <span className="version">v{version}</span>}
       </div>
       <div className="summary">
         <span className="chip">

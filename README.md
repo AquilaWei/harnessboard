@@ -330,6 +330,8 @@ still be typed. On the command line: `hb agents --models <profile>`.
 
 `hb serve` also serves the board at **http://127.0.0.1:4317**:
 
+- **Version next to the name:** the header shows the server's version (for example
+  `v0.0.21`), in the browser and in the desktop app alike.
 - **Four stages that fit one screen:**
   - **Draft**
   - **In progress:** queued, running, or waiting for quota

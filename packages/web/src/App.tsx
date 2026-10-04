@@ -26,6 +26,7 @@ export function App() {
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [status, setStatus] = useState<HarnessStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ id: number; tab: DrawerTab } | null>(null);
   const [dialog, setDialog] = useState<'new' | 'settings' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -71,6 +72,11 @@ export function App() {
   useEffect(() => {
     void load();
     api.settings().then(setSettings, (err: Error) => showToast(err.message));
+    // Only shown in the header; the board works without it, so a failure is not reported.
+    api.version().then(
+      (info) => setVersion(info.version),
+      () => setVersion(null),
+    );
   }, [load, showToast]);
 
   const refresh = useThrottled(() => void load(), 500);
@@ -99,6 +105,7 @@ export function App() {
         attention={attention}
         status={status}
         settings={settings}
+        version={version}
         onNewTask={() => setDialog('new')}
         onSettings={() => setDialog('settings')}
       />

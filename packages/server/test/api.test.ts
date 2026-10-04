@@ -73,6 +73,15 @@ describe('localOnly', () => {
   });
 });
 
+describe('version API', () => {
+  it('returns the server version as MAJOR.MINOR.PATCH', async () => {
+    const res = await app.request('/api/version', { headers: local });
+    expect((await res.json()) as { version: string }).toEqual({
+      version: expect.stringMatching(/^\d+\.\d+\.\d+$/),
+    });
+  });
+});
+
 describe('tasks API', () => {
   it('creates a backlog task when queue is false', async () => {
     const res = await post('/api/tasks', { prompt: 'Fix it', repo }, { [CLIENT_HEADER]: 'test' });

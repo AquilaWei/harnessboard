@@ -18,6 +18,7 @@ import type {
   HarnessStatus,
   Settings,
   StoredEvent,
+  VersionInfo,
   TaskDetail,
   TaskView,
   TaskNotes,
@@ -53,6 +54,7 @@ function send<T>(method: string, path: string, body?: unknown): Promise<T> {
 
 export const api = {
   status: () => request<HarnessStatus>('/status'),
+  version: () => request<VersionInfo>('/version'),
   tasks: () => request<TaskView[]>('/tasks'),
   task: (id: number) => request<TaskDetail>(`/tasks/${id}`),
   events: (id: number, after: number) =>
