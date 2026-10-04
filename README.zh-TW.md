@@ -85,13 +85,7 @@ hb done 1                            # 標記為已審核完成
 - **下載**：每個版本的安裝檔都放在
   [Releases](https://github.com/AquilaWei/harnessboard/releases) 頁面，附有
   `SHA256SUMS.txt` 可以核對。
-- **或自己建置**這台電腦作業系統的安裝檔：
-
-  ```bash
-  pnpm install && pnpm build
-  pnpm --filter @harnessboard/desktop dist   # 在 packages/desktop/release/
-  ```
-
+- **或自己打包**：步驟見下方的[自己打包安裝檔](#自己打包安裝檔)。
 - **安裝檔**：Linux 有 AppImage 和 .deb，macOS 有 .dmg（Intel 和 Apple 晶片），
   Windows 有安裝程式（.exe）。
 - **仍然需要**：git 和 agent CLI（`claude`、`codex`）。程式會用跟終端機一樣的方式找到它們，
@@ -106,6 +100,32 @@ hb done 1                            # 標記為已審核完成
   - **macOS**：在程式上按右鍵 → **打開** → **打開**（或到「系統設定」→「隱私權與安全性」→
     **強制打開**）。
   - **Windows**：SmartScreen 提示出現時，按**其他資訊** → **仍要執行**。
+
+### 自己打包安裝檔
+
+每個作業系統只能打包自己的安裝檔：.dmg 要在 Mac 上打包，.exe 要在 Windows 上打包。
+需要上面[需求](#需求)列的工具，以及這個 repo 的 clone。
+
+```bash
+corepack enable                               # 提供專案指定版本的 pnpm
+pnpm install && pnpm build
+pnpm --filter @harnessboard/desktop dist      # 打包這個作業系統的所有安裝檔；第一次會下載 Electron（約 100 MB）
+pnpm --filter @harnessboard/desktop dist --linux AppImage   # 或只打包一種
+```
+
+檔案會放在 **`packages/desktop/release/`**，檔名帶版號，例如
+`Harnessboard-0.0.19-linux-x86_64.AppImage`。拉了新的程式碼後要再跑一次 `pnpm build`，
+`dist` 打包的是最後一次建置的結果。
+
+| 作業系統 | 檔案                               | 安裝方式                                                    |
+| -------- | ---------------------------------- | ----------------------------------------------------------- |
+| Linux    | `…-linux-x86_64.AppImage`          | `chmod +x` 後直接執行。Ubuntu 22.04 以後還需要 `libfuse2`。 |
+| Linux    | `…-linux-amd64.deb`                | `sudo apt install ./Harnessboard-…-linux-amd64.deb`         |
+| macOS    | `…-mac-arm64.dmg`、`…-mac-x64.dmg` | 打開後把 Harnessboard 拖到「應用程式」。                    |
+| Windows  | `…-win-x64.exe`                    | 照安裝精靈的步驟走；只安裝給你的帳號。                      |
+
+.deb 是用 electron-builder 自動下載的 `fpm` 打包的。在沒有 `libcrypt.so.1` 的發行版
+（較新的 Fedora）上會失敗，這時照上面的寫法只打包 AppImage。
 
 ## 驗收標準：先討論再開工
 

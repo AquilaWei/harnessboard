@@ -94,13 +94,8 @@ in its own window. **Click the icon and the board is there.**
 - **Download:** every version has installers on the
   [Releases](https://github.com/AquilaWei/harnessboard/releases) page, with a
   `SHA256SUMS.txt` to check them against.
-- **Or build them** for your own OS:
-
-  ```bash
-  pnpm install && pnpm build
-  pnpm --filter @harnessboard/desktop dist   # in packages/desktop/release/
-  ```
-
+- **Or build them yourself:** see [Building the installers](#building-the-installers)
+  below.
 - **Builds:** AppImage and .deb on Linux, .dmg (Intel and Apple silicon) on macOS, an
   installer (.exe) on Windows.
 - **Still needed:** git and the agent CLIs (`claude`, `codex`). The app finds them the way
@@ -115,6 +110,32 @@ in its own window. **Click the icon and the board is there.**
   - **macOS:** right-click the app → **Open** → **Open** (or System Settings → Privacy &
     Security → **Open Anyway**).
   - **Windows:** on the SmartScreen notice, **More info** → **Run anyway**.
+
+### Building the installers
+
+Each OS builds only its own installers: a .dmg needs a Mac, an .exe needs Windows. You need
+the [Requirements](#requirements) above and a clone of this repository.
+
+```bash
+corepack enable                               # provides the pinned pnpm version
+pnpm install && pnpm build
+pnpm --filter @harnessboard/desktop dist      # every installer for this OS; the first run downloads Electron (~100 MB)
+pnpm --filter @harnessboard/desktop dist --linux AppImage   # or just one kind
+```
+
+The files land in **`packages/desktop/release/`**, named after the version, for example
+`Harnessboard-0.0.19-linux-x86_64.AppImage`. Run `pnpm build` again after pulling changes;
+`dist` packages what the last build produced.
+
+| OS      | File                               | Install                                                                |
+| ------- | ---------------------------------- | ---------------------------------------------------------------------- |
+| Linux   | `…-linux-x86_64.AppImage`          | `chmod +x` it and run it. Ubuntu 22.04 and later also need `libfuse2`. |
+| Linux   | `…-linux-amd64.deb`                | `sudo apt install ./Harnessboard-…-linux-amd64.deb`                    |
+| macOS   | `…-mac-arm64.dmg`, `…-mac-x64.dmg` | Open it and drag Harnessboard to Applications.                         |
+| Windows | `…-win-x64.exe`                    | Run it and follow the steps; it installs for your user only.           |
+
+The .deb is built with `fpm`, which electron-builder downloads. On distributions without
+`libcrypt.so.1` (recent Fedora) it fails; build the AppImage alone there, as above.
 
 ## Acceptance criteria: agree first
 
