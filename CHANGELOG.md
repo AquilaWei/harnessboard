@@ -12,6 +12,9 @@ are test versions that have not been accepted on real machines yet.
   window. Closing the window keeps it running in the tray so tasks go on; Quit stops the
   agents cleanly. It uses an `hb serve` that is already running instead of starting another,
   and finds `claude`, `codex` and git the way your terminal does. Builds are not signed yet.
+- **Installers on every release.** Each version tag builds the desktop installers on
+  Linux, macOS and Windows after the tests pass, and prepares a draft release with them,
+  their SHA256 sums and the notes from this changelog.
 
 ## 0.0.18 - 2026-10-04
 

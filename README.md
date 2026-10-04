@@ -91,10 +91,15 @@ it. Stop a running task first.
 Prefer an app to a terminal? The desktop app starts the server for you and shows the board
 in its own window. **Click the icon and the board is there.**
 
-```bash
-pnpm install && pnpm build
-pnpm --filter @harnessboard/desktop dist   # installers for this OS, in packages/desktop/release/
-```
+- **Download:** every version has installers on the
+  [Releases](https://github.com/AquilaWei/harnessboard/releases) page, with a
+  `SHA256SUMS.txt` to check them against.
+- **Or build them** for your own OS:
+
+  ```bash
+  pnpm install && pnpm build
+  pnpm --filter @harnessboard/desktop dist   # in packages/desktop/release/
+  ```
 
 - **Builds:** AppImage and .deb on Linux, .dmg (Intel and Apple silicon) on macOS, an
   installer (.exe) on Windows.

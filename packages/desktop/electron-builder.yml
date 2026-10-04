@@ -31,8 +31,9 @@ mac:
     - target: dmg
       arch: [x64, arm64]
   category: public.app-category.developer-tools
-  # Not signed yet (0.0.x test builds); see the README for opening it the first time.
-  identity: null
+  # Not signed with a developer certificate yet (0.0.x test builds); see the README for
+  # opening it the first time. '-' still signs ad hoc, which Apple silicon needs to run it.
+  identity: '-'
 win:
   target: [nsis]
 nsis:

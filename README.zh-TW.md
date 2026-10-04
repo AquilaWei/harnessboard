@@ -82,10 +82,15 @@ hb done 1                            # 標記為已審核完成
 
 不想開終端機？桌面程式會自己啟動伺服器，並在獨立視窗裡顯示看板。**點圖示，看板就出來了。**
 
-```bash
-pnpm install && pnpm build
-pnpm --filter @harnessboard/desktop dist   # 產生這台電腦作業系統的安裝檔，在 packages/desktop/release/
-```
+- **下載**：每個版本的安裝檔都放在
+  [Releases](https://github.com/AquilaWei/harnessboard/releases) 頁面，附有
+  `SHA256SUMS.txt` 可以核對。
+- **或自己建置**這台電腦作業系統的安裝檔：
+
+  ```bash
+  pnpm install && pnpm build
+  pnpm --filter @harnessboard/desktop dist   # 在 packages/desktop/release/
+  ```
 
 - **安裝檔**：Linux 有 AppImage 和 .deb，macOS 有 .dmg（Intel 和 Apple 晶片），
   Windows 有安裝程式（.exe）。

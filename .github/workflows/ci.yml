@@ -35,3 +35,67 @@ jobs:
       - run: pnpm build
       # The tests drive a fake claude CLI (packages/core/test/fixtures), so no account is needed.
       - run: pnpm test
+
+  # Installers for the desktop app, built only once every test job passed.
+  desktop:
+    name: desktop / ${{ matrix.os }}
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install --global --force corepack@latest && corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @harnessboard/desktop dist
+        env:
+          # Not signed yet; keeps electron-builder from looking for a certificate.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            packages/desktop/release/*.AppImage
+            packages/desktop/release/*.deb
+            packages/desktop/release/*.dmg
+            packages/desktop/release/*.exe
+          if-no-files-found: error
+
+  # A draft release with the installers, their SHA256 sums and the CHANGELOG section of the
+  # tag. Publishing the draft is left to a person.
+  release:
+    needs: desktop
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+      - name: Checksums
+        working-directory: installers
+        run: sha256sum * > SHA256SUMS.txt
+      - name: Release notes from CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            index($0, "## " v " ") == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $version"; exit 1; }
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" installers/*
+          --draft --title "$GITHUB_REF_NAME" --notes-file notes.md
