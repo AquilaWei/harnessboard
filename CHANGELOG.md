@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.17 - 2026-10-03
+
 ### Changed
 
 - **A task the reviewer stopped shows why.** When a task reaches Review with changes still
