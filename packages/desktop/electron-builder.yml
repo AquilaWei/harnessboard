@@ -24,6 +24,9 @@ linux:
   # .deb for Debian/Ubuntu, .rpm for Fedora/openSUSE, AppImage for the rest. Not Flatpak:
   # its sandbox hides the agent CLIs, git and the projects' tools the app has to run.
   target: [AppImage, deb, rpm]
+  # One PNG per size: icon themes have no 1024x1024 folder, so build/icon.png alone leaves
+  # the app menu without an icon.
+  icon: build/icons
   # Lets desktops tie the running window to the launcher entry.
   syncDesktopName: true
   category: Development

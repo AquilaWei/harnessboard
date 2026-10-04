@@ -5,6 +5,11 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Fixed
+
+- **The app menu shows Harnessboard's icon** after installing the .rpm or .deb. The
+  installers only had a 1024 px icon, a size Linux icon themes do not look in.
+
 ## 0.0.20 - 2026-10-04
 
 ### Added
