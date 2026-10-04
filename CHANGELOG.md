@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.21 - 2026-10-04
+
 ### Added
 
 - **The board shows its version** next to the name in the header, in the browser and in
