@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.15 - 2026-10-03
+
 ### Changed
 
 - **The model menus list what each platform offers**, with names and descriptions: Claude
