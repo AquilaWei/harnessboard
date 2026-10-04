@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.16 - 2026-10-03
+
 ### Added
 
 - **Codex usage on the board.** The header shows a quota reading for each platform you use,
