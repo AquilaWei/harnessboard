@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent, RunUsage } from '@harnessboard/shared';
+import type { AgentEvent, ModelInfo, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, LineParser, SessionSpec } from './agent.js';
+import { parseCodexModels } from './models.js';
+import { output } from './process.js';
 
 /**
  * Drives `codex exec --json`. Event names follow the output of Codex CLI 0.160; re-check
@@ -20,6 +22,11 @@ export class CodexAdapter implements AgentAdapter {
   };
 
   constructor(readonly command: string) {}
+
+  /** The models Codex offers in its own picker, from its model catalog. */
+  async listModels(): Promise<ModelInfo[]> {
+    return parseCodexModels(JSON.parse(await output(this.command, ['debug', 'models'])));
+  }
 
   /**
    * `-c sandbox_mode=...` is used instead of `--sandbox` because `exec resume` only

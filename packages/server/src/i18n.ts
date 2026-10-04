@@ -41,6 +41,8 @@ const en = {
   agentNotDetected: 'No {provider} CLI ({command}) found on PATH.',
   agentAdded: 'Added agent profile {id} ({provider}, {command}) to {file}.',
   defaultModel: '(default)',
+  noModelList: 'The CLI of {id} does not list its models; pass any model id it accepts.',
+  moreModel: '[more]',
   sameAsImplementer: '(the implementer)',
   suggestedVerify: 'Suggested verify command (not active until you approve): {command}',
   planNext:
@@ -105,6 +107,8 @@ const zhTW: Messages = {
   agentNotDetected: 'PATH 上找不到 {provider} 的 CLI（{command}）。',
   agentAdded: '已將 agent profile {id}（{provider}，{command}）加入 {file}。',
   defaultModel: '（預設）',
+  noModelList: '{id} 的 CLI 沒有提供模型清單；可以直接指定它接受的任何模型 ID。',
+  moreModel: '［更多］',
   sameAsImplementer: '（執行者）',
   suggestedVerify: '建議的驗證指令（你確認後才生效）：{command}',
   planNext:

@@ -7,6 +7,10 @@ are test versions that have not been accepted on real machines yet.
 
 ### Changed
 
+- **The model menus list what each platform offers**, with names and descriptions: Claude
+  Code's own model menu (falling back to `opus`, `sonnet`, `fable` and `haiku`) and Codex's
+  model catalog, so Codex models no longer have to be typed. Older models are under **More
+  models**; `hb agents --models <profile>` lists them on the command line.
 - `hb serve` shows the version it runs, e.g. `Harnessboard v0.0.14 is running at …`.
 
 ## 0.0.14 - 2026-10-03

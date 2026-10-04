@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MODEL_SUGGESTIONS, isModelId } from '@harnessboard/shared';
-import type { AgentInfo } from '@harnessboard/shared';
+import { isModelId } from '@harnessboard/shared';
+import type { AgentInfo, ModelInfo } from '@harnessboard/shared';
+import { api } from '../api';
 
 interface Props {
-  /** The profile the model is for; its provider decides the suggestions. */
+  /** The profile the model is for; its CLI decides which models are offered. */
   agent: AgentInfo | undefined;
   /** `null` uses the profile's own model. */
   value: string | null;
@@ -15,13 +16,41 @@ interface Props {
 
 const CUSTOM = '__custom';
 
-/** The profile's model, one of the provider's suggestions, or any id typed by hand. */
+/** `Opus 5.5 — For complex work and everyday tasks (Requires usage credits)` */
+function optionLabel(model: ModelInfo): string {
+  const description = model.description ? ` — ${model.description}` : '';
+  const note = model.note ? ` (${model.note})` : '';
+  return `${model.name}${description}${note}`;
+}
+
+/** The profile's model, one of the models its platform offers, or any id typed by hand. */
 export function ModelPicker({ agent, value, onChange, label }: Props) {
   const { t } = useTranslation();
-  const suggestions = agent ? MODEL_SUGGESTIONS[agent.profile.provider] : [];
-  const [custom, setCustom] = useState(value !== null && !suggestions.includes(value));
+  const [models, setModels] = useState<ModelInfo[] | null>(null);
+  const [customChosen, setCustomChosen] = useState(false);
+  const agentId = agent?.id;
+
+  useEffect(() => {
+    if (!agentId) return;
+    let current = true;
+    // A model list that can not be loaded leaves typing an id, which always works.
+    api.agentModels(agentId).then(
+      (list) => current && setModels(list),
+      () => current && setModels([]),
+    );
+    return () => {
+      current = false;
+    };
+  }, [agentId]);
+
+  const known = models?.some((m) => m.id === value) ?? false;
+  // A stored model the list does not offer is shown as typed, once the list is in.
+  const custom = customChosen || (value !== null && models !== null && !known);
   const profileModel = agent?.profile.model ?? t('settingsForm.defaultModel');
   const invalid = custom && value !== null && !isModelId(value);
+  const main = (models ?? []).filter((m) => !m.more);
+  const more = (models ?? []).filter((m) => m.more);
+  const selected = models?.find((m) => m.id === value);
 
   return (
     <label className="field">
@@ -30,28 +59,40 @@ export function ModelPicker({ agent, value, onChange, label }: Props) {
         value={custom ? CUSTOM : (value ?? '')}
         onChange={(e) => {
           const next = e.target.value;
-          setCustom(next === CUSTOM);
+          setCustomChosen(next === CUSTOM);
           if (next !== CUSTOM) onChange(next === '' ? null : next);
         }}
       >
         <option value="">{t('models.profile', { model: profileModel })}</option>
-        {suggestions.map((model) => (
-          <option key={model} value={model}>
-            {t(`models.names.${model}`, { defaultValue: model })}
+        {/* Keeps the stored choice selectable while the list loads. */}
+        {models === null && value !== null && <option value={value}>{value}</option>}
+        {main.map((model) => (
+          <option key={model.id} value={model.id}>
+            {optionLabel(model)}
           </option>
         ))}
+        {more.length > 0 && (
+          <optgroup label={t('models.more')}>
+            {more.map((model) => (
+              <option key={model.id} value={model.id}>
+                {optionLabel(model)}
+              </option>
+            ))}
+          </optgroup>
+        )}
         <option value={CUSTOM}>{t('models.custom')}</option>
       </select>
       {custom && (
         <input
           className="mono"
           value={value ?? ''}
-          placeholder="claude-opus-5-5"
+          placeholder={main[0]?.id ?? 'model-id'}
           aria-invalid={invalid}
           onChange={(e) => onChange(e.target.value.trim() || null)}
         />
       )}
       {invalid && <small className="hint warn-text">{t('models.invalid')}</small>}
+      {selected && !custom && <small className="hint mono">{selected.id}</small>}
     </label>
   );
 }

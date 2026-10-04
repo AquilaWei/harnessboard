@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent, AgentProvider } from '@harnessboard/shared';
+import type { AgentEvent, AgentProvider, ModelInfo } from '@harnessboard/shared';
 
 /** Tools a session may use: `edit` implements, `readOnly` only inspects (reviewers). */
 export type SessionAccess = 'edit' | 'readOnly';
@@ -87,6 +87,11 @@ export interface AgentAdapter {
    * state themselves.
    */
   createParser?(): LineParser;
+  /**
+   * The models this CLI offers, as its platform lists them. Absent when the CLI can not
+   * list them; then any model id can still be typed. Rejects when listing fails.
+   */
+  listModels?(): Promise<ModelInfo[]>;
   /** Arguments that print the CLI version; used to check the CLI is installed. */
   readonly versionArgs: string[];
   /** Arguments that reopen a session in the CLI's own interactive UI (`hb open`). */

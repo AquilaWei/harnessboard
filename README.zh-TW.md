@@ -177,6 +177,11 @@ hb add "Add input validation to the signup form" --reviewer opus
 `hb add "..." --model haiku --reviewer claude --reviewer-model opus`，或在「新增任務」對話框
 的模型選單選。審查者可以是任何 Claude Code 或 Codex 設定檔，讓不同廠商的 agent 互相檢查（Gemini 規劃中）。
 
+模型選單會列出各平台提供給你帳號的模型和說明：Claude Code 讀它自己 `/model` 選單用的目錄
+（快取在 `~/.claude` 下；還沒有快取時改列別名 `opus`、`sonnet`、`fable`、`haiku`），Codex 讀它的
+模型目錄（`codex debug models`）。舊模型放在**更多模型**底下，也仍然可以手動輸入其他模型 ID。
+命令列可用 `hb agents --models <設定檔>` 查看。
+
 ## 網頁看板
 
 `hb serve` 同時在 **http://127.0.0.1:4317** 提供看板：

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { AgentEvent, QuotaInfo, RunUsage } from '@harnessboard/shared';
+import type { AgentEvent, ModelInfo, QuotaInfo, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, PermissionReply, SessionSpec } from './agent.js';
+import { readClaudeModels } from './models.js';
 
 type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }>;
 
@@ -29,6 +30,11 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   };
 
   constructor(readonly command: string) {}
+
+  /** The models in Claude Code's own model menu for this account, or its aliases. */
+  listModels(): Promise<ModelInfo[]> {
+    return Promise.resolve(readClaudeModels());
+  }
 
   /** Throws when `sessionId` is missing: this CLI always gets its id from the harness. */
   buildArgs(spec: SessionSpec): string[] {

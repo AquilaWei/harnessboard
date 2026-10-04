@@ -203,6 +203,12 @@ example Haiku to build and Opus to review: `hb add "..." --model haiku --reviewe
 --reviewer-model opus`, or the model menus in the New task dialog. Today the reviewer can be
 any Claude Code or Codex profile, so different vendors can check each other (Gemini is planned).
 
+The model menus list what each platform offers your account, with its description: Claude
+Code's own model menu (read from the catalog it caches under `~/.claude`, or its aliases
+`opus`, `sonnet`, `fable` and `haiku` before it has one) and Codex's model catalog
+(`codex debug models`). Older models sit under **More models**, and any other model id can
+still be typed. On the command line: `hb agents --models <profile>`.
+
 ## Web board
 
 `hb serve` also serves the board at **http://127.0.0.1:4317**:

@@ -52,6 +52,7 @@ export function createApi(harness: Harness): Hono {
 
   app.get('/agents', async (c) => c.json(await harness.probeAgents()));
   app.get('/agents/detect', async (c) => c.json(await harness.detectAgents()));
+  app.get('/agents/:id/models', async (c) => c.json(await harness.models(c.req.param('id'))));
   app.post('/agents', async (c) =>
     c.json(harness.addAgent(await c.req.json<NewAgentProfile>()), 201),
   );

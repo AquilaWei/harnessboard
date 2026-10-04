@@ -228,6 +228,7 @@ program
   });
 
 interface AgentsOptions {
+  models?: string;
   add?: AgentProvider;
   id?: string;
   model?: string;
@@ -241,10 +242,20 @@ program
       AGENT_PROVIDERS,
     ),
   )
+  .option('--models <id>', "list the models a profile's CLI offers")
   .option('--id <id>', 'profile id for --add (default: the command name)')
   .option('--model <model>', 'model for --add (default: the CLI default)')
   .action(async (o: AgentsOptions) => {
     const api = client();
+    if (o.models) {
+      const models = await api.agentModels(o.models);
+      if (models.length === 0) console.log(t('noModelList', { id: o.models }));
+      for (const m of models) {
+        const details = [m.description, m.note && `(${m.note})`, m.more && t('moreModel')];
+        console.log(`${m.id.padEnd(28)} ${m.name.padEnd(14)} ${details.filter(Boolean).join(' ')}`);
+      }
+      return;
+    }
     if (o.add) {
       const provider = o.add;
       const found = (await api.detectAgents()).find((d) => d.provider === provider);

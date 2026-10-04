@@ -6,6 +6,7 @@ import type {
   AgentInfo,
   AgentProfile,
   DetectedAgent,
+  ModelInfo,
   NewAgentProfile,
   AgentsUpdate,
   CommitInfo,
@@ -46,6 +47,7 @@ export class ApiClient {
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);
   setAutoApprove = (id: number, on: boolean) =>
     this.send<Task>('PUT', `/tasks/${id}/auto-approve`, { on });
+  agentModels = (id: string) => this.get<ModelInfo[]>(`/agents/${encodeURIComponent(id)}/models`);
   detectAgents = () => this.get<DetectedAgent[]>('/agents/detect');
   addAgent = (input: NewAgentProfile) => this.post<AgentProfile>('/agents', input);
   settings = () => this.get<Settings>('/settings');

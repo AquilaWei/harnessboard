@@ -5,6 +5,7 @@ import type {
   AgentInfo,
   AgentProfile,
   DetectedAgent,
+  ModelInfo,
   NewAgentProfile,
   AgentsUpdate,
   CommitInfo,
@@ -63,6 +64,7 @@ export const api = {
   timeline: (id: number) => request<TimelineEntry[]>(`/tasks/${id}/timeline`),
   notes: (id: number) => request<TaskNotes>(`/tasks/${id}/notes`),
   agents: () => request<AgentInfo[]>('/agents'),
+  agentModels: (id: string) => request<ModelInfo[]>(`/agents/${encodeURIComponent(id)}/models`),
   detectAgents: () => request<DetectedAgent[]>('/agents/detect'),
   addAgent: (input: NewAgentProfile) => send<AgentProfile>('POST', '/agents', input),
   folders: (path?: string) =>

@@ -22,6 +22,7 @@ import type {
   AgentProfile,
   AgentProvider,
   DetectedAgent,
+  ModelInfo,
   NewAgentProfile,
   Session,
   AgentsUpdate,
@@ -101,6 +102,8 @@ import {
 export const DEFAULT_ALLOWED_TOOLS = presetRules([DEFAULT_PRESET]);
 
 const TICK_MS = 5_000;
+/** How long a profile's model list is reused before its CLI is asked again. */
+const MODELS_TTL_MS = 10 * 60_000;
 const DEFAULT_REVIEW_ROUNDS = 2;
 
 export interface HarnessOptions {
@@ -139,6 +142,7 @@ export class Harness {
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   private readonly adapters = new Map<string, AgentAdapter>();
+  private readonly modelLists = new Map<string, { at: number; models: ModelInfo[] }>();
   private readonly activities = new Map<number, TaskActivity>();
   /** Tool uses each running task waits on the user for, by request id. */
   private readonly permissions = new Map<number, Map<string, PendingPermission>>();
@@ -251,6 +255,25 @@ export class Harness {
     this.config.agents[id] = profile;
     if (this.settingsFile) saveUserAgent(id, profile, this.settingsFile);
     return profile;
+  }
+
+  /**
+   * The models an agent profile's CLI offers, cached for {@link MODELS_TTL_MS} because
+   * listing them may start the CLI. Empty when the CLI can not list them or listing fails;
+   * a model id can still be typed then. Throws when the profile is not configured.
+   */
+  async models(agentId: string): Promise<ModelInfo[]> {
+    const adapter = this.adapterFor(agentId);
+    const cached = this.modelLists.get(agentId);
+    if (cached && cached.at > Date.now() - MODELS_TTL_MS) return cached.models;
+    let models: ModelInfo[] = [];
+    try {
+      models = (await adapter.listModels?.()) ?? [];
+    } catch {
+      // An older CLI without a model catalog: the picker offers typing an id instead.
+    }
+    this.modelLists.set(agentId, { at: Date.now(), models });
+    return models;
   }
 
   /** What a running task is doing right now; `null` when it is not running. */

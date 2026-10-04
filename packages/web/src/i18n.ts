@@ -133,7 +133,7 @@ const en = {
       'The agent is working: models apply from its next session, and agents can be changed once it stops.',
     custom: 'Other model id…',
     invalid: 'Not a model id: use letters, digits and - . : / @ [ ], e.g. claude-opus-5-5.',
-    names: { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' },
+    more: 'More models',
   },
   commits: {
     title_one: '{{count}} commit',
@@ -607,7 +607,7 @@ const zhTW: typeof en = {
     liveHint: '代理程式正在工作：模型從下一個 session 開始套用；要換 agent 請先停止任務。',
     custom: '其他模型 ID…',
     invalid: '不是模型 ID：只能用英數字和 - . : / @ [ ]，例如 claude-opus-5-5。',
-    names: { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' },
+    more: '更多模型',
   },
   commits: {
     title_one: '{{count}} 個 commit',

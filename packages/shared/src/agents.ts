@@ -33,13 +33,19 @@ export function isProfileId(id: string): boolean {
 export type AgentRole = 'spec' | 'implementer' | 'tester' | 'reviewer';
 
 /**
- * Models offered for each provider. Any other id the CLI accepts can be typed instead;
- * Claude Code resolves these aliases to the latest model of that family.
+ * A model a profile's CLI offers (`GET /api/agents/:id/models`), as the platform describes
+ * it. Any other id the CLI accepts can still be typed by hand.
  */
-export const MODEL_SUGGESTIONS: Record<AgentProvider, readonly string[]> = {
-  'claude-code': ['opus', 'sonnet', 'haiku'],
-  codex: [],
-};
+export interface ModelInfo {
+  /** What is passed to the CLI's model option. */
+  id: string;
+  name: string;
+  description: string | null;
+  /** A caveat the platform shows with the model, e.g. that it needs usage credits. */
+  note: string | null;
+  /** Listed among further models rather than the main choices. */
+  more: boolean;
+}
 
 // Letters, digits and the punctuation model ids use, e.g. `claude-opus-5-5` or `opus[1m]`;
 // never starting with `-`, so a model can not be read as a CLI option.
