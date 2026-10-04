@@ -12,7 +12,9 @@ import type {
 import { api } from '../api';
 import type { TaskAction } from '../board';
 import { useLiveEvents, useThrottled } from '../live';
+import { openReview, sendBackKey } from '../describe';
 import { Description } from './Description';
+import { Markdown } from './Markdown';
 import { ChatPanel } from './ChatPanel';
 import { CommitList } from './CommitList';
 import { CriteriaReview } from './CriteriaReview';
@@ -129,6 +131,8 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   ];
   // Where a proposal waiting for approval is read and approved.
   const proposalTab: DrawerTab = task?.mode === 'loop' ? 'features' : 'criteria';
+  // Why a task in Review stopped, so it is read before deciding.
+  const review = task ? openReview(task) : null;
 
   return (
     <>
@@ -155,6 +159,12 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                 <span className="card-id">#{task.id}</span>
               </div>
               <Description task={task} />
+              {review && (
+                <details className="status-review" open>
+                  <summary>{t('timeline.reviewFindings', { agent: review.agentId })}</summary>
+                  <Markdown className="reply" text={review.findings} />
+                </details>
+              )}
               {(s === 'review' || s === 'done') && <UsageLine usage={task.usage} />}
               {task.permissionRequests.length > 0 && (
                 <PermissionPrompt
@@ -194,7 +204,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                       </button>
                     )}
                     <button type="button" className="btn" onClick={() => act('queue')}>
-                      {t('actions.sendBack')}
+                      {t(`actions.${sendBackKey(task)}`)}
                     </button>
                   </>
                 )}

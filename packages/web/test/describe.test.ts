@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import type { TaskView } from '@harnessboard/shared';
-import { describeTask } from '../src/describe';
+import { describeTask, openReview, sendBackKey } from '../src/describe';
 
 const base = {
   status: 'backlog',
@@ -245,5 +245,41 @@ describe('describeTask for permission requests', () => {
       tone: 'attention',
       vars: { agent: 'claude', tool: 'Bash', summary: 'node hello.js' },
     });
+  });
+});
+
+describe('openReview', () => {
+  const asked = { ...changes, findings: '- greet by name' };
+
+  it('is the review that asked for changes on a task in Review', () => {
+    const task = { ...base, status: 'review', lastReview: asked } as TaskView;
+    expect(openReview(task)).toEqual(asked);
+  });
+
+  it('is nothing once the reviewer approved', () => {
+    const task = { ...base, status: 'review', lastReview: approve } as TaskView;
+    expect(openReview(task)).toBeNull();
+  });
+
+  it('is nothing while the task is back at work', () => {
+    const task = { ...base, status: 'queued', lastReview: asked } as TaskView;
+    expect(openReview(task)).toBeNull();
+  });
+
+  it('is nothing when the review has no findings', () => {
+    const task = { ...base, status: 'review', lastReview: { ...asked, findings: ' ' } };
+    expect(openReview(task as TaskView)).toBeNull();
+  });
+});
+
+describe('sendBackKey', () => {
+  it('offers to continue with the review when it asked for changes', () => {
+    const task = { ...base, status: 'review', lastReview: changes } as TaskView;
+    expect(sendBackKey(task)).toBe('continueWithReview');
+  });
+
+  it('offers to run again otherwise', () => {
+    const task = { ...base, status: 'review', lastReview: approve } as TaskView;
+    expect(sendBackKey(task)).toBe('sendBack');
   });
 });

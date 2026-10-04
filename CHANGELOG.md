@@ -5,6 +5,12 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Changed
+
+- **A task the reviewer stopped shows why.** When a task reaches Review with changes still
+  requested, the task panel shows the reviewer's points under the status, and the button
+  that sends it back to work reads "Continue with the review".
+
 ### Fixed
 
 - **Reviews of a feature list no longer demand the features still to come.** The reviewer of

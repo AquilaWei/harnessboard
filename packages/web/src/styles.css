@@ -815,6 +815,11 @@ summary:focus-visible {
   font-weight: 550;
 }
 
+.status-review summary {
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

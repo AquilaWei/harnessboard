@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { TaskView } from '@harnessboard/shared';
+import type { ReviewRecord, TaskView } from '@harnessboard/shared';
 
 /** How a description should read: neutral, work in progress, needs you, or went wrong. */
 export type Tone = 'idle' | 'working' | 'attention' | 'problem' | 'done';
@@ -121,4 +121,19 @@ function describeReview(task: TaskView): Description {
     return d('noVerdict', 'attention', { agent: review.agentId });
   if (task.loop) return d('loopFinished', 'attention', { total: task.loop.total });
   return d('finished', 'attention');
+}
+
+/**
+ * The review a task in Review is waiting on you about, shown in the task panel's status box:
+ * the last one, unless it approved the work or has nothing to say.
+ */
+export function openReview(task: TaskView): ReviewRecord | null {
+  const review = task.lastReview;
+  if (task.status !== 'review' || !review || review.verdict === 'approve') return null;
+  return review.findings.trim() === '' ? null : review;
+}
+
+/** Translation key under `actions.` for sending a task in Review back to work. */
+export function sendBackKey(task: TaskView): 'continueWithReview' | 'sendBack' {
+  return task.lastReview?.verdict === 'changes' ? 'continueWithReview' : 'sendBack';
 }

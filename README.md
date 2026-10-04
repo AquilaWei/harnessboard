@@ -231,7 +231,8 @@ still be typed. On the command line: `hb agents --models <profile>`.
   between stages still works and follows the same rules.
 - **Task panel:**
   - At the top, the current situation and what you can do about it (for example Mark done
-    or Run again).
+    or Continue with the review). When the reviewer still wants changes, its points are shown
+    right there.
   - **Timeline:** each session with its role and agent, handoffs, verification results,
     and reviews with their findings.
   - **Changes:** the commits on the task branch (open one for its patch), then the diff against the base branch.
