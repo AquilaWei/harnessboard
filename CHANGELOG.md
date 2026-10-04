@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.20 - 2026-10-04
+
 ### Added
 
 - **An .rpm installer** for Fedora, openSUSE and other rpm-based distributions: install it
