@@ -30,8 +30,6 @@ beforeEach(() => {
     '*',
     access(harness, () => clock),
   );
-  // Stands in for the pairing route of F3, which a device without a cookie must reach.
-  app.post('/api/pair', (c) => c.text('paired'));
   app.route('/api', createApi(harness));
   app.get('*', (c) => c.text('index.html'));
 });
@@ -89,8 +87,10 @@ describe('access from a remote host', () => {
   });
 
   it('lets pairing through without a device cookie', async () => {
-    const res = await write('POST', '/api/pair', remote);
-    expect([res.status, await res.text()]).toEqual([200, 'paired']);
+    const made = await write('POST', '/api/pairing', { host: `127.0.0.1:${PORT}` });
+    const { code } = (await made.json()) as { code: string };
+    const res = await write('POST', '/api/pair', remote, { code, name: 'tablet' });
+    expect(res.status).toBe(201);
   });
 
   it('stops accepting a remote host as soon as the setting drops it', async () => {

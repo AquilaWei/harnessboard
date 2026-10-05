@@ -64,6 +64,20 @@ export interface VersionInfo {
   version: string;
 }
 
+/** Reply of `POST /api/pairing`: the one-time code the phone sends to `POST /api/pair`. */
+export interface PairingCode {
+  code: string;
+  /** Epoch ms after which the code is refused. */
+  expiresAt: number;
+}
+
+/** Body of `POST /api/pair`. */
+export interface PairRequest {
+  code: string;
+  /** What the device list calls the phone, e.g. "Pixel 9". */
+  name: string;
+}
+
 export interface HarnessStatus {
   running: number[];
   /** Latest quota snapshot per provider that has reported one. */

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Hono } from 'hono';
 import type { Context } from 'hono';
+import { setCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
 import { inspectFolder, listFolders } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
@@ -10,15 +11,28 @@ import type {
   DeletedTask,
   HarnessEvent,
   NewAgentProfile,
+  PairRequest,
   PermissionDecision,
   VersionInfo,
 } from '@harnessboard/shared';
 import pkg from '../package.json' with { type: 'json' };
+import { DEVICE_COOKIE } from './access.js';
+import { Pairing, newDeviceToken } from './pairing.js';
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
 
-/** The HTTP API, mounted under `/api`. Who may reach it is decided by `access` in access.ts. */
-export function createApi(harness: Harness): Hono {
+/** A device cookie lasts a year; revoking the device ends it sooner. */
+const DEVICE_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60;
+
+/** Longest device name accepted, so the device list stays readable. */
+const MAX_DEVICE_NAME = 64;
+
+/**
+ * The HTTP API, mounted under `/api`. Who may reach it is decided by `access` in access.ts.
+ * `now` is injectable for the expiry of pairing codes.
+ */
+export function createApi(harness: Harness, now: () => number = Date.now): Hono {
   const app = new Hono();
+  const pairing = new Pairing(now);
   const view = (id: number) => {
     const task = harness.store.getTask(id);
     return task ? taskView(task, harness) : undefined;
@@ -45,6 +59,39 @@ export function createApi(harness: Harness): Hono {
   app.put('/settings', async (c) =>
     c.json(harness.updateSettings(await c.req.json<Partial<EditableSettings>>())),
   );
+
+  // Pairing a phone: the computer makes a code (shown as a QR code), the phone sends it back.
+  app.post('/pairing', (c) => c.json(pairing.create(), 201));
+  app.post('/pair', async (c) => {
+    const body = await c.req.json<Partial<PairRequest>>().catch(() => ({}) as Partial<PairRequest>);
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (typeof body.code !== 'string' || !name || name.length > MAX_DEVICE_NAME) {
+      throw new Error(`send a code and a device name of 1 to ${MAX_DEVICE_NAME} characters`);
+    }
+    const result = pairing.redeem(body.code);
+    if (result === 'blocked') {
+      return c.json({ error: 'too many failed attempts; show a new pairing code' }, 429);
+    }
+    if (result === 'invalid') {
+      return c.json({ error: 'this pairing code is wrong, expired or already used' }, 400);
+    }
+    const token = newDeviceToken();
+    const device = harness.store.addDevice(name, token, now());
+    setCookie(c, DEVICE_COOKIE, token, {
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Strict',
+      maxAge: DEVICE_COOKIE_MAX_AGE_S,
+    });
+    return c.json(device, 201);
+  });
+  app.get('/devices', (c) => c.json(harness.store.listDevices()));
+  app.delete('/devices/:id', (c) => {
+    const id = Number(c.req.param('id'));
+    if (!harness.store.revokeDevice(id)) return c.json({ error: `device ${id} not found` }, 404);
+    return c.json({ id });
+  });
 
   app.get('/tasks', (c) => c.json(harness.store.listTasks().map((t) => taskView(t, harness))));
 
