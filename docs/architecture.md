@@ -193,3 +193,8 @@ Its adapter should report a usage-limit error as an error `result` with
   from events, and tasks that were running are queued again.
 - **Schema changes:** migrations live in `core/src/store.ts`. Never edit a shipped entry.
   Add a new one, plus a test that upgrades a database in the previous format.
+
+## Plans
+
+- [Phone access](plans/phone-access.md): using the board from a phone over Tailscale, with
+  device pairing and a passkey. Planned, not started.
