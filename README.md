@@ -413,6 +413,9 @@ nothing is opened to the internet.
    The code works once, for 5 minutes. Give the phone a name, then tap **Create passkey**:
    the phone asks for your fingerprint, face or screen lock. The phone is paired only once
    the passkey is made.
+5. **Add to Home Screen** (optional): in Chrome's menu, **Add to Home Screen** (on Safari,
+   in the Share menu). The Harnessboard icon then opens the board full screen, without the
+   address bar.
 
 **How the passkey protects the board**
 

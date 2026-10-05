@@ -29,6 +29,8 @@ are test versions that have not been accepted on real machines yet.
   for answering a permission request, a plan or acceptance criteria are big enough to tap.
 - **"Files only" on the Changes tab** lists the changed files without the line-by-line
   changes, which is easier to read on a phone.
+- **Add the board to a phone's Home Screen.** It gets the Harnessboard icon and opens full
+  screen, without the browser's address bar.
 
 ## 0.0.21 - 2026-10-04
 

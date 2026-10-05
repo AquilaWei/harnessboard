@@ -1,8 +1,8 @@
 # Phone access
 
-Status: M0 done. M1, M2 and M3's phone layout are built and waiting for the
-[real-phone acceptance](#real-phone-acceptance-m1-m2-and-the-m3-layout); 0.1.0 is released
-after it passes. The PWA part of M3 and M4 are not started. Decisions dated 2026-10-04.
+Status: M0 done. M1, M2 and M3 (phone layout and PWA) are built and waiting for the
+[real-phone acceptance](#real-phone-acceptance-m1-m2-and-m3); 0.1.0 is released after it
+passes. M4 is not started. Decisions dated 2026-10-04.
 
 ## Goal
 
@@ -237,7 +237,7 @@ and no logic.
   - finish with `tailscale serve reset`.
   - Ask the user before each real-phone session.
 
-### Real-phone acceptance (M1, M2 and the M3 layout)
+### Real-phone acceptance (M1, M2 and M3)
 
 Run by the user before 0.1.0. Tick each step; a step that fails stops the release and goes into
 this file with what the phone showed. The phone is on mobile data, not the home Wi-Fi.
@@ -295,7 +295,7 @@ this file with what the phone showed. The phone is on mobile data, not the home 
 18. On the computer: **Revoke** the phone. Expected: the next tap on the phone shows "This device
     is not paired".
 
-**M3: phone layout** (pair again first if step 18 revoked the phone)
+**M3: phone layout and Home Screen** (pair again first if step 18 revoked the phone)
 
 19. On the computer, create a draft, a task in Review and one waiting for an answer. On the
     phone, the board shows four tabs (Waiting for you, In progress, Review, Done) with counts,
@@ -309,12 +309,15 @@ this file with what the phone showed. The phone is on mobile data, not the home 
     field being typed in. Open the folder browser. Expected: it fills the screen, and **Close**
     at the bottom returns to the form, also while the list is still loading.
 23. Turn the phone sideways and back. Expected: nothing is cut off or needs sideways scrolling.
+24. In Chrome's menu, **Add to Home Screen** (or **Install app**). Expected: the Harnessboard icon
+    (white H on blue) on the Home Screen. Open it. Expected: the board opens without the address
+    bar, the status bar is blue, and the board asks to unlock as on any new visit.
 
 **Teardown**
 
-24. Stop the scratch server, then run `tailscale serve reset` and check `tailscale serve status`
+25. Stop the scratch server, then run `tailscale serve reset` and check `tailscale serve status`
     is empty.
-25. Remove the scratch data: `rm -rf "$HARNESSBOARD_HOME"`. Delete the test passkey on the phone
+26. Remove the scratch data: `rm -rf "$HARNESSBOARD_HOME"`. Delete the test passkey on the phone
     (Google Password Manager → passkeys) so it does not pile up.
 
 ## Limits (for the README)
