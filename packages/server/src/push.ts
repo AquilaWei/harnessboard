@@ -24,8 +24,9 @@ export interface VapidKeys {
 
 /**
  * The VAPID keys in `dir`, made on first use and read back afterwards, so subscriptions keep
- * working across restarts. The file is readable by its owner only, since the private key lets
- * anyone push to the paired phones. Throws when the file exists but is not valid JSON; deleting
+ * working across restarts. On macOS and Linux the file is readable by its owner only, since the
+ * private key lets anyone push to the paired phones; Windows ignores the file mode, so there the
+ * file keeps the permissions it inherits from `dir`. Throws when the file exists but is not valid JSON; deleting
  * it makes new keys, and every phone then has to turn notifications on again.
  */
 export function loadVapidKeys(dir: string): VapidKeys {

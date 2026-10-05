@@ -69,7 +69,8 @@ describe('VAPID keys', () => {
     expect(JSON.parse(readFileSync(path.join(dir, 'vapid.json'), 'utf8'))).toEqual(keys);
   });
 
-  it('makes the key file readable by its owner only', () => {
+  // Windows has no owner/group/other file modes, so Node reports 0o666 there whatever was asked.
+  it.runIf(process.platform !== 'win32')('makes the key file readable by its owner only', () => {
     const dir = tempHome();
     loadVapidKeys(dir);
     expect(statSync(path.join(dir, 'vapid.json')).mode & 0o777).toBe(0o600);
