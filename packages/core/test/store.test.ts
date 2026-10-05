@@ -170,6 +170,10 @@ describe('Store', () => {
 });
 
 const passkey = { credentialId: 'cred-1', publicKey: new Uint8Array([1, 2, 3]), counter: 4 };
+const pushSubscription = {
+  endpoint: 'https://push.example/abc',
+  keys: { p256dh: 'p256dh-key', auth: 'auth-secret' },
+};
 
 describe('Store devices', () => {
   it('finds a device by the token it was added with', () => {
@@ -318,7 +322,8 @@ describe('Store devices', () => {
     db.exec(
       `ALTER TABLE devices DROP COLUMN credential_id; ALTER TABLE devices DROP COLUMN public_key;
        ALTER TABLE devices DROP COLUMN sign_count; ALTER TABLE devices DROP COLUMN verified_at;
-       ALTER TABLE devices DROP COLUMN last_active_at; PRAGMA user_version = 7;`,
+       ALTER TABLE devices DROP COLUMN last_active_at; ALTER TABLE devices DROP COLUMN push_subscription;
+       PRAGMA user_version = 7;`,
     );
     db.close();
     expect(new Store(file).findDeviceByToken('token-one')).toEqual({
@@ -330,6 +335,64 @@ describe('Store devices', () => {
       verifiedAt: null,
       lastActiveAt: null,
     });
+  });
+
+  it('stores a push subscription on its device', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setPushSubscription(id, pushSubscription);
+    expect(store.listPushSubscriptions()).toEqual([
+      {
+        deviceId: 1,
+        subscription: {
+          endpoint: 'https://push.example/abc',
+          keys: { p256dh: 'p256dh-key', auth: 'auth-secret' },
+        },
+      },
+    ]);
+  });
+
+  it('replaces the push subscription a device had', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setPushSubscription(id, pushSubscription);
+    store.setPushSubscription(id, { ...pushSubscription, endpoint: 'https://push.example/new' });
+    expect(store.listPushSubscriptions().map((p) => p.subscription.endpoint)).toEqual([
+      'https://push.example/new',
+    ]);
+  });
+
+  it('clears a push subscription with null', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setPushSubscription(id, pushSubscription);
+    store.setPushSubscription(id, null);
+    expect(store.listPushSubscriptions()).toEqual([]);
+  });
+
+  it('removes the push subscription when the device is revoked', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setPushSubscription(id, pushSubscription);
+    store.revokeDevice(id);
+    expect(store.listPushSubscriptions()).toEqual([]);
+  });
+
+  it('stores no push subscription for a device that is gone', () => {
+    const store = new Store(':memory:');
+    expect(store.setPushSubscription(7, pushSubscription)).toBe(false);
+  });
+
+  it('keeps devices paired before push, without a subscription', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    first.addDevice('Pixel', 'token-one', 1000);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(`ALTER TABLE devices DROP COLUMN push_subscription; PRAGMA user_version = 8;`);
+    db.close();
+    const store = new Store(file);
+    expect([store.listDevices().length, store.listPushSubscriptions()]).toEqual([1, []]);
   });
 
   it('adds the devices table to a database from before phone access', () => {

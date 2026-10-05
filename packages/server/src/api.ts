@@ -15,6 +15,7 @@ import type {
   PairingSetup,
   PasskeySession,
   PermissionDecision,
+  PushKey,
   VersionInfo,
 } from '@harnessboard/shared';
 import pkg from '../package.json' with { type: 'json' };
@@ -23,6 +24,8 @@ import type { AccessEnv } from './access.js';
 import { Pairing, newDeviceToken } from './pairing.js';
 import { Passkeys, webauthnVerifier } from './passkey.js';
 import type { Party, PasskeyResult, PasskeyVerifier } from './passkey.js';
+import { loadVapidKeys, parseSubscription } from './push.js';
+import type { VapidKeys } from './push.js';
 import type { Sessions } from './session.js';
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
 
@@ -146,6 +149,25 @@ export function createApi(
     const device = remoteDevice(c);
     const result = await passkeys.verify(device, party(c), await c.req.json());
     return result.ok ? sessionReply(c, sessions, device.id) : passkeyReply(c, result);
+  });
+
+  // Web Push for a paired phone. The keys are made on the first request, not at startup, so a
+  // board nobody opens from a phone never writes them.
+  let vapid: VapidKeys | undefined;
+  app.get('/push/key', (c) => {
+    vapid ??= loadVapidKeys(harness.config.dataDir);
+    return c.json({ publicKey: vapid.publicKey } satisfies PushKey);
+  });
+  app.post('/push/subscribe', async (c) => {
+    const device = remoteDevice(c, 'push');
+    const subscription = parseSubscription(await c.req.json().catch(() => null));
+    if (!subscription) throw new Error('send a push subscription with an https endpoint and keys');
+    harness.store.setPushSubscription(device.id, subscription);
+    return c.json({ ok: true }, 201);
+  });
+  app.delete('/push/subscribe', (c) => {
+    harness.store.setPushSubscription(remoteDevice(c, 'push').id, null);
+    return c.json({ ok: true });
   });
 
   app.get('/devices', (c) => c.json(harness.store.listDevices()));
@@ -312,10 +334,10 @@ function taskId(c: Context<AccessEnv>): number {
   return id;
 }
 
-/** The remote device that made the request. Passkeys belong to remote devices only. */
-function remoteDevice(c: Context<AccessEnv>) {
+/** The remote device that made the request. Passkeys and push belong to remote devices only. */
+function remoteDevice(c: Context<AccessEnv>, what: 'passkeys' | 'push' = 'passkeys') {
   const device = c.get('device');
-  if (!device) throw new Error('passkeys are only used by devices paired from a phone');
+  if (!device) throw new Error(`${what} are only used by devices paired from a phone`);
   return device;
 }
 

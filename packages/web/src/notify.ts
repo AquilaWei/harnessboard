@@ -1,17 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+import { NOTIFY_STATUSES } from '@harnessboard/shared';
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
 import type { DrawerTab } from './components/TaskDrawer';
-
-/**
- * Statuses worth a notification: the task waits for your answer or your review. `stopped`
- * is left out because only your own stop sets it.
- */
-const NOTIFY_STATUSES: ReadonlySet<TaskStatus> = new Set([
-  'awaiting_permission',
-  'awaiting_approval',
-  'review',
-  'failed',
-]);
 
 const STORAGE_KEY = 'harnessboard.notify';
 

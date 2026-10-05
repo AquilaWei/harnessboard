@@ -17,6 +17,18 @@ export const TASK_STATUSES = [
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 /**
+ * Statuses worth a notification: the task waits for your answer or your review. `stopped`
+ * is left out because only your own stop sets it. The board's notifications and the push to
+ * paired phones both use this list.
+ */
+export const NOTIFY_STATUSES: ReadonlySet<TaskStatus> = new Set([
+  'awaiting_permission',
+  'awaiting_approval',
+  'review',
+  'failed',
+]);
+
+/**
  * `single`: one prompt, handed off across sessions until the agent finishes.
  * `loop`: an initializer session writes a feature list, then each session implements one
  * feature and the harness runs the task's verify command itself before counting it.

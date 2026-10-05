@@ -130,6 +130,22 @@ export interface Device {
   lastSeenAt: number;
 }
 
+/** Body of `GET /api/push/key`: the board's VAPID public key, for `PushManager.subscribe`. */
+export interface PushKey {
+  /** Uncompressed P-256 public key, base64url. */
+  publicKey: string;
+}
+
+/**
+ * Body of `POST /api/push/subscribe`: what `PushSubscription.toJSON()` gives, without the
+ * expiration time the board does not use.
+ */
+export interface PushSubscriptionInfo {
+  /** The push service URL the board posts to; always https. */
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
 /** Body of `POST /api/tasks`. */
 export interface CreateTaskInput {
   prompt: string;

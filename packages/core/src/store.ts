@@ -8,6 +8,7 @@ import type {
   ContextPolicy,
   Device,
   PermissionPolicy,
+  PushSubscriptionInfo,
   Session,
   SessionEndReason,
   StoredEvent,
@@ -91,7 +92,15 @@ const MIGRATIONS = [
    ALTER TABLE devices ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0;
    ALTER TABLE devices ADD COLUMN verified_at INTEGER;
    ALTER TABLE devices ADD COLUMN last_active_at INTEGER;`,
+  // The device's Web Push subscription as JSON; on the device row so revoking removes it.
+  `ALTER TABLE devices ADD COLUMN push_subscription TEXT;`,
 ];
+
+/** A device's Web Push subscription, with the device it reaches. */
+export interface DevicePush {
+  deviceId: number;
+  subscription: PushSubscriptionInfo;
+}
 
 /** A device's registered passkey: what the server needs to check its signatures. */
 export interface Passkey {
@@ -439,6 +448,32 @@ export class Store {
    */
   markDeviceActive(id: number, now = Date.now()): void {
     this.db.prepare('UPDATE devices SET last_active_at = ? WHERE id = ?').run(now, id);
+  }
+
+  /**
+   * Sets the device's push subscription, replacing any earlier one, or clears it with null. A
+   * device has one subscription: subscribing again from a new browser on the phone replaces it.
+   * False when the device is gone.
+   */
+  setPushSubscription(id: number, subscription: PushSubscriptionInfo | null): boolean {
+    const json = subscription === null ? null : JSON.stringify(subscription);
+    const result = this.db
+      .prepare('UPDATE devices SET push_subscription = ? WHERE id = ?')
+      .run(json, id);
+    return Number(result.changes) > 0;
+  }
+
+  /** Every paired device's push subscription, oldest device first. */
+  listPushSubscriptions(): DevicePush[] {
+    return this.db
+      .prepare(
+        'SELECT id, push_subscription FROM devices WHERE push_subscription IS NOT NULL ORDER BY id',
+      )
+      .all()
+      .map((row) => ({
+        deviceId: Number(row.id),
+        subscription: JSON.parse(String(row.push_subscription)) as PushSubscriptionInfo,
+      }));
   }
 
   /**
