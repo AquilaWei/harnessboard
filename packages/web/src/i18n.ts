@@ -2,7 +2,7 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-const en = {
+export const en = {
   summary: {
     running: '{{count}} running',
     attention_one: '{{count}} needs you',
@@ -460,6 +460,36 @@ const en = {
     createOnly: 'Create',
     cancel: 'Cancel',
   },
+  phone: {
+    title: 'Phone access',
+    intro:
+      'Use the board from a phone through Tailscale. The board stays on this computer; only devices you pair here can reach it, through the remote hosts below.',
+    detected: 'This computer’s Tailscale name:',
+    useDetected: 'Add as remote host',
+    notDetected: 'Tailscale was not found on this computer, or it is not running.',
+    hosts: 'Remote hosts',
+    hostsHint:
+      'One host name per line. Paired devices reach the board only through these names. Save before pairing.',
+    serveHint: 'Run this once on this computer so your tailnet can reach the board:',
+    copy: 'Copy',
+    copied: 'Copied',
+    pair: 'Pair a phone',
+    newCode: 'New code',
+    needHost: 'Save a remote host first.',
+    scan: 'Scan this with the phone’s camera, or open the address below on it. The code works once, until {{time}}.',
+    devices: 'Paired devices',
+    noDevices: 'No paired devices.',
+    device: 'Device',
+    lastSeen: 'Last seen',
+    revoke: 'Revoke',
+    pairTitle: 'Pair this device',
+    pairIntro: 'Give this device a name. The computer lists it under that name.',
+    deviceName: 'Device name',
+    pairSubmit: 'Pair',
+    notPairedTitle: 'This device is not paired',
+    notPairedBody:
+      'On the computer, open Settings → Phone access → Pair a phone, then scan the QR code with this device.',
+  },
   settingsForm: {
     maxConcurrent: 'Tasks running at once',
     quotaPause: 'Pause new sessions at 5-hour quota %',
@@ -487,7 +517,7 @@ const en = {
   },
 };
 
-const zhTW: typeof en = {
+export const zhTW: typeof en = {
   summary: {
     running: '{{count}} 個執行中',
     attention_one: '{{count}} 個需要你處理',
@@ -927,6 +957,34 @@ const zhTW: typeof en = {
     create: '建立並開始',
     createOnly: '建立',
     cancel: '取消',
+  },
+  phone: {
+    title: '手機存取',
+    intro:
+      '透過 Tailscale 從手機使用看板。看板留在這台電腦上，只有在這裡配對過的裝置，才能經由下面的遠端主機名稱連進來。',
+    detected: '這台電腦的 Tailscale 名稱：',
+    useDetected: '加為遠端主機',
+    notDetected: '這台電腦上找不到 Tailscale，或 Tailscale 沒有在執行。',
+    hosts: '遠端主機',
+    hostsHint: '一行一個主機名稱。配對過的裝置只能經由這些名稱連到看板。配對前請先儲存。',
+    serveHint: '在這台電腦上執行一次這個指令，讓你的 tailnet 連得到看板：',
+    copy: '複製',
+    copied: '已複製',
+    pair: '配對手機',
+    newCode: '換一個配對碼',
+    needHost: '請先儲存一個遠端主機。',
+    scan: '用手機相機掃描，或在手機上打開下面的網址。配對碼只能用一次，{{time}} 前有效。',
+    devices: '已配對的裝置',
+    noDevices: '沒有已配對的裝置。',
+    device: '裝置',
+    lastSeen: '最後使用',
+    revoke: '撤銷',
+    pairTitle: '配對這個裝置',
+    pairIntro: '幫這個裝置取個名字，電腦上的裝置清單會用這個名字顯示。',
+    deviceName: '裝置名稱',
+    pairSubmit: '配對',
+    notPairedTitle: '這個裝置還沒有配對',
+    notPairedBody: '請在電腦上打開「設定 → 手機存取 → 配對手機」，再用這個裝置掃描 QR code。',
   },
   settingsForm: {
     maxConcurrent: '同時執行的任務數',

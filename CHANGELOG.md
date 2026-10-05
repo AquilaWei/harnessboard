@@ -5,6 +5,17 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Pair a phone with the board** (not finished: a passkey check comes before this is
+  released). Settings has a new "Phone access" section. It finds this computer's Tailscale
+  name, saves it as a remote host, and shows the `tailscale serve --bg <port>` command to
+  run once. "Pair a phone" shows a QR code; scanning it on the phone asks for a device name
+  and pairs it. The section lists paired devices with when each was last used, and Revoke
+  ends a device's access at once.
+- **A device that is not paired** sees "This device is not paired" instead of an empty
+  board. Settings, agents, tool rules and pairing stay reachable only from this computer.
+
 ## 0.0.21 - 2026-10-04
 
 ### Added

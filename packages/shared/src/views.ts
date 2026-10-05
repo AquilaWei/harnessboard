@@ -71,6 +71,14 @@ export interface PairingCode {
   expiresAt: number;
 }
 
+/** Reply of `GET /api/pairing/setup`: what the computer needs to let a phone reach it. */
+export interface PairingSetup {
+  /** This machine's Tailscale name, or `null` when Tailscale is missing or not running. */
+  tailscaleHost: string | null;
+  /** The port the board listens on, for the `tailscale serve --bg <port>` command. */
+  port: number;
+}
+
 /** Body of `POST /api/pair`. */
 export interface PairRequest {
   code: string;

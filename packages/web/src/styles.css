@@ -1702,3 +1702,35 @@ th {
 .chat-input textarea {
   width: 100%;
 }
+
+/* Phone access: the settings section and the screens a phone sees before it is paired. */
+.serve-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.serve-command code {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.pairing img {
+  display: block;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pairing .mono {
+  overflow-wrap: anywhere;
+}
+
+.gate {
+  width: min(420px, calc(100vw - 32px));
+  margin: 15vh auto 0;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--surface);
+}

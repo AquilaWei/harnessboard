@@ -186,6 +186,11 @@ describe('settings-level routes from a paired remote device', () => {
     expect(res.status).toBe(403);
   });
 
+  it('refuses GET /pairing/setup', async () => {
+    const res = await app.request('/api/pairing/setup', { headers: paired });
+    expect(res.status).toBe(403);
+  });
+
   it('refuses GET /devices', async () => {
     const res = await app.request('/api/devices', { headers: paired });
     expect(res.status).toBe(403);

@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
-import { inspectFolder, listFolders } from '@harnessboard/core';
+import { inspectFolder, listFolders, tailscaleHost } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
 import type {
   AgentsUpdate,
@@ -12,6 +12,7 @@ import type {
   HarnessEvent,
   NewAgentProfile,
   PairRequest,
+  PairingSetup,
   PermissionDecision,
   VersionInfo,
 } from '@harnessboard/shared';
@@ -28,9 +29,14 @@ const MAX_DEVICE_NAME = 64;
 
 /**
  * The HTTP API, mounted under `/api`. Who may reach it is decided by `access` in access.ts.
- * `now` is injectable for the expiry of pairing codes.
+ * `now` is injectable for the expiry of pairing codes, and `detectTailscale` so tests do not
+ * depend on whether this machine runs Tailscale.
  */
-export function createApi(harness: Harness, now: () => number = Date.now): Hono {
+export function createApi(
+  harness: Harness,
+  now: () => number = Date.now,
+  detectTailscale: () => Promise<string | null> = () => tailscaleHost(),
+): Hono {
   const app = new Hono();
   const pairing = new Pairing(now);
   const view = (id: number) => {
@@ -62,6 +68,13 @@ export function createApi(harness: Harness, now: () => number = Date.now): Hono 
 
   // Pairing a phone: the computer makes a code (shown as a QR code), the phone sends it back.
   app.post('/pairing', (c) => c.json(pairing.create(), 201));
+  // What the settings dialog needs to explain phone access; under /pairing so it stays local.
+  app.get('/pairing/setup', async (c) =>
+    c.json({
+      tailscaleHost: await detectTailscale(),
+      port: harness.config.port,
+    } satisfies PairingSetup),
+  );
   app.post('/pair', async (c) => {
     const body = await c.req.json<Partial<PairRequest>>().catch(() => ({}) as Partial<PairRequest>);
     const name = typeof body.name === 'string' ? body.name.trim() : '';

@@ -11,8 +11,12 @@ import type {
   CommitInfo,
   CreateTaskInput,
   DeletedTask,
+  Device,
   FolderInfo,
   FolderListing,
+  PairingCode,
+  PairingSetup,
+  PairRequest,
   PermissionDecision,
   PlanView,
   HarnessStatus,
@@ -29,6 +33,21 @@ import type {
 // Required by the server on every state-changing request (see server/src/api.ts).
 const CLIENT_HEADER = 'x-harnessboard-client';
 
+/** A failed API call; `status` tells a device that is not paired (401) from other errors. */
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** True for the 401 a remote device gets until it is paired, or after it was revoked. */
+export function isNotPaired(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 401;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`/api${path}`, init);
   const text = await res.text();
@@ -39,7 +58,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       // plain-text error body; use it as is
     }
-    throw new Error(message || res.statusText);
+    throw new ApiError(message || res.statusText, res.status);
   }
   return JSON.parse(text) as T;
 }
@@ -100,4 +119,9 @@ export const api = {
   cancelChat: (id: number) => send<unknown>('DELETE', `/tasks/${id}/chat/pending`),
   settings: () => request<Settings>('/settings'),
   saveSettings: (patch: Partial<Settings>) => send<Settings>('PUT', '/settings', patch),
+  pairingSetup: () => request<PairingSetup>('/pairing/setup'),
+  createPairing: () => send<PairingCode>('POST', '/pairing'),
+  pair: (input: PairRequest) => send<Device>('POST', '/pair', input),
+  devices: () => request<Device[]>('/devices'),
+  revokeDevice: (id: number) => send<{ id: number }>('DELETE', `/devices/${id}`),
 };

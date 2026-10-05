@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { AgentInfo, Settings, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
 import { DetectedAgents } from './DetectedAgents';
+import { PhoneAccess } from './PhoneAccess';
 import { LANGUAGES, setLanguage } from '../i18n';
 import { parseRules } from '../rules';
 import type { Language } from '../i18n';
@@ -29,6 +30,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [globalRules, setGlobalRules] = useState(settings.allowedTools.join('\n'));
   const parsedRules = parseRules(globalRules);
   const [guidelines, setGuidelines] = useState(settings.reviewGuidelines.join('\n'));
+  const [remoteHosts, setRemoteHosts] = useState(settings.remoteHosts.join('\n'));
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [notify, setNotify] = useState(notificationsEnabled);
   const [permission, setPermission] = useState(notificationPermission);
@@ -49,6 +51,10 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           defaultReviewer: reviewer === '' ? null : reviewer,
           allowedTools: parsedRules.rules,
           reviewGuidelines: guidelines
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line !== ''),
+          remoteHosts: remoteHosts
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line !== ''),
@@ -181,6 +187,13 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
               : t('settingsForm.agentsHintNoFile')}
           </p>
         </section>
+
+        <PhoneAccess
+          savedHosts={settings.remoteHosts}
+          hosts={remoteHosts}
+          onHostsChange={setRemoteHosts}
+          onError={setError}
+        />
 
         <div className="row">
           <label className="field">

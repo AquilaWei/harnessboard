@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
-import type { Device, PairingCode } from '@harnessboard/shared';
+import type { Device, PairingCode, PairingSetup } from '@harnessboard/shared';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
 
@@ -15,6 +15,7 @@ const START = 1_000_000;
 let harness: Harness;
 let app: Hono;
 let clock: number;
+let tailscale: string | null;
 
 beforeEach(() => {
   const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-pairing-'));
@@ -25,6 +26,7 @@ beforeEach(() => {
     remoteHosts: [REMOTE],
   });
   clock = START;
+  tailscale = 'box.tail1234.ts.net';
   app = new Hono();
   app.use(
     '*',
@@ -32,7 +34,11 @@ beforeEach(() => {
   );
   app.route(
     '/api',
-    createApi(harness, () => clock),
+    createApi(
+      harness,
+      () => clock,
+      () => Promise.resolve(tailscale),
+    ),
   );
 });
 
@@ -59,6 +65,22 @@ describe('POST /api/pairing', () => {
   it('returns a code that expires 5 minutes from now', async () => {
     const { expiresAt } = await newCode();
     expect(expiresAt).toBe(START + 300_000);
+  });
+});
+
+describe('GET /api/pairing/setup', () => {
+  it('returns the Tailscale name and the port', async () => {
+    const res = await app.request('/api/pairing/setup', { headers: local });
+    expect((await res.json()) as PairingSetup).toEqual({
+      tailscaleHost: 'box.tail1234.ts.net',
+      port: 4999,
+    });
+  });
+
+  it('returns a null name when Tailscale is not running', async () => {
+    tailscale = null;
+    const res = await app.request('/api/pairing/setup', { headers: local });
+    expect((await res.json()) as PairingSetup).toEqual({ tailscaleHost: null, port: 4999 });
   });
 });
 

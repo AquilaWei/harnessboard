@@ -2,18 +2,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HarnessStatus, Settings, TaskStatus, TaskView } from '@harnessboard/shared';
-import { api } from './api';
+import { api, isNotPaired } from './api';
 import { stageOf } from './board';
 import type { Stage, TaskAction } from './board';
 import { Board } from './components/Board';
 import { Header } from './components/Header';
 import { NewTaskDialog } from './components/NewTaskDialog';
+import { NotPaired, PairScreen } from './components/PairScreen';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TaskDrawer } from './components/TaskDrawer';
 import type { DrawerTab } from './components/TaskDrawer';
 import { descriptionText } from './components/Description';
 import { useLiveEvents, useThrottled } from './live';
 import { newlyWaiting, notificationsEnabled, openTab } from './notify';
+import { pairCodeFromHash } from './phone';
 
 const ACTIONS: Record<TaskAction, (id: number) => Promise<unknown>> = {
   queue: api.queue,
@@ -30,11 +32,24 @@ export function App() {
   const [selected, setSelected] = useState<{ id: number; tab: DrawerTab } | null>(null);
   const [dialog, setDialog] = useState<'new' | 'settings' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // A phone opened the pairing address the computer showed as a QR code.
+  const [pairCode] = useState(() => pairCodeFromHash(window.location.hash));
+  const [notPaired, setNotPaired] = useState(false);
+
+  // The code works once; keep it out of the address bar and the history.
+  useEffect(() => {
+    if (pairCode) history.replaceState(null, '', location.pathname + location.search);
+  }, [pairCode]);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast((current) => (current === message ? null : current)), 4000);
   }, []);
+  /** Reports a failed load, or swaps the board for the "not paired" screen on a 401. */
+  const showError = useCallback(
+    (err: Error) => (isNotPaired(err) ? setNotPaired(true) : showToast(err.message)),
+    [showToast],
+  );
 
   // Statuses at the previous load; `null` until the first one, which notifies nothing.
   const lastStatuses = useRef<Map<number, TaskStatus> | null>(null);
@@ -65,19 +80,19 @@ export function App() {
       notifyWaiting.current(nextTasks);
       setStatus(nextStatus);
     } catch (err) {
-      showToast((err as Error).message);
+      showError(err as Error);
     }
-  }, [showToast]);
+  }, [showError]);
 
   useEffect(() => {
     void load();
-    api.settings().then(setSettings, (err: Error) => showToast(err.message));
+    api.settings().then(setSettings, showError);
     // Only shown in the header; the board works without it, so a failure is not reported.
     api.version().then(
       (info) => setVersion(info.version),
       () => setVersion(null),
     );
-  }, [load, showToast]);
+  }, [load, showError]);
 
   const refresh = useThrottled(() => void load(), 500);
   useLiveEvents((event) => {
@@ -97,6 +112,10 @@ export function App() {
 
   const attention = tasks.filter((task) => stageOf(task.status) === 'attention').length;
   const running = tasks.filter((task) => task.status === 'running').length;
+
+  // Reloading starts the board afresh with the new cookie, live events included.
+  if (pairCode) return <PairScreen code={pairCode} onPaired={() => window.location.reload()} />;
+  if (notPaired) return <NotPaired />;
 
   return (
     <>
