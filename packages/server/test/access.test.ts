@@ -165,50 +165,138 @@ describe('access through a proxy on loopback', () => {
   });
 });
 
-describe('settings-level routes from a paired remote device', () => {
-  it('refuses PUT /settings', async () => {
+const MINUTE = 60_000;
+
+describe('lock of a paired remote device', () => {
+  it('lets a device through after 29 idle minutes', async () => {
+    clock = 29 * MINUTE;
+    const res = await app.request('/api/tasks', { headers: paired });
+    expect(res.status).toBe(200);
+  });
+
+  it('answers 401 locked after 31 idle minutes', async () => {
+    clock = 31 * MINUTE;
+    const res = await app.request('/api/tasks', { headers: paired });
+    expect([res.status, await res.json()]).toEqual([
+      401,
+      { error: 'this device is locked', locked: true },
+    ]);
+  });
+
+  it('lets a locked device ask for a passkey challenge', async () => {
+    clock = 31 * MINUTE;
+    const res = await write('POST', '/api/auth/challenge', paired);
+    expect(res.status).toBe(200);
+  });
+
+  it('stays unlocked while the device keeps being active', async () => {
+    clock = 20 * MINUTE;
+    await app.request('/api/tasks', { headers: paired });
+    clock = 45 * MINUTE;
+    const res = await app.request('/api/tasks', { headers: paired });
+    expect(res.status).toBe(200);
+  });
+
+  it('unlocks after a passed passkey check', async () => {
+    harness.store.markDeviceVerified(harness.store.listDevices()[0]!.id, 0, 40 * MINUTE);
+    clock = 41 * MINUTE;
+    const res = await app.request('/api/tasks', { headers: paired });
+    expect(res.status).toBe(200);
+  });
+});
+
+describe('last active time of a device', () => {
+  it('is written by a request once a minute has passed', async () => {
+    clock = 20 * MINUTE;
+    await app.request('/api/tasks', { headers: paired });
+    expect(harness.store.findDeviceByToken(TOKEN)!.lastActiveAt).toBe(20 * MINUTE);
+  });
+
+  it('is not written again within a minute', async () => {
+    clock = 59_999;
+    await app.request('/api/tasks', { headers: paired });
+    expect(harness.store.findDeviceByToken(TOKEN)!.lastActiveAt).toBe(0);
+  });
+
+  it('is not written by a request the lock refused', async () => {
+    clock = 31 * MINUTE;
+    await app.request('/api/tasks', { headers: paired });
+    expect(harness.store.findDeviceByToken(TOKEN)!.lastActiveAt).toBe(0);
+  });
+});
+
+describe('sensitive routes from a paired remote device', () => {
+  it('lets POST /tasks through within 5 minutes of a passkey check', async () => {
+    clock = 5 * MINUTE;
+    const res = await write('POST', '/api/tasks', paired, {});
+    expect(res.status).toBe(400);
+  });
+
+  it('answers 401 reauth to POST /tasks more than 5 minutes after a passkey check', async () => {
+    clock = 5 * MINUTE + 1;
+    const res = await write('POST', '/api/tasks', paired, {});
+    expect([res.status, await res.json()]).toEqual([
+      401,
+      { error: 'confirm with your passkey first', reauth: true },
+    ]);
+  });
+
+  it('lets PUT /settings through within 5 minutes of a passkey check', async () => {
+    clock = 5 * MINUTE;
     const res = await write('PUT', '/api/settings', paired, { maxConcurrent: 5 });
-    expect([res.status, harness.settings().maxConcurrent]).toEqual([403, 1]);
+    expect([res.status, harness.settings().maxConcurrent]).toEqual([200, 5]);
   });
 
-  it('refuses POST /agents', async () => {
-    const res = await write('POST', '/api/agents', paired, { id: 'x', provider: 'codex' });
-    expect(res.status).toBe(403);
+  it('answers 401 reauth to PUT /settings more than 5 minutes after a passkey check', async () => {
+    clock = 5 * MINUTE + 1;
+    const res = await write('PUT', '/api/settings', paired, { maxConcurrent: 5 });
+    expect([res.status, harness.settings().maxConcurrent]).toEqual([401, 1]);
   });
 
-  it('refuses PUT /tasks/:id/auto-approve', async () => {
-    const res = await write('PUT', '/api/tasks/1/auto-approve', paired, { on: true });
-    expect(res.status).toBe(403);
-  });
-
-  it('refuses PUT /tasks/:id/allowed-tools', async () => {
-    const res = await write('PUT', '/api/tasks/1/allowed-tools', paired, { rules: ['Bash'] });
-    expect(res.status).toBe(403);
-  });
-
-  it('refuses POST /pairing', async () => {
-    const res = await write('POST', '/api/pairing', paired);
-    expect(res.status).toBe(403);
-  });
-
-  it('refuses GET /pairing/setup', async () => {
-    const res = await app.request('/api/pairing/setup', { headers: paired });
-    expect(res.status).toBe(403);
-  });
-
-  it('refuses GET /devices', async () => {
+  it('lets GET /devices through within 5 minutes of a passkey check', async () => {
+    clock = 5 * MINUTE;
     const res = await app.request('/api/devices', { headers: paired });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
-  it('refuses DELETE /devices/:id', async () => {
-    const res = await write('DELETE', '/api/devices/1', paired);
-    expect(res.status).toBe(403);
+  it('answers 401 reauth to DELETE /tasks/:id after 5 minutes', async () => {
+    clock = 6 * MINUTE;
+    const res = await write('DELETE', '/api/tasks/1', paired);
+    expect(res.status).toBe(401);
   });
 
-  it('still allows GET /settings', async () => {
+  it('answers 401 reauth to POST /tasks/:id/plan/approve after 5 minutes', async () => {
+    clock = 6 * MINUTE;
+    const res = await write('POST', '/api/tasks/1/plan/approve', paired);
+    expect(res.status).toBe(401);
+  });
+
+  it('does not ask for a passkey on GET /tasks/:id after 5 minutes', async () => {
+    clock = 6 * MINUTE;
+    const res = await app.request('/api/tasks/1', { headers: paired });
+    expect(res.status).toBe(404);
+  });
+
+  it('does not ask for a passkey on GET /settings after 5 minutes', async () => {
+    clock = 6 * MINUTE;
     const res = await app.request('/api/settings', { headers: paired });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('lock and reauth on loopback', () => {
+  const local = { host: `127.0.0.1:${PORT}` };
+
+  it('never locks a loopback request', async () => {
+    clock = 31 * MINUTE;
+    const res = await app.request('/api/tasks', { headers: local });
+    expect(res.status).toBe(200);
+  });
+
+  it('never asks a loopback request for a passkey on a sensitive route', async () => {
+    clock = 6 * MINUTE;
+    const res = await write('PUT', '/api/settings', local, { maxConcurrent: 5 });
+    expect([res.status, harness.settings().maxConcurrent]).toEqual([200, 5]);
   });
 });
 

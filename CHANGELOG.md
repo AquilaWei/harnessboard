@@ -14,7 +14,11 @@ are test versions that have not been accepted on real machines yet.
   and pairs it. The section lists paired devices with when each was last used, and Revoke
   ends a device's access at once.
 - **A device that is not paired** sees "This device is not paired" instead of an empty
-  board. Settings, agents, tool rules and pairing stay reachable only from this computer.
+  board.
+- **A paired phone locks itself** after 30 minutes without use and needs its passkey again.
+  Starting, approving, merging or deleting tasks, and changing settings, agents, tool rules
+  or paired devices from a phone need a passkey check within the last 5 minutes. Nothing
+  changes on this computer.
 
 ## 0.0.21 - 2026-10-04
 

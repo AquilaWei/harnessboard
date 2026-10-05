@@ -236,6 +236,15 @@ describe('Store devices', () => {
     expect(store.findDeviceByToken('token-one')!.lastSeenAt).toBe(5000);
   });
 
+  it('records when a device was last active without changing its passkey check time', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    store.markDeviceActive(id, 7000);
+    const device = store.findDeviceByToken('token-one')!;
+    expect([device.verifiedAt, device.lastActiveAt]).toEqual([2000, 7000]);
+  });
+
   it('stores a passkey and counts registering it as a passkey check', () => {
     const store = new Store(':memory:');
     const { id } = store.addDevice('Pixel', 'token-one', 1000);

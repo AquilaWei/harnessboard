@@ -434,6 +434,14 @@ export class Store {
   }
 
   /**
+   * Records activity of an unlocked device, which keeps it from locking after being idle. The
+   * caller decides that the device is unlocked; this does not check it.
+   */
+  markDeviceActive(id: number, now = Date.now()): void {
+    this.db.prepare('UPDATE devices SET last_active_at = ? WHERE id = ?').run(now, id);
+  }
+
+  /**
    * Ids are never reused, even after the newest task is deleted: its branch is kept and is
    * named after the id, so a new task with the same id could collide with it.
    */

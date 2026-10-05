@@ -29,13 +29,32 @@ const PAIR_PATH = '/api/pair';
 /** Paths a paired device without a passkey may reach: registering one, and the passkey check. */
 const PASSKEY_SETUP_PATHS = /^\/api\/(passkey(\/.*)?|auth\/.*)$/;
 
+/** A device that has not been active for longer than this is locked until a passkey check. */
+export const IDLE_LOCK_MS = 30 * 60_000;
+
+/** A sensitive route needs a passkey check no older than this. */
+export const REAUTH_MS = 5 * 60_000;
+
+/** Paths a locked device may reach: the passkey check that unlocks it. */
+const UNLOCK_PATHS = /^\/api\/auth\/.*$/;
+
 /**
- * Routes that change what the board may do or who may use it. A remote device must not reach
- * them without a fresh passkey check, which does not exist yet, so they are refused to every
- * remote device. TODO: F6 in feature_list.json - move these into `SENSITIVE_ROUTES` behind the
- * passkey reauth check.
+ * Routes that start or steer agents, or change what the board may do or who may use it. A remote
+ * device needs a passkey check within {@link REAUTH_MS} to reach them. A null method means every
+ * method. Keep this the only list; docs/plans/phone-access.md (M2 step 3) names the same routes.
  */
-const SETTINGS_ROUTES: { method: string | null; path: RegExp }[] = [
+const SENSITIVE_ROUTES: { method: string | null; path: RegExp }[] = [
+  { method: 'POST', path: /^\/api\/tasks$/ },
+  { method: 'POST', path: /^\/api\/tasks\/[^/]+\/permission$/ },
+  { method: 'POST', path: /^\/api\/tasks\/[^/]+\/plan\/(feedback|approve)$/ },
+  { method: 'POST', path: /^\/api\/tasks\/[^/]+\/criteria\/approve$/ },
+  { method: 'POST', path: /^\/api\/tasks\/[^/]+\/chat$/ },
+  { method: 'POST', path: /^\/api\/tasks\/[^/]+\/merge$/ },
+  { method: 'POST', path: /^\/api\/tasks\/[^/]+\/complete$/ },
+  { method: 'DELETE', path: /^\/api\/tasks\/[^/]+$/ },
+  { method: 'PUT', path: /^\/api\/tasks\/[^/]+\/agents$/ },
+  { method: 'POST', path: /^\/api\/tasks\/[^/]+\/queue$/ },
+  // Settings-level routes (M1 step 5).
   { method: 'PUT', path: /^\/api\/settings$/ },
   { method: 'POST', path: /^\/api\/agents$/ },
   { method: 'PUT', path: /^\/api\/tasks\/[^/]+\/auto-approve$/ },
@@ -56,10 +75,15 @@ const SETTINGS_ROUTES: { method: string | null; path: RegExp }[] = [
  * - a remote request to `/api/*` needs the cookie of a paired device (401 otherwise), except
  *   pairing itself. Static files are served without one so the web can show the pairing screen;
  * - a device without a passkey is not paired yet: it may only register one or reach
- *   `/api/auth/*` (401 otherwise).
+ *   `/api/auth/*` (401 otherwise);
+ * - a device that never passed a passkey check, or was idle for over {@link IDLE_LOCK_MS}, is
+ *   locked: it may only reach `/api/auth/*` (401 `{locked: true}` otherwise);
+ * - a route in {@link SENSITIVE_ROUTES} answers 401 `{reauth: true}` when the device's last
+ *   passkey check is older than {@link REAUTH_MS}.
  *
- * Remote hosts are read from the harness on every request, so a settings change applies at once.
- * `now` is injectable for the `last_seen_at` throttle.
+ * Local requests see neither the lock nor the reauth. Remote hosts are read from the harness on
+ * every request, so a settings change applies at once. `now` is injectable for the lock, the
+ * reauth and the throttled `last_seen_at` / `last_active_at` writes.
  */
 export function access(
   harness: Harness,
@@ -92,14 +116,28 @@ export function access(
     const at = now();
     if (at - device.lastSeenAt >= TOUCH_INTERVAL_MS) harness.store.touchDevice(device.id, at);
     c.set('device', device);
-    if (!device.passkey && !PASSKEY_SETUP_PATHS.test(path)) {
+    if (!device.passkey) {
+      if (PASSKEY_SETUP_PATHS.test(path)) return next();
       return c.json({ error: 'this device has no passkey yet; pair it again' }, 401);
     }
-    const method = c.req.method;
+    if (UNLOCK_PATHS.test(path)) return next();
     if (
-      SETTINGS_ROUTES.some((r) => (r.method === null || r.method === method) && r.path.test(path))
+      device.verifiedAt === null ||
+      device.lastActiveAt === null ||
+      at - device.lastActiveAt > IDLE_LOCK_MS
     ) {
-      return c.json({ error: 'this can only be changed on the computer running the board' }, 403);
+      return c.json({ error: 'this device is locked', locked: true }, 401);
+    }
+    // Read and write happen with no await between them, so no other request can lock the device
+    // in between and have this write unlock it again.
+    if (at - device.lastActiveAt >= TOUCH_INTERVAL_MS)
+      harness.store.markDeviceActive(device.id, at);
+    const method = c.req.method;
+    const sensitive = SENSITIVE_ROUTES.some(
+      (r) => (r.method === null || r.method === method) && r.path.test(path),
+    );
+    if (sensitive && at - device.verifiedAt > REAUTH_MS) {
+      return c.json({ error: 'confirm with your passkey first', reauth: true }, 401);
     }
     return next();
   };
