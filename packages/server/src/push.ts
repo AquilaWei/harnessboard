@@ -132,8 +132,8 @@ export class PushNotifier {
   }
 
   /**
-   * Sends the pushes `event` calls for. Every phone is tried; rejects with an `AggregateError`
-   * of the sends that failed. A phone whose subscription is gone has it removed.
+   * Sends the pushes `event` calls for. Every phone is tried; rejects with a `PushFailedError`
+   * naming the devices whose send failed. A phone whose subscription is gone has it removed.
    */
   async handle(event: HarnessEvent): Promise<void> {
     if (event.type === 'deleted') this.statuses.delete(event.taskId);
@@ -154,8 +154,14 @@ export class PushNotifier {
         }
       }),
     );
-    const failures = results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
-    if (failures.length > 0) throw new AggregateError(failures, 'push failed');
+    // The send errors themselves are dropped: a `WebPushError` carries the endpoint, which is the
+    // phone's secret push address, and the push service's reply.
+    const failures = results.flatMap((r, i) =>
+      r.status === 'rejected'
+        ? [`device ${targets[i]!.deviceId}: ${describePushError(r.reason)}`]
+        : [],
+    );
+    if (failures.length > 0) throw new PushFailedError(failures);
   }
 
   /** Removes the subscription unless the phone subscribed again while the push was in flight. */
@@ -163,6 +169,27 @@ export class PushNotifier {
     const current = this.store.listPushSubscriptions().find((p) => p.deviceId === deviceId);
     if (current?.subscription.endpoint === endpoint) this.store.setPushSubscription(deviceId, null);
   }
+}
+
+/** Some pushes failed. The message names each device and holds nothing secret, so it can be logged. */
+export class PushFailedError extends Error {
+  constructor(readonly failures: string[]) {
+    super(`push failed (${failures.join('; ')})`);
+    this.name = 'PushFailedError';
+  }
+}
+
+/**
+ * A short reason for a push error that is safe to log: the HTTP status, a Node error code, or
+ * the error's name. Never the message, which can hold the endpoint, the push service's reply or,
+ * for a damaged `vapid.json`, part of the private key.
+ */
+export function describePushError(err: unknown): string {
+  if (err instanceof PushFailedError) return err.message;
+  if (err instanceof webpush.WebPushError) return `status ${err.statusCode}`;
+  const code = (err as { code?: unknown } | null)?.code;
+  if (typeof code === 'string') return code;
+  return err instanceof Error ? err.name : 'unknown error';
 }
 
 function isNotifyStatus(status: string): status is TaskStatus {

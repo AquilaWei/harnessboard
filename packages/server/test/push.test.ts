@@ -9,7 +9,13 @@ import { Harness, Store, defaultConfig } from '@harnessboard/core';
 import type { PushSubscriptionInfo } from '@harnessboard/shared';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
-import { PushNotifier, isGone, loadVapidKeys, parseSubscription } from '../src/push.js';
+import {
+  PushNotifier,
+  describePushError,
+  isGone,
+  loadVapidKeys,
+  parseSubscription,
+} from '../src/push.js';
 import type { PushOutcome, PushSender } from '../src/push.js';
 import { SESSION_HEADER, Sessions } from '../src/session.js';
 
@@ -366,6 +372,17 @@ describe('PushNotifier', () => {
     expect(sender.sent.map((s) => s.endpoint)).toEqual(['https://push/1', 'https://push/2']);
   });
 
+  it('rejects naming the failed device and status, without the endpoint', async () => {
+    const refused = new webpush.WebPushError('refused', 429, {}, 'body', 'https://push/1');
+    const sender = new FakeSender({ 'https://push/1': refused });
+    const handled = new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'review',
+    });
+    await expect(handled).rejects.toThrow(/^push failed \(device 1: status 429\)$/);
+  });
+
   it('does not load the keys when no device is subscribed', async () => {
     store.revokeDevice(1);
     store.revokeDevice(2);
@@ -403,6 +420,26 @@ describe('isGone', () => {
   });
 });
 
+describe('describePushError', () => {
+  it('gives the status of a push service error', () => {
+    const err = new webpush.WebPushError('refused', 503, {}, 'reply', 'https://push/secret');
+    expect(describePushError(err)).toBe('status 503');
+  });
+
+  it('gives the code of a network error', () => {
+    const err = Object.assign(new Error('connect ECONNRESET https://push/secret'), {
+      code: 'ECONNRESET',
+    });
+    expect(describePushError(err)).toBe('ECONNRESET');
+  });
+
+  it('gives only the name of an error without a code', () => {
+    expect(describePushError(new SyntaxError('Unexpected token in "private-key"'))).toBe(
+      'SyntaxError',
+    );
+  });
+});
+
 describe('push trigger in the API', () => {
   it('pushes to a subscribed phone when the harness reports a task entering review', async () => {
     harness.store.setPushSubscription(1, phone('https://push/1'));
@@ -411,5 +448,26 @@ describe('push trigger in the API', () => {
     // Any change the harness announces carries the task's status; this one is the simplest.
     harness.setAutoApprove(id, true);
     await vi.waitFor(() => expect(pushed.sent.map((s) => s.endpoint)).toEqual(['https://push/1']));
+  });
+
+  it('logs a failed push by device and status, without the endpoint or the reply', async () => {
+    const endpoint = 'https://push.example/send/secret-subscription-token';
+    const refused = new webpush.WebPushError(
+      'Received unexpected response code',
+      429,
+      { 'retry-after': '60', 'x-reply-header': 'secret-header' },
+      'secret-reply-body',
+      endpoint,
+    );
+    createApi(harness, new Sessions(), { pushSender: new FakeSender({ [endpoint]: refused }) });
+    harness.store.setPushSubscription(1, phone(endpoint));
+    const { id } = harness.store.createTask(newTask);
+    harness.store.updateTask(id, { status: 'review' });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    harness.setAutoApprove(id, true);
+    await vi.waitFor(() => expect(logged).toHaveBeenCalled());
+    const calls = logged.mock.calls;
+    logged.mockRestore();
+    expect(calls).toEqual([['harnessboard: push failed (device 1: status 429)']]);
   });
 });

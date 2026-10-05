@@ -24,7 +24,13 @@ import type { AccessEnv } from './access.js';
 import { Pairing, newDeviceToken } from './pairing.js';
 import { Passkeys, webauthnVerifier } from './passkey.js';
 import type { Party, PasskeyResult, PasskeyVerifier } from './passkey.js';
-import { PushNotifier, loadVapidKeys, parseSubscription, webPushSender } from './push.js';
+import {
+  PushNotifier,
+  describePushError,
+  loadVapidKeys,
+  parseSubscription,
+  webPushSender,
+} from './push.js';
 import type { PushSender, VapidKeys } from './push.js';
 import type { Sessions } from './session.js';
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
@@ -162,7 +168,10 @@ export function createApi(
   // The listener is never removed: the API lives as long as the harness.
   const notifier = new PushNotifier(harness.store, pushSender, vapidKeys);
   harness.subscribe((event) => {
-    notifier.handle(event).catch((err: unknown) => console.error('harnessboard: push failed', err));
+    // Only the short reason is logged: the error object can hold a phone's push address.
+    notifier
+      .handle(event)
+      .catch((err: unknown) => console.error(`harnessboard: ${describePushError(err)}`));
   });
   app.post('/push/subscribe', async (c) => {
     const device = remoteDevice(c, 'push');
