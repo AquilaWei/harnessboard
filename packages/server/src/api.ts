@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Hono } from 'hono';
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { inspectFolder, listFolders } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
@@ -16,27 +16,7 @@ import type {
 import pkg from '../package.json' with { type: 'json' };
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
 
-/** Header every state-changing request must carry; see {@link localOnly}. */
-export const CLIENT_HEADER = 'x-harnessboard-client';
-
-/**
- * The API can start agents that edit files and run commands, so it must only be reachable
- * from this machine's own tools:
- * - the Host header must be a loopback name, which defeats DNS rebinding;
- * - non-GET requests need {@link CLIENT_HEADER}. Browsers cannot add a custom header to a
- *   cross-origin request without a CORS preflight, which this server never approves.
- */
-export function localOnly(port: number): MiddlewareHandler {
-  const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
-  return async (c, next) => {
-    if (!allowedHosts.has(c.req.header('host') ?? '')) return c.text('forbidden host', 403);
-    if (c.req.method !== 'GET' && !c.req.header(CLIENT_HEADER)) {
-      return c.text(`missing ${CLIENT_HEADER} header`, 403);
-    }
-    await next();
-  };
-}
-
+/** The HTTP API, mounted under `/api`. Who may reach it is decided by `access` in access.ts. */
 export function createApi(harness: Harness): Hono {
   const app = new Hono();
   const view = (id: number) => {

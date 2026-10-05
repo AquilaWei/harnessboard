@@ -21,7 +21,7 @@ import type {
   TimelineEntry,
   WorktreeDiff,
 } from '@harnessboard/shared';
-import { CLIENT_HEADER } from './api.js';
+import { CLIENT_HEADER } from './access.js';
 
 export class ServerUnavailableError extends Error {}
 

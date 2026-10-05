@@ -6,7 +6,8 @@ import { Hono } from 'hono';
 import { Harness, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import type { AgentInfo, DetectedAgent } from '@harnessboard/shared';
-import { createApi, localOnly } from './api.js';
+import { access } from './access.js';
+import { createApi } from './api.js';
 import { serveWeb } from './static.js';
 
 // The bundled CLI lives in dist/; the web build is copied next to it in dist/web.
@@ -29,7 +30,7 @@ export async function startServer(config: HarnessConfig): Promise<RunningServer>
   const harness = Harness.open(config, { settingsFile: userConfigFile() });
   const [agents, detected] = await Promise.all([harness.probeAgents(), harness.detectAgents()]);
   const app = new Hono();
-  app.use('*', localOnly(config.port));
+  app.use('*', access(harness));
   app.route('/api', createApi(harness));
   app.get('*', serveWeb(WEB_ROOT));
 

@@ -5,7 +5,7 @@
 /** What answers on the server's port: Harnessboard, another program, or nothing. */
 export type PortState = 'harnessboard' | 'other' | 'free';
 
-/** Header the API requires from its clients (see `localOnly` in the server). */
+/** Header the API requires from its clients (see `access` in the server). */
 const CLIENT_HEADER = { 'x-harnessboard-client': 'desktop' };
 
 /**

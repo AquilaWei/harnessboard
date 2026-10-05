@@ -7,7 +7,8 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
 import type { Task } from '@harnessboard/shared';
-import { CLIENT_HEADER, createApi, localOnly } from '../src/api.js';
+import { CLIENT_HEADER, access } from '../src/access.js';
+import { createApi } from '../src/api.js';
 
 const PORT = 4999;
 let harness: Harness;
@@ -42,7 +43,7 @@ beforeEach(() => {
   };
   harness = Harness.open(config);
   app = new Hono();
-  app.use('*', localOnly(PORT));
+  app.use('*', access(harness));
   app.route('/api', createApi(harness));
 });
 
