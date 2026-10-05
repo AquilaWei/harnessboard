@@ -214,12 +214,13 @@ export class Passkeys {
         // A response that does not verify counts as a failed check below.
       }
     }
-    if (counter === null || !counterAdvanced(device.passkey.counter, counter)) {
+    // The counter is compared with the stored one as it is saved, not with `device`: another
+    // check may have stored a higher counter while this one waited on the verifier.
+    if (counter === null || !this.store.markDeviceVerified(device.id, counter, at)) {
       this.fail(device.id, at);
       return { ok: false, reason: 'invalid' };
     }
     this.failures.delete(device.id);
-    this.store.markDeviceVerified(device.id, counter, at);
     return done;
   }
 
@@ -252,12 +253,4 @@ export class Passkeys {
     if (!open || open.kind !== kind || this.now() >= open.expiresAt) return null;
     return open.value;
   }
-}
-
-/**
- * Whether a signature counter moved forward. Authenticators without a counter report 0 every
- * time, which passes; any other value must be higher than the stored one.
- */
-function counterAdvanced(stored: number, next: number): boolean {
-  return (stored === 0 && next === 0) || next > stored;
 }

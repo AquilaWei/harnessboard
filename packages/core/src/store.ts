@@ -402,13 +402,22 @@ export class Store {
     return Number(result.changes) > 0;
   }
 
-  /** Records a passed passkey check and the authenticator's new signature counter. */
-  markDeviceVerified(id: number, counter: number, now = Date.now()): void {
-    this.db
+  /**
+   * Records a passed passkey check and the authenticator's new signature counter. False, with
+   * nothing changed, when the counter is not above the stored one, as it can mean a cloned
+   * authenticator; a counter that stays at 0 passes, since many passkeys never count. The check
+   * is part of the update, so a slower check that finishes after a newer one cannot roll the
+   * counter back.
+   */
+  markDeviceVerified(id: number, counter: number, now = Date.now()): boolean {
+    const result = this.db
       .prepare(
-        'UPDATE devices SET sign_count = ?, verified_at = ?, last_active_at = ? WHERE id = ?',
+        `UPDATE devices SET sign_count = ?, verified_at = ?, last_active_at = ?
+         WHERE id = ? AND credential_id IS NOT NULL
+           AND (sign_count < ? OR (sign_count = 0 AND ? = 0))`,
       )
-      .run(counter, now, now, id);
+      .run(counter, now, now, id, counter, counter);
+    return Number(result.changes) > 0;
   }
 
   listDevices(): Device[] {

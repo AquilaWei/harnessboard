@@ -277,6 +277,29 @@ describe('Store devices', () => {
     ]);
   });
 
+  it('refuses a passkey check whose counter is not above the stored one', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    store.markDeviceVerified(id, 5, 3000);
+    const marked = store.markDeviceVerified(id, 4, 4000);
+    const device = store.findDeviceByToken('token-one')!;
+    expect([marked, device.passkey!.counter, device.verifiedAt, device.lastActiveAt]).toEqual([
+      false,
+      5,
+      3000,
+      3000,
+    ]);
+  });
+
+  it('accepts a passkey check from a passkey whose counter stays at 0', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, { ...passkey, counter: 0 }, 2000);
+    const marked = store.markDeviceVerified(id, 0, 3000);
+    expect([marked, store.findDeviceByToken('token-one')!.verifiedAt]).toEqual([true, 3000]);
+  });
+
   it('keeps devices paired before passkeys, without a passkey', () => {
     const file = path.join(tempDir('db'), 'harness.db');
     const first = new Store(file);

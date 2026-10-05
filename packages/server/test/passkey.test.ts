@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
@@ -193,6 +193,35 @@ describe('the passkey check', () => {
     clock = START + 5000;
     const res = await challengeAndVerify({ counter: 2 });
     expect([res.status, stored(TOKEN).verifiedAt]).toEqual([400, START]);
+  });
+
+  it('refuses a slower check that finishes after a check with a higher counter', async () => {
+    const answers: ((counter: number) => void)[] = [];
+    const deferred: PasskeyVerifier = {
+      ...verifier,
+      verifyAuthentication: () => new Promise((resolve) => answers.push(resolve)),
+    };
+    app = new Hono();
+    app.use(
+      '*',
+      access(harness, () => clock),
+    );
+    app.route('/api', createApi(harness, { now: () => clock, verifier: deferred }));
+    clock = START + 1000;
+    await post('/api/auth/challenge', device);
+    const slower = post('/api/auth/verify', device, {});
+    await vi.waitFor(() => expect(answers).toHaveLength(1));
+    clock = START + 5000;
+    await post('/api/auth/challenge', device);
+    const faster = post('/api/auth/verify', device, {});
+    await vi.waitFor(() => expect(answers).toHaveLength(2));
+    answers[1]!(5);
+    await faster;
+    answers[0]!(4);
+    const res = await slower;
+    expect([res.status, stored(TOKEN).passkey!.counter, stored(TOKEN).verifiedAt]).toEqual([
+      400, 5, 1_005_000,
+    ]);
   });
 
   it('refuses a signature that does not verify', async () => {
