@@ -20,6 +20,9 @@ const en = {
     'Deleted task {id}. Its branch {branch} is kept; remove it with git branch -D {branch}.',
   openWhileRunning: 'Task {id} is running; stop it before opening its session.',
   noSession: 'Task {id} has not started a session yet.',
+  openBaseTask:
+    'Task {id} works directly on {base} in the repository folder, which hb open cannot reserve ' +
+    'for it. Use hb chat {id} instead.',
   opening: 'Opening session {session} in {dir}',
   emptyDiff: 'No changes yet.',
   untracked: 'Untracked files:',
@@ -86,6 +89,8 @@ const zhTW: Messages = {
     '已刪除任務 {id}。分支 {branch} 仍保留，不需要的話可以用 git branch -D {branch} 刪除。',
   openWhileRunning: '任務 {id} 正在執行，請先停止再開啟它的 session。',
   noSession: '任務 {id} 還沒有開始任何 session。',
+  openBaseTask:
+    '任務 {id} 直接在儲存庫資料夾的 {base} 上工作，hb open 無法替它保留這個資料夾。請改用 hb chat {id}。',
   opening: '在 {dir} 開啟 session {session}',
   emptyDiff: '目前沒有變更。',
   untracked: '未追蹤的檔案：',

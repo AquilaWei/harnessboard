@@ -138,6 +138,7 @@ describe('Store', () => {
     db.exec(
       `DROP TABLE devices; DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
        ALTER TABLE tasks DROP COLUMN confirm_plan; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans;
        PRAGMA user_version = 3;`,
     );
     db.close();
@@ -158,7 +159,8 @@ describe('Store', () => {
     const db = new DatabaseSync(file);
     db.exec(
       `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN acceptance;
-       ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit; PRAGMA user_version = 5;`,
+       ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; PRAGMA user_version = 5;`,
     );
     db.close();
     expect(new Store(file).getTask(id)!.acceptance).toBeNull();
@@ -171,7 +173,8 @@ describe('Store', () => {
     first.close();
     const db = new DatabaseSync(file);
     db.exec(
-      `ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit; PRAGMA user_version = 9;`,
+      `ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; PRAGMA user_version = 9;`,
     );
     db.close();
     const task = new Store(file).getTask(id)!;
@@ -188,6 +191,31 @@ describe('Store', () => {
     const store = new Store(':memory:');
     const { id } = store.createTask({ ...newTask, workspace: 'base' });
     expect(store.updateTask(id, { startCommit: 'abc123' }).startCommit).toBe('abc123');
+  });
+
+  it('stores where a base task last ended and its earlier stretches', () => {
+    const store = new Store(':memory:');
+    const { id } = store.createTask({ ...newTask, workspace: 'base' });
+    const task = store.updateTask(id, {
+      endCommit: 'def456',
+      priorSpans: [{ from: 'a', to: 'b' }],
+    });
+    expect([task.endCommit, task.priorSpans]).toEqual(['def456', [{ from: 'a', to: 'b' }]]);
+  });
+
+  it('gives tasks from before end commits no end and no earlier stretches', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    const { id } = first.createTask({ ...newTask, workspace: 'base' });
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(
+      `ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans;
+       PRAGMA user_version = 10;`,
+    );
+    db.close();
+    const task = new Store(file).getTask(id)!;
+    expect([task.endCommit, task.priorSpans]).toEqual([null, []]);
   });
 
   it('stores an updated permission list as JSON', () => {
@@ -352,7 +380,8 @@ describe('Store devices', () => {
       `ALTER TABLE devices DROP COLUMN credential_id; ALTER TABLE devices DROP COLUMN public_key;
        ALTER TABLE devices DROP COLUMN sign_count; ALTER TABLE devices DROP COLUMN verified_at;
        ALTER TABLE devices DROP COLUMN last_active_at; ALTER TABLE devices DROP COLUMN push_subscription;
-       ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit; PRAGMA user_version = 7;`,
+       ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; PRAGMA user_version = 7;`,
     );
     db.close();
     expect(new Store(file).findDeviceByToken('token-one')).toEqual({
@@ -420,6 +449,7 @@ describe('Store devices', () => {
     const db = new DatabaseSync(file);
     db.exec(
       `ALTER TABLE devices DROP COLUMN push_subscription; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans;
        PRAGMA user_version = 8;`,
     );
     db.close();
@@ -434,7 +464,8 @@ describe('Store devices', () => {
     first.close();
     const db = new DatabaseSync(file);
     db.exec(
-      `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit; PRAGMA user_version = 6;`,
+      `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; PRAGMA user_version = 6;`,
     );
     db.close();
     const store = new Store(file);

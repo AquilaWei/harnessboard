@@ -25,6 +25,7 @@ import type {
 import { ApiClient, ServerUnavailableError } from './client.js';
 import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
 import { t } from './i18n.js';
+import { openTarget } from './open.js';
 import { printUnconfigured, runServer } from './run.js';
 import pkg from '../package.json' with { type: 'json' };
 
@@ -610,17 +611,13 @@ program
   .description("continue a task's latest session interactively in Claude Code")
   .argument('<id>', 'task id', parseInteger)
   .action(async (id: number) => {
-    const task = await client().getTask(id);
-    if (task.status === 'running') throw new Error(t('openWhileRunning', { id }));
-    // Reviewer sessions are read-only; taking over means continuing the implementer's work.
-    const session = task.sessions.findLast((s) => s.role === 'implementer' && s.agentSessionId);
-    if (!session?.agentSessionId || !task.worktreePath) throw new Error(t('noSession', { id }));
+    const { session, agentSessionId, dir } = openTarget(await client().getTask(id));
     const profile = config().agents[session.agentId];
     if (!profile) throw new Error(t('unknownAgent', { agent: session.agentId }));
     const adapter = createAdapter(profile);
-    console.log(t('opening', { session: session.agentSessionId, dir: task.worktreePath }));
-    const child = spawn(adapter.command, adapter.interactiveResumeArgs(session.agentSessionId), {
-      cwd: task.worktreePath,
+    console.log(t('opening', { session: agentSessionId, dir }));
+    const child = spawn(adapter.command, adapter.interactiveResumeArgs(agentSessionId), {
+      cwd: dir,
       stdio: 'inherit',
     });
     await new Promise<void>((resolve) => child.once('close', () => resolve()));

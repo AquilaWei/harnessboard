@@ -31,6 +31,7 @@ import type {
   ChatQueueCleared,
   ChatQueued,
   CommitInfo,
+  CommitSpan,
   CreateTaskInput,
   CriteriaApproval,
   CriteriaProposal,
@@ -84,6 +85,7 @@ import {
   branchName,
   commitDiff,
   commitLog,
+  commitRange,
   commitTree,
   currentRef,
   deleteMergedBranch,
@@ -94,6 +96,7 @@ import {
   mergeTree,
   porcelainStatus,
   pruneWorktrees,
+  rangeDiff,
   removeWorktree,
   resolveCommit,
   startMerge,
@@ -837,7 +840,9 @@ export class Harness {
     if (
       contextPct(session.contextTokens, window) >= resolveThresholds(task.contextPolicy).hardPct
     ) {
-      return `the conversation of task ${task.id} is full; continue it with hb open ${task.id}`;
+      // hb open refuses a `base` task, so it is not suggested for one.
+      const hint = task.workspace === 'base' ? '' : `; continue it with hb open ${task.id}`;
+      return `the conversation of task ${task.id} is full${hint}`;
     }
     return session;
   }
@@ -862,7 +867,7 @@ export class Harness {
   ): Promise<void> {
     let reason: ChatEnd['reason'] = 'error';
     try {
-      if (task.workspace === 'base') await this.assertOnBase(task);
+      const ready = task.workspace === 'base' ? await this.startOnBase(task) : task;
       const plan: SessionPlan = {
         role: 'implementer',
         agentId: session.agentId,
@@ -871,7 +876,9 @@ export class Harness {
         prompt: text,
       };
       const adapter = this.adapterFor(session.agentId);
-      const outcome = await this.runOne(task, session.id, plan, adapter, controller.signal, true);
+      const outcome = await this.runOne(ready, session.id, plan, adapter, controller.signal, true)
+        // Before the task returns to its status and may let go of the folder.
+        .finally(() => this.endOnBase(ready));
       reason = outcome.reason;
     } catch (err) {
       this.notice(task.id, `chat failed: ${(err as Error).message}`);
@@ -1013,10 +1020,35 @@ export class Harness {
     return this.setStatus(id, 'done');
   }
 
+  /**
+   * Everything the task changed. A `base` task's earlier stretches come first, one patch
+   * each; untracked files are only shown while it holds the folder, since after that they
+   * may be anyone's.
+   */
   async diff(id: number): Promise<WorktreeDiff> {
     const task = this.requireTask(id);
     if (!task.worktreePath) return { diff: '', untracked: [] };
-    return worktreeDiff(task.worktreePath, diffBase(task));
+    if (task.workspace === 'worktree') return worktreeDiff(task.worktreePath, diffBase(task));
+    const { closed, liveFrom } = this.baseHistory(task);
+    const patches = await Promise.all(closed.map((span) => rangeDiff(task.repoPath, span)));
+    const live = liveFrom
+      ? await worktreeDiff(task.repoPath, liveFrom)
+      : { diff: '', untracked: [] };
+    return { diff: [...patches, live.diff].join(''), untracked: live.untracked };
+  }
+
+  /**
+   * A `base` task's stretches of work in the repository folder. While it holds the folder its
+   * current stretch runs up to the working tree (`liveFrom`); once it lets go, the stretch
+   * ends where its last session left HEAD, so later work in the folder is not counted as its.
+   */
+  private baseHistory(task: Task): { closed: CommitSpan[]; liveFrom: string | null } {
+    const holds = this.running.has(task.id) || HOLDS_FOLDER.includes(task.status);
+    if (holds || task.endCommit === null) {
+      return { closed: task.priorSpans, liveFrom: task.startCommit };
+    }
+    const last = { from: task.startCommit!, to: task.endCommit };
+    return { closed: [...task.priorSpans, last], liveFrom: null };
   }
 
   /** The task's notes file: what each role reported, kept even after the worktree is gone. */
@@ -1031,7 +1063,13 @@ export class Harness {
   async commits(id: number): Promise<CommitInfo[]> {
     const task = this.requireTask(id);
     if (!task.worktreePath) return [];
-    return commitLog(task.worktreePath, diffBase(task));
+    if (task.workspace === 'worktree') return commitLog(task.worktreePath, diffBase(task));
+    const { closed, liveFrom } = this.baseHistory(task);
+    const logs = await Promise.all([
+      ...closed.map((span) => commitRange(task.repoPath, span)),
+      ...(liveFrom ? [commitLog(task.repoPath, liveFrom)] : []),
+    ]);
+    return logs.reverse().flat();
   }
 
   /**
@@ -1140,7 +1178,9 @@ export class Harness {
       }
       this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
       this.setStatus(task.id, 'running');
-      const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal);
+      const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal)
+        // Before the workflow moves the task on and may let go of the folder.
+        .finally(() => this.endOnBase(ready));
       this.store.endSession(sessionId, outcome.reason);
       await this.workflow.finish(ready, plan, outcome, controller.signal);
     } catch (err) {
@@ -1168,15 +1208,37 @@ export class Harness {
    * A `base` task works in the repository folder itself, so its commits land on the base
    * branch, which must be checked out there. The commit it starts at is kept, since without
    * a branch of its own that is the only way to tell its work from what came before.
-   * Uncommitted changes already in the folder count as part of its work.
+   * When HEAD moved after its last session (another task or the user committed while it let
+   * go of the folder), that stretch is closed and a new one starts here, so those commits
+   * never count as its work. Uncommitted changes already in the folder count as its work.
+   * Throws when the base is not checked out there.
    */
   private async startOnBase(task: Task): Promise<Task> {
     await this.assertOnBase(task);
-    if (task.startCommit) return task;
+    const head = await headCommit(task.repoPath);
+    if (!task.startCommit) {
+      return this.store.updateTask(task.id, {
+        worktreePath: task.repoPath,
+        startCommit: head,
+        endCommit: head,
+      });
+    }
+    // No end: a task from before end commits were kept; its history stays as it was.
+    if (task.endCommit === null || task.endCommit === head) return task;
     return this.store.updateTask(task.id, {
-      worktreePath: task.repoPath,
-      startCommit: await headCommit(task.repoPath),
+      priorSpans: [...task.priorSpans, { from: task.startCommit, to: task.endCommit }],
+      startCommit: head,
+      endCommit: head,
     });
+  }
+
+  /**
+   * Records where a `base` task's session left HEAD: once the task lets go of the folder,
+   * its history ends there. Throws when git cannot read HEAD.
+   */
+  private async endOnBase(task: Task): Promise<void> {
+    if (task.workspace !== 'base') return;
+    this.store.updateTask(task.id, { endCommit: await headCommit(task.repoPath) });
   }
 
   /**

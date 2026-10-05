@@ -8,8 +8,10 @@ import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
+  askBash,
   assistantText,
   commitAll,
+  hang,
   init,
   makeRepo,
   result,
@@ -289,6 +291,19 @@ describe('a chat with a base task while another one holds the folder', () => {
   });
 });
 
+describe('a chat with a base task whose conversation is full', () => {
+  it('is refused without suggesting hb open, which refuses base tasks', async () => {
+    scenario([TALK]);
+    const task = await createBaseTask();
+    await harness.waitForIdle();
+    const [first] = harness.store.listSessions(task.id);
+    harness.store.updateSessionContext(first!.id, 90_000, 100_000);
+    expect(() => harness.chat(task.id, 'One more thing')).toThrow(
+      /^the conversation of task 1 is full$/,
+    );
+  });
+});
+
 describe('a base task after the folder switched to another branch', () => {
   it('fails to restart without running an agent', async () => {
     scenario([TALK], [TALK]);
@@ -316,8 +331,7 @@ describe('a base task after the folder switched to another branch', () => {
     ]);
   });
 
-  it('keeps the commit it first started at when restarted on its branch again', async () => {
-    const start = git(repo, 'rev-parse', 'HEAD');
+  it('counts again from where the folder is when restarted on its branch again', async () => {
     scenario([TALK], [TALK]);
     const task = await createBaseTask();
     await harness.waitForIdle();
@@ -326,9 +340,161 @@ describe('a base task after the folder switched to another branch', () => {
     await harness.waitForIdle();
     git(repo, 'checkout', '-q', 'main');
     commitFile(repo, 'later.txt', 'user work\n');
+    const later = git(repo, 'rev-parse', 'HEAD');
     harness.queueTask(task.id);
     await harness.waitForIdle();
-    expect([fakeRuns().length, harness.store.getTask(task.id)!.startCommit]).toEqual([2, start]);
+    expect([fakeRuns().length, harness.store.getTask(task.id)!.startCommit]).toEqual([2, later]);
+  });
+});
+
+const ADD_WORLD = [init(), writeFile('world.txt', 'w\n'), commitAll('add world.txt'), result('ok')];
+const ADD_BYE = [init(), writeFile('bye.txt', 'bye\n'), commitAll('add bye.txt'), result('ok')];
+
+/**
+ * Base task 1 committed hello.txt and is done; base task 2 then committed world.txt and is
+ * done. A chat with task 1 after that commits bye.txt.
+ */
+async function doneTaskThenAnother() {
+  const addHelloAndTalk = [
+    init(),
+    writeFile('hello.txt', 'hi\n'),
+    commitAll('add hello.txt'),
+    assistantText('done', 10_000),
+    result('done'),
+  ];
+  scenario([addHelloAndTalk], [ADD_WORLD], [ADD_BYE]);
+  const first = await createBaseTask();
+  await harness.waitForIdle();
+  harness.completeTask(first.id);
+  const second = await createBaseTask('Another change');
+  await harness.waitForIdle();
+  harness.completeTask(second.id);
+  return first;
+}
+
+describe('a done base task after another base task worked in the folder', () => {
+  it('shows only its own changes', async () => {
+    const first = await doneTaskThenAnother();
+    const { diff } = await harness.diff(first.id);
+    expect([diff.includes('hello.txt'), diff.includes('world.txt')]).toEqual([true, false]);
+  });
+
+  it('lists only its own commits', async () => {
+    const first = await doneTaskThenAnother();
+    const commits = await harness.commits(first.id);
+    expect(commits.map((c) => c.subject)).toEqual(['add hello.txt']);
+  });
+
+  it('does not list uncommitted files left in the folder later', async () => {
+    const first = await doneTaskThenAnother();
+    writeFileSync(path.join(repo, 'draft.txt'), 'not committed\n');
+    expect((await harness.diff(first.id)).untracked).toEqual([]);
+  });
+
+  it('lists its own commits from before and after a chat, but not the other task', async () => {
+    const first = await doneTaskThenAnother();
+    harness.chat(first.id, 'Say goodbye too');
+    await harness.waitForIdle();
+    const commits = await harness.commits(first.id);
+    expect(commits.map((c) => c.subject)).toEqual(['add bye.txt', 'add hello.txt']);
+  });
+});
+
+async function waitForStatus(id: number, status: string): Promise<void> {
+  while (harness.store.getTask(id)!.status !== status) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+/**
+ * Base task 1 committed hello.txt and was stopped while asking for permission; base task 2
+ * then committed world.txt and is done; task 1 was resumed and committed bye.txt.
+ */
+async function stoppedTaskResumedAfterAnother() {
+  scenario(
+    [
+      [
+        init(),
+        writeFile('hello.txt', 'hi\n'),
+        commitAll('add hello.txt'),
+        askBash('r1', 'node hello.js', 'node *'),
+        hang,
+      ],
+    ],
+    [ADD_WORLD],
+    [ADD_BYE],
+  );
+  const first = await harness.createTask({
+    prompt: 'Add a greeting',
+    repo,
+    workspace: 'base',
+    confirmPlan: false,
+    reviewer: null,
+    autoApprove: false,
+    queue: true,
+  });
+  await waitForStatus(first.id, 'awaiting_permission');
+  harness.stopTask(first.id);
+  await harness.waitForIdle();
+  const second = await createBaseTask('Another change');
+  await harness.waitForIdle();
+  harness.completeTask(second.id);
+  harness.queueTask(first.id);
+  await harness.waitForIdle();
+  return first;
+}
+
+describe('a stopped base task resumed after another base task worked in the folder', () => {
+  it('lists its own commits from before and after, but not the other task', async () => {
+    const first = await stoppedTaskResumedAfterAnother();
+    const commits = await harness.commits(first.id);
+    expect(commits.map((c) => c.subject)).toEqual(['add bye.txt', 'add hello.txt']);
+  });
+
+  it('shows its own changes from before and after, but not the other task', async () => {
+    const first = await stoppedTaskResumedAfterAnother();
+    const { diff } = await harness.diff(first.id);
+    expect([
+      diff.includes('hello.txt'),
+      diff.includes('bye.txt'),
+      diff.includes('world.txt'),
+    ]).toEqual([true, true, false]);
+  });
+});
+
+describe('an approved base task resumed after another base task worked in the folder', () => {
+  it('asks for a review from where it came back, not of the other task', async () => {
+    scenario(
+      [ADD_HELLO],
+      [[init(), result('VERDICT: APPROVE')]],
+      [ADD_WORLD],
+      [ADD_BYE],
+      [[init(), result('VERDICT: APPROVE')]],
+    );
+    const first = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      workspace: 'base',
+      confirmPlan: false,
+      reviewer: 'claude',
+      queue: true,
+    });
+    await harness.waitForIdle();
+    harness.tick(); // the reviewer's session
+    await harness.waitForIdle();
+    // Sent back while the folder is on another branch, so it fails and lets go of the folder.
+    git(repo, 'checkout', '-q', '-b', 'other');
+    harness.queueTask(first.id);
+    await harness.waitForIdle();
+    git(repo, 'checkout', '-q', 'main');
+    const second = await createBaseTask('Another change');
+    await harness.waitForIdle();
+    harness.completeTask(second.id);
+    const back = git(repo, 'rev-parse', 'HEAD');
+    harness.queueTask(first.id);
+    await harness.waitForIdle();
+    const request = harness.store.lastEvent(first.id, 'review_request')!.data as { since: string };
+    expect(request.since).toBe(back);
   });
 });
 

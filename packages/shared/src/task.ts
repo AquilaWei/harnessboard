@@ -42,6 +42,12 @@ export type TaskMode = 'single' | 'loop';
  */
 export type TaskWorkspace = 'worktree' | 'base';
 
+/** Commits after `from` up to and including `to`, as in `git log from..to`. */
+export interface CommitSpan {
+  from: string;
+  to: string;
+}
+
 /** Rough task size; selects the default soft context threshold. */
 export type TaskSize = 'small' | 'medium' | 'large';
 
@@ -86,10 +92,22 @@ export interface Task {
   worktreePath: string | null;
   workspace: TaskWorkspace;
   /**
-   * The base's commit when a `base` task first started; its diff and commits count from
-   * here. `null` for `worktree` tasks, which count from where their branch left the base.
+   * The base's commit where a `base` task's current stretch of work started; its diff and
+   * commits count from here. `null` for `worktree` tasks, which count from where their
+   * branch left the base.
    */
   startCommit: string | null;
+  /**
+   * HEAD of the repository folder when a `base` task's latest session there ended. Once the
+   * task lets go of the folder its history stops here, so later tasks' commits are not
+   * counted as its work. `null` for `worktree` tasks and before the first session.
+   */
+  endCommit: string | null;
+  /**
+   * Earlier stretches of a `base` task's work, oldest first. A stretch ends when the task
+   * comes back to a folder whose HEAD moved after its last session; empty otherwise.
+   */
+  priorSpans: CommitSpan[];
   status: TaskStatus;
   mode: TaskMode;
   /**

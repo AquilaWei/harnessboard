@@ -5,6 +5,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   AgentRole,
+  CommitSpan,
   ContextPolicy,
   Device,
   PermissionPolicy,
@@ -99,6 +100,9 @@ const MIGRATIONS = [
   // Where a task works; older tasks all had a worktree. A `base` task's starting commit.
   `ALTER TABLE tasks ADD COLUMN workspace TEXT NOT NULL DEFAULT 'worktree';
    ALTER TABLE tasks ADD COLUMN start_commit TEXT;`,
+  // Where a `base` task's work last ended, and its earlier stretches as JSON.
+  `ALTER TABLE tasks ADD COLUMN end_commit TEXT;
+   ALTER TABLE tasks ADD COLUMN prior_spans TEXT NOT NULL DEFAULT '[]';`,
 ];
 
 /** A device's Web Push subscription, with the device it reaches. */
@@ -193,6 +197,8 @@ export class Store {
         | 'branch'
         | 'worktreePath'
         | 'startCommit'
+        | 'endCommit'
+        | 'priorSpans'
         | 'resumeAt'
         | 'verifyCommand'
         | 'acceptance'
@@ -207,6 +213,8 @@ export class Store {
       branch: 'branch',
       worktreePath: 'worktree_path',
       startCommit: 'start_commit',
+      endCommit: 'end_commit',
+      priorSpans: 'prior_spans',
       resumeAt: 'resume_at',
       verifyCommand: 'verify_command',
       acceptance: 'acceptance',
@@ -529,6 +537,8 @@ function toTask(row: Row): Task {
     worktreePath: (row.worktree_path as string | null) ?? null,
     workspace: row.workspace as TaskWorkspace,
     startCommit: (row.start_commit as string | null) ?? null,
+    endCommit: (row.end_commit as string | null) ?? null,
+    priorSpans: JSON.parse(String(row.prior_spans)) as CommitSpan[],
     status: row.status as TaskStatus,
     mode: row.mode as TaskMode,
     verifyCommand: (row.verify_command as string | null) ?? null,

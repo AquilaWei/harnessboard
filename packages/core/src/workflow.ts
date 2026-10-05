@@ -62,6 +62,7 @@ import {
   diffBase,
   headCommit,
   isCommitted,
+  isMergedInto,
   mergeBase,
   porcelainStatus,
 } from './worktree.js';
@@ -637,10 +638,21 @@ export class Workflow {
     else await this.requestReview(task);
   }
 
-  /** Commit the next review or test of a step is measured from. */
+  /**
+   * Commit the next review or test of a step is measured from. An approval from an earlier
+   * stretch of a `base` task does not count: the commits between it and where the current
+   * stretch started are other work in the folder.
+   */
   private async stepBase(task: Task): Promise<string> {
+    const dir = task.worktreePath!;
     const approved = this.reviews(task.id).findLast((r) => r.verdict === 'approve');
-    return approved?.head ?? (await mergeBase(task.worktreePath!, diffBase(task)));
+    const base = await mergeBase(dir, diffBase(task));
+    if (!approved) return base;
+    const earlier =
+      task.workspace === 'base' &&
+      approved.head !== base &&
+      (await isMergedInto(dir, approved.head, base));
+    return earlier ? base : approved.head;
   }
 
   /**
