@@ -489,6 +489,15 @@ export const en = {
     notPairedTitle: 'This device is not paired',
     notPairedBody:
       'On the computer, open Settings → Phone access → Pair a phone, then scan the QR code with this device.',
+    passkeyIntro:
+      'One more step: create a passkey for the board. Your phone asks for your fingerprint, face or screen lock, and asks again whenever the board is locked.',
+    passkeySubmit: 'Create passkey',
+    lockedTitle: 'The board is locked',
+    lockedBody: 'Confirm with your passkey to go on.',
+    unlock: 'Unlock',
+    noPasskeys:
+      'This browser cannot use passkeys, which the board needs on a phone. Open this page in Chrome or Safari instead, for example from the menu’s “Open in browser”.',
+    reauthCancelled: 'Not done: a phone must confirm this with its passkey.',
   },
   settingsForm: {
     maxConcurrent: 'Tasks running at once',
@@ -985,6 +994,15 @@ export const zhTW: typeof en = {
     pairSubmit: '配對',
     notPairedTitle: '這個裝置還沒有配對',
     notPairedBody: '請在電腦上打開「設定 → 手機存取 → 配對手機」，再用這個裝置掃描 QR code。',
+    passkeyIntro:
+      '還差一步：替看板建立通行金鑰。手機會要求指紋、臉部或螢幕鎖，之後看板鎖定時也會再問一次。',
+    passkeySubmit: '建立通行金鑰',
+    lockedTitle: '看板已鎖定',
+    lockedBody: '請用通行金鑰確認後繼續。',
+    unlock: '解鎖',
+    noPasskeys:
+      '這個瀏覽器無法使用通行金鑰，而手機上的看板需要它。請改用 Chrome 或 Safari 開啟這個頁面，例如從選單選「用瀏覽器開啟」。',
+    reauthCancelled: '沒有執行：在手機上做這件事需要先用通行金鑰確認。',
   },
   settingsForm: {
     maxConcurrent: '同時執行的任務數',

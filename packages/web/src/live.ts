@@ -1,21 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useRef } from 'react';
 import type { HarnessEvent } from '@harnessboard/shared';
+import { eventsUrl, onSessionChange } from './api';
 
 /**
  * Subscribes to the server's event stream for the lifetime of the component.
- * EventSource reconnects on its own after the server restarts.
+ * EventSource reconnects on its own after the server restarts. A new board session (a passkey
+ * check on a phone) reopens the stream with its token: a stream refused while the phone was
+ * locked does not retry, and the old token may be dropped by the server.
  */
 export function useLiveEvents(onEvent: (event: HarnessEvent) => void): void {
   const handler = useRef(onEvent);
   handler.current = onEvent;
   useEffect(() => {
-    const source = new EventSource('/api/events');
     const listener = (e: MessageEvent<string>) =>
       handler.current(JSON.parse(e.data) as HarnessEvent);
-    for (const type of ['agent', 'task', 'deleted', 'harness', 'quota'])
-      source.addEventListener(type, listener);
-    return () => source.close();
+    let source: EventSource | null = null;
+    const connect = () => {
+      source?.close();
+      source = new EventSource(eventsUrl());
+      for (const type of ['agent', 'task', 'deleted', 'harness', 'quota'])
+        source.addEventListener(type, listener);
+    };
+    connect();
+    const stop = onSessionChange(connect);
+    return () => {
+      stop();
+      source?.close();
+    };
   }, []);
 }
 

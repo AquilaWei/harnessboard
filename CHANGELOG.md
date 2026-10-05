@@ -7,19 +7,21 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
-- **Pair a phone with the board** (not finished: a passkey check comes before this is
-  released). Settings has a new "Phone access" section. It finds this computer's Tailscale
-  name, saves it as a remote host, and shows the `tailscale serve --bg <port>` command to
-  run once. "Pair a phone" shows a QR code; scanning it on the phone asks for a device name
-  and pairs it. The section lists paired devices with when each was last used, and Revoke
-  ends a device's access at once.
+- **Pair a phone with the board.** Settings has a new "Phone access" section. It finds this
+  computer's Tailscale name, saves it as a remote host, and shows the
+  `tailscale serve --bg <port>` command to run once. "Pair a phone" shows a QR code; scanning
+  it on the phone asks for a device name, then creates a passkey with your fingerprint, face
+  or screen lock. The phone is paired only once the passkey is made. The section lists
+  paired devices with when each was last used, and Revoke ends a device's access at once.
 - **A device that is not paired** sees "This device is not paired" instead of an empty
   board.
 - **A paired phone locks itself** each time the board is opened, and after 30 minutes
-  without use, and needs its passkey again.
+  without use, and shows an Unlock button that asks for its passkey.
   Starting, approving, merging or deleting tasks, and changing settings, agents, tool rules
-  or paired devices from a phone need a passkey check within the last 5 minutes. Nothing
-  changes on this computer.
+  or paired devices from a phone need a passkey check within the last 5 minutes; the phone
+  asks for it and then carries on with the action. Nothing changes on this computer.
+- **Browsers without passkeys**, such as the one inside LINE, say to open the page in Chrome
+  or Safari instead of offering to pair or unlock.
 
 ## 0.0.21 - 2026-10-04
 
