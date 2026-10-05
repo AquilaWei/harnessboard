@@ -6,6 +6,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TaskView } from '@harnessboard/shared';
 import { App } from '../src/App';
+import { notificationsEnabled, setNotifications } from '../src/notify';
 import '../src/i18n';
 
 // The phone's passkey prompt; each test says whether it passes.
@@ -364,5 +365,62 @@ describe('App', () => {
     expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
       'Changes',
     );
+  });
+});
+
+describe('notifications after pairing again', () => {
+  /** The push calls the board got, as `METHOD path`. */
+  let pushCalls: string[] = [];
+  const subscription = {
+    toJSON: () => ({ endpoint: 'https://push.example/1', keys: { p256dh: 'p', auth: 'a' } }),
+  };
+  const registration = { pushManager: { getSubscription: () => Promise.resolve(subscription) } };
+
+  beforeEach(() => {
+    pushCalls = [];
+    localStorage.removeItem('harnessboard.notify');
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
+    vi.stubGlobal('Notification', {
+      permission: 'granted',
+      requestPermission: () => Promise.resolve('granted'),
+    });
+    vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/push/')) pushCalls.push(`${init?.method ?? 'GET'} ${url}`);
+      return Promise.resolve(server(url));
+    });
+    // The browser keeps its push subscription when the board revokes the device.
+    const worker = Object.assign(new EventTarget(), {
+      register: () => Promise.resolve(registration),
+      ready: Promise.resolve(registration),
+    });
+    Object.defineProperty(navigator, 'serviceWorker', { value: worker, configurable: true });
+  });
+
+  afterEach(() => {
+    delete (navigator as { serviceWorker?: unknown }).serviceWorker;
+    localStorage.removeItem('harnessboard.notify');
+  });
+
+  /** Switches push on, has the board revoke the device, then pairs this browser again. */
+  const enableRevokeAndPairAgain = async () => {
+    await setNotifications(true, 'push');
+    revoked = true;
+    webauthn.startRegistration.mockResolvedValueOnce({ id: 'cred' });
+    history.replaceState(null, '', '/#pair=abc');
+    await reopen();
+    act(() => type(container.querySelector('input')!, 'Pixel 9'));
+    await act(async () => button('Pair').click());
+  };
+
+  it('shows notifications switched off once the browser is paired again', async () => {
+    await enableRevokeAndPairAgain();
+    expect(notificationsEnabled()).toBe(false);
+  });
+
+  it('hands the kept subscription to the board when switched on again after pairing', async () => {
+    await enableRevokeAndPairAgain();
+    pushCalls = [];
+    await setNotifications(true, 'push');
+    expect([pushCalls, notificationsEnabled()]).toEqual([['POST /api/push/subscribe'], true]);
   });
 });

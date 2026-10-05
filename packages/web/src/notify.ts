@@ -66,3 +66,17 @@ export async function setNotifications(
   }
   return permission;
 }
+
+/**
+ * Switches notifications off in this browser after it pairs as a new device. The board keeps
+ * a push subscription per device, so one saved by an earlier pairing of this browser, since
+ * revoked, is gone; leaving the choice "on" would show notifications enabled while no push can
+ * arrive. Switching them on again from Settings hands the board the subscription.
+ */
+export function resetNotifications(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, 'off');
+  } catch {
+    // storage unavailable (private mode); nothing was saved to reset
+  }
+}

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
+import { resetNotifications } from '../notify';
 import { checkPasskey, passkeysAvailable, registerPasskey } from '../passkey';
 
 interface Props {
@@ -30,6 +31,7 @@ export function PairScreen({ code, onPaired }: Props) {
     try {
       if (!paired) {
         await api.pair({ code, name: name.trim() });
+        resetNotifications(); // a new device has no push subscription on the board yet
         setPaired(true);
       }
       await registerPasskey();
