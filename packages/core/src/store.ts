@@ -16,6 +16,7 @@ import type {
   TaskAgents,
   TaskMode,
   TaskStatus,
+  TaskWorkspace,
 } from '@harnessboard/shared';
 
 export interface NewTask {
@@ -23,6 +24,7 @@ export interface NewTask {
   prompt: string;
   repoPath: string;
   baseRef: string;
+  workspace: TaskWorkspace;
   mode: TaskMode;
   verifyCommand: string | null;
   acceptance: string | null;
@@ -94,6 +96,9 @@ const MIGRATIONS = [
    ALTER TABLE devices ADD COLUMN last_active_at INTEGER;`,
   // The device's Web Push subscription as JSON; on the device row so revoking removes it.
   `ALTER TABLE devices ADD COLUMN push_subscription TEXT;`,
+  // Where a task works; older tasks all had a worktree. A `base` task's starting commit.
+  `ALTER TABLE tasks ADD COLUMN workspace TEXT NOT NULL DEFAULT 'worktree';
+   ALTER TABLE tasks ADD COLUMN start_commit TEXT;`,
 ];
 
 /** A device's Web Push subscription, with the device it reaches. */
@@ -145,10 +150,10 @@ export class Store {
   createTask(input: NewTask, now = Date.now()): Task {
     const result = this.db
       .prepare(
-        `INSERT INTO tasks (id, title, prompt, repo_path, base_ref, mode, verify_command,
-                            acceptance, confirm_plan, status, context_policy, permission,
-                            agents, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (id, title, prompt, repo_path, base_ref, workspace, mode,
+                            verify_command, acceptance, confirm_plan, status, context_policy,
+                            permission, agents, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
       )
       .run(
         this.nextTaskId(),
@@ -156,6 +161,7 @@ export class Store {
         input.prompt,
         input.repoPath,
         input.baseRef,
+        input.workspace,
         input.mode,
         input.verifyCommand,
         input.acceptance,
@@ -186,6 +192,7 @@ export class Store {
         | 'status'
         | 'branch'
         | 'worktreePath'
+        | 'startCommit'
         | 'resumeAt'
         | 'verifyCommand'
         | 'acceptance'
@@ -199,6 +206,7 @@ export class Store {
       status: 'status',
       branch: 'branch',
       worktreePath: 'worktree_path',
+      startCommit: 'start_commit',
       resumeAt: 'resume_at',
       verifyCommand: 'verify_command',
       acceptance: 'acceptance',
@@ -519,6 +527,8 @@ function toTask(row: Row): Task {
     baseRef: String(row.base_ref),
     branch: (row.branch as string | null) ?? null,
     worktreePath: (row.worktree_path as string | null) ?? null,
+    workspace: row.workspace as TaskWorkspace,
+    startCommit: (row.start_commit as string | null) ?? null,
     status: row.status as TaskStatus,
     mode: row.mode as TaskMode,
     verifyCommand: (row.verify_command as string | null) ?? null,

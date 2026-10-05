@@ -227,6 +227,7 @@ const newTask = {
   prompt: 'secret prompt text',
   repoPath: '/repo',
   baseRef: 'main',
+  workspace: 'worktree' as const,
   mode: 'single' as const,
   verifyCommand: null,
   acceptance: null,

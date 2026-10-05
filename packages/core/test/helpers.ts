@@ -87,6 +87,9 @@ export const writeFile = (filePath: string, content: string) => ({
   __write: { path: filePath, content },
 });
 
+/** Commits every change in the fake CLI's working directory. */
+export const commitAll = (message: string) => ({ __commit: message });
+
 /** A `feature_list.json` write with one entry per `passes` flag, ids F1, F2, ... */
 export const featureList = (...passes: boolean[]) =>
   writeFile(

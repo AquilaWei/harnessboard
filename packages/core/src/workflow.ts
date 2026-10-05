@@ -59,6 +59,7 @@ import type { Store } from './store.js';
 import {
   changedPaths,
   commitFile,
+  diffBase,
   headCommit,
   isCommitted,
   mergeBase,
@@ -386,7 +387,7 @@ export class Workflow {
     }
     const dir = task.worktreePath!;
     const file = this.specPath(task);
-    const stray = (await changedPaths(dir, await mergeBase(dir, task.baseRef))).filter(
+    const stray = (await changedPaths(dir, await mergeBase(dir, diffBase(task)))).filter(
       (p) => p !== file,
     );
     if (stray.length > 0) {
@@ -639,7 +640,7 @@ export class Workflow {
   /** Commit the next review or test of a step is measured from. */
   private async stepBase(task: Task): Promise<string> {
     const approved = this.reviews(task.id).findLast((r) => r.verdict === 'approve');
-    return approved?.head ?? (await mergeBase(task.worktreePath!, task.baseRef));
+    return approved?.head ?? (await mergeBase(task.worktreePath!, diffBase(task)));
   }
 
   /**

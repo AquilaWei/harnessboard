@@ -35,6 +35,13 @@ export const NOTIFY_STATUSES: ReadonlySet<TaskStatus> = new Set([
  */
 export type TaskMode = 'single' | 'loop';
 
+/**
+ * Where a task works. `worktree`: on its own branch in a worktree of its own, merged into
+ * the base after review. `base`: directly on the base branch in the repository folder, with
+ * no worktree or branch, so its commits land on the base as it goes and nothing is merged.
+ */
+export type TaskWorkspace = 'worktree' | 'base';
+
 /** Rough task size; selects the default soft context threshold. */
 export type TaskSize = 'small' | 'medium' | 'large';
 
@@ -71,10 +78,18 @@ export interface Task {
   prompt: string;
   /** Absolute path of the repository the task works on. */
   repoPath: string;
-  /** Git ref the task branch starts from. */
+  /** Git ref the task branch starts from, or the branch a `base` task works on. */
   baseRef: string;
+  /** Always `null` for a `base` task. */
   branch: string | null;
+  /** Where the task's sessions run; the repository folder itself for a `base` task. */
   worktreePath: string | null;
+  workspace: TaskWorkspace;
+  /**
+   * The base's commit when a `base` task first started; its diff and commits count from
+   * here. `null` for `worktree` tasks, which count from where their branch left the base.
+   */
+  startCommit: string | null;
   status: TaskStatus;
   mode: TaskMode;
   /**

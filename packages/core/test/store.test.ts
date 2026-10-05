@@ -10,6 +10,7 @@ const newTask = {
   prompt: 'do it',
   repoPath: '/repo',
   baseRef: 'main',
+  workspace: 'worktree' as const,
   mode: 'single' as const,
   verifyCommand: null,
   acceptance: null,
@@ -136,7 +137,8 @@ describe('Store', () => {
     const db = new DatabaseSync(file);
     db.exec(
       `DROP TABLE devices; DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
-       ALTER TABLE tasks DROP COLUMN confirm_plan; PRAGMA user_version = 3;`,
+       ALTER TABLE tasks DROP COLUMN confirm_plan; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       PRAGMA user_version = 3;`,
     );
     db.close();
     expect(new Store(file).getTask(id)!.confirmPlan).toBe(false);
@@ -155,10 +157,37 @@ describe('Store', () => {
     first.close();
     const db = new DatabaseSync(file);
     db.exec(
-      `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN acceptance; PRAGMA user_version = 5;`,
+      `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN acceptance;
+       ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit; PRAGMA user_version = 5;`,
     );
     db.close();
     expect(new Store(file).getTask(id)!.acceptance).toBeNull();
+  });
+
+  it('reads tasks from before the workspace choice as worktree tasks', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    const { id } = first.createTask(newTask);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(
+      `ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit; PRAGMA user_version = 9;`,
+    );
+    db.close();
+    const task = new Store(file).getTask(id)!;
+    expect([task.workspace, task.startCommit]).toEqual(['worktree', null]);
+  });
+
+  it('stores a base task with no start commit until it starts', () => {
+    const store = new Store(':memory:');
+    const task = store.createTask({ ...newTask, workspace: 'base' });
+    expect([task.workspace, task.startCommit]).toEqual(['base', null]);
+  });
+
+  it('stores the commit a base task started at', () => {
+    const store = new Store(':memory:');
+    const { id } = store.createTask({ ...newTask, workspace: 'base' });
+    expect(store.updateTask(id, { startCommit: 'abc123' }).startCommit).toBe('abc123');
   });
 
   it('stores an updated permission list as JSON', () => {
@@ -323,7 +352,7 @@ describe('Store devices', () => {
       `ALTER TABLE devices DROP COLUMN credential_id; ALTER TABLE devices DROP COLUMN public_key;
        ALTER TABLE devices DROP COLUMN sign_count; ALTER TABLE devices DROP COLUMN verified_at;
        ALTER TABLE devices DROP COLUMN last_active_at; ALTER TABLE devices DROP COLUMN push_subscription;
-       PRAGMA user_version = 7;`,
+       ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit; PRAGMA user_version = 7;`,
     );
     db.close();
     expect(new Store(file).findDeviceByToken('token-one')).toEqual({
@@ -389,7 +418,10 @@ describe('Store devices', () => {
     first.addDevice('Pixel', 'token-one', 1000);
     first.close();
     const db = new DatabaseSync(file);
-    db.exec(`ALTER TABLE devices DROP COLUMN push_subscription; PRAGMA user_version = 8;`);
+    db.exec(
+      `ALTER TABLE devices DROP COLUMN push_subscription; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       PRAGMA user_version = 8;`,
+    );
     db.close();
     const store = new Store(file);
     expect([store.listDevices().length, store.listPushSubscriptions()]).toEqual([1, []]);
@@ -401,7 +433,9 @@ describe('Store devices', () => {
     const { id } = first.createTask(newTask);
     first.close();
     const db = new DatabaseSync(file);
-    db.exec(`DROP TABLE devices; PRAGMA user_version = 6;`);
+    db.exec(
+      `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit; PRAGMA user_version = 6;`,
+    );
     db.close();
     const store = new Store(file);
     store.addDevice('Pixel', 'token-one', 1000);

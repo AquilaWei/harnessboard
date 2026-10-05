@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import type { CommitInfo, WorktreeDiff } from '@harnessboard/shared';
+import type { CommitInfo, Task, WorktreeDiff } from '@harnessboard/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -67,6 +67,14 @@ export async function removeWorktree(repo: string, dir: string): Promise<void> {
 /** Forgets worktrees whose directories were deleted by hand. */
 export async function pruneWorktrees(repo: string): Promise<void> {
   await git(repo, ['worktree', 'prune']);
+}
+
+/**
+ * What a task's diff and commits count from: the commit a `base` task started at (only set
+ * for those), or else the base its branch left.
+ */
+export function diffBase(task: Pick<Task, 'baseRef' | 'startCommit'>): string {
+  return task.startCommit ?? task.baseRef;
 }
 
 /** Everything the task changed relative to its base. Read-only: never touches the index. */

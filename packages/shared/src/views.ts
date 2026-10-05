@@ -7,6 +7,7 @@ import type {
   Task,
   TaskMode,
   TaskStatus,
+  TaskWorkspace,
 } from './task.js';
 import type { Feature, LoopProgress } from './loop.js';
 import type { ReviewRecord, TaskActivity } from './review.js';
@@ -164,6 +165,11 @@ export interface CreateTaskInput {
   repo: string;
   title?: string;
   baseRef?: string;
+  /**
+   * Defaults to `worktree`. A `base` task needs `baseRef` checked out in the repository
+   * folder when it starts, and only one at a time may work in that folder.
+   */
+  workspace?: TaskWorkspace;
   mode?: TaskMode;
   /** Agent profile ids; default to `claude` and the configured default reviewer. */
   implementer?: string;

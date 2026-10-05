@@ -87,6 +87,8 @@ import {
   commitTree,
   currentRef,
   deleteMergedBranch,
+  diffBase,
+  headCommit,
   isLocalBranch,
   isMergedInto,
   mergeTree,
@@ -133,6 +135,18 @@ interface HeldReplies {
 }
 
 const STARTABLE: TaskStatus[] = ['backlog', 'stopped', 'failed', 'review', 'waiting_quota'];
+/**
+ * A `base` task in one of these is using the repository folder: it works there, or its
+ * work there waits for an answer or a review that another task's commits would mix into.
+ */
+const HOLDS_FOLDER: TaskStatus[] = [
+  'queued',
+  'running',
+  'awaiting_permission',
+  'waiting_quota',
+  'awaiting_approval',
+  'review',
+];
 /** A task can be chatted with while nothing else is about to run in its conversation. */
 const CHATTABLE: TaskStatus[] = ['stopped', 'failed', 'review', 'done'];
 
@@ -409,9 +423,14 @@ export class Harness {
    * Validates the repository and thresholds, then records the task.
    * Throws when `repo` is missing, not inside a git repository with a commit, the context policy is invalid, a
    * loop task has no verify command (from the input or the project's config file), an
-   * allowed-tools entry is not a tool rule, or an agent profile or model id is invalid.
+   * allowed-tools entry is not a tool rule, an agent profile or model id is invalid, or the
+   * workspace is unknown.
    */
   async createTask(input: CreateTaskInput): Promise<Task> {
+    const workspace = input.workspace ?? 'worktree';
+    if (workspace !== 'worktree' && workspace !== 'base') {
+      throw new Error(`unknown workspace ${String(workspace)}; use worktree or base`);
+    }
     const repoPath = await resolveRepository(input.repo);
     const project = loadProjectConfig(repoPath);
     const contextPolicy = {
@@ -455,6 +474,7 @@ export class Harness {
       prompt: input.prompt,
       repoPath,
       baseRef: input.baseRef ?? project.baseRef ?? (await currentRef(repoPath)),
+      workspace,
       mode,
       verifyCommand: mode === 'loop' ? verifyCommand : null,
       acceptance,
@@ -478,13 +498,15 @@ export class Harness {
 
   /**
    * Puts a task in line to run. A task in review is sent back to work with the last review's
-   * feedback and fresh review rounds. Throws when it is missing, running, queued or done.
+   * feedback and fresh review rounds. Throws when it is missing, running, queued or done,
+   * or it works on the base while another such task holds the same repository folder.
    */
   queueTask(id: number): Task {
     const task = this.requireTask(id);
     if (!STARTABLE.includes(task.status)) {
       throw new Error(`task ${id} is ${task.status} and cannot be queued`);
     }
+    if (task.workspace === 'base') this.assertFolderFree(task);
     if (task.status === 'review') {
       this.workflow.sendBack(id);
       this.notice(id, 'sent back to work by you; review rounds start again');
@@ -492,6 +514,28 @@ export class Harness {
     const queued = this.setStatus(id, 'queued', { resumeAt: null });
     this.tick();
     return queued;
+  }
+
+  /**
+   * Two agents in one folder would edit the same files and mix their commits into each
+   * other's review, so only one `base` task may hold a repository folder at a time.
+   */
+  private assertFolderFree(task: Task): void {
+    const other = this.store
+      .listTasks()
+      .find(
+        (t) =>
+          t.id !== task.id &&
+          t.workspace === 'base' &&
+          t.repoPath === task.repoPath &&
+          HOLDS_FOLDER.includes(t.status),
+      );
+    if (other) {
+      throw new Error(
+        `task ${other.id} already works directly on ${other.baseRef} in ${task.repoPath} ` +
+          `(${other.status}); finish or stop it before starting task ${task.id}`,
+      );
+    }
   }
 
   /** Stops a running or queued task. The worktree and branch are kept. */
@@ -577,6 +621,7 @@ export class Harness {
   /**
    * Deletes a task with its history and removes its worktree directory, discarding any
    * uncommitted changes there. The branch is kept, so committed work can still be merged.
+   * A `base` task's folder is the repository itself, so nothing on disk is touched.
    * Throws when the task is missing or running (stop it first), or git cannot remove the
    * worktree; the task is then left as it was.
    */
@@ -589,7 +634,9 @@ export class Harness {
     if (task.status === 'queued' || task.status === 'waiting_quota') {
       this.setStatus(id, 'stopped', { resumeAt: null });
     }
-    if (task.worktreePath) await this.discardWorktree(task.repoPath, task.worktreePath);
+    if (task.workspace === 'worktree' && task.worktreePath) {
+      await this.discardWorktree(task.repoPath, task.worktreePath);
+    }
     this.store.deleteTask(id);
     this.emit({ type: 'deleted', taskId: id });
   }
@@ -839,11 +886,17 @@ export class Harness {
    * into the task's worktree instead, its agent is queued to resolve the conflicts and
    * commit, and the task comes back for review (and another merge) afterwards.
    * Throws when the task is not in review, has uncommitted changes or nothing to merge, its
-   * base is not a local branch, or git refuses.
+   * base is not a local branch, or git refuses. A `base` task has nothing to merge: its
+   * commits are on the base already, and {@link completeTask} finishes it.
    */
   async mergeTask(id: number): Promise<MergeResult> {
     const task = this.requireTask(id);
     if (task.status !== 'review') throw new Error(`task ${id} is ${task.status}, not review`);
+    if (task.workspace === 'base') {
+      throw new Error(
+        `task ${id} works directly on ${task.baseRef}, so there is nothing to merge; mark it done`,
+      );
+    }
     const { repoPath: repo, baseRef: base, branch, worktreePath: dir } = task;
     if (!branch || !dir) throw new Error(`task ${id} has no branch to merge`);
     if ((await porcelainStatus(dir)) !== '') {
@@ -908,7 +961,7 @@ export class Harness {
   async diff(id: number): Promise<WorktreeDiff> {
     const task = this.requireTask(id);
     if (!task.worktreePath) return { diff: '', untracked: [] };
-    return worktreeDiff(task.worktreePath, task.baseRef);
+    return worktreeDiff(task.worktreePath, diffBase(task));
   }
 
   /** The task's notes file: what each role reported, kept even after the worktree is gone. */
@@ -916,11 +969,14 @@ export class Harness {
     return { markdown: this.workflow.renderedNotes(this.requireTask(id)) };
   }
 
-  /** Commits on the task's branch since its base, newest first; none before it has a worktree. */
+  /**
+   * Commits on the task's branch since its base, or a `base` task's commits since it
+   * started, newest first; none before it has a worktree.
+   */
   async commits(id: number): Promise<CommitInfo[]> {
     const task = this.requireTask(id);
     if (!task.worktreePath) return [];
-    return commitLog(task.worktreePath, task.baseRef);
+    return commitLog(task.worktreePath, diffBase(task));
   }
 
   /**
@@ -1045,10 +1101,31 @@ export class Harness {
 
   private async ensureWorktree(task: Task): Promise<Task> {
     if (task.worktreePath) return task;
+    if (task.workspace === 'base') return this.startOnBase(task);
     const branch = branchName(task.id, task.title);
     const dir = worktreePath(this.config.dataDir, task.repoPath, task.id);
     await addWorktree(task.repoPath, dir, branch, task.baseRef);
     return this.store.updateTask(task.id, { branch, worktreePath: dir });
+  }
+
+  /**
+   * A `base` task works in the repository folder itself, so its commits land on the base
+   * branch, which must be checked out there. The commit it starts at is kept, since without
+   * a branch of its own that is the only way to tell its work from what came before.
+   * Uncommitted changes already in the folder count as part of its work.
+   */
+  private async startOnBase(task: Task): Promise<Task> {
+    const repo = task.repoPath;
+    if (!(await isLocalBranch(repo, task.baseRef)) || (await currentRef(repo)) !== task.baseRef) {
+      throw new Error(
+        `task ${task.id} works directly on ${task.baseRef}, but ${repo} does not have that ` +
+          `branch checked out; check it out there and start the task again`,
+      );
+    }
+    return this.store.updateTask(task.id, {
+      worktreePath: repo,
+      startCommit: await headCommit(repo),
+    });
   }
 
   private async discardWorktree(repo: string, dir: string): Promise<void> {
