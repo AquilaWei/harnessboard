@@ -13,6 +13,7 @@ import type {
   NewAgentProfile,
   PairRequest,
   PairingSetup,
+  PasskeySession,
   PermissionDecision,
   VersionInfo,
 } from '@harnessboard/shared';
@@ -22,6 +23,7 @@ import type { AccessEnv } from './access.js';
 import { Pairing, newDeviceToken } from './pairing.js';
 import { Passkeys, webauthnVerifier } from './passkey.js';
 import type { Party, PasskeyResult, PasskeyVerifier } from './passkey.js';
+import type { Sessions } from './session.js';
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
 
 /** A device cookie lasts a year; revoking the device ends it sooner. */
@@ -49,8 +51,15 @@ export interface ApiDeps {
   verifier: PasskeyVerifier;
 }
 
-/** The HTTP API, mounted under `/api`. Who may reach it is decided by `access` in access.ts. */
-export function createApi(harness: Harness, deps: Partial<ApiDeps> = {}): Hono<AccessEnv> {
+/**
+ * The HTTP API, mounted under `/api`. Who may reach it is decided by `access` in access.ts, which
+ * must be given the same `sessions`: the passkey routes open them, `access` checks them.
+ */
+export function createApi(
+  harness: Harness,
+  sessions: Sessions,
+  deps: Partial<ApiDeps> = {},
+): Hono<AccessEnv> {
   const {
     now = Date.now,
     detectTailscale = () => tailscaleHost(),
@@ -123,21 +132,27 @@ export function createApi(harness: Harness, deps: Partial<ApiDeps> = {}): Hono<A
   app.post('/passkey/options', async (c) =>
     passkeyReply(c, await passkeys.registrationOptions(remoteDevice(c), party(c))),
   );
-  app.post('/passkey', async (c) =>
-    passkeyReply(c, await passkeys.register(remoteDevice(c), party(c), await c.req.json())),
-  );
+  // Registering requires the same user verification as a check, so it also starts a session.
+  app.post('/passkey', async (c) => {
+    const device = remoteDevice(c);
+    const result = await passkeys.register(device, party(c), await c.req.json());
+    return result.ok ? sessionReply(c, sessions, device.id) : passkeyReply(c, result);
+  });
   // The passkey check: a challenge for the device's own passkey, then the phone's signed answer.
   app.post('/auth/challenge', async (c) =>
     passkeyReply(c, await passkeys.authenticationOptions(remoteDevice(c), party(c))),
   );
-  app.post('/auth/verify', async (c) =>
-    passkeyReply(c, await passkeys.verify(remoteDevice(c), party(c), await c.req.json())),
-  );
+  app.post('/auth/verify', async (c) => {
+    const device = remoteDevice(c);
+    const result = await passkeys.verify(device, party(c), await c.req.json());
+    return result.ok ? sessionReply(c, sessions, device.id) : passkeyReply(c, result);
+  });
 
   app.get('/devices', (c) => c.json(harness.store.listDevices()));
   app.delete('/devices/:id', (c) => {
     const id = Number(c.req.param('id'));
     if (!harness.store.revokeDevice(id)) return c.json({ error: `device ${id} not found` }, 404);
+    sessions.end(id);
     return c.json({ id });
   });
 
@@ -308,6 +323,11 @@ function remoteDevice(c: Context<AccessEnv>) {
 function party(c: Context<AccessEnv>): Party {
   const host = (c.req.header('host') ?? '').toLowerCase();
   return { rpID: host.replace(/:\d+$/, ''), origin: `https://${host}` };
+}
+
+/** Starts a board session for the device that just passed a passkey step. */
+function sessionReply(c: Context<AccessEnv>, sessions: Sessions, deviceId: number) {
+  return c.json({ ok: true, session: sessions.open(deviceId) } satisfies PasskeySession);
 }
 
 /** WebAuthn options as they are, `{ok: true}` for a step without a value, or the refusal. */

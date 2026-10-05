@@ -15,7 +15,8 @@ are test versions that have not been accepted on real machines yet.
   ends a device's access at once.
 - **A device that is not paired** sees "This device is not paired" instead of an empty
   board.
-- **A paired phone locks itself** after 30 minutes without use and needs its passkey again.
+- **A paired phone locks itself** each time the board is opened, and after 30 minutes
+  without use, and needs its passkey again.
   Starting, approving, merging or deleting tasks, and changing settings, agents, tool rules
   or paired devices from a phone need a passkey check within the last 5 minutes. Nothing
   changes on this computer.

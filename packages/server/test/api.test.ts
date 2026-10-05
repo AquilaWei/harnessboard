@@ -9,6 +9,7 @@ import { Harness, defaultConfig } from '@harnessboard/core';
 import type { Task } from '@harnessboard/shared';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
+import { Sessions } from '../src/session.js';
 
 const PORT = 4999;
 let harness: Harness;
@@ -43,8 +44,9 @@ beforeEach(() => {
   };
   harness = Harness.open(config);
   app = new Hono();
-  app.use('*', access(harness));
-  app.route('/api', createApi(harness));
+  const sessions = new Sessions();
+  app.use('*', access(harness, sessions));
+  app.route('/api', createApi(harness, sessions));
 });
 
 afterEach(() => harness.store.close());
@@ -92,7 +94,7 @@ describe('settings API', () => {
     const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-settings-'));
     const settingsFile = path.join(dir, 'config.json');
     const saving = Harness.open({ ...defaultConfig({}), dataDir: dir }, { settingsFile });
-    const api = new Hono().route('/api', createApi(saving));
+    const api = new Hono().route('/api', createApi(saving, new Sessions()));
     await api.request('/api/settings', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },

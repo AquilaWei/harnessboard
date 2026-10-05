@@ -86,6 +86,16 @@ export interface PairRequest {
   name: string;
 }
 
+/**
+ * Reply of a passed `POST /api/passkey` or `POST /api/auth/verify`. The web sends `session` in
+ * the `x-harnessboard-session` header (`?session=` on `GET /api/events`) and keeps it in page
+ * memory only, so opening the board again needs another passkey check.
+ */
+export interface PasskeySession {
+  ok: true;
+  session: string;
+}
+
 export interface HarnessStatus {
   running: number[];
   /** Latest quota snapshot per provider that has reported one. */

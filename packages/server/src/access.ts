@@ -2,6 +2,8 @@
 import type { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
 import type { DeviceRecord, Harness } from '@harnessboard/core';
+import { SESSION_HEADER, SESSION_QUERY } from './session.js';
+import type { Sessions } from './session.js';
 
 /** Header every state-changing request must carry; see {@link access}. */
 export const CLIENT_HEADER = 'x-harnessboard-client';
@@ -28,6 +30,9 @@ const PAIR_PATH = '/api/pair';
 
 /** Paths a paired device without a passkey may reach: registering one, and the passkey check. */
 const PASSKEY_SETUP_PATHS = /^\/api\/(passkey(\/.*)?|auth\/.*)$/;
+
+/** The event stream, the one path that takes its session token as {@link SESSION_QUERY}. */
+const EVENTS_PATH = '/api/events';
 
 /** A device that has not been active for longer than this is locked until a passkey check. */
 export const IDLE_LOCK_MS = 30 * 60_000;
@@ -76,7 +81,8 @@ const SENSITIVE_ROUTES: { method: string | null; path: RegExp }[] = [
  *   pairing itself. Static files are served without one so the web can show the pairing screen;
  * - a device without a passkey is not paired yet: it may only register one or reach
  *   `/api/auth/*` (401 otherwise);
- * - a device that never passed a passkey check, or was idle for over {@link IDLE_LOCK_MS}, is
+ * - a request without an open session of its device ({@link Sessions}: the board was opened
+ *   again, or the server restarted), or from a device idle for over {@link IDLE_LOCK_MS}, is
  *   locked: it may only reach `/api/auth/*` (401 `{locked: true}` otherwise);
  * - a route in {@link SENSITIVE_ROUTES} answers 401 `{reauth: true}` when the device's last
  *   passkey check is older than {@link REAUTH_MS}.
@@ -87,6 +93,7 @@ const SENSITIVE_ROUTES: { method: string | null; path: RegExp }[] = [
  */
 export function access(
   harness: Harness,
+  sessions: Sessions,
   now: () => number = Date.now,
 ): MiddlewareHandler<AccessEnv> {
   const port = harness.config.port;
@@ -121,7 +128,12 @@ export function access(
       return c.json({ error: 'this device has no passkey yet; pair it again' }, 401);
     }
     if (UNLOCK_PATHS.test(path)) return next();
+    // EventSource cannot send headers, so the event stream alone takes the token in its URL.
+    const session =
+      c.req.header(SESSION_HEADER) ??
+      (path === EVENTS_PATH ? c.req.query(SESSION_QUERY) : undefined);
     if (
+      !sessions.has(device.id, session) ||
       device.verifiedAt === null ||
       device.lastActiveAt === null ||
       at - device.lastActiveAt > IDLE_LOCK_MS

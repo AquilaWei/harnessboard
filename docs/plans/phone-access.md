@@ -146,6 +146,9 @@ version rules.
    - A device without a passkey is not paired.
 3. **Lock state is kept on the server, per device:** `verified_at`, `last_active_at`.
    - **Locked** (new session, or idle > 30 min): only `/api/auth/*` is allowed.
+     - A session starts only with a passed passkey check or registration, which answers a token.
+       The web keeps it in page memory and sends it as `X-Harnessboard-Session` (`?session=` on
+       `GET /api/events`). Opening the board again, or a server restart, starts a new session.
      - `POST /api/auth/challenge` then `POST /api/auth/verify`.
      - The web shows an unlock screen.
    - **Sensitive routes** answer 401 `{reauth: true}` when `verified_at` is older than 5 min. The

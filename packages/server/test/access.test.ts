@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
+import { SESSION_HEADER, Sessions } from '../src/session.js';
 
 const PORT = 4999;
 const REMOTE = 'box.tail1234.ts.net';
@@ -14,6 +15,9 @@ const TOKEN = 'device-token';
 let harness: Harness;
 let app: Hono;
 let clock: number;
+let sessions: Sessions;
+let paired: Record<string, string>;
+let deviceId: number;
 
 beforeEach(() => {
   const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-access-'));
@@ -23,26 +27,31 @@ beforeEach(() => {
     port: PORT,
     remoteHosts: [REMOTE],
   });
-  const { id } = harness.store.addDevice('phone', TOKEN, 0);
+  deviceId = harness.store.addDevice('phone', TOKEN, 0).id;
   harness.store.setDevicePasskey(
-    id,
+    deviceId,
     { credentialId: 'cred', publicKey: new Uint8Array([1]), counter: 0 },
     0,
   );
+  sessions = new Sessions();
+  paired = {
+    host: REMOTE,
+    cookie: `hb_device=${TOKEN}`,
+    [SESSION_HEADER]: sessions.open(deviceId),
+  };
   clock = 0;
   app = new Hono();
   app.use(
     '*',
-    access(harness, () => clock),
+    access(harness, sessions, () => clock),
   );
-  app.route('/api', createApi(harness));
+  app.route('/api', createApi(harness, sessions));
   app.get('*', (c) => c.text('index.html'));
 });
 
 afterEach(() => harness.store.close());
 
 const remote = { host: REMOTE };
-const paired = { host: REMOTE, cookie: `hb_device=${TOKEN}` };
 const write = (method: string, url: string, headers: Record<string, string>, body: unknown = {}) =>
   app.request(url, {
     method,
@@ -76,7 +85,7 @@ describe('access from a remote host', () => {
 
   it('matches the remote host without regard to case', async () => {
     const res = await app.request('/api/tasks', {
-      headers: { host: 'Box.Tail1234.TS.net', cookie: `hb_device=${TOKEN}` },
+      headers: { ...paired, host: 'Box.Tail1234.TS.net' },
     });
     expect(res.status).toBe(200);
   });
@@ -198,10 +207,65 @@ describe('lock of a paired remote device', () => {
   });
 
   it('unlocks after a passed passkey check', async () => {
-    harness.store.markDeviceVerified(harness.store.listDevices()[0]!.id, 0, 40 * MINUTE);
+    harness.store.markDeviceVerified(deviceId, 0, 40 * MINUTE);
     clock = 41 * MINUTE;
     const res = await app.request('/api/tasks', { headers: paired });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('session of a paired remote device', () => {
+  const cookieOnly = { host: REMOTE, cookie: `hb_device=${TOKEN}` };
+
+  it('answers 401 locked to a request without a session token', async () => {
+    const res = await app.request('/api/tasks', { headers: cookieOnly });
+    expect([res.status, await res.json()]).toEqual([
+      401,
+      { error: 'this device is locked', locked: true },
+    ]);
+  });
+
+  it('answers 401 locked to an unknown session token', async () => {
+    const res = await app.request('/api/tasks', {
+      headers: { ...cookieOnly, [SESSION_HEADER]: 'not-a-session' },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('answers 401 locked once the server starts over with new sessions', async () => {
+    const restarted = new Hono();
+    restarted.use(
+      '*',
+      access(harness, new Sessions(), () => clock),
+    );
+    restarted.route('/api', createApi(harness, new Sessions()));
+    const res = await restarted.request('/api/tasks', { headers: paired });
+    expect(res.status).toBe(401);
+  });
+
+  it('lets a request without a session token ask for a passkey challenge', async () => {
+    const res = await write('POST', '/api/auth/challenge', cookieOnly);
+    expect(res.status).toBe(200);
+  });
+
+  it('takes the session token as a query parameter on the event stream', async () => {
+    const res = await app.request(`/api/events?session=${paired[SESSION_HEADER]}`, {
+      headers: cookieOnly,
+    });
+    await res.body?.cancel();
+    expect(res.status).toBe(200);
+  });
+
+  it('ignores a session query parameter on any other route', async () => {
+    const res = await app.request(`/api/tasks?session=${paired[SESSION_HEADER]}`, {
+      headers: cookieOnly,
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('ends when the device is revoked', async () => {
+    await write('DELETE', `/api/devices/${deviceId}`, { host: `127.0.0.1:${PORT}` });
+    expect(sessions.has(deviceId, paired[SESSION_HEADER])).toBe(false);
   });
 });
 

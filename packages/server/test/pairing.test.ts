@@ -8,6 +8,7 @@ import { Harness, defaultConfig } from '@harnessboard/core';
 import type { Device, PairingCode, PairingSetup } from '@harnessboard/shared';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
+import { Sessions } from '../src/session.js';
 
 const PORT = 4999;
 const REMOTE = 'box.tail1234.ts.net';
@@ -27,14 +28,18 @@ beforeEach(() => {
   });
   clock = START;
   tailscale = 'box.tail1234.ts.net';
+  const sessions = new Sessions();
   app = new Hono();
   app.use(
     '*',
-    access(harness, () => clock),
+    access(harness, sessions, () => clock),
   );
   app.route(
     '/api',
-    createApi(harness, { now: () => clock, detectTailscale: () => Promise.resolve(tailscale) }),
+    createApi(harness, sessions, {
+      now: () => clock,
+      detectTailscale: () => Promise.resolve(tailscale),
+    }),
   );
 });
 

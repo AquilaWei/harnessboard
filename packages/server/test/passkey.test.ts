@@ -9,6 +9,7 @@ import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
 import { webauthnVerifier } from '../src/passkey.js';
 import type { PasskeyVerifier } from '../src/passkey.js';
+import { SESSION_HEADER, Sessions } from '../src/session.js';
 
 const PORT = 4999;
 const REMOTE = 'box.tail1234.ts.net';
@@ -59,12 +60,13 @@ beforeEach(() => {
   );
   clock = START;
   registrationChallenges = [];
+  const sessions = new Sessions();
   app = new Hono();
   app.use(
     '*',
-    access(harness, () => clock),
+    access(harness, sessions, () => clock),
   );
-  app.route('/api', createApi(harness, { now: () => clock, verifier }));
+  app.route('/api', createApi(harness, sessions, { now: () => clock, verifier }));
 });
 
 afterEach(() => harness.store.close());
@@ -125,7 +127,9 @@ describe('passkey registration after pairing', () => {
   });
 
   it('refuses to replace a passkey the device already has', async () => {
-    const res = await post('/api/passkey/options', device);
+    const verified = await challengeAndVerify({ counter: 4 });
+    const { session } = (await verified.json()) as { session: string };
+    const res = await post('/api/passkey/options', { ...device, [SESSION_HEADER]: session });
     expect(res.status).toBe(409);
   });
 
@@ -157,11 +161,54 @@ describe('a device without a passkey', () => {
     expect(res.status).toBe(409);
   });
 
-  it('can use the board API once its passkey is registered', async () => {
+  it('can use the board API with the session its passkey registration started', async () => {
     await post('/api/passkey/options', newDevice);
-    await post('/api/passkey', newDevice, { valid: true });
-    const res = await app.request('/api/tasks', { headers: newDevice });
+    const registered = await post('/api/passkey', newDevice, { valid: true });
+    const { session } = (await registered.json()) as { session: string };
+    const res = await app.request('/api/tasks', {
+      headers: { ...newDevice, [SESSION_HEADER]: session },
+    });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('a new board session of a device that passed a check', () => {
+  it('is locked two minutes after the check without its session token', async () => {
+    await challengeAndVerify({ counter: 4 });
+    clock = START + 2 * 60_000;
+    const res = await app.request('/api/tasks', { headers: device });
+    expect([res.status, await res.json()]).toEqual([
+      401,
+      { error: 'this device is locked', locked: true },
+    ]);
+  });
+
+  it('is refused a sensitive route two minutes after the check without its session', async () => {
+    await challengeAndVerify({ counter: 4 });
+    clock = START + 2 * 60_000;
+    const res = await post('/api/tasks', device, {});
+    expect(res.status).toBe(401);
+  });
+
+  it('is unlocked by the session token of its next passed check', async () => {
+    await challengeAndVerify({ counter: 4 });
+    clock = START + 2 * 60_000;
+    const res = await challengeAndVerify({ counter: 5 });
+    const { session } = (await res.json()) as { session: string };
+    const tasks = await app.request('/api/tasks', {
+      headers: { ...device, [SESSION_HEADER]: session },
+    });
+    expect(tasks.status).toBe(200);
+  });
+
+  it('is locked when it sends the session token of another device', async () => {
+    await post('/api/passkey/options', newDevice);
+    const registered = await post('/api/passkey', newDevice, { valid: true });
+    const { session } = (await registered.json()) as { session: string };
+    const res = await app.request('/api/tasks', {
+      headers: { ...device, [SESSION_HEADER]: session },
+    });
+    expect(res.status).toBe(401);
   });
 });
 
@@ -184,6 +231,12 @@ describe('the passkey check', () => {
     expect(stored(TOKEN).verifiedAt).toBe(1_005_000);
   });
 
+  it('answers a passed check with a session token', async () => {
+    const res = await challengeAndVerify({ counter: 4 });
+    const body = (await res.json()) as { ok: boolean; session: string };
+    expect([body.ok, body.session]).toEqual([true, expect.stringMatching(/^[A-Za-z0-9_-]{43}$/)]);
+  });
+
   it('stores the new signature counter', async () => {
     await challengeAndVerify({ counter: 4 });
     expect(stored(TOKEN).passkey!.counter).toBe(4);
@@ -201,12 +254,13 @@ describe('the passkey check', () => {
       ...verifier,
       verifyAuthentication: () => new Promise((resolve) => answers.push(resolve)),
     };
+    const sessions = new Sessions();
     app = new Hono();
     app.use(
       '*',
-      access(harness, () => clock),
+      access(harness, sessions, () => clock),
     );
-    app.route('/api', createApi(harness, { now: () => clock, verifier: deferred }));
+    app.route('/api', createApi(harness, sessions, { now: () => clock, verifier: deferred }));
     clock = START + 1000;
     await post('/api/auth/challenge', device);
     const slower = post('/api/auth/verify', device, {});
