@@ -197,4 +197,4 @@ Its adapter should report a usage-limit error as an error `result` with
 ## Plans
 
 - [Phone access](plans/phone-access.md): using the board from a phone over Tailscale, with
-  device pairing and a passkey. Planned, not started.
+  device pairing and a passkey. M0 spike done, M1 not started.

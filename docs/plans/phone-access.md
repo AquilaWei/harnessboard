@@ -1,6 +1,6 @@
 # Phone access
 
-Status: planned, not started. Decisions dated 2026-10-04.
+Status: M0 done, M1 not started. Decisions dated 2026-10-04.
 
 ## Goal
 
@@ -64,21 +64,29 @@ version rules.
   - If it rewrites Host to `127.0.0.1:<port>`, remote requests would pass today's `localOnly()` as
     local. Remote must then be detected from `X-Forwarded-For` / `Tailscale-User-Login`, not from Host.
   - Write the finding into this file.
-  - **Finding (from source, `ipn/ipnlocal/serve.go` on Tailscale `main`, 2026-10-04; still to be
-    confirmed on a real run):**
+  - **Finding (Tailscale 1.102.4, checked in `ipn/ipnlocal/serve.go` and confirmed on a real run
+    from an Android phone over mobile data, 2026-10-04):**
     - Host is kept (`r.Out.Host = r.In.Host`), so the board sees `<machine>.<tailnet>.ts.net` and
       today's `localOnly()` answers 403. Remote requests do not pass as local through Tailscale.
     - Added on every proxied request: `X-Forwarded-Host`, `X-Forwarded-Proto: https`,
-      `X-Forwarded-For: <client tailnet IP>`.
+      `X-Forwarded-For: <client tailnet IP>`. The TCP peer is always `127.0.0.1`.
     - `Tailscale-User-Login` / `-Name` / `-Profile-Pic` are set for user-owned devices, not for
       tagged ones. Incoming copies are deleted first, so they cannot be spoofed through the proxy.
     - Funnel (public internet) traffic gets `Tailscale-Funnel-Request: ?1` and no identity headers.
     - Other proxies may rewrite Host (nginx sends the `proxy_pass` host by default). So M1 treats any
       request that carries `X-Forwarded-For`, `X-Forwarded-Host` or `Forwarded` as remote, whatever
       its Host, and refuses any request with `Tailscale-Funnel-Request`.
-- Check that a passkey on `*.ts.net` registers and verifies on the user's phone (iOS Safari and/or
-  Android Chrome).
-- Check "Add to Home Screen" and Web Push on the phone (iOS needs 16.4+ and an installed PWA).
+    - The first HTTPS request after enabling certificates took over 30 s while the certificate was
+      issued; later requests were immediate.
+- **Passkey on `*.ts.net`: works.** Android 16, Chrome 156: registration and verification with
+  `rpId = <machine>.<tailnet>.ts.net` and `userVerification: 'required'` both passed, with the UV
+  flag set. iOS is not checked; the test phone is Android.
+- **In-app browsers have no passkey.** A link opened from LINE loads in its WebView, where
+  `window.PublicKeyCredential` and `PushManager` are missing and `credentials.create` fails with
+  `NotSupportedError`. M2 must detect this and tell the user to open the board in Chrome or Safari.
+- **Push:** Chrome on Android exposes `serviceWorker` and `PushManager` without installing the page.
+  Actual delivery and "Add to Home Screen" are checked in M3 and M4, where the manifest and service
+  worker exist.
 
 ### M1 — Remote access and device pairing
 
@@ -131,6 +139,8 @@ version rules.
 1. Server uses `@simplewebauthn/server`, web uses `@simplewebauthn/browser`.
    - `rpID` = the remote host.
    - `userVerification: 'required'`.
+   - Without `window.PublicKeyCredential` (in-app browsers such as LINE's), the web shows "open this
+     page in Chrome or Safari" instead of the pairing or unlock button.
 2. **Pairing registers a passkey** right after the cookie is issued.
    - The credential id, public key and counter are stored on the device row.
    - A device without a passkey is not paired.
