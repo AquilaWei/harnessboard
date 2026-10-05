@@ -64,6 +64,18 @@ version rules.
   - If it rewrites Host to `127.0.0.1:<port>`, remote requests would pass today's `localOnly()` as
     local. Remote must then be detected from `X-Forwarded-For` / `Tailscale-User-Login`, not from Host.
   - Write the finding into this file.
+  - **Finding (from source, `ipn/ipnlocal/serve.go` on Tailscale `main`, 2026-10-04; still to be
+    confirmed on a real run):**
+    - Host is kept (`r.Out.Host = r.In.Host`), so the board sees `<machine>.<tailnet>.ts.net` and
+      today's `localOnly()` answers 403. Remote requests do not pass as local through Tailscale.
+    - Added on every proxied request: `X-Forwarded-Host`, `X-Forwarded-Proto: https`,
+      `X-Forwarded-For: <client tailnet IP>`.
+    - `Tailscale-User-Login` / `-Name` / `-Profile-Pic` are set for user-owned devices, not for
+      tagged ones. Incoming copies are deleted first, so they cannot be spoofed through the proxy.
+    - Funnel (public internet) traffic gets `Tailscale-Funnel-Request: ?1` and no identity headers.
+    - Other proxies may rewrite Host (nginx sends the `proxy_pass` host by default). So M1 treats any
+      request that carries `X-Forwarded-For`, `X-Forwarded-Host` or `Forwarded` as remote, whatever
+      its Host, and refuses any request with `Tailscale-Funnel-Request`.
 - Check that a passkey on `*.ts.net` registers and verifies on the user's phone (iOS Safari and/or
   Android Chrome).
 - Check "Add to Home Screen" and Web Push on the phone (iOS needs 16.4+ and an installed PWA).
@@ -93,6 +105,8 @@ version rules.
      - the client header is still required on non-GET requests;
      - `last_seen_at` is updated, throttled.
    - Any other host: 403.
+   - A request with `X-Forwarded-For`, `X-Forwarded-Host` or `Forwarded` is never local, even when
+     its Host is loopback. A request with `Tailscale-Funnel-Request` is always 403.
    - Static files are served without auth. The web shows "this device is not paired" on a 401.
 5. **Settings-level routes are sensitive, not local-only.** From a remote device, they need a fresh
    passkey check (M2) instead of a 403. M1 is not released before M2, so these routes are never open
@@ -181,7 +195,8 @@ and no logic.
   - revoked: 401;
   - unknown host: 403;
   - remote non-GET without the header: 403;
-  - forwarded requests are treated as remote (depends on the M0 finding).
+  - loopback Host with `X-Forwarded-For`: treated as remote (401 without a cookie);
+  - `Tailscale-Funnel-Request: ?1`: 403.
 - **Pairing**
   - expired code, reused code, wrong code;
   - rate limit.
