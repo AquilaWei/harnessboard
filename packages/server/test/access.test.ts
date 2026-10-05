@@ -23,7 +23,12 @@ beforeEach(() => {
     port: PORT,
     remoteHosts: [REMOTE],
   });
-  harness.store.addDevice('phone', TOKEN, 0);
+  const { id } = harness.store.addDevice('phone', TOKEN, 0);
+  harness.store.setDevicePasskey(
+    id,
+    { credentialId: 'cred', publicKey: new Uint8Array([1]), counter: 0 },
+    0,
+  );
   clock = 0;
   app = new Hono();
   app.use(

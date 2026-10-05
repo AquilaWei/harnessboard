@@ -169,6 +169,8 @@ describe('Store', () => {
   });
 });
 
+const passkey = { credentialId: 'cred-1', publicKey: new Uint8Array([1, 2, 3]), counter: 4 };
+
 describe('Store devices', () => {
   it('finds a device by the token it was added with', () => {
     const store = new Store(':memory:');
@@ -178,6 +180,9 @@ describe('Store devices', () => {
       name: 'Pixel',
       createdAt: 1000,
       lastSeenAt: 1000,
+      passkey: null,
+      verifiedAt: null,
+      lastActiveAt: null,
     });
   });
 
@@ -229,6 +234,70 @@ describe('Store devices', () => {
     const { id } = store.addDevice('Pixel', 'token-one', 1000);
     store.touchDevice(id, 5000);
     expect(store.findDeviceByToken('token-one')!.lastSeenAt).toBe(5000);
+  });
+
+  it('stores a passkey and counts registering it as a passkey check', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    expect(store.findDeviceByToken('token-one')).toEqual({
+      id: 1,
+      name: 'Pixel',
+      createdAt: 1000,
+      lastSeenAt: 1000,
+      passkey: { credentialId: 'cred-1', publicKey: new Uint8Array([1, 2, 3]), counter: 4 },
+      verifiedAt: 2000,
+      lastActiveAt: 2000,
+    });
+  });
+
+  it('does not replace a passkey a device already has', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    const replaced = store.setDevicePasskey(
+      id,
+      { credentialId: 'cred-2', publicKey: new Uint8Array([9]), counter: 0 },
+      3000,
+    );
+    expect([replaced, store.findDeviceByToken('token-one')!.passkey!.credentialId]).toEqual([
+      false,
+      'cred-1',
+    ]);
+  });
+
+  it('records a passed passkey check with the new counter', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    store.markDeviceVerified(id, 5, 3000);
+    const device = store.findDeviceByToken('token-one')!;
+    expect([device.passkey!.counter, device.verifiedAt, device.lastActiveAt]).toEqual([
+      5, 3000, 3000,
+    ]);
+  });
+
+  it('keeps devices paired before passkeys, without a passkey', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    first.addDevice('Pixel', 'token-one', 1000);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(
+      `ALTER TABLE devices DROP COLUMN credential_id; ALTER TABLE devices DROP COLUMN public_key;
+       ALTER TABLE devices DROP COLUMN sign_count; ALTER TABLE devices DROP COLUMN verified_at;
+       ALTER TABLE devices DROP COLUMN last_active_at; PRAGMA user_version = 7;`,
+    );
+    db.close();
+    expect(new Store(file).findDeviceByToken('token-one')).toEqual({
+      id: 1,
+      name: 'Pixel',
+      createdAt: 1000,
+      lastSeenAt: 1000,
+      passkey: null,
+      verifiedAt: null,
+      lastActiveAt: null,
+    });
   });
 
   it('adds the devices table to a database from before phone access', () => {

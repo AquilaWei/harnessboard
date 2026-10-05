@@ -1,13 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
-import type { Harness } from '@harnessboard/core';
+import type { DeviceRecord, Harness } from '@harnessboard/core';
 
 /** Header every state-changing request must carry; see {@link access}. */
 export const CLIENT_HEADER = 'x-harnessboard-client';
 
 /** Cookie that holds a paired device's token. */
 export const DEVICE_COOKIE = 'hb_device';
+
+/**
+ * What {@link access} hands to the routes: the remote device that made the request, unset for a
+ * local request.
+ */
+export interface AccessEnv {
+  Variables: { device?: DeviceRecord };
+}
 
 /** A device's `last_seen_at` is written at most this often, so reads do not all become writes. */
 export const TOUCH_INTERVAL_MS = 60_000;
@@ -17,6 +25,9 @@ const FORWARDING_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'forwarded'];
 
 /** Paths a remote request may reach without a device cookie, besides the static web files. */
 const PAIR_PATH = '/api/pair';
+
+/** Paths a paired device without a passkey may reach: registering one, and the passkey check. */
+const PASSKEY_SETUP_PATHS = /^\/api\/(passkey(\/.*)?|auth\/.*)$/;
 
 /**
  * Routes that change what the board may do or who may use it. A remote device must not reach
@@ -43,12 +54,17 @@ const SETTINGS_ROUTES: { method: string | null; path: RegExp }[] = [
  * - non-GET requests need {@link CLIENT_HEADER}. Browsers cannot add a custom header to a
  *   cross-origin request without a CORS preflight, which this server never approves;
  * - a remote request to `/api/*` needs the cookie of a paired device (401 otherwise), except
- *   pairing itself. Static files are served without one so the web can show the pairing screen.
+ *   pairing itself. Static files are served without one so the web can show the pairing screen;
+ * - a device without a passkey is not paired yet: it may only register one or reach
+ *   `/api/auth/*` (401 otherwise).
  *
  * Remote hosts are read from the harness on every request, so a settings change applies at once.
  * `now` is injectable for the `last_seen_at` throttle.
  */
-export function access(harness: Harness, now: () => number = Date.now): MiddlewareHandler {
+export function access(
+  harness: Harness,
+  now: () => number = Date.now,
+): MiddlewareHandler<AccessEnv> {
   const port = harness.config.port;
   const loopbackHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
   return async (c, next) => {
@@ -75,6 +91,10 @@ export function access(harness: Harness, now: () => number = Date.now): Middlewa
     if (!device) return c.json({ error: 'this device is not paired' }, 401);
     const at = now();
     if (at - device.lastSeenAt >= TOUCH_INTERVAL_MS) harness.store.touchDevice(device.id, at);
+    c.set('device', device);
+    if (!device.passkey && !PASSKEY_SETUP_PATHS.test(path)) {
+      return c.json({ error: 'this device has no passkey yet; pair it again' }, 401);
+    }
     const method = c.req.method;
     if (
       SETTINGS_ROUTES.some((r) => (r.method === null || r.method === method) && r.path.test(path))

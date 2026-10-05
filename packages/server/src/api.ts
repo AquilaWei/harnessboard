@@ -18,7 +18,10 @@ import type {
 } from '@harnessboard/shared';
 import pkg from '../package.json' with { type: 'json' };
 import { DEVICE_COOKIE } from './access.js';
+import type { AccessEnv } from './access.js';
 import { Pairing, newDeviceToken } from './pairing.js';
+import { Passkeys, webauthnVerifier } from './passkey.js';
+import type { Party, PasskeyResult, PasskeyVerifier } from './passkey.js';
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
 
 /** A device cookie lasts a year; revoking the device ends it sooner. */
@@ -27,18 +30,35 @@ const DEVICE_COOKIE_MAX_AGE_S = 365 * 24 * 60 * 60;
 /** Longest device name accepted, so the device list stays readable. */
 const MAX_DEVICE_NAME = 64;
 
-/**
- * The HTTP API, mounted under `/api`. Who may reach it is decided by `access` in access.ts.
- * `now` is injectable for the expiry of pairing codes, and `detectTailscale` so tests do not
- * depend on whether this machine runs Tailscale.
- */
-export function createApi(
-  harness: Harness,
-  now: () => number = Date.now,
-  detectTailscale: () => Promise<string | null> = () => tailscaleHost(),
-): Hono {
-  const app = new Hono();
+/** Status code and message for each refused passkey step. */
+const PASSKEY_REFUSALS = {
+  'has-passkey': [409, 'this device already has a passkey'],
+  'too-late': [403, 'too long since pairing; pair this device again'],
+  'no-passkey': [409, 'this device has no passkey yet; pair it again'],
+  invalid: [400, 'the passkey could not be verified'],
+  blocked: [429, 'too many failed passkey checks; try again later'],
+} as const;
+
+/** What {@link createApi} talks to outside the harness; tests swap these for fakes. */
+export interface ApiDeps {
+  /** Clock for pairing codes, passkey challenges and lock times. */
+  now: () => number;
+  /** Finds this machine's Tailscale name, so tests do not depend on whether it runs Tailscale. */
+  detectTailscale: () => Promise<string | null>;
+  /** Checks passkeys; tests fake the phone's signed responses. */
+  verifier: PasskeyVerifier;
+}
+
+/** The HTTP API, mounted under `/api`. Who may reach it is decided by `access` in access.ts. */
+export function createApi(harness: Harness, deps: Partial<ApiDeps> = {}): Hono<AccessEnv> {
+  const {
+    now = Date.now,
+    detectTailscale = () => tailscaleHost(),
+    verifier = webauthnVerifier,
+  } = deps;
+  const app = new Hono<AccessEnv>();
   const pairing = new Pairing(now);
+  const passkeys = new Passkeys(harness.store, verifier, now);
   const view = (id: number) => {
     const task = harness.store.getTask(id);
     return task ? taskView(task, harness) : undefined;
@@ -99,6 +119,21 @@ export function createApi(
     });
     return c.json(device, 201);
   });
+  // Right after pairing the phone registers a passkey; until then the device can do nothing else.
+  app.post('/passkey/options', async (c) =>
+    passkeyReply(c, await passkeys.registrationOptions(remoteDevice(c), party(c))),
+  );
+  app.post('/passkey', async (c) =>
+    passkeyReply(c, await passkeys.register(remoteDevice(c), party(c), await c.req.json())),
+  );
+  // The passkey check: a challenge for the device's own passkey, then the phone's signed answer.
+  app.post('/auth/challenge', async (c) =>
+    passkeyReply(c, await passkeys.authenticationOptions(remoteDevice(c), party(c))),
+  );
+  app.post('/auth/verify', async (c) =>
+    passkeyReply(c, await passkeys.verify(remoteDevice(c), party(c), await c.req.json())),
+  );
+
   app.get('/devices', (c) => c.json(harness.store.listDevices()));
   app.delete('/devices/:id', (c) => {
     const id = Number(c.req.param('id'));
@@ -256,8 +291,30 @@ export function createApi(
   return app;
 }
 
-function taskId(c: Context): number {
+function taskId(c: Context<AccessEnv>): number {
   const id = Number(c.req.param('id'));
   if (!Number.isInteger(id) || id <= 0) throw new Error(`invalid task id: ${c.req.param('id')}`);
   return id;
+}
+
+/** The remote device that made the request. Passkeys belong to remote devices only. */
+function remoteDevice(c: Context<AccessEnv>) {
+  const device = c.get('device');
+  if (!device) throw new Error('passkeys are only used by devices paired from a phone');
+  return device;
+}
+
+/** The relying party is the remote host the phone opened, always over HTTPS (`tailscale serve`). */
+function party(c: Context<AccessEnv>): Party {
+  const host = (c.req.header('host') ?? '').toLowerCase();
+  return { rpID: host.replace(/:\d+$/, ''), origin: `https://${host}` };
+}
+
+/** WebAuthn options as they are, `{ok: true}` for a step without a value, or the refusal. */
+function passkeyReply<T>(c: Context<AccessEnv>, result: PasskeyResult<T>) {
+  if (!result.ok) {
+    const [status, error] = PASSKEY_REFUSALS[result.reason];
+    return c.json({ error }, status);
+  }
+  return c.json(result.value ?? { ok: true });
 }

@@ -34,11 +34,7 @@ beforeEach(() => {
   );
   app.route(
     '/api',
-    createApi(
-      harness,
-      () => clock,
-      () => Promise.resolve(tailscale),
-    ),
+    createApi(harness, { now: () => clock, detectTailscale: () => Promise.resolve(tailscale) }),
   );
 });
 
@@ -97,11 +93,11 @@ describe('POST /api/pair', () => {
     expect(harness.store.listDevices().map((d) => d.name)).toEqual(['Pixel 9']);
   });
 
-  it('gives a cookie that lets the device use the API', async () => {
+  it('gives a cookie that lets the device go on to register a passkey', async () => {
     const res = await pair((await newCode()).code);
     const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
-    const tasks = await app.request('/api/tasks', { headers: { host: REMOTE, cookie } });
-    expect(tasks.status).toBe(200);
+    const options = await send('POST', '/api/passkey/options', { host: REMOTE, cookie });
+    expect(options.status).toBe(200);
   });
 
   it('accepts a code just before it expires', async () => {
@@ -187,8 +183,8 @@ describe('devices API', () => {
     const cookie = res.headers.get('set-cookie')!.split(';')[0]!;
     const { id } = (await res.json()) as Device;
     await send('DELETE', `/api/devices/${id}`, local);
-    const tasks = await app.request('/api/tasks', { headers: { host: REMOTE, cookie } });
-    expect(tasks.status).toBe(401);
+    const options = await send('POST', '/api/passkey/options', { host: REMOTE, cookie });
+    expect(options.status).toBe(401);
   });
 
   it('answers 404 when revoking a device that does not exist', async () => {

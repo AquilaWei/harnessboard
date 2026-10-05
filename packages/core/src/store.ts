@@ -85,7 +85,33 @@ const MIGRATIONS = [
      created_at INTEGER NOT NULL,
      last_seen_at INTEGER NOT NULL
    );`,
+  // The device's passkey, and when it last passed a passkey check or made a request after one.
+  `ALTER TABLE devices ADD COLUMN credential_id TEXT;
+   ALTER TABLE devices ADD COLUMN public_key BLOB;
+   ALTER TABLE devices ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE devices ADD COLUMN verified_at INTEGER;
+   ALTER TABLE devices ADD COLUMN last_active_at INTEGER;`,
 ];
+
+/** A device's registered passkey: what the server needs to check its signatures. */
+export interface Passkey {
+  /** base64url credential id, as WebAuthn reports it. */
+  credentialId: string;
+  /** COSE-encoded public key. */
+  publicKey: Uint8Array<ArrayBuffer>;
+  /** The authenticator's signature counter; many passkeys always report 0. */
+  counter: number;
+}
+
+/** A paired device with what the access check needs; never sent to the web as is. */
+export interface DeviceRecord extends Device {
+  /** Null until the device registers a passkey right after pairing. */
+  passkey: Passkey | null;
+  /** Time of the last passkey check the device passed, or null for none. */
+  verifiedAt: number | null;
+  /** Time of the device's last activity after a passkey check, or null for none. */
+  lastActiveAt: number | null;
+}
 
 /**
  * SQLite persistence for tasks, sessions and the event log.
@@ -356,9 +382,33 @@ export class Store {
   }
 
   /** The device a cookie token belongs to; undefined for an unknown or revoked token. */
-  findDeviceByToken(token: string): Device | undefined {
+  findDeviceByToken(token: string): DeviceRecord | undefined {
     const row = this.db.prepare('SELECT * FROM devices WHERE token_hash = ?').get(hashToken(token));
-    return row ? toDevice(row) : undefined;
+    return row ? toDeviceRecord(row) : undefined;
+  }
+
+  /**
+   * Stores the device's passkey and counts its registration as a passkey check. False when the
+   * device is gone or already has a passkey: a stolen cookie must not replace the owner's passkey.
+   */
+  setDevicePasskey(id: number, passkey: Passkey, now = Date.now()): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE devices SET credential_id = ?, public_key = ?, sign_count = ?, verified_at = ?,
+                            last_active_at = ?
+         WHERE id = ? AND credential_id IS NULL`,
+      )
+      .run(passkey.credentialId, passkey.publicKey, passkey.counter, now, now, id);
+    return Number(result.changes) > 0;
+  }
+
+  /** Records a passed passkey check and the authenticator's new signature counter. */
+  markDeviceVerified(id: number, counter: number, now = Date.now()): void {
+    this.db
+      .prepare(
+        'UPDATE devices SET sign_count = ?, verified_at = ?, last_active_at = ? WHERE id = ?',
+      )
+      .run(counter, now, now, id);
   }
 
   listDevices(): Device[] {
@@ -452,6 +502,22 @@ function toDevice(row: Row): Device {
     name: String(row.name),
     createdAt: Number(row.created_at),
     lastSeenAt: Number(row.last_seen_at),
+  };
+}
+
+function toDeviceRecord(row: Row): DeviceRecord {
+  return {
+    ...toDevice(row),
+    passkey:
+      row.credential_id == null
+        ? null
+        : {
+            credentialId: String(row.credential_id),
+            publicKey: new Uint8Array(row.public_key as Uint8Array),
+            counter: Number(row.sign_count),
+          },
+    verifiedAt: row.verified_at == null ? null : Number(row.verified_at),
+    lastActiveAt: row.last_active_at == null ? null : Number(row.last_active_at),
   };
 }
 
