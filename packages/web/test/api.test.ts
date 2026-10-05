@@ -130,6 +130,48 @@ describe('reauth retry', () => {
   });
 });
 
+/** Answers the first call only once `setSession` has run, as a read in flight while unlocking. */
+const lateLocked = (next: [number, string]) => {
+  const fetch = vi.fn((_url: string, _init: RequestInit) =>
+    fetch.mock.calls.length === 1
+      ? new Promise<Response>((resolve) => {
+          setSession('new-token');
+          resolve(new Response(LOCKED, { status: 401 }));
+        })
+      : Promise.resolve(new Response(next[1], { status: next[0] })),
+  );
+  vi.stubGlobal('fetch', fetch);
+  return fetch;
+};
+
+describe('a 401 to a call sent before the session changed', () => {
+  it('retries the call with the new session', async () => {
+    const fetch = lateLocked([200, '[]']);
+    await api.tasks();
+    expect(new Headers(fetch.mock.calls[1]![1].headers).get('x-harnessboard-session')).toBe(
+      'new-token',
+    );
+  });
+
+  it('does not tell the lock listeners', async () => {
+    lateLocked([200, '[]']);
+    const locked = vi.fn();
+    const stop = onLocked(locked);
+    await api.tasks();
+    stop();
+    expect(locked).not.toHaveBeenCalled();
+  });
+
+  it('tells the lock listeners when the retry under the new session is locked too', async () => {
+    lateLocked([401, LOCKED]);
+    const locked = vi.fn();
+    const stop = onLocked(locked);
+    await api.tasks().catch(() => {});
+    stop();
+    expect(locked).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('session', () => {
   it('sends the session token with a read', async () => {
     const fetch = answers([200, '[]']);

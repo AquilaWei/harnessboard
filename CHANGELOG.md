@@ -16,7 +16,8 @@ are test versions that have not been accepted on real machines yet.
 - **A device that is not paired** sees "This device is not paired" instead of an empty
   board.
 - **A paired phone locks itself** each time the board is opened, and after 30 minutes
-  without use, and shows an Unlock button that asks for its passkey.
+  without use, and shows an Unlock button that asks for its passkey. This includes a phone
+  with the board open while the server restarts; once unlocked, the board updates live again.
   Starting, approving, merging or deleting tasks, and changing settings, agents, tool rules
   or paired devices from a phone need a passkey check within the last 5 minutes; the phone
   asks for it and then carries on with the action. Nothing changes on this computer.

@@ -84,6 +84,10 @@ const sessionListeners = new Set<() => void>();
 
 // Page memory only, never storage: opening the board again must start a new, locked session.
 let session: string | null = null;
+// Counts session changes. A 401 to a call sent before the latest change answered the old
+// session, e.g. a board read still in flight while the phone paired or unlocked: it must not
+// put the not-paired or locked screen back over the board the new session just opened.
+let generation = 0;
 
 /**
  * Asks for a passkey check before a refused action is retried. Resolves false when the user
@@ -123,6 +127,7 @@ export function onSessionChange(listener: () => void): () => void {
 /** Sends `token` with every later call; `null` sends none (a computer needs none). */
 export function setSession(token: string | null): void {
   session = token;
+  generation += 1;
   for (const listener of sessionListeners) listener();
 }
 
@@ -157,15 +162,23 @@ function errorOf(res: Response, text: string): ApiError {
   return new ApiError(body.error ?? (text || res.statusText), res.status, body);
 }
 
-/** Calls the API; an action refused for reauth is retried once after a passed passkey prompt. */
+/**
+ * Calls the API. An action refused for reauth is retried once after a passed passkey prompt,
+ * and a call refused under a session that has since changed is retried once with the new one.
+ */
 async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
   const headers = new Headers(init.headers);
   if (session) headers.set(SESSION_HEADER, session);
+  const sentIn = generation;
   const res = await fetch(`/api${path}`, { ...init, headers });
   const text = await res.text();
   if (res.ok) return JSON.parse(text) as T;
   const err = errorOf(res, text);
-  if (err.status === 401) {
+  if (err.status === 401 && sentIn !== generation) {
+    // A stale 401 answered the old session: ask once again with the new one, and tell no
+    // listener about it.
+    if (!retried) return request<T>(path, init, true);
+  } else if (err.status === 401) {
     if (err.reauth && !retried && (await confirmPasskey())) return request<T>(path, init, true);
     if (err.locked) for (const listener of lockedListeners) listener();
     else if (!err.reauth) for (const listener of notPairedListeners) listener();

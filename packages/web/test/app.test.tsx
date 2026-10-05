@@ -39,6 +39,8 @@ let revoked = false;
 let locked = false;
 /** Actions answer 401 `{reauth: true}`, as they do on a phone without a recent passkey check. */
 let reauth = false;
+/** The title `/api/tasks` answers with, changed by a test to see the board reload. */
+let title = 'Write the docs';
 const server = (url: string) => {
   // Pairing and creating the passkey, as a phone that opened the pairing address does them.
   if (url === '/api/pair') return Response.json({ id: 1, name: 'Pixel 9' }, { status: 201 });
@@ -47,6 +49,12 @@ const server = (url: string) => {
     revoked = false;
     return Response.json({ ok: true, session: 's' });
   }
+  // The passkey check that unlocks a locked phone.
+  if (url === '/api/auth/challenge') return Response.json({ challenge: 'c' });
+  if (url === '/api/auth/verify') {
+    locked = false;
+    return Response.json({ ok: true, session: 's2' });
+  }
   if (revoked) return new Response('{"error":"this device is not paired"}', { status: 401 });
   if (locked)
     return new Response('{"error":"this device is locked","locked":true}', { status: 401 });
@@ -54,15 +62,46 @@ const server = (url: string) => {
     return new Response('{"error":"confirm with your passkey first","reauth":true}', {
       status: 401,
     });
-  if (url === '/api/tasks') return Response.json([task]);
+  if (url === '/api/tasks') return Response.json([{ ...task, title }]);
   if (url === '/api/version') return Response.json({ version: '0.0.0' });
   return Response.json(null);
 };
 
-class NoEvents {
-  addEventListener() {}
-  close() {}
+/** The event streams the board opened, newest last. */
+let streams: FakeEvents[] = [];
+class FakeEvents {
+  readonly url: string;
+  readyState = 1;
+  readonly listeners = new Map<string, (e: MessageEvent<string>) => void>();
+  constructor(url: string) {
+    this.url = url;
+    streams.push(this);
+  }
+  addEventListener(type: string, listener: (e: MessageEvent<string>) => void) {
+    this.listeners.set(type, listener);
+  }
+  close() {
+    this.readyState = 2;
+  }
+  /** The stream drops; `readyState` 2 says it gave up (an HTTP error), 0 that it retries. */
+  fail(readyState: number) {
+    this.readyState = readyState;
+    this.listeners.get('error')!(new MessageEvent('error'));
+  }
+  emit(type: string, data: string) {
+    this.listeners.get(type)!(new MessageEvent(type, { data }));
+  }
 }
+
+/** Calls to these paths wait for {@link release}, answering as the server would have when sent. */
+let holding: string[] = [];
+let held: (() => void)[] = [];
+const release = async () => {
+  await act(async () => {
+    for (const answer of held) answer();
+    held = [];
+  });
+};
 
 let root: Root;
 let container: HTMLElement;
@@ -71,8 +110,16 @@ beforeEach(async () => {
   revoked = false;
   locked = false;
   reauth = false;
-  vi.stubGlobal('fetch', (url: string) => Promise.resolve(server(url)));
-  vi.stubGlobal('EventSource', NoEvents);
+  title = 'Write the docs';
+  streams = [];
+  holding = [];
+  held = [];
+  vi.stubGlobal('fetch', (url: string) => {
+    const res = server(url);
+    if (!holding.includes(url)) return Promise.resolve(res);
+    return new Promise<Response>((resolve) => held.push(() => resolve(res)));
+  });
+  vi.stubGlobal('EventSource', FakeEvents);
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -81,6 +128,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   act(() => root.unmount());
+  vi.useRealTimers();
   container.remove();
   vi.unstubAllGlobals();
   history.replaceState(null, '', '/');
@@ -199,5 +247,75 @@ describe('App', () => {
       container.querySelector('[role="status"]')?.textContent,
       container.textContent?.includes('Write the docs'),
     ]).toEqual(['Not done: a phone must confirm this with its passkey.', true]);
+  });
+  it('shows the board after pairing when a board read sent before pairing gets its 401 late', async () => {
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
+    webauthn.startRegistration.mockResolvedValueOnce({ id: 'cred' });
+    revoked = true;
+    holding = ['/api/tasks', '/api/status', '/api/settings', '/api/version'];
+    history.replaceState(null, '', '/#pair=abc');
+    await reopen();
+    holding = [];
+    act(() => type(container.querySelector('input')!, 'Pixel 9'));
+    await act(async () => button('Pair').click());
+    await release();
+    expect(container.textContent).toContain('Write the docs');
+  });
+
+  it('shows the board after unlocking when a board read sent before unlocking gets its 401 late', async () => {
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
+    webauthn.startAuthentication.mockResolvedValueOnce({ id: 'cred' });
+    locked = true;
+    holding = ['/api/settings'];
+    await reopen();
+    holding = [];
+    await act(async () => button('Unlock').click());
+    await release();
+    expect(container.textContent).toContain('Write the docs');
+  });
+
+  it('shows the unlock screen when the event stream is refused after a server restart', async () => {
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
+    locked = true; // the restart dropped the board session
+    await act(async () => streams.at(-1)!.fail(2));
+    expect([container.querySelector('h2')?.textContent, button('Unlock') !== undefined]).toEqual([
+      'The board is locked',
+      true,
+    ]);
+  });
+
+  it('reopens the event stream with the new session after unlocking from a restart', async () => {
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
+    webauthn.startAuthentication.mockResolvedValueOnce({ id: 'cred' });
+    locked = true;
+    await act(async () => streams.at(-1)!.fail(2));
+    await act(async () => button('Unlock').click());
+    expect(streams.at(-1)!.url).toBe('/api/events?session=s2');
+  });
+
+  it('reloads the board on an event after unlocking from a restart', async () => {
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
+    webauthn.startAuthentication.mockResolvedValueOnce({ id: 'cred' });
+    locked = true;
+    await act(async () => streams.at(-1)!.fail(2));
+    await act(async () => button('Unlock').click());
+    vi.useFakeTimers();
+    title = 'Write the README';
+    act(() => streams.at(-1)!.emit('task', '{"type":"task","taskId":1}'));
+    await act(async () => vi.advanceTimersByTime(500));
+    expect(container.textContent).toContain('Write the README');
+  });
+
+  it('keeps the board while the event stream retries after a network failure', async () => {
+    locked = true;
+    await act(async () => streams.at(-1)!.fail(0));
+    expect(container.textContent).toContain('Write the docs');
+  });
+
+  it('reopens the event stream later when it is refused but the server lets the board in', async () => {
+    vi.useFakeTimers();
+    await act(async () => streams.at(-1)!.fail(2));
+    await act(async () => vi.advanceTimersByTime(3000));
+    expect(streams.length).toBe(2);
   });
 });
