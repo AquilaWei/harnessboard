@@ -91,6 +91,18 @@ describe('loadConfig', () => {
     );
   });
 
+  it('allows no remote hosts by default', () => {
+    expect(loadConfig({ env: {}, configFile: missing }).remoteHosts).toEqual([]);
+  });
+
+  it('rejects remote hosts that are not a list of host names', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ remoteHosts: 'box.tail1234.ts.net' }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      'config remoteHosts must be a list of host names',
+    );
+  });
+
   it('reports which config file has invalid JSON', () => {
     const file = path.join(tempDir('cfg'), 'config.json');
     writeFileSync(file, '{ nope');

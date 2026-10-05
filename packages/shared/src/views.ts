@@ -85,6 +85,17 @@ export interface Settings {
   allowedTools: string[];
   /** Files with the rules every reviewer checks the work against; `~` is the home folder. */
   reviewGuidelines: string[];
+  /** Host names a paired device may reach the board through; empty for loopback only. */
+  remoteHosts: string[];
+}
+
+/** A phone or other remote device paired with the board. */
+export interface Device {
+  id: number;
+  name: string;
+  createdAt: number;
+  /** Time of the device's last request, or of pairing before it made one. */
+  lastSeenAt: number;
 }
 
 /** Body of `POST /api/tasks`. */

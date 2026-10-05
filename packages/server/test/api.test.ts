@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
@@ -70,6 +70,37 @@ describe('localOnly', () => {
   it('allows reads from loopback without the client header', async () => {
     const res = await app.request('/api/tasks', { headers: local });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('settings API', () => {
+  it('returns the remote hosts that PUT /settings saved', async () => {
+    const put = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: '1' },
+      body: JSON.stringify({ remoteHosts: ['box.tail1234.ts.net'] }),
+    });
+    expect(put.status).toBe(200);
+    const res = await app.request('/api/settings', { headers: local });
+    expect(((await res.json()) as { remoteHosts: string[] }).remoteHosts).toEqual([
+      'box.tail1234.ts.net',
+    ]);
+  });
+
+  it('writes the remote hosts to the settings file', async () => {
+    const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-settings-'));
+    const settingsFile = path.join(dir, 'config.json');
+    const saving = Harness.open({ ...defaultConfig({}), dataDir: dir }, { settingsFile });
+    const api = new Hono().route('/api', createApi(saving));
+    await api.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ remoteHosts: ['box.tail1234.ts.net'] }),
+    });
+    saving.store.close();
+    expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({
+      remoteHosts: ['box.tail1234.ts.net'],
+    });
   });
 });
 

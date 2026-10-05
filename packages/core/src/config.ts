@@ -42,6 +42,11 @@ export interface HarnessConfig {
    * work against. Read at each review, so edits apply to the next one; `~` is the home folder.
    */
   reviewGuidelines: string[];
+  /**
+   * Host names (for example a Tailscale `*.ts.net` name) a paired device may reach the board
+   * through. Empty means the board answers loopback requests only.
+   */
+  remoteHosts: string[];
 }
 
 /** Settings the web UI may change at runtime; they are saved to the user config file. */
@@ -53,6 +58,7 @@ export type EditableSettings = Pick<
   | 'defaultReviewer'
   | 'allowedTools'
   | 'reviewGuidelines'
+  | 'remoteHosts'
 >;
 export const EDITABLE_SETTINGS = [
   'maxConcurrent',
@@ -61,6 +67,7 @@ export const EDITABLE_SETTINGS = [
   'defaultReviewer',
   'allowedTools',
   'reviewGuidelines',
+  'remoteHosts',
 ] as const;
 
 /** Profile every config has; tasks use it unless they name another implementer. */
@@ -94,6 +101,7 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     defaultContextPolicy: { size: 'medium' },
     allowedTools: [],
     reviewGuidelines: [],
+    remoteHosts: [],
   };
 }
 
@@ -208,6 +216,12 @@ export function validate(config: HarnessConfig): void {
     !config.reviewGuidelines.every((f) => typeof f === 'string' && f.trim() !== '')
   ) {
     throw new Error('config reviewGuidelines must be a list of file paths');
+  }
+  if (
+    !Array.isArray(config.remoteHosts) ||
+    !config.remoteHosts.every((h) => typeof h === 'string' && h.trim() !== '')
+  ) {
+    throw new Error('config remoteHosts must be a list of host names');
   }
   if (!config.agents[DEFAULT_AGENT]) {
     throw new Error(`config agents must include "${DEFAULT_AGENT}"`);

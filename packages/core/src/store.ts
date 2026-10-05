@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   AgentRole,
   ContextPolicy,
+  Device,
   PermissionPolicy,
   Session,
   SessionEndReason,
@@ -75,6 +77,14 @@ const MIGRATIONS = [
   `ALTER TABLE tasks ADD COLUMN confirm_plan INTEGER NOT NULL DEFAULT 0;`,
   `CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);`,
   `ALTER TABLE tasks ADD COLUMN acceptance TEXT;`,
+  // AUTOINCREMENT so a revoked device's id never names a newer device in a stale list.
+  `CREATE TABLE devices (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     name TEXT NOT NULL,
+     token_hash TEXT NOT NULL UNIQUE,
+     created_at INTEGER NOT NULL,
+     last_seen_at INTEGER NOT NULL
+   );`,
 ];
 
 /**
@@ -331,6 +341,40 @@ export class Store {
   }
 
   /**
+   * Registers a paired device. Only the SHA-256 of `token` is kept, so a copy of the
+   * database does not let anyone sign in as the device. Throws if the token is already used.
+   */
+  addDevice(name: string, token: string, now = Date.now()): Device {
+    const result = this.db
+      .prepare(
+        'INSERT INTO devices (name, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?)',
+      )
+      .run(name, hashToken(token), now, now);
+    return toDevice(
+      this.db.prepare('SELECT * FROM devices WHERE id = ?').get(Number(result.lastInsertRowid))!,
+    );
+  }
+
+  /** The device a cookie token belongs to; undefined for an unknown or revoked token. */
+  findDeviceByToken(token: string): Device | undefined {
+    const row = this.db.prepare('SELECT * FROM devices WHERE token_hash = ?').get(hashToken(token));
+    return row ? toDevice(row) : undefined;
+  }
+
+  listDevices(): Device[] {
+    return this.db.prepare('SELECT * FROM devices ORDER BY id').all().map(toDevice);
+  }
+
+  /** Deletes the device, so its token stops working at once. False when there was none. */
+  revokeDevice(id: number): boolean {
+    return Number(this.db.prepare('DELETE FROM devices WHERE id = ?').run(id).changes) > 0;
+  }
+
+  touchDevice(id: number, now = Date.now()): void {
+    this.db.prepare('UPDATE devices SET last_seen_at = ? WHERE id = ?').run(now, id);
+  }
+
+  /**
    * Ids are never reused, even after the newest task is deleted: its branch is kept and is
    * named after the id, so a new task with the same id could collide with it.
    */
@@ -400,6 +444,19 @@ function toSession(row: Row): Session {
     contextTokens: Number(row.context_tokens),
     contextWindow: row.context_window == null ? null : Number(row.context_window),
   };
+}
+
+function toDevice(row: Row): Device {
+  return {
+    id: Number(row.id),
+    name: String(row.name),
+    createdAt: Number(row.created_at),
+    lastSeenAt: Number(row.last_seen_at),
+  };
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 function toEvent(row: Row): StoredEvent {

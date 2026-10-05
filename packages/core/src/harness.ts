@@ -341,6 +341,7 @@ export class Harness {
       this.config;
     const allowedTools = [...this.config.allowedTools];
     const reviewGuidelines = [...this.config.reviewGuidelines];
+    const remoteHosts = [...this.config.remoteHosts];
     return {
       maxConcurrent,
       quotaPauseUtilization,
@@ -348,6 +349,7 @@ export class Harness {
       defaultReviewer,
       allowedTools,
       reviewGuidelines,
+      remoteHosts,
     };
   }
 

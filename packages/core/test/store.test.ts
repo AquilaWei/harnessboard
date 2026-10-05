@@ -135,7 +135,7 @@ describe('Store', () => {
     first.close();
     const db = new DatabaseSync(file);
     db.exec(
-      `DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
+      `DROP TABLE devices; DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
        ALTER TABLE tasks DROP COLUMN confirm_plan; PRAGMA user_version = 3;`,
     );
     db.close();
@@ -154,7 +154,9 @@ describe('Store', () => {
     const { id } = first.createTask(newTask);
     first.close();
     const db = new DatabaseSync(file);
-    db.exec(`ALTER TABLE tasks DROP COLUMN acceptance; PRAGMA user_version = 5;`);
+    db.exec(
+      `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN acceptance; PRAGMA user_version = 5;`,
+    );
     db.close();
     expect(new Store(file).getTask(id)!.acceptance).toBeNull();
   });
@@ -164,5 +166,82 @@ describe('Store', () => {
     const { id } = store.createTask(newTask);
     const permission = { allowedTools: ['Bash(npm test)'], skipPermissions: false };
     expect(store.updateTask(id, { permission }).permission).toEqual(permission);
+  });
+});
+
+describe('Store devices', () => {
+  it('finds a device by the token it was added with', () => {
+    const store = new Store(':memory:');
+    store.addDevice('Pixel', 'token-one', 1000);
+    expect(store.findDeviceByToken('token-one')).toEqual({
+      id: 1,
+      name: 'Pixel',
+      createdAt: 1000,
+      lastSeenAt: 1000,
+    });
+  });
+
+  it('finds no device for an unknown token', () => {
+    const store = new Store(':memory:');
+    store.addDevice('Pixel', 'token-one', 1000);
+    expect(store.findDeviceByToken('token-two')).toBeUndefined();
+  });
+
+  it('stores only a hash of the token', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const store = new Store(file);
+    store.addDevice('Pixel', 'raw-device-token', 1000);
+    store.close();
+    const db = new DatabaseSync(file);
+    const rows = JSON.stringify(db.prepare('SELECT * FROM devices').all());
+    db.close();
+    expect(rows).not.toContain('raw-device-token');
+  });
+
+  it('lists devices in the order they were paired', () => {
+    const store = new Store(':memory:');
+    store.addDevice('Pixel', 'token-one', 1000);
+    store.addDevice('iPad', 'token-two', 2000);
+    expect(store.listDevices().map((d) => d.name)).toEqual(['Pixel', 'iPad']);
+  });
+
+  it('no longer finds a revoked device by its token', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.revokeDevice(id);
+    expect(store.findDeviceByToken('token-one')).toBeUndefined();
+  });
+
+  it('reports that revoking an unknown device changed nothing', () => {
+    const store = new Store(':memory:');
+    expect(store.revokeDevice(7)).toBe(false);
+  });
+
+  it('does not give a new device the id of a revoked one', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.revokeDevice(id);
+    expect(store.addDevice('iPad', 'token-two', 2000).id).toBe(2);
+  });
+
+  it('records when a device was last seen', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.touchDevice(id, 5000);
+    expect(store.findDeviceByToken('token-one')!.lastSeenAt).toBe(5000);
+  });
+
+  it('adds the devices table to a database from before phone access', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    const { id } = first.createTask(newTask);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(`DROP TABLE devices; PRAGMA user_version = 6;`);
+    db.close();
+    const store = new Store(file);
+    store.addDevice('Pixel', 'token-one', 1000);
+    expect(store.listDevices().map((d) => d.name)).toEqual(['Pixel']);
+    expect(store.getTask(id)!.title).toBe('t');
   });
 });
