@@ -41,6 +41,8 @@ let locked = false;
 let reauth = false;
 /** The title `/api/tasks` answers with, changed by a test to see the board reload. */
 let title = 'Write the docs';
+/** The status `/api/tasks` answers with. */
+let status = 'backlog';
 const server = (url: string) => {
   // Pairing and creating the passkey, as a phone that opened the pairing address does them.
   if (url === '/api/pair') return Response.json({ id: 1, name: 'Pixel 9' }, { status: 201 });
@@ -62,7 +64,9 @@ const server = (url: string) => {
     return new Response('{"error":"confirm with your passkey first","reauth":true}', {
       status: 401,
     });
-  if (url === '/api/tasks') return Response.json([{ ...task, title }]);
+  if (url === '/api/tasks') return Response.json([{ ...task, title, status }]);
+  // The task panel's event and timeline lists, empty; its other reads stay null (loading).
+  if (/^\/api\/tasks\/1\/(events|timeline)\b/.test(url)) return Response.json([]);
   if (url === '/api/version') return Response.json({ version: '0.0.0' });
   return Response.json(null);
 };
@@ -111,6 +115,7 @@ beforeEach(async () => {
   locked = false;
   reauth = false;
   title = 'Write the docs';
+  status = 'backlog';
   streams = [];
   holding = [];
   held = [];
@@ -317,5 +322,47 @@ describe('App', () => {
     await act(async () => streams.at(-1)!.fail(2));
     await act(async () => vi.advanceTimersByTime(3000));
     expect(streams.length).toBe(2);
+  });
+
+  it('opens a task tapped in a push on the tab for its status', async () => {
+    status = 'review';
+    history.replaceState(null, '', '/#task=1');
+    await reopen();
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+      'Changes',
+    );
+  });
+
+  it('clears a tapped push from the address once the board reads it', async () => {
+    history.replaceState(null, '', '/#task=1');
+    await reopen();
+    expect(location.hash).toBe('');
+  });
+
+  it('opens a task tapped in a push once a locked phone is unlocked', async () => {
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
+    webauthn.startAuthentication.mockResolvedValueOnce({ id: 'cred' });
+    locked = true;
+    status = 'review';
+    history.replaceState(null, '', '/#task=1');
+    await reopen();
+    await act(async () => button('Unlock').click());
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+      'Changes',
+    );
+  });
+
+  it('opens a task when the service worker asks the open board to', async () => {
+    const worker = new EventTarget();
+    Object.defineProperty(navigator, 'serviceWorker', { value: worker, configurable: true });
+    await reopen();
+    status = 'review';
+    await act(async () => {
+      worker.dispatchEvent(new MessageEvent('message', { data: { type: 'open-task', taskId: 1 } }));
+    });
+    delete (navigator as { serviceWorker?: unknown }).serviceWorker;
+    expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
+      'Changes',
+    );
   });
 });

@@ -29,6 +29,8 @@ import type {
   TimelineEntry,
   WorktreeDiff,
   PasskeySession,
+  PushKey,
+  PushSubscriptionInfo,
 } from '@harnessboard/shared';
 import type {
   AuthenticationResponseJSON,
@@ -253,4 +255,8 @@ export const api = {
   passkeyChallenge: () => send<PublicKeyCredentialRequestOptionsJSON>('POST', '/auth/challenge'),
   verifyPasskey: (response: AuthenticationResponseJSON) =>
     send<PasskeySession>('POST', '/auth/verify', response),
+  pushKey: () => request<PushKey>('/push/key'),
+  subscribePush: (subscription: PushSubscriptionInfo) =>
+    send<{ ok: true }>('POST', '/push/subscribe', subscription),
+  unsubscribePush: () => send<{ ok: true }>('DELETE', '/push/subscribe'),
 };

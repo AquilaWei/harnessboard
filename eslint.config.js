@@ -13,4 +13,9 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
+  {
+    // The service worker and the classic script it loads with `importScripts`.
+    files: ['packages/web/public/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: globals.serviceworker },
+  },
 );

@@ -413,9 +413,15 @@ nothing is opened to the internet.
    The code works once, for 5 minutes. Give the phone a name, then tap **Create passkey**:
    the phone asks for your fingerprint, face or screen lock. The phone is paired only once
    the passkey is made.
-5. **Add to Home Screen** (optional): in Chrome's menu, **Add to Home Screen** (on Safari,
-   in the Share menu). The Harnessboard icon then opens the board full screen, without the
-   address bar.
+5. **Add to Home Screen** (optional on Android, needed for push on an iPhone): in Chrome's
+   menu, **Add to Home Screen** (on Safari, in the Share menu). The Harnessboard icon then
+   opens the board full screen, without the address bar.
+6. **Turn on push notifications** (optional): on the phone, open **Settings** and switch on
+   **Notify me when a task needs me**, then allow notifications. The phone gets a push when
+   a task waits for permission, approval or review, or fails, even with the board closed.
+   Tapping it opens the task on the tab that needs you (after unlocking, if the board was
+   locked). A push carries only the task's number, title and status, never its changes or
+   chat. Switching it off, or revoking the phone, stops the pushes.
 
 **How the passkey protects the board**
 
@@ -441,8 +447,8 @@ nothing is opened to the internet.
 
 - **The computer must be on** and Harnessboard running (desktop app or `hb serve`). A
   sleeping computer cannot be reached.
-- **Push notifications** to the phone are planned; on an iPhone they will need iOS 16.4 or
-  later and the board added to the Home Screen.
+- **Push notifications on an iPhone** need iOS 16.4 or later and the board opened from the
+  Home Screen; in Safari itself the switch says push is not available.
 - Tailscale Funnel (the public internet) is always refused. Another HTTPS reverse proxy
   works too: add its host name as a remote host.
 

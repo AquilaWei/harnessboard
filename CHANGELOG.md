@@ -31,6 +31,11 @@ are test versions that have not been accepted on real machines yet.
   changes, which is easier to read on a phone.
 - **Add the board to a phone's Home Screen.** It gets the Harnessboard icon and opens full
   screen, without the browser's address bar.
+- **Push notifications to a paired phone.** Switching on "Notify me when a task needs me" in
+  the phone's Settings sends a push whenever a task waits for permission, approval or review,
+  or fails, even while the board is closed. Tapping it opens the task on the tab that needs
+  you. A push holds only the task's number, title and status. On an iPhone this needs iOS
+  16.4 or later and the board added to the Home Screen.
 
 ## 0.0.21 - 2026-10-04
 

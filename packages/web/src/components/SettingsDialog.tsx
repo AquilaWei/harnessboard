@@ -10,6 +10,7 @@ import { LANGUAGES, setLanguage } from '../i18n';
 import { parseRules } from '../rules';
 import type { Language } from '../i18n';
 import { notificationPermission, notificationsEnabled, setNotifications } from '../notify';
+import { currentNotifyMode } from '../push';
 import { THEMES, applyTheme, savedTheme } from '../theme';
 import type { Theme } from '../theme';
 
@@ -34,6 +35,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [notify, setNotify] = useState(notificationsEnabled);
   const [permission, setPermission] = useState(notificationPermission);
+  const notifyMode = currentNotifyMode();
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -228,23 +230,30 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           <input
             type="checkbox"
             checked={notify}
-            disabled={permission === null}
+            disabled={permission === null || notifyMode === 'unsupported'}
             onChange={(e) => {
               const on = e.target.checked;
-              void setNotifications(on).then((granted) => {
-                setPermission(granted);
-                setNotify(on && granted === 'granted');
-              });
+              setNotifications(on, notifyMode).then(
+                (granted) => {
+                  setPermission(granted);
+                  setNotify(on && granted === 'granted');
+                },
+                (err: Error) => setError(err.message),
+              );
             }}
           />
           <span>
             {t('notify.label')}
             <small className="hint">
-              {permission === null
-                ? t('notify.unsupported')
-                : permission === 'denied'
-                  ? t('notify.blocked')
-                  : t('notify.hint')}
+              {notifyMode === 'unsupported'
+                ? t('notify.pushUnsupported')
+                : permission === null
+                  ? t('notify.unsupported')
+                  : permission === 'denied'
+                    ? t('notify.blocked')
+                    : notifyMode === 'push'
+                      ? t('notify.pushHint')
+                      : t('notify.hint')}
             </small>
           </span>
         </label>

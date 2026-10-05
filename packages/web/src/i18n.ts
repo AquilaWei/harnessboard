@@ -44,6 +44,10 @@ export const en = {
     blocked:
       'This browser blocks notifications from the board. Allow them in the site settings for this address, then switch this on again.',
     unsupported: 'This browser does not support notifications.',
+    pushHint:
+      'A push notification to this phone when a task waits for permission, approval or review, or fails, even while the board is closed.',
+    pushUnsupported:
+      'This browser cannot receive push notifications. On an iPhone, add the board to the Home Screen first (iOS 16.4 or later) and open it from there.',
   },
   stage: {
     draft: 'Draft',
@@ -580,6 +584,9 @@ export const zhTW: typeof en = {
     hint: '看板開著但不在前景時，任務等你允許、核准、審查，或失敗，就由這個瀏覽器跳出桌面通知。',
     blocked: '這個瀏覽器封鎖了看板的通知。請在這個網址的網站設定中允許通知，再重新開啟這個選項。',
     unsupported: '這個瀏覽器不支援通知。',
+    pushHint: '任務等你允許、核准、審查，或失敗時，推播通知到這支手機，看板關著也會收到。',
+    pushUnsupported:
+      '這個瀏覽器收不到推播通知。iPhone 要先把看板加到主畫面（iOS 16.4 以上），再從主畫面打開。',
   },
   stage: {
     draft: '草稿',

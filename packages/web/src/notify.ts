@@ -2,6 +2,8 @@
 import { NOTIFY_STATUSES } from '@harnessboard/shared';
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
 import type { DrawerTab } from './components/TaskDrawer';
+import { currentNotifyMode, disablePush, enablePush } from './push';
+import type { NotifyMode } from './push';
 
 const STORAGE_KEY = 'harnessboard.notify';
 
@@ -46,14 +48,21 @@ export function notificationsEnabled(): boolean {
 
 /**
  * Switches notifications on or off for this browser. Switching on asks the browser for
- * permission, so it must run from a click; it returns the permission the browser gave.
+ * permission, so it must run from a click; it returns the permission the browser gave. In
+ * `push` mode (a board opened remotely) it also subscribes this device to push, or ends its
+ * subscription, and fails when that does; the choice is then left as it was.
  */
-export async function setNotifications(on: boolean): Promise<NotificationPermission | null> {
+export async function setNotifications(
+  on: boolean,
+  mode: NotifyMode = currentNotifyMode(),
+): Promise<NotificationPermission | null> {
+  let permission = notificationPermission();
+  if (on && permission !== null) permission = await Notification.requestPermission();
+  if (mode === 'push') await (on && permission === 'granted' ? enablePush() : disablePush());
   try {
     localStorage.setItem(STORAGE_KEY, on ? 'on' : 'off');
   } catch {
     // not persisted; the choice is lost on reload
   }
-  if (!on || notificationPermission() === null) return notificationPermission();
-  return Notification.requestPermission();
+  return permission;
 }

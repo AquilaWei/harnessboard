@@ -1,8 +1,8 @@
 # Phone access
 
-Status: M0 done. M1, M2 and M3 (phone layout and PWA) are built and waiting for the
-[real-phone acceptance](#real-phone-acceptance-m1-m2-and-m3); 0.1.0 is released after it
-passes. M4 has its push backend (F11) and trigger (F12); the service worker is not built yet. Decisions dated 2026-10-04.
+Status: M0 done. M1, M2, M3 (phone layout and PWA) and M4 (Web Push) are built and waiting
+for the [real-phone acceptance](#real-phone-acceptance-m1-to-m4); 0.1.0 is released after
+M1 and M2 pass. Decisions dated 2026-10-04.
 
 ## Goal
 
@@ -237,7 +237,7 @@ and no logic.
   - finish with `tailscale serve reset`.
   - Ask the user before each real-phone session.
 
-### Real-phone acceptance (M1, M2 and M3)
+### Real-phone acceptance (M1 to M4)
 
 Run by the user before 0.1.0. Tick each step; a step that fails stops the release and goes into
 this file with what the phone showed. The phone is on mobile data, not the home Wi-Fi.
@@ -313,11 +313,30 @@ this file with what the phone showed. The phone is on mobile data, not the home 
     (white H on blue) on the Home Screen. Open it. Expected: the board opens without the address
     bar, the status bar is blue, and the board asks to unlock as on any new visit.
 
+**M4: push notifications** (from the Home Screen icon of step 24, unlocked)
+
+25. Open **Settings** on the phone. Expected: the hint under **Notify me when a task needs me**
+    says pushes arrive even while the board is closed. Switch it on and allow notifications.
+    Expected: no error; the switch stays on after closing and reopening Settings.
+26. Close the board on the phone (swipe the app away) and lock the screen. On the computer,
+    start a task that will ask for permission, or move one to Review. Expected: within a few
+    seconds the phone shows "#<id> <title>" with "Needs permission" or "Ready for review" (in
+    Chinese if the phone's language is Chinese).
+27. Tap the notification. Expected: the board opens, asks to unlock, and then opens that task
+    on the right tab (Changes for Review, Timeline for a permission request).
+28. With the board open on the phone but another app in front, make another task wait. Tap the
+    push. Expected: the board comes to the front and opens the task without asking to unlock
+    again (no reload).
+29. Switch the setting off, then make a task wait. Expected: no push. Switch it on again, then
+    **Revoke** the phone on the computer and make a task wait. Expected: no push.
+30. Optional, on an iPhone (iOS 16.4+): in Safari the switch is greyed out and says to add the
+    board to the Home Screen; from the Home Screen icon, steps 25–27 work the same.
+
 **Teardown**
 
-25. Stop the scratch server, then run `tailscale serve reset` and check `tailscale serve status`
+31. Stop the scratch server, then run `tailscale serve reset` and check `tailscale serve status`
     is empty.
-26. Remove the scratch data: `rm -rf "$HARNESSBOARD_HOME"`. Delete the test passkey on the phone
+32. Remove the scratch data: `rm -rf "$HARNESSBOARD_HOME"`. Delete the test passkey on the phone
     (Google Password Manager → passkeys) so it does not pile up.
 
 ## Limits (for the README)

@@ -25,6 +25,7 @@ import { useLiveEvents, useThrottled } from './live';
 import { newlyWaiting, notificationsEnabled, openTab } from './notify';
 import { checkPasskey, passkeysAvailable } from './passkey';
 import { pairCodeFromHash } from './phone';
+import { currentNotifyMode, taskFromHash, taskFromMessage } from './push';
 
 const ACTIONS: Record<TaskAction, (id: number) => Promise<unknown>> = {
   queue: api.queue,
@@ -93,7 +94,8 @@ export function App() {
     lastStatuses.current = new Map(nextTasks.map((task) => [task.id, task.status]));
     // While you are looking at the board the card itself tells you.
     const looking = document.visibilityState === 'visible' && document.hasFocus();
-    if (looking || !notificationsEnabled()) return;
+    // A board opened remotely is notified by push instead, which also reaches a closed board.
+    if (looking || !notificationsEnabled() || currentNotifyMode() !== 'browser') return;
     for (const task of waiting) {
       const notification = new Notification(`#${task.id} ${task.title}`, {
         body: descriptionText(task, t, i18n.language),
@@ -107,10 +109,25 @@ export function App() {
     }
   };
 
+  // A tapped push asks for its task (public/sw.js): a new board by `#task=<id>`, an open one by
+  // a message. It is opened by the next load that gets the tasks, which for a locked phone is
+  // the one after unlocking, because the tab to open depends on the task.
+  const pendingTask = useRef(taskFromHash(window.location.hash));
+  const openPendingTask = (nextTasks: TaskView[]) => {
+    const task = nextTasks.find((candidate) => candidate.id === pendingTask.current);
+    pendingTask.current = null;
+    if (task) setSelected({ id: task.id, tab: openTab(task) });
+  };
+  useEffect(() => {
+    if (taskFromHash(location.hash) !== null)
+      history.replaceState(null, '', location.pathname + location.search);
+  }, []);
+
   const load = useCallback(async () => {
     try {
       const [nextTasks, nextStatus] = await Promise.all([api.tasks(), api.status()]);
       setTasks(nextTasks);
+      if (pendingTask.current !== null) openPendingTask(nextTasks);
       notifyWaiting.current(nextTasks);
       setStatus(nextStatus);
     } catch (err) {
@@ -130,6 +147,19 @@ export function App() {
   }, [load, showError]);
 
   useEffect(loadAll, [loadAll]);
+
+  useEffect(() => {
+    const worker = 'serviceWorker' in navigator ? navigator.serviceWorker : null;
+    if (!worker) return;
+    const onMessage = (event: MessageEvent) => {
+      const id = taskFromMessage(event.data);
+      if (id === null) return;
+      pendingTask.current = id;
+      void load();
+    };
+    worker.addEventListener('message', onMessage);
+    return () => worker.removeEventListener('message', onMessage);
+  }, [load]);
 
   const refresh = useThrottled(() => void load(), 500);
   useLiveEvents((event) => {
