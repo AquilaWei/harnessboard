@@ -6,6 +6,7 @@ import type {
   Session,
   Task,
   TaskMode,
+  TaskStatus,
 } from './task.js';
 import type { Feature, LoopProgress } from './loop.js';
 import type { ReviewRecord, TaskActivity } from './review.js';
@@ -144,6 +145,16 @@ export interface PushSubscriptionInfo {
   /** The push service URL the board posts to; always https. */
   endpoint: string;
   keys: { p256dh: string; auth: string };
+}
+
+/**
+ * What a push to a paired phone carries. It passes through the browser vendor's push service, so
+ * it holds only what the notification shows: never the diff, the chat or the prompt.
+ */
+export interface PushPayload {
+  taskId: number;
+  title: string;
+  status: TaskStatus;
 }
 
 /** Body of `POST /api/tasks`. */

@@ -24,8 +24,8 @@ import type { AccessEnv } from './access.js';
 import { Pairing, newDeviceToken } from './pairing.js';
 import { Passkeys, webauthnVerifier } from './passkey.js';
 import type { Party, PasskeyResult, PasskeyVerifier } from './passkey.js';
-import { loadVapidKeys, parseSubscription } from './push.js';
-import type { VapidKeys } from './push.js';
+import { PushNotifier, loadVapidKeys, parseSubscription, webPushSender } from './push.js';
+import type { PushSender, VapidKeys } from './push.js';
 import type { Sessions } from './session.js';
 import { chatTranscript, latestSnapshot, planView, taskView, timeline } from './views.js';
 
@@ -52,6 +52,8 @@ export interface ApiDeps {
   detectTailscale: () => Promise<string | null>;
   /** Checks passkeys; tests fake the phone's signed responses. */
   verifier: PasskeyVerifier;
+  /** Delivers pushes to paired phones; tests record them instead. */
+  pushSender: PushSender;
 }
 
 /**
@@ -67,6 +69,7 @@ export function createApi(
     now = Date.now,
     detectTailscale = () => tailscaleHost(),
     verifier = webauthnVerifier,
+    pushSender = webPushSender,
   } = deps;
   const app = new Hono<AccessEnv>();
   const pairing = new Pairing(now);
@@ -154,9 +157,12 @@ export function createApi(
   // Web Push for a paired phone. The keys are made on the first request, not at startup, so a
   // board nobody opens from a phone never writes them.
   let vapid: VapidKeys | undefined;
-  app.get('/push/key', (c) => {
-    vapid ??= loadVapidKeys(harness.config.dataDir);
-    return c.json({ publicKey: vapid.publicKey } satisfies PushKey);
+  const vapidKeys = () => (vapid ??= loadVapidKeys(harness.config.dataDir));
+  app.get('/push/key', (c) => c.json({ publicKey: vapidKeys().publicKey } satisfies PushKey));
+  // The listener is never removed: the API lives as long as the harness.
+  const notifier = new PushNotifier(harness.store, pushSender, vapidKeys);
+  harness.subscribe((event) => {
+    notifier.handle(event).catch((err: unknown) => console.error('harnessboard: push failed', err));
   });
   app.post('/push/subscribe', async (c) => {
     const device = remoteDevice(c, 'push');

@@ -2,8 +2,7 @@
 
 Status: M0 done. M1, M2 and M3 (phone layout and PWA) are built and waiting for the
 [real-phone acceptance](#real-phone-acceptance-m1-m2-and-m3); 0.1.0 is released after it
-passes. M4 has its push backend (F11); the push trigger and the service worker are not built
-yet. Decisions dated 2026-10-04.
+passes. M4 has its push backend (F11) and trigger (F12); the service worker is not built yet. Decisions dated 2026-10-04.
 
 ## Goal
 

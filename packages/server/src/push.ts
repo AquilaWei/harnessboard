@@ -2,7 +2,15 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import type { PushSubscriptionInfo } from '@harnessboard/shared';
+import webpush from 'web-push';
+import type { Store } from '@harnessboard/core';
+import { NOTIFY_STATUSES } from '@harnessboard/shared';
+import type {
+  HarnessEvent,
+  PushPayload,
+  PushSubscriptionInfo,
+  TaskStatus,
+} from '@harnessboard/shared';
 
 /** File in the data folder (`HARNESSBOARD_HOME` when set) that holds the board's VAPID keys. */
 export const VAPID_FILE = 'vapid.json';
@@ -69,4 +77,94 @@ export function parseSubscription(body: unknown): PushSubscriptionInfo | null {
 
 function isKey(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_KEY;
+}
+
+/**
+ * Who VAPID says is sending. Push services may use it to reach the sender about a problem; Apple's
+ * rejects a push without one.
+ */
+const VAPID_SUBJECT = 'https://github.com/AquilaWei/harnessboard';
+
+/** `gone`: the push service no longer knows the subscription (404 or 410), so drop it. */
+export type PushOutcome = 'sent' | 'gone';
+
+/** Delivers one push; `web-push` in production, a fake in tests. */
+export interface PushSender {
+  /** Rejects when the push service fails in any other way than reporting the subscription gone. */
+  send(subscription: PushSubscriptionInfo, payload: string, keys: VapidKeys): Promise<PushOutcome>;
+}
+
+export const webPushSender: PushSender = {
+  async send(subscription, payload, keys) {
+    try {
+      await webpush.sendNotification(subscription, payload, {
+        vapidDetails: { subject: VAPID_SUBJECT, ...keys },
+      });
+      return 'sent';
+    } catch (err) {
+      if (isGone(err)) return 'gone';
+      throw err;
+    }
+  },
+};
+
+/** Whether a `web-push` error means the push service has dropped the subscription. */
+export function isGone(err: unknown): boolean {
+  return err instanceof webpush.WebPushError && [404, 410].includes(err.statusCode);
+}
+
+/**
+ * Pushes to every subscribed phone when a task enters a status in `NOTIFY_STATUSES`. A task is
+ * pushed once per entry: a repeated event for the status it already has sends nothing, and tasks
+ * already waiting when the board starts are not pushed again.
+ */
+export class PushNotifier {
+  /** Last status seen per task, so only a change into a notify status pushes. */
+  private readonly statuses = new Map<number, string>();
+
+  /** `keys` is only called when there is a phone to push to. */
+  constructor(
+    private readonly store: Store,
+    private readonly sender: PushSender,
+    private readonly keys: () => VapidKeys,
+  ) {
+    for (const task of store.listTasks()) this.statuses.set(task.id, task.status);
+  }
+
+  /**
+   * Sends the pushes `event` calls for. Every phone is tried; rejects with an `AggregateError`
+   * of the sends that failed. A phone whose subscription is gone has it removed.
+   */
+  async handle(event: HarnessEvent): Promise<void> {
+    if (event.type === 'deleted') this.statuses.delete(event.taskId);
+    if (event.type !== 'task') return;
+    const previous = this.statuses.get(event.taskId);
+    this.statuses.set(event.taskId, event.status);
+    if (event.status === previous || !isNotifyStatus(event.status)) return;
+    const task = this.store.getTask(event.taskId);
+    const targets = this.store.listPushSubscriptions();
+    if (!task || targets.length === 0) return;
+    const payload: PushPayload = { taskId: task.id, title: task.title, status: event.status };
+    const json = JSON.stringify(payload);
+    const keys = this.keys();
+    const results = await Promise.allSettled(
+      targets.map(async ({ deviceId, subscription }) => {
+        if ((await this.sender.send(subscription, json, keys)) === 'gone') {
+          this.dropSubscription(deviceId, subscription.endpoint);
+        }
+      }),
+    );
+    const failures = results.flatMap((r) => (r.status === 'rejected' ? [r.reason] : []));
+    if (failures.length > 0) throw new AggregateError(failures, 'push failed');
+  }
+
+  /** Removes the subscription unless the phone subscribed again while the push was in flight. */
+  private dropSubscription(deviceId: number, endpoint: string): void {
+    const current = this.store.listPushSubscriptions().find((p) => p.deviceId === deviceId);
+    if (current?.subscription.endpoint === endpoint) this.store.setPushSubscription(deviceId, null);
+  }
+}
+
+function isNotifyStatus(status: string): status is TaskStatus {
+  return NOTIFY_STATUSES.has(status as TaskStatus);
 }

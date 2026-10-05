@@ -3,11 +3,14 @@ import { mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Harness, defaultConfig } from '@harnessboard/core';
+import webpush from 'web-push';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Harness, Store, defaultConfig } from '@harnessboard/core';
+import type { PushSubscriptionInfo } from '@harnessboard/shared';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
-import { loadVapidKeys, parseSubscription } from '../src/push.js';
+import { PushNotifier, isGone, loadVapidKeys, parseSubscription } from '../src/push.js';
+import type { PushOutcome, PushSender } from '../src/push.js';
 import { SESSION_HEADER, Sessions } from '../src/session.js';
 
 const PORT = 4999;
@@ -22,6 +25,7 @@ let home: string;
 let harness: Harness;
 let app: Hono;
 let device: Record<string, string>;
+let pushed: FakeSender;
 
 const tempHome = () => mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-push-'));
 
@@ -45,7 +49,8 @@ beforeEach(() => {
     '*',
     access(harness, sessions, () => START),
   );
-  app.route('/api', createApi(harness, sessions, { now: () => START }));
+  pushed = new FakeSender();
+  app.route('/api', createApi(harness, sessions, { now: () => START, pushSender: pushed }));
 });
 
 afterEach(() => harness.store.close());
@@ -82,6 +87,23 @@ describe('VAPID keys', () => {
       Buffer.from(keys.publicKey, 'base64url').length,
       Buffer.from(keys.privateKey, 'base64url').length,
     ]).toEqual([65, 32]);
+  });
+
+  it('makes keys web-push accepts for signing a push', () => {
+    const vapid = loadVapidKeys(tempHome());
+    const request = webpush.generateRequestDetails(
+      {
+        endpoint: 'https://push.example/abc',
+        keys: {
+          p256dh:
+            'BPKJThHBK6vQ0eAiMjOrUCheJtRXYZDFpeD3SHrnZZiWsRURI8Tz-LQrGyqLh49qUVIzRoWfm1Hn1wPoXOAdUEs',
+          auth: 'AAAAAAAAAAAAAAAAAAAAAA',
+        },
+      },
+      'hello',
+      { vapidDetails: { subject: 'https://github.com/AquilaWei/harnessboard', ...vapid } },
+    );
+    expect(request.headers.Authorization).toMatch(/^vapid t=/);
   });
 
   it('makes different keys in different folders', () => {
@@ -191,5 +213,203 @@ describe('push API', () => {
     await send('POST', '/api/push/subscribe', device, subscription);
     await send('DELETE', '/api/devices/1', { host: `127.0.0.1:${PORT}` });
     expect(harness.store.listPushSubscriptions()).toEqual([]);
+  });
+});
+
+const newTask = {
+  title: 'Fix the login page',
+  prompt: 'secret prompt text',
+  repoPath: '/repo',
+  baseRef: 'main',
+  mode: 'single' as const,
+  verifyCommand: null,
+  acceptance: null,
+  confirmPlan: false,
+  agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
+  contextPolicy: { size: 'small' as const },
+  permission: { allowedTools: [], skipPermissions: false },
+};
+const keys = { publicKey: 'public', privateKey: 'private' };
+const phone = (endpoint: string) => ({ endpoint, keys: { p256dh: 'p', auth: 'a' } });
+
+/** Records every push; endpoints listed in `outcomes` answer with that outcome or error. */
+class FakeSender implements PushSender {
+  readonly sent: { endpoint: string; payload: string }[] = [];
+  constructor(private readonly outcomes: Record<string, PushOutcome | Error> = {}) {}
+  async send(subscription: PushSubscriptionInfo, payload: string) {
+    this.sent.push({ endpoint: subscription.endpoint, payload });
+    const outcome = this.outcomes[subscription.endpoint] ?? 'sent';
+    if (outcome instanceof Error) throw outcome;
+    return outcome;
+  }
+}
+
+describe('PushNotifier', () => {
+  let store: Store;
+  beforeEach(() => {
+    store = new Store(':memory:');
+    store.createTask(newTask);
+    store.setPushSubscription(store.addDevice('phone', 'token-1').id, phone('https://push/1'));
+    store.setPushSubscription(store.addDevice('tablet', 'token-2').id, phone('https://push/2'));
+  });
+  afterEach(() => store.close());
+
+  it('pushes once to each subscribed device when a task enters review', async () => {
+    const sender = new FakeSender();
+    await new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'review',
+    });
+    expect(sender.sent.map((s) => s.endpoint)).toEqual(['https://push/1', 'https://push/2']);
+  });
+
+  it('sends only the task id, title and status', async () => {
+    const sender = new FakeSender();
+    await new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'review',
+    });
+    expect(sender.sent[0]!.payload).toBe(
+      '{"taskId":1,"title":"Fix the login page","status":"review"}',
+    );
+  });
+
+  it('sends no second push for a repeated event with the same status', async () => {
+    const sender = new FakeSender();
+    const notifier = new PushNotifier(store, sender, () => keys);
+    await notifier.handle({ type: 'task', taskId: 1, status: 'review' });
+    await notifier.handle({ type: 'task', taskId: 1, status: 'review' });
+    expect(sender.sent).toHaveLength(2);
+  });
+
+  it('pushes again when the task comes back to review after running', async () => {
+    const sender = new FakeSender();
+    const notifier = new PushNotifier(store, sender, () => keys);
+    await notifier.handle({ type: 'task', taskId: 1, status: 'review' });
+    await notifier.handle({ type: 'task', taskId: 1, status: 'running' });
+    await notifier.handle({ type: 'task', taskId: 1, status: 'review' });
+    expect(sender.sent).toHaveLength(4);
+  });
+
+  it('does not push a task that was already in review when the board started', async () => {
+    store.updateTask(1, { status: 'review' });
+    const sender = new FakeSender();
+    await new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'review',
+    });
+    expect(sender.sent).toEqual([]);
+  });
+
+  it('does not push a status nobody needs to act on', async () => {
+    const sender = new FakeSender();
+    await new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'running',
+    });
+    expect(sender.sent).toEqual([]);
+  });
+
+  it('pushes nothing to a revoked device', async () => {
+    store.revokeDevice(1);
+    const sender = new FakeSender();
+    await new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'review',
+    });
+    expect(sender.sent.map((s) => s.endpoint)).toEqual(['https://push/2']);
+  });
+
+  it('deletes a subscription the push service reports gone', async () => {
+    const sender = new FakeSender({ 'https://push/1': 'gone' });
+    await new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'review',
+    });
+    expect(store.listPushSubscriptions()).toEqual([
+      { deviceId: 2, subscription: phone('https://push/2') },
+    ]);
+  });
+
+  it('keeps a subscription the phone replaced while the push was in flight', async () => {
+    const sender = new FakeSender({ 'https://push/1': 'gone' });
+    const send = sender.send.bind(sender);
+    sender.send = async (subscription, payload) => {
+      store.setPushSubscription(1, phone('https://push/1-new'));
+      return send(subscription, payload);
+    };
+    await new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'review',
+    });
+    expect(store.listPushSubscriptions()[0]).toEqual({
+      deviceId: 1,
+      subscription: phone('https://push/1-new'),
+    });
+  });
+
+  it('still pushes to the other devices when one push fails, then rejects', async () => {
+    const sender = new FakeSender({ 'https://push/1': new Error('push service down') });
+    const handled = new PushNotifier(store, sender, () => keys).handle({
+      type: 'task',
+      taskId: 1,
+      status: 'review',
+    });
+    await expect(handled).rejects.toThrow('push failed');
+    expect(sender.sent.map((s) => s.endpoint)).toEqual(['https://push/1', 'https://push/2']);
+  });
+
+  it('does not load the keys when no device is subscribed', async () => {
+    store.revokeDevice(1);
+    store.revokeDevice(2);
+    const loadKeys = () => {
+      throw new Error('keys loaded');
+    };
+    await expect(
+      new PushNotifier(store, new FakeSender(), loadKeys).handle({
+        type: 'task',
+        taskId: 1,
+        status: 'review',
+      }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('isGone', () => {
+  const pushError = (status: number) =>
+    new webpush.WebPushError('push refused', status, {}, '', 'https://push/1');
+
+  it('reads a 410 from the push service as a gone subscription', () => {
+    expect(isGone(pushError(410))).toBe(true);
+  });
+
+  it('reads a 404 from the push service as a gone subscription', () => {
+    expect(isGone(pushError(404))).toBe(true);
+  });
+
+  it('does not read a 429 from the push service as a gone subscription', () => {
+    expect(isGone(pushError(429))).toBe(false);
+  });
+
+  it('does not read a network error as a gone subscription', () => {
+    expect(isGone(new Error('ECONNRESET'))).toBe(false);
+  });
+});
+
+describe('push trigger in the API', () => {
+  it('pushes to a subscribed phone when the harness reports a task entering review', async () => {
+    harness.store.setPushSubscription(1, phone('https://push/1'));
+    const { id } = harness.store.createTask(newTask);
+    harness.store.updateTask(id, { status: 'review' });
+    // Any change the harness announces carries the task's status; this one is the simplest.
+    harness.setAutoApprove(id, true);
+    await vi.waitFor(() => expect(pushed.sent.map((s) => s.endpoint)).toEqual(['https://push/1']));
   });
 });
