@@ -63,6 +63,7 @@ export function FolderField({ value, onChange, recent }: Props) {
             onChange(path);
             setBrowsing(false);
           }}
+          onClose={() => setBrowsing(false)}
         />
       )}
     </div>
@@ -89,7 +90,14 @@ function FolderStatus({ info }: { info: FolderInfo | null }) {
   );
 }
 
-function FolderBrowser({ start, onPick }: { start: string; onPick: (path: string) => void }) {
+interface BrowserProps {
+  start: string;
+  onPick: (path: string) => void;
+  /** Closes without picking; needed at phone width, where the browser covers the field's button. */
+  onClose: () => void;
+}
+
+function FolderBrowser({ start, onPick, onClose }: BrowserProps) {
   const { t } = useTranslation();
   const [listing, setListing] = useState<FolderListing | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -140,6 +148,9 @@ function FolderBrowser({ start, onPick }: { start: string; onPick: (path: string
             <span className={listing.repoRoot ? 'ok-text' : 'hint'}>
               {listing.repoRoot ? `✓ ${t('folders.inRepo')}` : t('folders.pickHint')}
             </span>
+            <button type="button" className="btn small phone-only" onClick={onClose}>
+              {t('folders.closeBrowser')}
+            </button>
             <button
               type="button"
               className="btn primary small"

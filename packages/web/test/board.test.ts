@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
-import { dropAction, primaryAction, stageOf } from '../src/board';
+import { attentionTab, dropAction, groupByPhoneTab, primaryAction, stageOf } from '../src/board';
 
 const task = (status: TaskStatus) => ({ status }) as TaskView;
 
@@ -91,5 +91,59 @@ describe('a plan waiting for approval', () => {
 
   it('cannot be dragged back into progress', () => {
     expect(dropAction(task('awaiting_approval'), 'active')).toBeNull();
+  });
+});
+
+describe('groupByPhoneTab', () => {
+  const withId = (id: number, status: TaskStatus) => ({ id, status }) as TaskView;
+
+  it('puts a task waiting for permission under Waiting for you', () => {
+    expect(groupByPhoneTab([withId(1, 'awaiting_permission')]).waiting).toEqual([
+      withId(1, 'awaiting_permission'),
+    ]);
+  });
+
+  it('puts a draft under Waiting for you', () => {
+    expect(groupByPhoneTab([withId(1, 'backlog')]).waiting).toEqual([withId(1, 'backlog')]);
+  });
+
+  it('puts a quota-paused task under In progress', () => {
+    expect(groupByPhoneTab([withId(1, 'waiting_quota')]).active).toEqual([
+      withId(1, 'waiting_quota'),
+    ]);
+  });
+
+  it('puts a finished task to review under Review, not Waiting for you', () => {
+    expect(groupByPhoneTab([withId(1, 'review')])).toEqual({
+      waiting: [],
+      active: [],
+      review: [withId(1, 'review')],
+      done: [],
+    });
+  });
+
+  it('puts a done task under Done', () => {
+    expect(groupByPhoneTab([withId(1, 'done')]).done).toEqual([withId(1, 'done')]);
+  });
+
+  it('keeps the given order within a tab', () => {
+    expect(groupByPhoneTab([withId(1, 'failed'), withId(2, 'stopped')]).waiting).toEqual([
+      withId(1, 'failed'),
+      withId(2, 'stopped'),
+    ]);
+  });
+});
+
+describe('attentionTab', () => {
+  it('opens Review when the only other waiting tasks are drafts', () => {
+    expect(attentionTab([task('backlog'), task('review')])).toBe('review');
+  });
+
+  it('opens Waiting for you when a question is waiting', () => {
+    expect(attentionTab([task('awaiting_permission'), task('review')])).toBe('waiting');
+  });
+
+  it('opens Waiting for you when a task failed', () => {
+    expect(attentionTab([task('failed')])).toBe('waiting');
   });
 });

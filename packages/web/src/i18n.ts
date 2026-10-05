@@ -51,6 +51,18 @@ export const en = {
     attention: 'Needs you',
     done: 'Done',
   },
+  phoneTab: {
+    waiting: 'Waiting for you',
+    active: 'In progress',
+    review: 'Review',
+    done: 'Done',
+  },
+  phoneTabEmpty: {
+    waiting: 'Nothing is waiting for you.',
+    active: 'Nothing is running.',
+    review: 'Nothing to review.',
+    done: 'Finished tasks appear here.',
+  },
   stageEmpty: {
     draft: 'Tasks you have not started yet.',
     active: 'Nothing is running.',
@@ -366,6 +378,7 @@ export const en = {
   },
   noEvents: 'No output yet.',
   noDiff: 'No changes yet.',
+  filesOnly: 'Files only',
   untracked: 'Untracked files',
   loop: {
     badge: 'Loop',
@@ -573,6 +586,18 @@ export const zhTW: typeof en = {
     active: '進行中',
     attention: '需要你處理',
     done: '完成',
+  },
+  phoneTab: {
+    waiting: '等你處理',
+    active: '進行中',
+    review: '審核',
+    done: '完成',
+  },
+  phoneTabEmpty: {
+    waiting: '沒有等你處理的任務。',
+    active: '目前沒有在執行的任務。',
+    review: '沒有要審核的任務。',
+    done: '完成的任務會出現在這裡。',
   },
   stageEmpty: {
     draft: '還沒開始的任務放在這裡。',
@@ -879,6 +904,7 @@ export const zhTW: typeof en = {
   },
   noEvents: '還沒有輸出。',
   noDiff: '目前沒有變更。',
+  filesOnly: '只看檔案',
   untracked: '未追蹤的檔案',
   loop: {
     badge: 'Loop',

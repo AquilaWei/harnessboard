@@ -1157,68 +1157,6 @@ th {
   white-space: pre-wrap;
 }
 
-/* ---------- small screens ---------- */
-
-@media (max-width: 1000px) {
-  .board {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
-  }
-
-  .header {
-    padding: 10px 16px;
-  }
-
-  .summary {
-    order: 3;
-    width: 100%;
-  }
-
-  .header-actions {
-    margin-left: auto;
-  }
-
-  .board {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 12px 16px 32px;
-  }
-
-  .stage {
-    min-height: 0;
-  }
-
-  .drawer-head,
-  .drawer-body {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .tabs {
-    padding: 0 16px;
-  }
-
-  .row,
-  .choice-cards {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .popover {
-    position: fixed;
-    top: 110px;
-    right: 16px;
-    left: 16px;
-    width: auto;
-  }
-}
-
 /* ---------- folder picker ---------- */
 
 .field > label {
@@ -1733,4 +1671,133 @@ th {
   padding: 20px;
   border-radius: 12px;
   background: var(--surface);
+}
+
+/* ---------- small screens ---------- */
+
+/* Last in the file, so these overrides win over the base rules of every section above. */
+
+/* Shown only at phone width, by the rule in the 640px block below. */
+.phone-only {
+  display: none;
+}
+
+@media (max-width: 1000px) {
+  .board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .header {
+    padding: 10px 16px;
+  }
+
+  .summary {
+    order: 3;
+    width: 100%;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px 16px 32px;
+  }
+
+  .stage {
+    min-height: 0;
+  }
+
+  .drawer-head,
+  .drawer-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .tabs {
+    padding: 0 16px;
+  }
+
+  .row,
+  .choice-cards {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .popover {
+    position: fixed;
+    top: 110px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+
+  .phone-only {
+    display: inline-flex;
+  }
+
+  /* The board shows one tab at a time (Board.tsx); the tabs sit inside its padding. */
+  .board-tabs {
+    padding: 0;
+  }
+
+  .board-tabs .tab {
+    min-height: 44px;
+  }
+
+  .drawer {
+    width: 100vw;
+  }
+
+  /* New task and settings fill the screen, so the keyboard does not hide half a centred form. */
+  .modal,
+  .modal.wide {
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
+    padding: 16px;
+    border-radius: 0;
+    transform: none;
+  }
+
+  .folder-browser {
+    position: fixed;
+    inset: 0;
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .folder-list {
+    flex: 1;
+    max-height: none;
+  }
+
+  .folder {
+    min-height: 44px;
+  }
+
+  .folder-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Touch targets for answering the agent (Apple and WCAG suggest 44px). */
+  .permission button,
+  .plan-review button {
+    min-height: 44px;
+  }
 }

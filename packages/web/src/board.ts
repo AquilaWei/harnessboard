@@ -25,6 +25,45 @@ export function stageOf(status: TaskStatus): Stage {
   return STAGE_OF[status];
 }
 
+/**
+ * Tabs of the board at phone width, where only one column fits. They split the desktop's
+ * Needs you stage, so a finished task to review is not buried among questions waiting for
+ * an answer. Drafts wait for you to start them, so they sit under `waiting`.
+ */
+export const PHONE_TABS = ['waiting', 'active', 'review', 'done'] as const;
+export type PhoneTab = (typeof PHONE_TABS)[number];
+
+const PHONE_TAB_OF: Record<TaskStatus, PhoneTab> = {
+  backlog: 'waiting',
+  queued: 'active',
+  running: 'active',
+  awaiting_permission: 'waiting',
+  waiting_quota: 'active',
+  awaiting_approval: 'waiting',
+  review: 'review',
+  failed: 'waiting',
+  stopped: 'waiting',
+  done: 'done',
+};
+
+/** Tasks grouped by phone tab, each group in the order the tasks were given. */
+export function groupByPhoneTab(tasks: TaskView[]): Record<PhoneTab, TaskView[]> {
+  const groups: Record<PhoneTab, TaskView[]> = { waiting: [], active: [], review: [], done: [] };
+  for (const task of tasks) groups[PHONE_TAB_OF[task.status]].push(task);
+  return groups;
+}
+
+/**
+ * The phone tab that holds the tasks counted as needing you. Drafts are under `waiting` too
+ * but are not counted, so `waiting` is chosen only when a counted task is there.
+ */
+export function attentionTab(tasks: TaskView[]): PhoneTab {
+  const waiting = tasks.some(
+    (task) => stageOf(task.status) === 'attention' && PHONE_TAB_OF[task.status] === 'waiting',
+  );
+  return waiting ? 'waiting' : 'review';
+}
+
 /** API calls the board can make for a task. */
 export type TaskAction = 'queue' | 'stop' | 'complete';
 

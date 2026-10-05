@@ -23,6 +23,12 @@ are test versions that have not been accepted on real machines yet.
   asks for it and then carries on with the action. Nothing changes on this computer.
 - **Browsers without passkeys**, such as the one inside LINE, say to open the page in Chrome
   or Safari instead of offering to pair or unlock.
+- **The board fits a phone screen.** On a narrow screen it shows one list at a time, with
+  tabs for Waiting for you, In progress, Review and Done; drafts are under Waiting for you.
+  The task panel, New task, Settings and the folder browser fill the screen, and the buttons
+  for answering a permission request, a plan or acceptance criteria are big enough to tap.
+- **"Files only" on the Changes tab** lists the changed files without the line-by-line
+  changes, which is easier to read on a phone.
 
 ## 0.0.21 - 2026-10-04
 

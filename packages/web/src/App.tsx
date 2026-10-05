@@ -11,8 +11,8 @@ import {
   onNotPaired,
   setReauthPrompt,
 } from './api';
-import { stageOf } from './board';
-import type { Stage, TaskAction } from './board';
+import { attentionTab, stageOf } from './board';
+import type { PhoneTab, Stage, TaskAction } from './board';
 import { Board } from './components/Board';
 import { Header } from './components/Header';
 import { NewTaskDialog } from './components/NewTaskDialog';
@@ -40,6 +40,7 @@ export function App() {
   const [version, setVersion] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ id: number; tab: DrawerTab } | null>(null);
   const [dialog, setDialog] = useState<'new' | 'settings' | null>(null);
+  const [phoneTab, setPhoneTab] = useState<PhoneTab>('waiting');
   const [toast, setToast] = useState<string | null>(null);
   // A phone opened the pairing address the computer showed as a QR code.
   const [pairCode, setPairCode] = useState(() => pairCodeFromHash(window.location.hash));
@@ -155,6 +156,12 @@ export function App() {
     setLocked(false);
     loadAll();
   };
+  const jumpToAttention = () => {
+    // At phone width the stages are tabs, and Needs you is split into Waiting for you and Review.
+    setPhoneTab(attentionTab(tasks));
+    document.getElementById('stage-attention')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   if (pairCode)
     return (
       <PairScreen
@@ -178,9 +185,12 @@ export function App() {
         version={version}
         onNewTask={() => setDialog('new')}
         onSettings={() => setDialog('settings')}
+        onAttention={jumpToAttention}
       />
       <Board
         tasks={tasks}
+        phoneTab={phoneTab}
+        onPhoneTab={setPhoneTab}
         onOpen={(id, tab = 'timeline') => setSelected({ id, tab })}
         onAction={act}
         onInvalidMove={invalidMove}

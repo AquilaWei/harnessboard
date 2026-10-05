@@ -2,7 +2,8 @@
 
 Status: M0 done. M1 and M2 are built and waiting for the
 [real-phone acceptance](#real-phone-acceptance-m1-and-m2); 0.1.0 is released after it passes.
-M3 and M4 are not started. Decisions dated 2026-10-04.
+M3's phone layout is built (not yet checked on a real phone); the PWA part of M3 and M4 are
+not started. Decisions dated 2026-10-04.
 
 ## Goal
 
