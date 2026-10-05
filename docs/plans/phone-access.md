@@ -1,6 +1,8 @@
 # Phone access
 
-Status: M0 done, M1 not started. Decisions dated 2026-10-04.
+Status: M0 done. M1 and M2 are built and waiting for the
+[real-phone acceptance](#real-phone-acceptance-m1-and-m2); 0.1.0 is released after it passes.
+M3 and M4 are not started. Decisions dated 2026-10-04.
 
 ## Goal
 
@@ -234,6 +236,71 @@ and no logic.
   - pair, unlock, approve, create a task, receive a push;
   - finish with `tailscale serve reset`.
   - Ask the user before each real-phone session.
+
+### Real-phone acceptance (M1 and M2)
+
+Run by the user before 0.1.0. Tick each step; a step that fails stops the release and goes into
+this file with what the phone showed. The phone is on mobile data, not the home Wi-Fi.
+
+**Setup (on the computer)**
+
+1. Check that no other `tailscale serve` is running: `tailscale serve status`.
+2. Build and start a scratch server on port 4399, never the everyday server on 4317:
+
+   ```bash
+   pnpm build
+   export HARNESSBOARD_HOME=$(mktemp -d /tmp/hb-accept-XXXX)
+   node packages/server/dist/cli.js serve --port 4399
+   ```
+
+3. In another terminal: `tailscale serve --bg 4399`. Open `https://<machine>.<tailnet>.ts.net`
+   once on the computer and wait for the certificate (up to about 30 s).
+4. Open `http://127.0.0.1:4399` on the computer. No pairing or passkey is asked for.
+
+**M1: remote access and pairing**
+
+5. Before pairing, open `https://<machine>.<tailnet>.ts.net` on the phone. Expected: 403, because
+   the host is not saved yet.
+6. On the computer: **Settings → Phone access** shows the Tailscale name. **Add as remote host**,
+   **Save**. The section shows `tailscale serve --bg 4399`.
+7. Reload the page on the phone. Expected: "This device is not paired".
+8. On the computer: **Pair a phone**. Scan the QR code with the phone's camera and open it in Chrome.
+9. Enter a device name and tap **Pair**, then **Create passkey**, and confirm with fingerprint or
+   screen lock. Expected: the board appears; the computer's device list shows the name with a
+   recent "Last seen".
+10. Scan the same QR code again from another browser profile or after clearing site data.
+    Expected: the code is refused (used once).
+11. On the computer: **New code**, and send the address under the QR code to yourself in LINE.
+    Open it inside LINE. Expected: the "cannot use passkeys" message instead of a Pair button.
+    Use LINE's **Open in browser**. Expected: Chrome shows the pairing screen, because the code
+    stayed in the address. Pairing there is optional; revoke that device afterwards.
+
+**M2: lock, unlock and sensitive actions**
+
+12. Reload the board on the phone. Expected: "The board is locked"; **Unlock** asks for the
+    passkey and the board comes back.
+13. Leave the board open for 31 minutes without touching it, then tap anything. Expected: the
+    unlock screen.
+14. Unlock, wait 6 minutes, then create a task (or approve a permission request, or **Start** a
+    draft). Expected: the passkey prompt comes up after the tap, without a second tap, and the
+    action completes once confirmed. On Safari especially, note whether the browser refused the
+    prompt because it did not follow the tap directly.
+15. Cancel that prompt instead. Expected: the toast "Not done: a phone must confirm this with its
+    passkey", and the action did not happen.
+16. With the board open and unlocked on the phone, stop the server (Ctrl+C) and start it again
+    with the same command. Expected: the phone shows the unlock screen; after unlocking, card
+    changes made on the computer appear on the phone without a reload.
+17. Within 5 minutes of a passkey check, open **Settings** on the phone and change a setting.
+    Expected: it saves without a prompt. After 6 minutes, it asks first.
+18. On the computer: **Revoke** the phone. Expected: the next tap on the phone shows "This device
+    is not paired".
+
+**Teardown**
+
+19. Stop the scratch server, then run `tailscale serve reset` and check `tailscale serve status`
+    is empty.
+20. Remove the scratch data: `rm -rf "$HARNESSBOARD_HOME"`. Delete the test passkey on the phone
+    (Google Password Manager → passkeys) so it does not pile up.
 
 ## Limits (for the README)
 

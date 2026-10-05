@@ -384,8 +384,64 @@ still be typed. On the command line: `hb agents --models <profile>`.
     waits for permission, approval or review, or fails, while the board is open but not in
     front. Click it to open the task.
 
-The API accepts only loopback `Host` headers, and it requires a custom header on every
-write. A web page you visit cannot drive your agents through the browser.
+The API accepts only loopback `Host` headers, plus the remote hosts you add for
+[phone access](#phone-access), and it requires a custom header on every write. A web page you
+visit cannot drive your agents through the browser.
+
+## Phone access
+
+Follow progress, approve, answer and create tasks from your phone, from anywhere. The board
+stays on your computer; the phone reaches it through [Tailscale](https://tailscale.com), so
+nothing is opened to the internet.
+
+1. **Install Tailscale** on the computer and the phone, signed in to the same tailnet. Turn
+   on MagicDNS and HTTPS certificates in the Tailscale admin console.
+2. **Add the remote host:** on the computer, open **Settings → Phone access**. It shows this
+   computer's Tailscale name (`<machine>.<tailnet>.ts.net`); click **Add as remote host**
+   and **Save**.
+3. **Serve the board on the tailnet**, once, with the command the section shows (the port is
+   the board's, 4317 by default):
+
+   ```bash
+   tailscale serve --bg 4317
+   ```
+
+   The first HTTPS request can take about 30 seconds while Tailscale issues the certificate.
+   `tailscale serve reset` turns it off again.
+
+4. **Pair the phone:** click **Pair a phone** and scan the QR code with the phone's camera.
+   The code works once, for 5 minutes. Give the phone a name, then tap **Create passkey**:
+   the phone asks for your fingerprint, face or screen lock. The phone is paired only once
+   the passkey is made.
+
+**How the passkey protects the board**
+
+- **Unlock:** the board locks each time it is opened on the phone (a reload or a server
+  restart counts) and after 30 minutes without use. **Unlock** asks for the passkey.
+- **Sensitive actions** ask again when the last check is more than 5 minutes old: creating,
+  starting, approving, answering, merging or deleting tasks, and changing settings, agents,
+  tool rules or paired devices. The action carries on once you confirm.
+- **Lost phone:** revoke it under **Settings → Phone access → Paired devices**; it loses
+  access on its next request. There are no backup codes: pair the new phone the same way.
+- **Browsers inside apps** (LINE, for example) cannot use passkeys. The board says so; open
+  the page in Chrome or Safari from the app's menu, and the pairing code goes along.
+- **On the computer itself** nothing changes: no pairing and no passkey.
+
+**Recommended Tailscale settings**
+
+- **Two-factor login** on the account that owns the tailnet.
+- **Device approval**, so a new device cannot join the tailnet without you.
+- **An access rule (ACL)** that lets only your phone reach this computer, so other devices
+  or shared nodes in the tailnet cannot even load the pairing page.
+
+**Limits**
+
+- **The computer must be on** and Harnessboard running (desktop app or `hb serve`). A
+  sleeping computer cannot be reached.
+- **Push notifications** to the phone are planned; on an iPhone they will need iOS 16.4 or
+  later and the board added to the Home Screen.
+- Tailscale Funnel (the public internet) is always refused. Another HTTPS reverse proxy
+  works too: add its host name as a remote host.
 
 ## How the context budget works
 
