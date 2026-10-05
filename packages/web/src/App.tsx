@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { HarnessStatus, Settings, TaskStatus, TaskView } from '@harnessboard/shared';
-import { api, isNotPaired } from './api';
+import { api, isNotPaired, onNotPaired } from './api';
 import { stageOf } from './board';
 import type { Stage, TaskAction } from './board';
 import { Board } from './components/Board';
@@ -35,6 +35,9 @@ export function App() {
   // A phone opened the pairing address the computer showed as a QR code.
   const [pairCode] = useState(() => pairCodeFromHash(window.location.hash));
   const [notPaired, setNotPaired] = useState(false);
+  // Any call can get the 401, including those made by panels and dialogs that only show
+  // the error text: a device revoked while its board is open must not keep the board.
+  useEffect(() => onNotPaired(() => setNotPaired(true)), []);
 
   // The code works once; keep it out of the address bar and the history.
   useEffect(() => {
@@ -45,9 +48,11 @@ export function App() {
     setToast(message);
     window.setTimeout(() => setToast((current) => (current === message ? null : current)), 4000);
   }, []);
-  /** Reports a failed load, or swaps the board for the "not paired" screen on a 401. */
+  /** Reports a failed call; a 401 needs no message, `onNotPaired` already swapped the screen. */
   const showError = useCallback(
-    (err: Error) => (isNotPaired(err) ? setNotPaired(true) : showToast(err.message)),
+    (err: Error) => {
+      if (!isNotPaired(err)) showToast(err.message);
+    },
     [showToast],
   );
 
@@ -102,9 +107,8 @@ export function App() {
   });
 
   const act = useCallback(
-    (task: TaskView, action: TaskAction) =>
-      ACTIONS[action](task.id).then(load, (err: Error) => showToast(err.message)),
-    [load, showToast],
+    (task: TaskView, action: TaskAction) => ACTIONS[action](task.id).then(load, showError),
+    [load, showError],
   );
 
   const invalidMove = (task: TaskView, target: Stage) =>

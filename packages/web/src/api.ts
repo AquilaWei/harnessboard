@@ -48,9 +48,26 @@ export function isNotPaired(err: unknown): boolean {
   return err instanceof ApiError && err.status === 401;
 }
 
+// Module-level on purpose: a device can be revoked while any panel or dialog is open, and
+// each of them reports its own errors as text. Telling the app here, where every call
+// passes, means none of them can leave the board on screen after a 401.
+const notPairedListeners = new Set<() => void>();
+
+/**
+ * Calls `listener` whenever any API call gets a 401, so the app can swap the board for
+ * the "not paired" screen. The call itself still fails as usual. Returns the unsubscribe.
+ */
+export function onNotPaired(listener: () => void): () => void {
+  notPairedListeners.add(listener);
+  return () => {
+    notPairedListeners.delete(listener);
+  };
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`/api${path}`, init);
   const text = await res.text();
+  if (res.status === 401) for (const listener of notPairedListeners) listener();
   if (!res.ok) {
     let message = text;
     try {

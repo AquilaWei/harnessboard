@@ -66,11 +66,17 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
 
   // Fetches only events after the last one seen, so the log grows in order without gaps.
   const loadEvents = useCallback(async () => {
-    const fresh = await api.events(taskId, lastId.current);
+    let fresh: StoredEvent[];
+    try {
+      fresh = await api.events(taskId, lastId.current);
+    } catch (e) {
+      onError((e as Error).message);
+      return;
+    }
     if (fresh.length === 0) return;
     lastId.current = fresh[fresh.length - 1]!.id;
     setEvents((prev) => [...prev, ...fresh]);
-  }, [taskId]);
+  }, [taskId, onError]);
 
   useEffect(() => {
     void loadTask();
