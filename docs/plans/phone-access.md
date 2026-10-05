@@ -1,9 +1,8 @@
 # Phone access
 
-Status: M0 done. M1 and M2 are built and waiting for the
-[real-phone acceptance](#real-phone-acceptance-m1-and-m2); 0.1.0 is released after it passes.
-M3's phone layout is built (not yet checked on a real phone); the PWA part of M3 and M4 are
-not started. Decisions dated 2026-10-04.
+Status: M0 done. M1, M2 and M3's phone layout are built and waiting for the
+[real-phone acceptance](#real-phone-acceptance-m1-m2-and-the-m3-layout); 0.1.0 is released
+after it passes. The PWA part of M3 and M4 are not started. Decisions dated 2026-10-04.
 
 ## Goal
 
@@ -238,7 +237,7 @@ and no logic.
   - finish with `tailscale serve reset`.
   - Ask the user before each real-phone session.
 
-### Real-phone acceptance (M1 and M2)
+### Real-phone acceptance (M1, M2 and the M3 layout)
 
 Run by the user before 0.1.0. Tick each step; a step that fails stops the release and goes into
 this file with what the phone showed. The phone is on mobile data, not the home Wi-Fi.
@@ -296,11 +295,26 @@ this file with what the phone showed. The phone is on mobile data, not the home 
 18. On the computer: **Revoke** the phone. Expected: the next tap on the phone shows "This device
     is not paired".
 
+**M3: phone layout** (pair again first if step 18 revoked the phone)
+
+19. On the computer, create a draft, a task in Review and one waiting for an answer. On the
+    phone, the board shows four tabs (Waiting for you, In progress, Review, Done) with counts,
+    one tab's tasks at a time. The header's "N need you" chip opens the tab with that task.
+20. Open a task. Expected: the panel fills the screen. With several permission requests or long
+    review findings, the top part scrolls on its own, and the tabs and the body below it stay
+    on screen. The answer buttons are easy to hit with a thumb (at least 44 px tall).
+21. On a task with changes, open **Changes** and tap **Files only**. Expected: just the file
+    names, Chinese names shown as characters, not `\346...` escapes.
+22. Tap **New task**. Expected: the form fills the screen and the keyboard does not hide the
+    field being typed in. Open the folder browser. Expected: it fills the screen, and **Close**
+    at the bottom returns to the form, also while the list is still loading.
+23. Turn the phone sideways and back. Expected: nothing is cut off or needs sideways scrolling.
+
 **Teardown**
 
-19. Stop the scratch server, then run `tailscale serve reset` and check `tailscale serve status`
+24. Stop the scratch server, then run `tailscale serve reset` and check `tailscale serve status`
     is empty.
-20. Remove the scratch data: `rm -rf "$HARNESSBOARD_HOME"`. Delete the test passkey on the phone
+25. Remove the scratch data: `rm -rf "$HARNESSBOARD_HOME"`. Delete the test passkey on the phone
     (Google Password Manager → passkeys) so it does not pile up.
 
 ## Limits (for the README)

@@ -771,9 +771,13 @@ summary:focus-visible {
   box-shadow: var(--shadow-lg);
 }
 
+/* Scrolls on its own when permission requests or review findings run long, so it never
+   pushes the tabs and body out of the fixed panel, where nothing could scroll to them. */
 .drawer-head {
   display: grid;
   gap: 12px;
+  max-height: 60%;
+  overflow-y: auto;
   padding: 16px 20px 12px;
 }
 
@@ -838,6 +842,8 @@ summary:focus-visible {
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
+  /* overflow-x lets a flex column squash the row to nothing; keep it whole in the drawer. */
+  flex-shrink: 0;
 }
 
 .tab {
