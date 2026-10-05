@@ -1791,8 +1791,10 @@ th {
     min-height: 44px;
   }
 
+  /* Stays at the bottom while the list is loading or failed, where Close is the only way out. */
   .folder-actions {
     flex-wrap: wrap;
+    margin-top: auto;
   }
 
   /* Touch targets for answering the agent (Apple and WCAG suggest 44px). */

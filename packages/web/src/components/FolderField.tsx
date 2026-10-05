@@ -144,23 +144,24 @@ function FolderBrowser({ start, onPick, onClose }: BrowserProps) {
               </li>
             ))}
           </ul>
-          <div className="folder-actions">
-            <span className={listing.repoRoot ? 'ok-text' : 'hint'}>
-              {listing.repoRoot ? `✓ ${t('folders.inRepo')}` : t('folders.pickHint')}
-            </span>
-            <button type="button" className="btn small phone-only" onClick={onClose}>
-              {t('folders.closeBrowser')}
-            </button>
-            <button
-              type="button"
-              className="btn primary small"
-              onClick={() => onPick(listing.path)}
-            >
-              {t('folders.use')}
-            </button>
-          </div>
         </>
       )}
+      {/* Outside `listing` so the full-screen phone browser can be closed while loading or after an error. */}
+      <div className="folder-actions">
+        {listing && (
+          <span className={listing.repoRoot ? 'ok-text' : 'hint'}>
+            {listing.repoRoot ? `✓ ${t('folders.inRepo')}` : t('folders.pickHint')}
+          </span>
+        )}
+        <button type="button" className="btn small phone-only" onClick={onClose}>
+          {t('folders.closeBrowser')}
+        </button>
+        {listing && (
+          <button type="button" className="btn primary small" onClick={() => onPick(listing.path)}>
+            {t('folders.use')}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
