@@ -29,17 +29,21 @@ The computer keeps running the server (desktop app or `hb serve`). The phone ope
 - **When to verify:**
   - the board is opened, or has been idle for 30 minutes;
   - sensitive actions, when the last verification is older than 5 minutes.
+- **A verified phone is the user.** It has the same rights as the computer; nothing is
+  local-only. Settings-level actions are sensitive, so they need a recent passkey check.
 - **Local (loopback) use is unchanged.** It never needs pairing or a passkey.
+- **The first phone release is 0.1.0.** The user has accepted every 0.0.x build (2026-10-04).
 - **No one-click `tailscale serve` from the app.** The app shows the command to copy.
 
 ## Threat model
 
-| Who                                             | Stopped by                                                                                            |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Anyone on the internet                          | Not reachable: Tailscale only.                                                                        |
-| Another device in the tailnet, or a shared node | Device pairing: a cookie from a QR code shown on the computer.                                        |
-| Someone holding the unlocked phone              | Passkey, on opening the board and again for sensitive actions.                                        |
-| A malicious website the phone visits            | `SameSite=Strict` cookie, the `x-harnessboard-client` header on non-GET requests, and the Host check. |
+| Who                                                       | Stopped by                                                                                            |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Anyone on the internet                                    | Not reachable: Tailscale only.                                                                        |
+| Another device in the tailnet, or a shared node           | Device pairing: a cookie from a QR code shown on the computer.                                        |
+| Someone holding the unlocked phone                        | Passkey, on opening the board and again for sensitive actions.                                        |
+| The same person changing settings or pairing a new device | Passkey again: settings, agents, tool rules and devices are sensitive routes.                         |
+| A malicious website the phone visits                      | `SameSite=Strict` cookie, the `x-harnessboard-client` header on non-GET requests, and the Host check. |
 
 Recommended Tailscale settings, which go in the README:
 
@@ -49,8 +53,9 @@ Recommended Tailscale settings, which go in the README:
 
 ## Milestones
 
-Each milestone is its own set of commits. Release after M2 (the secure baseline), then after M3,
-then after M4.
+Each milestone is its own set of commits. M1 is not released on its own. Release 0.1.0 after M2,
+once M1 and M2 pass a real-phone acceptance. M3 and M4 follow as 0.1.x or 0.2.0, by the usual
+version rules.
 
 ### M0 — Spike (no code merged)
 
@@ -66,15 +71,15 @@ then after M4.
 ### M1 — Remote access and device pairing
 
 1. **Settings**
-   - Add `remoteHosts: string[]` to `HarnessConfig`. It is in `EDITABLE_SETTINGS`
-     (`packages/core/src/config.ts`), but only local requests can change it.
+   - Add `remoteHosts: string[]` to `HarnessConfig` and `EDITABLE_SETTINGS`
+     (`packages/core/src/config.ts`).
    - Empty means no remote access, which is today's behaviour.
 2. **Storage**
    - New `devices` table through `Store.migrate()` (`packages/core/src/store.ts:347`), with columns
      `id, name, token_hash, created_at, last_seen_at`.
    - The token is 32 random bytes; only its SHA-256 is stored.
 3. **Pairing**
-   - `POST /api/pairing` (local only) creates a one-time code: 128-bit, expires in 5 minutes, used once.
+   - `POST /api/pairing` creates a one-time code: 128-bit, expires in 5 minutes, used once.
    - The settings dialog shows a QR code (`qrcode` package) for `https://<remoteHost>/#pair=<code>`.
    - On the phone, `POST /api/pair {code, name}` returns
      `Set-Cookie: hb_device=<token>; HttpOnly; Secure; SameSite=Strict; Max-Age=31536000`.
@@ -89,9 +94,11 @@ then after M4.
      - `last_seen_at` is updated, throttled.
    - Any other host: 403.
    - Static files are served without auth. The web shows "this device is not paired" on a 401.
-5. **Local-only routes** (remote gets 403). Recommended default; confirm before M1:
-   - pairing and device management;
-   - `PUT /settings`;
+5. **Settings-level routes are sensitive, not local-only.** From a remote device, they need a fresh
+   passkey check (M2) instead of a 403. M1 is not released before M2, so these routes are never open
+   to a device without a passkey. The routes:
+   - pairing, device listing and revoking;
+   - `PUT /settings`, including `remoteHosts`;
    - `POST /agents`;
    - `PUT /tasks/:id/auto-approve`;
    - `PUT /tasks/:id/allowed-tools`.
@@ -128,9 +135,10 @@ then after M4.
        - `POST /tasks/:id/complete`;
        - `DELETE /tasks/:id`;
        - `PUT /tasks/:id/agents`;
-       - `POST /tasks/:id/queue`.
+       - `POST /tasks/:id/queue`;
+       - the settings-level routes from M1 step 5.
    - A counter that goes backwards is rejected. Failed verifications are rate-limited.
-4. **First release** (MINOR or PATCH, to be decided at release time).
+4. **Release 0.1.0** after the real-phone acceptance of M1 and M2.
 
 ### M3 — Phone layout and PWA
 
@@ -173,7 +181,6 @@ and no logic.
   - revoked: 401;
   - unknown host: 403;
   - remote non-GET without the header: 403;
-  - local-only routes from remote: 403;
   - forwarded requests are treated as remote (depends on the M0 finding).
 - **Pairing**
   - expired code, reused code, wrong code;
@@ -182,6 +189,7 @@ and no logic.
   - locked → only `/api/auth/*` is allowed;
   - relocks after 30 min idle;
   - a sensitive route gets `{reauth: true}` after 5 min and passes within 5 min;
+  - a settings route (`PUT /settings`) from remote gets `{reauth: true}` after 5 min;
   - a backwards counter is rejected.
 - **Push** (fake sender)
   - one push when a task enters review;
@@ -203,8 +211,3 @@ and no logic.
 
 - The computer must be on and Harnessboard running; a sleeping computer is unreachable.
 - iOS push needs iOS 16.4+ and the board added to the Home Screen.
-
-## Open questions
-
-- Which routes stay local-only (M1 step 5): confirm before M1.
-- MINOR (0.1.0) or PATCH for the first phone release, given the pending macOS and Windows acceptance.
