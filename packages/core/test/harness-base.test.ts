@@ -8,6 +8,7 @@ import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
+  assistantText,
   commitAll,
   init,
   makeRepo,
@@ -246,6 +247,150 @@ describe('a second base task on the same repository', () => {
     await reviewedBaseTask();
     const other = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
     expect(harness.queueTask(other.id).status).toBe('queued');
+  });
+});
+
+/** A session that writes nothing but leaves a conversation a chat can continue. */
+const TALK = [init(), assistantText('done', 10_000), result('done')];
+
+/** A base task that was marked done, then a second base task now waiting for review. */
+async function doneTaskWhileAnotherHoldsTheFolder() {
+  scenario([TALK], [TALK]);
+  const first = await createBaseTask();
+  await harness.waitForIdle();
+  harness.completeTask(first.id);
+  await createBaseTask('Another change');
+  await harness.waitForIdle();
+  return first;
+}
+
+describe('a chat with a base task while another one holds the folder', () => {
+  it('is refused', async () => {
+    const first = await doneTaskWhileAnotherHoldsTheFolder();
+    expect(() => harness.chat(first.id, 'One more thing')).toThrow(
+      `task 2 already works directly on main in ${repo} (review); ` +
+        'finish or stop it before starting task 1',
+    );
+  });
+
+  it('runs no agent', async () => {
+    const first = await doneTaskWhileAnotherHoldsTheFolder();
+    expect(() => harness.chat(first.id, 'One more thing')).toThrow();
+    await harness.waitForIdle();
+    expect(fakeRuns()).toHaveLength(2);
+  });
+
+  it('keeps a pending message unsent', async () => {
+    const first = await doneTaskWhileAnotherHoldsTheFolder();
+    harness.store.appendEvent(first.id, null, 'chat_queued', { text: 'One more thing' });
+    harness.tick();
+    await harness.waitForIdle();
+    expect([fakeRuns().length, harness.pendingChat(first.id)]).toEqual([2, ['One more thing']]);
+  });
+});
+
+describe('a base task after the folder switched to another branch', () => {
+  it('fails to restart without running an agent', async () => {
+    scenario([TALK], [TALK]);
+    const task = await createBaseTask();
+    await harness.waitForIdle();
+    git(repo, 'checkout', '-q', '-b', 'other');
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    expect([harness.store.getTask(task.id)!.status, fakeRuns().length]).toEqual(['failed', 1]);
+  });
+
+  it('refuses a chat without running an agent', async () => {
+    scenario([TALK], [TALK]);
+    const task = await createBaseTask();
+    await harness.waitForIdle();
+    git(repo, 'checkout', '-q', '-b', 'other');
+    harness.chat(task.id, 'One more thing');
+    await harness.waitForIdle();
+    const notice = harness.store.lastEvent(task.id, 'notice')!.data as { message: string };
+    expect([harness.store.getTask(task.id)!.status, fakeRuns().length, notice.message]).toEqual([
+      'review',
+      1,
+      `chat failed: task 1 works directly on main, but ${repo} does not have that branch ` +
+        'checked out; check it out there and start the task again',
+    ]);
+  });
+
+  it('keeps the commit it first started at when restarted on its branch again', async () => {
+    const start = git(repo, 'rev-parse', 'HEAD');
+    scenario([TALK], [TALK]);
+    const task = await createBaseTask();
+    await harness.waitForIdle();
+    git(repo, 'checkout', '-q', '-b', 'other');
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    git(repo, 'checkout', '-q', 'main');
+    commitFile(repo, 'later.txt', 'user work\n');
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    expect([fakeRuns().length, harness.store.getTask(task.id)!.startCommit]).toEqual([2, start]);
+  });
+});
+
+/** A worktree task with a committed file waiting for review, then a base task (not started). */
+async function reviewedWorktreeTaskAndBaseTask() {
+  scenario(
+    [[init(), writeFile('feature.txt', 'new\n'), commitAll('add feature'), result('ok')]],
+    [TALK],
+  );
+  const worktree = await harness.createTask({
+    prompt: 'Add a feature',
+    repo,
+    confirmPlan: false,
+    reviewer: null,
+    queue: true,
+  });
+  await harness.waitForIdle();
+  const base = await createBaseTask('Work on main', false);
+  return { worktree, base };
+}
+
+describe('merging a worktree task into a branch a base task works on', () => {
+  async function refusedMerge() {
+    const { worktree, base } = await reviewedWorktreeTaskAndBaseTask();
+    harness.queueTask(base.id);
+    await harness.waitForIdle();
+    const head = git(repo, 'rev-parse', 'HEAD');
+    const merge = harness.mergeTask(worktree.id);
+    return { merge, head };
+  }
+
+  it('is refused', async () => {
+    const { merge } = await refusedMerge();
+    await expect(merge).rejects.toThrow(
+      `task 2 works directly on main in ${repo} (review); finish or stop it before merging task 1`,
+    );
+  });
+
+  it('leaves the base branch and the folder as they were', async () => {
+    const { merge, head } = await refusedMerge();
+    await merge.catch(() => {});
+    expect([git(repo, 'rev-parse', 'HEAD'), existsSync(path.join(repo, 'feature.txt'))]).toEqual([
+      head,
+      false,
+    ]);
+  });
+});
+
+describe('a base task while a merge into its branch is in progress', () => {
+  it('cannot be queued', async () => {
+    const { worktree, base } = await reviewedWorktreeTaskAndBaseTask();
+    const merge = harness.mergeTask(worktree.id);
+    expect(() => harness.queueTask(base.id)).toThrow(
+      `task 1 is being merged into main in ${repo}; start task 2 again once the merge is done`,
+    );
+    await merge;
+  });
+
+  it('can be queued once the merge is done', async () => {
+    const { worktree, base } = await reviewedWorktreeTaskAndBaseTask();
+    await harness.mergeTask(worktree.id);
+    expect(harness.queueTask(base.id).status).toBe('queued');
   });
 });
 

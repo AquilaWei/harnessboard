@@ -156,6 +156,8 @@ const CHATTABLE: TaskStatus[] = ['stopped', 'failed', 'review', 'done'];
  */
 export class Harness {
   private readonly running = new Map<number, AbortController>();
+  /** Merges in progress by task id, so no `base` task starts in the folder they change. */
+  private readonly merging = new Map<number, { repo: string; base: string }>();
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   private readonly adapters = new Map<string, AgentAdapter>();
@@ -518,24 +520,46 @@ export class Harness {
 
   /**
    * Two agents in one folder would edit the same files and mix their commits into each
-   * other's review, so only one `base` task may hold a repository folder at a time.
+   * other's review, so only one `base` task may hold a repository folder at a time. A merge
+   * into the branch checked out there moves its files, so none may start during one either.
    */
   private assertFolderFree(task: Task): void {
-    const other = this.store
+    const busy = this.folderBusy(task);
+    if (busy) throw new Error(busy);
+  }
+
+  /** Why the `base` task may not use its repository folder now, or null when it may. */
+  private folderBusy(task: Task): string | null {
+    const other = this.folderHolder(task.repoPath, task.id);
+    if (other) {
+      return (
+        `task ${other.id} already works directly on ${other.baseRef} in ${task.repoPath} ` +
+        `(${other.status}); finish or stop it before starting task ${task.id}`
+      );
+    }
+    const merge = [...this.merging].find(
+      ([, m]) => m.repo === task.repoPath && m.base === task.baseRef,
+    );
+    if (merge) {
+      return (
+        `task ${merge[0]} is being merged into ${task.baseRef} in ${task.repoPath}; ` +
+        `start task ${task.id} again once the merge is done`
+      );
+    }
+    return null;
+  }
+
+  /** The `base` task other than `except` using the repository folder, if any. */
+  private folderHolder(repo: string, except: number): Task | undefined {
+    return this.store
       .listTasks()
       .find(
         (t) =>
-          t.id !== task.id &&
+          t.id !== except &&
           t.workspace === 'base' &&
-          t.repoPath === task.repoPath &&
+          t.repoPath === repo &&
           HOLDS_FOLDER.includes(t.status),
       );
-    if (other) {
-      throw new Error(
-        `task ${other.id} already works directly on ${other.baseRef} in ${task.repoPath} ` +
-          `(${other.status}); finish or stop it before starting task ${task.id}`,
-      );
-    }
   }
 
   /** Stops a running or queued task. The worktree and branch are kept. */
@@ -732,7 +756,8 @@ export class Harness {
    * While the task is busy (running, queued, waiting for quota or approval) the message is
    * kept as pending instead and sent when the current step ends; see {@link pendingChat}.
    * Throws when the message is empty, or the task is idle and there is no conversation to
-   * continue or its context is full.
+   * continue, its context is full, or it works on the base while another task holds or a
+   * merge changes the same repository folder.
    */
   chat(id: number, message: string): Task {
     const task = this.requireTask(id);
@@ -743,6 +768,7 @@ export class Harness {
       this.emit({ type: 'task', taskId: id, status: task.status });
       return task;
     }
+    if (task.workspace === 'base') this.assertFolderFree(task);
     const target = this.chatTarget(task);
     if (typeof target === 'string') throw new Error(target);
     return this.startChat(task, target, text);
@@ -778,12 +804,14 @@ export class Harness {
   /**
    * Sends the pending messages of an idle task as one turn. A task that has stopped drops
    * them when they cannot be sent, since nothing would change that; a queued one keeps them
-   * for after its next step, which may start a conversation they fit into.
+   * for after its next step, which may start a conversation they fit into. A `base` task
+   * whose folder another task holds keeps them until a later tick finds the folder free.
    * Returns true when a reply started.
    */
   private deliverPendingChat(task: Task): boolean {
     const pending = this.pendingChat(task.id);
     if (pending.length === 0) return false;
+    if (task.workspace === 'base' && this.folderBusy(task)) return false;
     const target = this.chatTarget(task);
     if (typeof target === 'string') {
       if (CHATTABLE.includes(task.status)) {
@@ -834,6 +862,7 @@ export class Harness {
   ): Promise<void> {
     let reason: ChatEnd['reason'] = 'error';
     try {
+      if (task.workspace === 'base') await this.assertOnBase(task);
       const plan: SessionPlan = {
         role: 'implementer',
         agentId: session.agentId,
@@ -886,8 +915,10 @@ export class Harness {
    * into the task's worktree instead, its agent is queued to resolve the conflicts and
    * commit, and the task comes back for review (and another merge) afterwards.
    * Throws when the task is not in review, has uncommitted changes or nothing to merge, its
-   * base is not a local branch, or git refuses. A `base` task has nothing to merge: its
-   * commits are on the base already, and {@link completeTask} finishes it.
+   * base is not a local branch, git refuses, or a `base` task works on that base in the
+   * repository folder (the merge would move its files underneath its agent). A `base` task
+   * has nothing to merge: its commits are on the base already, and {@link completeTask}
+   * finishes it.
    */
   async mergeTask(id: number): Promise<MergeResult> {
     const task = this.requireTask(id);
@@ -899,6 +930,30 @@ export class Harness {
     }
     const { repoPath: repo, baseRef: base, branch, worktreePath: dir } = task;
     if (!branch || !dir) throw new Error(`task ${id} has no branch to merge`);
+    const holder = this.folderHolder(repo, id);
+    if (holder?.baseRef === base) {
+      throw new Error(
+        `task ${holder.id} works directly on ${base} in ${repo} (${holder.status}); ` +
+          `finish or stop it before merging task ${id}`,
+      );
+    }
+    // Registered before the first await, so no `base` task can start while git works.
+    this.merging.set(id, { repo, base });
+    try {
+      return await this.mergeInto(task, repo, base, branch, dir);
+    } finally {
+      this.merging.delete(id);
+    }
+  }
+
+  private async mergeInto(
+    task: Task,
+    repo: string,
+    base: string,
+    branch: string,
+    dir: string,
+  ): Promise<MergeResult> {
+    const id = task.id;
     if ((await porcelainStatus(dir)) !== '') {
       throw new Error(
         `task ${id} has uncommitted changes in its worktree; commit or discard them first`,
@@ -1100,8 +1155,9 @@ export class Harness {
   }
 
   private async ensureWorktree(task: Task): Promise<Task> {
-    if (task.worktreePath) return task;
+    // Checked before every session: the user may have switched branches since the last one.
     if (task.workspace === 'base') return this.startOnBase(task);
+    if (task.worktreePath) return task;
     const branch = branchName(task.id, task.title);
     const dir = worktreePath(this.config.dataDir, task.repoPath, task.id);
     await addWorktree(task.repoPath, dir, branch, task.baseRef);
@@ -1115,6 +1171,19 @@ export class Harness {
    * Uncommitted changes already in the folder count as part of its work.
    */
   private async startOnBase(task: Task): Promise<Task> {
+    await this.assertOnBase(task);
+    if (task.startCommit) return task;
+    return this.store.updateTask(task.id, {
+      worktreePath: task.repoPath,
+      startCommit: await headCommit(task.repoPath),
+    });
+  }
+
+  /**
+   * Throws unless the repository folder has the task's base branch checked out, so a `base`
+   * task's agent never edits and commits on whatever branch the user switched to.
+   */
+  private async assertOnBase(task: Task): Promise<void> {
     const repo = task.repoPath;
     if (!(await isLocalBranch(repo, task.baseRef)) || (await currentRef(repo)) !== task.baseRef) {
       throw new Error(
@@ -1122,10 +1191,6 @@ export class Harness {
           `branch checked out; check it out there and start the task again`,
       );
     }
-    return this.store.updateTask(task.id, {
-      worktreePath: repo,
-      startCommit: await headCommit(repo),
-    });
   }
 
   private async discardWorktree(repo: string, dir: string): Promise<void> {
