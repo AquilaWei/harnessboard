@@ -476,7 +476,7 @@ describe('a tool the task does not allow', () => {
     const task = await harness.createTask({ autoApprove: false, prompt: 'Run it', repo });
     harness.store.updateTask(task.id, { status: 'awaiting_permission' });
     const restarted = new Harness(harness.config, harness.store);
-    restarted.start();
+    await restarted.start();
     await restarted.shutdown();
     expect(harness.store.getTask(task.id)!.status).not.toBe('awaiting_permission');
   });

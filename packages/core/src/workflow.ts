@@ -33,6 +33,7 @@ import { missingFeatures, readPlan, runVerify } from './loop.js';
 import { notesPrompt, parseNotes, renderNotes, writeNotes } from './notes.js';
 import {
   QUOTA_RESUME_PROMPT,
+  SCOPE_CHANGED_PROMPT,
   continuationPrompt,
   criteriaApprovedPrompt,
   criteriaPrompt,
@@ -155,19 +156,19 @@ export class Workflow {
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
     const base = { role: 'reviewer', agentId: reviewer, access: 'readOnly' } as const;
-    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    const seen = this.requestSeen(task.id, 'review_request');
+    if (resumable && seen) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
     const snapshot = task.mode === 'loop' ? this.snapshots(task.id).at(-1) : undefined;
-    return {
-      ...base,
-      resume: null,
-      prompt: reviewPrompt(this.goal(task), request, {
-        verify: snapshot?.verify ?? null,
-        hasCriteria: task.acceptance !== null,
-        features: snapshot?.features ?? null,
-        // Read for every review, so an edited rules file applies from the next one.
-        guidelines: readGuidelines(this.host.config.reviewGuidelines),
-      }),
-    };
+    const prompt = reviewPrompt(this.goal(task), request, {
+      verify: snapshot?.verify ?? null,
+      hasCriteria: task.acceptance !== null,
+      features: snapshot?.features ?? null,
+      // Read for every review, so an edited rules file applies from the next one.
+      guidelines: readGuidelines(this.host.config.reviewGuidelines),
+    });
+    // The request was rebuilt after the session stopped; it goes on with the new scope.
+    if (resumable) return { ...base, resume: last, prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}` };
+    return { ...base, resume: null, prompt };
   }
 
   /** The phase a planned session works in. */
@@ -216,13 +217,16 @@ export class Workflow {
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
     const base = { role: 'tester', agentId: tester, access: 'edit' } as const;
-    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    const seen = this.requestSeen(task.id, 'test_request');
+    if (resumable && seen) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
     const prompt = testPrompt(
       this.goal(task),
       request,
       task.verifyCommand,
       task.acceptance !== null,
     );
+    // The request was rebuilt after the session stopped; it goes on with the new scope.
+    if (resumable) return { ...base, resume: last, prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}` };
     return { ...base, resume: null, prompt };
   }
 
@@ -771,6 +775,39 @@ export class Workflow {
     );
     const changed = await changedPaths(dir, request.head);
     return changed.filter((file) => !before.has(file) && !allowed(file));
+  }
+
+  /**
+   * Rebuilds a review or test request still waiting for a `base` task that has just opened
+   * a new stretch. The old one runs up to a HEAD that now includes other work in the
+   * folder, which the reviewer or tester would be shown, and its baseline would blame them
+   * for those commits. The round stays the same. Throws when git cannot read the folder.
+   */
+  async refreshPending(task: Task): Promise<void> {
+    const review = this.pendingReview(task.id);
+    const test = this.pendingTest(task.id);
+    if (!review && !test) return;
+    const dir = task.worktreePath!;
+    const [head, status] = await Promise.all([headCommit(dir), porcelainStatus(dir)]);
+    const scope = { ...(await this.stepBase(task)), head, status };
+    const store = this.host.store;
+    if (review) {
+      store.appendEvent(task.id, null, 'review_request', { ...scope, round: review.round });
+    }
+    if (test) store.appendEvent(task.id, null, 'test_request', { ...scope, round: test.round });
+    this.host.notice(
+      task.id,
+      'other work landed in the folder; the waiting check now leaves it out',
+    );
+  }
+
+  /**
+   * Whether a session already ran for the latest request of `kind`; one rebuilt by
+   * {@link refreshPending} has not been seen by the session it interrupted.
+   */
+  private requestSeen(taskId: number, kind: 'review_request' | 'test_request'): boolean {
+    const event = this.host.store.lastEvent(taskId, kind);
+    return event !== undefined && this.host.store.hasSessionEventsAfter(taskId, event.id);
   }
 
   /** Sends new commits to the reviewer, or moves on when there is none. */

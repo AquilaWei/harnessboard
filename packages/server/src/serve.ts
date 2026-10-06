@@ -42,7 +42,7 @@ export async function startServer(config: HarnessConfig): Promise<RunningServer>
     );
     s.once('error', reject);
   });
-  harness.start();
+  await harness.start();
   return {
     url: `http://127.0.0.1:${config.port}`,
     agents,

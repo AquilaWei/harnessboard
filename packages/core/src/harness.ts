@@ -392,22 +392,44 @@ export class Harness {
   /**
    * Starts periodic scheduling. Tasks left `running` or `awaiting_permission` by a previous
    * process that died are re-queued, because their agent process no longer exists.
+   * A `base` task among them first gets the end its session never recorded, before any
+   * other task can start, so the commits it made before the crash stay its work.
    */
-  start(): void {
+  async start(): Promise<void> {
     for (const task of this.store.listTasks()) {
+      const interrupted = task.status === 'running' || task.status === 'awaiting_permission';
+      if (interrupted) await this.endInterrupted(task);
       // A chat is the user's own conversation, not workflow work to pick up again.
       const chat = this.unansweredChat(task.id);
-      if (chat && (task.status === 'running' || task.status === 'awaiting_permission')) {
+      if (chat && interrupted) {
         this.endChat(task.id, chat.sessionId, chat.message.returnTo, 'stopped');
         continue;
       }
       // A task that waited for permission asks again once its session resumes.
-      if (task.status === 'running' || task.status === 'awaiting_permission') {
-        this.setStatus(task.id, 'queued');
-      }
+      if (interrupted) this.setStatus(task.id, 'queued');
     }
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.tick();
+  }
+
+  /**
+   * Records where a `base` task's session cut off by a crash left HEAD. Without it the end
+   * stays where that session started, so its commits would look like other work in the
+   * folder. Commits made by hand before the restart count as its work too; there is no way
+   * to tell them apart. When git cannot read the folder the task is told and keeps the old
+   * end.
+   */
+  private async endInterrupted(task: Task): Promise<void> {
+    if (task.workspace !== 'base' || !task.startCommit) return;
+    try {
+      await this.endOnBase(task);
+    } catch (err) {
+      this.notice(
+        task.id,
+        `could not record where the interrupted session left ${task.repoPath}: ` +
+          (err as Error).message,
+      );
+    }
   }
 
   /** Stops scheduling and every running session; resolves once they have ended. */
@@ -1217,7 +1239,8 @@ export class Harness {
    * a branch of its own that is the only way to tell its work from what came before.
    * When HEAD moved after its last session (another task or the user committed while it let
    * go of the folder), that stretch is closed and a new one starts here, so those commits
-   * never count as its work. Uncommitted changes already in the folder count as its work.
+   * never count as its work; a review or test waiting to run is rebuilt to leave them out
+   * too. Uncommitted changes already in the folder count as its work.
    * Throws when the base is not checked out there.
    */
   private async startOnBase(task: Task): Promise<Task> {
@@ -1232,11 +1255,13 @@ export class Harness {
     }
     // No end: a task from before end commits were kept; its history stays as it was.
     if (task.endCommit === null || task.endCommit === head) return task;
-    return this.store.updateTask(task.id, {
+    const resumed = this.store.updateTask(task.id, {
       priorSpans: [...task.priorSpans, { from: task.startCommit, to: task.endCommit }],
       startCommit: head,
       endCommit: head,
     });
+    await this.workflow.refreshPending(resumed);
+    return resumed;
   }
 
   /**

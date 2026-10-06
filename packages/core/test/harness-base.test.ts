@@ -21,7 +21,9 @@ import {
 } from './helpers.js';
 
 interface FakeRun {
+  args: string[];
   cwd: string;
+  received: string[];
 }
 
 let dir: string;
@@ -660,5 +662,102 @@ describe('deleting a base task', () => {
     writeFileSync(path.join(repo, 'draft.txt'), 'not committed\n');
     await harness.deleteTask(task.id);
     expect(readFileSync(path.join(repo, 'draft.txt'), 'utf8')).toBe('not committed\n');
+  });
+});
+
+describe('a base task whose session was cut off by a crash after committing', () => {
+  it('keeps those commits as its work once it runs again after the restart', async () => {
+    scenario([TALK]);
+    const start = git(repo, 'rev-parse', 'HEAD');
+    const task = await createBaseTask('Add a greeting', false);
+    // What the store holds when the process dies mid-session: the end is where it started.
+    harness.store.updateTask(task.id, {
+      worktreePath: repo,
+      startCommit: start,
+      endCommit: start,
+      status: 'running',
+    });
+    commitFile(repo, 'hello.txt', 'hi\n');
+    const restarted = new Harness(harness.config, harness.store);
+    await restarted.start();
+    await restarted.waitForIdle();
+    await restarted.shutdown();
+    const commits = await restarted.commits(task.id);
+    expect(commits.map((c) => c.subject)).toEqual(['add hello.txt']);
+  });
+});
+
+async function waitUntil(done: () => boolean): Promise<void> {
+  while (!done()) await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
+/** A session that has read something, so it can be resumed, and then runs until stopped. */
+const READ_AND_HANG = [init(), assistantText('Reading the diff.', 10_000), hang];
+
+/**
+ * Base task 1 committed hello.txt and its `role` (reviewer or tester) was stopped partway;
+ * base task 2 then committed world.txt and is done; task 1 was resumed and `role` answered
+ * `reply`.
+ */
+async function checkResumedAfterAnother(role: 'reviewer' | 'tester', reply: string) {
+  scenario([ADD_HELLO], [READ_AND_HANG], [ADD_WORLD], [[init(), result(reply)]]);
+  const start = git(repo, 'rev-parse', 'HEAD');
+  const first = await harness.createTask({
+    prompt: 'Add a greeting',
+    repo,
+    workspace: 'base',
+    confirmPlan: false,
+    reviewer: role === 'reviewer' ? 'claude' : null,
+    tester: role === 'tester' ? 'claude' : null,
+    queue: true,
+  });
+  await harness.waitForIdle();
+  const hello = git(repo, 'rev-parse', 'HEAD');
+  harness.tick();
+  await waitUntil(() => (harness.store.listSessions(first.id)[1]?.contextTokens ?? 0) > 0);
+  harness.stopTask(first.id);
+  await harness.waitForIdle();
+  const second = await createBaseTask('Another change');
+  await harness.waitForIdle();
+  harness.completeTask(second.id);
+  harness.queueTask(first.id);
+  await harness.waitForIdle();
+  return { first, start, hello, resumed: fakeRuns()[3]! };
+}
+
+describe('a base task whose reviewer was stopped and resumed after another base task', () => {
+  it('takes the verdict instead of blaming the reviewer for the other commit', async () => {
+    const { first } = await checkResumedAfterAnother('reviewer', 'VERDICT: APPROVE');
+    const review = harness.store.lastEvent(first.id, 'review')!.data as { verdict: string };
+    expect(review.verdict).toBe('approve');
+  });
+
+  it('resumes the reviewer with its own earlier stretch as the scope', async () => {
+    const { start, hello, resumed } = await checkResumedAfterAnother(
+      'reviewer',
+      'VERDICT: APPROVE',
+    );
+    expect([
+      resumed.args.includes('--resume'),
+      resumed.received[0]!.startsWith('[harness] While you were stopped'),
+      resumed.received[0]!.includes(`git diff ${start}..${hello}`),
+    ]).toEqual([true, true, true]);
+  });
+});
+
+describe('a base task whose tester was stopped and resumed after another base task', () => {
+  it('takes the verdict instead of blaming the tester for the other commit', async () => {
+    const { first } = await checkResumedAfterAnother('tester', 'TESTS: PASS');
+    const report = harness.store.lastEvent(first.id, 'test_report')!.data as { verdict: string };
+    expect(report.verdict).toBe('pass');
+  });
+
+  it('resumes the tester with its own earlier stretch as the scope', async () => {
+    const { start, hello, resumed } = await checkResumedAfterAnother('tester', 'TESTS: PASS');
+    expect([
+      resumed.args.includes('--resume'),
+      resumed.received[0]!.startsWith('[harness] While you were stopped'),
+      resumed.received[0]!.includes(`git diff ${start}..${hello}`),
+    ]).toEqual([true, true, true]);
   });
 });

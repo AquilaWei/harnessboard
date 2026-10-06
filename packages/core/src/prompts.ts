@@ -53,6 +53,15 @@ export const QUOTA_RESUME_PROMPT =
   '[harness] The usage limit has reset. Continue the task from where you stopped.';
 
 /**
+ * Sent to a stopped reviewer or tester of a `base` task when its request was rebuilt because
+ * other work landed in the folder meanwhile; the scope it was given before is out of date.
+ */
+export const SCOPE_CHANGED_PROMPT =
+  '[harness] While you were stopped, other work was committed in this folder. ' +
+  'What you were checking has changed: drop the ranges you were given before and check ' +
+  'only the ones below.';
+
+/**
  * First session of a loop task: plan the work as a feature list, implement nothing yet.
  * Without a verify command the planner proposes one; the user confirms it before building.
  */
