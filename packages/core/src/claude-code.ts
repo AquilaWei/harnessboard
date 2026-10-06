@@ -27,6 +27,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     midTurnInput: true,
     sessionIds: 'harness',
     permissionPrompts: true,
+    readOnlyGit: true,
   };
 
   constructor(readonly command: string) {}

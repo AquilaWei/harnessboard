@@ -59,6 +59,12 @@ export interface AgentCapabilities {
    * for {@link AgentAdapter.encodePermissionReply}. Without it such tools are refused.
    */
   permissionPrompts: boolean;
+  /**
+   * A `readOnly` session can still run `git log`, `git diff` and `git status`. Without it a
+   * reviewer could not see the work it judges, so the harness runs those commands itself and
+   * puts their output in the reviewer's prompt.
+   */
+  readOnlyGit: boolean;
 }
 
 /**

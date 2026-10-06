@@ -20,6 +20,7 @@ export class CodexAdapter implements AgentAdapter {
     midTurnInput: false,
     sessionIds: 'agent',
     permissionPrompts: false,
+    readOnlyGit: true,
   };
 
   constructor(readonly command: string) {}

@@ -10,7 +10,9 @@ are test versions that have not been accepted on real machines yet.
 - **Gemini as a third agent.** Harnessboard finds the `gemini` command on your PATH and
   offers a profile for it (`hb agents --add gemini`), so Gemini can implement, review, test,
   write the spec or design the UI, next to Claude and Codex. It runs through the signed-in
-  Gemini CLI. Reviewers use its read-only `plan` mode. Gemini does not report usage, so the
+  Gemini CLI. Reviewers use its read-only `plan` mode, which can not run git, so the harness
+  gives a Gemini reviewer the commits and diff it is judging, including a base task's
+  earlier stretches of work. Gemini does not report usage, so the
   header shows no quota for it; a usage-limit error pauses the task and retries it later.
   Not yet tried with the real Gemini CLI.
 - **Pair a phone with the board.** Settings has a new "Phone access" section. It finds this

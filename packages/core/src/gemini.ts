@@ -18,6 +18,7 @@ export class GeminiAdapter implements AgentAdapter {
     midTurnInput: false,
     sessionIds: 'agent',
     permissionPrompts: false,
+    readOnlyGit: false,
   };
 
   constructor(readonly command: string) {}
@@ -26,8 +27,9 @@ export class GeminiAdapter implements AgentAdapter {
    * Access maps to `--approval-mode`: `plan` is Gemini's read-only mode, `yolo` approves
    * every tool, and `auto_edit` approves file edits only. Without a terminal nothing can
    * answer an approval, so under `auto_edit` shell commands are refused, which also means
-   * such a session can not commit. `allowedTools` are Claude-style rules that Gemini does
-   * not understand, so they are not passed on.
+   * such a session can not commit. `plan` refuses git as well, so the harness gives a
+   * reviewer the git output (`readOnlyGit`). `allowedTools` are Claude-style rules that
+   * Gemini does not understand, so they are not passed on.
    */
   buildArgs(spec: SessionSpec): string[] {
     const args = ['--output-format', 'stream-json'];

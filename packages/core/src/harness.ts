@@ -74,6 +74,7 @@ import { readPlan } from './loop.js';
 import { probe } from './process.js';
 import { createAdapter } from './providers.js';
 import type { AdapterFactory } from './providers.js';
+import { reviewEvidence } from './review.js';
 import { runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
 import { dueForRetry, quotaBlocks, startable } from './scheduler.js';
@@ -1323,9 +1324,13 @@ export class Harness {
     try {
       const ready = await this.ensureWorktree(task);
       await this.workflow.reviseSpecFile(ready);
-      const plan = this.workflow.plan(ready);
+      let plan = this.workflow.plan(ready);
       await this.workflow.syncNotes(ready);
       const adapter = this.adapterFor(plan.agentId);
+      if (plan.review && !adapter.capabilities.readOnlyGit) {
+        const evidence = await reviewEvidence(ready.worktreePath!, plan.review);
+        plan = { ...plan, prompt: `${plan.prompt}\n\n${evidence}` };
+      }
       const sessionId = plan.resume?.id ?? randomUUID();
       if (!plan.resume) {
         // CLIs that assign their own ids report them in `init`; see runOne.

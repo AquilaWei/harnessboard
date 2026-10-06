@@ -197,6 +197,7 @@ get `maxReviewRounds` again.
    | `midTurnInput`      | Prompt and wrap-up request are written to stdin during the turn                                | Prompt goes in the arguments; the wrap-up is sent by resuming the session after the turn ends |
    | `sessionIds`        | The harness picks the id and passes it                                                         | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it     |
    | `permissionPrompts` | A tool outside the rules emits `permission_request`; the CLI waits for `encodePermissionReply` | Such tools are refused; the user widens the rules with `hb tools` and runs the task again     |
+   | `readOnlyGit`       | A read-only reviewer runs `git log`, `git diff` and `git status` itself                        | The harness runs them and adds their output to the reviewer's prompt (`reviewEvidence`)       |
 
 5. Map `SessionSpec.access: 'readOnly'` to the CLI's most restrictive mode. Reviewers rely
    on it. The harness also compares HEAD and `git status` before and after every review,
@@ -210,7 +211,8 @@ get `maxReviewRounds` again.
 
 `core/src/codex.ts` drives `codex exec --json`, checked against Codex CLI 0.160:
 
-- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
+- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`,
+  `readOnlyGit: true` (the read-only sandbox still runs commands that do not write).
 - The result's text is the turn's last `agent_message`. Adapters are shared by all sessions
   of a profile, so this needs state per process: an adapter may provide `createParser()`,
   which the runner calls once for each CLI process.
@@ -231,7 +233,8 @@ names and fields follow the stream-json types in the Gemini CLI source
 (`packages/core/src/output/types.ts`) and the CLI reference; it has not been checked against
 a real run yet.
 
-- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
+- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`,
+  `readOnlyGit: false`.
 - Output is JSONL: `init` (with `session_id` and `model`), `message` (`role`, `content`, and
   `delta: true` for chunks), `tool_use`, `tool_result`, `error` (`severity`, `message`) and
   `result` (`status`, `error`, `stats`). The parser joins assistant chunks into one message,
@@ -244,7 +247,12 @@ a real run yet.
   that skip permissions, and `auto_edit` for the others. Without a terminal nothing can answer
   an approval, so under `auto_edit` shell commands are refused and the session can not
   commit. Plan mode allows no shell either, so a Gemini reviewer can not run the verify
-  command itself. `allowedTools` are Claude-style rules that Gemini does not understand, so
+  command or git itself. Instead the harness runs the git commands the review prompt names
+  (`reviewEvidence` in `review.ts`): log, `--stat` and patch of the current stretch and of a
+  `base` task's earlier stretches, `git status --porcelain`, and `git diff HEAD` when there
+  are uncommitted edits. The output goes after the prompt. Patches share a budget of 40,000
+  characters, because the prompt is one argument and Linux refuses an argument over 128 KiB;
+  past it a patch is cut and the reviewer reads the files from the `--stat` list instead. `allowedTools` are Claude-style rules that Gemini does not understand, so
   they are not passed on.
 - `stats` comes once, in the `result`, so no `context` events are emitted and Gemini manages
   its own context. Its per-model `input` (tokens not read from the cache) and `cached` become

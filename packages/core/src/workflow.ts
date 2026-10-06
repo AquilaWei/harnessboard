@@ -100,6 +100,12 @@ export interface SessionPlan {
    * {@link Workflow.started} so they count as delivered only to the session that heard them.
    */
   delivers?: number[];
+  /**
+   * Set when the prompt asks for a review of this request, so the harness can add the git
+   * output for a reviewer that cannot run git itself; not set when a reviewer is resumed
+   * with only a request to go on.
+   */
+  review?: ReviewRequest;
 }
 
 /** What a task's next session is for, in the order {@link Workflow} picks it. */
@@ -324,8 +330,15 @@ export class Workflow {
       guidelines: readGuidelines(this.host.config.reviewGuidelines),
     });
     // The request was rebuilt after the session stopped; it goes on with the new scope.
-    if (resumable) return { ...base, resume: last, prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}` };
-    return { ...base, resume: null, prompt };
+    if (resumable) {
+      return {
+        ...base,
+        resume: last,
+        prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}`,
+        review: request,
+      };
+    }
+    return { ...base, resume: null, prompt, review: request };
   }
 
   /** The phase a planned session works in. */

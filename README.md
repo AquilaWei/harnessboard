@@ -557,11 +557,13 @@ Supported providers: `claude-code`, `codex` and `gemini`. A Codex profile uses t
 an API key. Codex can not ask about a tool: its sandbox decides, so permission rules and
 prompts do not apply to it. A Gemini profile uses the signed-in
 [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini --prompt`). It can not ask
-about a tool either: reviewers run in its read-only `plan` mode, tasks that skip permissions
-(the default) in `yolo` mode, and other tasks in `auto_edit` mode, where shell commands are
-refused. Gemini does not report usage, so it has no quota reading on the board; a usage-limit
-error pauses the task and retries it later. The Gemini adapter has not been tried against the
-real CLI yet. How to add another CLI is in [docs/architecture.md](docs/architecture.md).
+about a tool either: reviewers run in its read-only `plan` mode, which allows no shell, so
+the harness runs `git log`, `git diff` and `git status` for them and adds the output to their
+prompt (a very large diff is cut, and the reviewer reads those files directly). Tasks that
+skip permissions (the default) run in `yolo` mode, and other tasks in `auto_edit` mode, where
+shell commands are refused. Gemini does not report usage, so it has no quota reading on the
+board; a usage-limit error pauses the task and retries it later. The Gemini adapter has not
+been tried against the real CLI yet. How to add another CLI is in [docs/architecture.md](docs/architecture.md).
 
 **Permissions:** tasks run with `--permission-mode acceptEdits` and a list of allowed tool
 rules such as `Bash(npm *)`:

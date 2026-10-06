@@ -9,6 +9,7 @@ import type {
   VerifyResult,
 } from '@harnessboard/shared';
 import type { Guideline } from './guidelines.js';
+import { git } from './worktree.js';
 
 export const VERDICT_APPROVE = 'VERDICT: APPROVE';
 export const VERDICT_CHANGES = 'VERDICT: CHANGES';
@@ -93,6 +94,68 @@ export function reviewPrompt(
     `After ${VERDICT_CHANGES}, list each required change with the file and what to do,`,
     'most important first. Only request changes that matter; the implementer gets your list.',
   );
+  return lines.join('\n');
+}
+
+/**
+ * Characters of patch text {@link reviewEvidence} puts in a prompt, shared by all its
+ * diffs. The prompt goes to the CLI as one argument, and Linux refuses a single argument
+ * over 128 KiB; at three bytes per character for CJK text this stays below it with room
+ * for the rest of the prompt.
+ */
+export const EVIDENCE_PATCH_LIMIT = 40_000;
+
+/**
+ * The output of the git commands {@link reviewPrompt} names, for a reviewer whose CLI
+ * cannot run them in a read-only session (see `AgentCapabilities.readOnlyGit`): the log,
+ * file summary and patch of the current stretch and of each earlier one, uncommitted
+ * changes and `git status`. Patches past {@link EVIDENCE_PATCH_LIMIT} are cut, and the
+ * reviewer is told to read those files instead. Throws when git fails in `dir`.
+ */
+export async function reviewEvidence(dir: string, request: ReviewRequest): Promise<string> {
+  let budget = EVIDENCE_PATCH_LIMIT;
+  const patch = (text: string): string => {
+    if (text.length <= budget) {
+      budget -= text.length;
+      return text;
+    }
+    const kept = text.slice(0, budget);
+    budget = 0;
+    return `${kept}\n[harness] The patch was cut here; read the files in the summary above directly.`;
+  };
+  const block = (command: string, output: string): string[] => [
+    `$ ${command}`,
+    '```',
+    output.trimEnd() || '(no output)',
+    '```',
+  ];
+  const span = async (from: string, to: string): Promise<string[]> => {
+    const range = `${from}..${to}`;
+    const [log, stat, diff] = await Promise.all([
+      git(dir, ['log', '--oneline', range]),
+      git(dir, ['diff', '--stat', range]),
+      git(dir, ['diff', range]),
+    ]);
+    return [
+      ...block(`git log --oneline ${range}`, log),
+      ...block(`git diff --stat ${range}`, stat),
+      ...block(`git diff ${range}`, patch(diff)),
+    ];
+  };
+  const lines = [
+    'You cannot run shell commands in this session, so the harness ran the git commands',
+    'above for you. Their output follows; use your read tools for the surrounding code.',
+    '',
+    ...(await span(request.since, 'HEAD')),
+  ];
+  // `git diff HEAD` adds what `git status` alone does not show: the uncommitted edits.
+  const [status, uncommitted] = await Promise.all([
+    git(dir, ['status', '--porcelain']),
+    git(dir, ['diff', 'HEAD']),
+  ]);
+  lines.push(...block('git status --porcelain', status));
+  if (uncommitted.trim()) lines.push(...block('git diff HEAD', patch(uncommitted)));
+  for (const { from, to } of request.earlier ?? []) lines.push(...(await span(from, to)));
   return lines.join('\n');
 }
 
