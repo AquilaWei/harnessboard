@@ -73,4 +73,37 @@ describe('formatSpecChange', () => {
       '  proposed criteria: none in the reply; write them with `hb approve 3 --criteria "..."`',
     );
   });
+
+  it('shows the explanation in the reply below the request, before the criteria', () => {
+    const reply = 'Added a line for hello.\nThe old check still holds.';
+    expect(formatSpecChange(3, { ...change, reply })).toBe(
+      [
+        'Proposed change to the spec you asked for: Say hello too',
+        '  reply:',
+        '    Added a line for hello.',
+        '    The old check still holds.',
+        '  current criteria:',
+        '    - prints hi',
+        '  proposed criteria:',
+        '    - prints hi',
+        '    - prints hello',
+        'Approve with `hb approve 3` (`--criteria "..."` to approve your own), reply with `hb feedback 3 "..."`, or keep the spec with `hb reject 3`.',
+      ].join('\n'),
+    );
+  });
+
+  it("shows the spec author's questions when the reply had no criteria", () => {
+    const reply = 'Should hello replace hi, or print after it?';
+    expect(formatSpecChange(3, { ...change, criteria: null, reply })).toBe(
+      [
+        'Proposed change to the spec you asked for: Say hello too',
+        '  reply:',
+        '    Should hello replace hi, or print after it?',
+        '  current criteria:',
+        '    - prints hi',
+        '  proposed criteria: none in the reply; write them with `hb approve 3 --criteria "..."`',
+        'Approve with `hb approve 3` (`--criteria "..."` to approve your own), reply with `hb feedback 3 "..."`, or keep the spec with `hb reject 3`.',
+      ].join('\n'),
+    );
+  });
 });

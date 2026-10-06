@@ -23,18 +23,22 @@ export function formatFeature(feature: Feature): string {
 }
 
 /**
- * A spec change waiting for the user: who asked and why, the criteria in force and the
- * proposed ones, one under the other, then the commands that decide it.
+ * A spec change waiting for the user: who asked and why, the reply it was read from, the
+ * criteria in force and the proposed ones, one under the other, then the commands that
+ * decide it. For the user's own request the reason is their message, so the reply is the
+ * only place the spec author's explanation and questions show.
  */
 export function formatSpecChange(taskId: number, change: SpecChangeProposal): string {
   const indent = (text: string) => text.replace(/^/gm, '    ');
   const proposed = change.criteria
     ? `  ${t('specChangeProposed')}\n${indent(change.criteria)}`
     : `  ${t('specChangeNoCriteria', { id: taskId })}`;
+  const reply = change.reply ? [`  ${t('specChangeReply')}`, indent(change.reply)] : [];
   return [
     t(change.from === 'user' ? 'specChangeFromUser' : 'specChangeFromImplementer', {
       reason: change.reason,
     }),
+    ...reply,
     `  ${t('specChangeCurrent')}`,
     indent(change.previous),
     proposed,

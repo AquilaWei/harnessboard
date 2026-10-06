@@ -53,7 +53,8 @@ are test versions that have not been accepted on real machines yet.
 - **Change the spec from the board or `hb`.** The task panel of a task with a spec has a
   **Change the spec** button, and `hb spec <id> "..."` does the same. A proposed change shows
   the current criteria next to the proposed ones on the Criteria tab, with Approve change,
-  Reject change and a reply box; `hb plan <id>` shows both lists, and `hb reject <id>`
+  Reject change and a reply box; `hb plan <id>` shows both lists with
+  the spec author's reply, and `hb reject <id>`
   rejects the change. Cards say when a change waits for you or for the spec author.
 
 ## 0.0.21 - 2026-10-04

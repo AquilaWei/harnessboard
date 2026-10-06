@@ -56,6 +56,7 @@ const en = {
   noCriteria: 'Task {id} has no acceptance criteria.',
   specChangeFromUser: 'Proposed change to the spec you asked for: {reason}',
   specChangeFromImplementer: 'The implementer proposes a change to the spec: {reason}',
+  specChangeReply: 'reply:',
   specChangeCurrent: 'current criteria:',
   specChangeProposed: 'proposed criteria:',
   specChangeNoCriteria:
@@ -136,6 +137,7 @@ const zhTW: Messages = {
   noCriteria: '任務 {id} 沒有驗收標準。',
   specChangeFromUser: '依照你的要求提出的規格修改：{reason}',
   specChangeFromImplementer: '實作者提議修改規格：{reason}',
+  specChangeReply: '回覆：',
   specChangeCurrent: '目前的驗收標準：',
   specChangeProposed: '提議的驗收標準：',
   specChangeNoCriteria:
