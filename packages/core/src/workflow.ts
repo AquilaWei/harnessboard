@@ -20,6 +20,7 @@ import type {
   RoleNote,
   SpecChangeDecision,
   SpecChangeProposal,
+  SpecDelivery,
   SpecRecord,
   SpecRevisionRecord,
   SpecRevisionRequest,
@@ -90,7 +91,22 @@ export interface SessionPlan {
   /** Session to continue; `null` starts a new one. */
   resume: Session | null;
   prompt: string;
+  /**
+   * The `spec_revision` or `spec_change_decision` event the prompt carries; recorded with
+   * {@link Workflow.started} so it counts as delivered only to the session that heard it.
+   */
+  delivers?: number;
 }
+
+/** What a task's next session is for, in the order {@link Workflow} picks it. */
+type NextStep =
+  | { kind: 'specRevision'; request: StoredEvent }
+  | { kind: 'specDecision'; decision: StoredEvent }
+  | { kind: 'review'; request: ReviewRequest }
+  | { kind: 'test'; request: TestRequest }
+  | { kind: 'conflict'; conflict: MergeConflict }
+  | { kind: 'specFile' }
+  | { kind: 'work' };
 
 /** What the workflow needs from the harness: persistence and status changes that notify. */
 export interface WorkflowHost {
@@ -124,28 +140,56 @@ export class Workflow {
     return { ...plan, prompt: [plan.prompt, ...duty, notesPrompt(hasNotes)].join('\n\n') };
   }
 
+  /**
+   * What the task's next session is for. Both {@link nextSession} and {@link nextAgentId}
+   * choose by it, so the quota checked is always that of the session that runs.
+   */
+  private nextStep(task: Task): NextStep {
+    const conflict = this.pendingMergeConflict(task.id);
+    // A merge the harness started leaves conflict markers, which come before anything else.
+    if (!conflict) {
+      const revision = this.pendingRevisionEvent(task.id);
+      if (revision) return { kind: 'specRevision', request: revision };
+      const decision = this.untoldDecision(task.id);
+      if (decision) return { kind: 'specDecision', decision };
+    }
+    const review = this.pendingReview(task.id);
+    if (review) return { kind: 'review', request: review };
+    const test = this.pendingTest(task.id);
+    if (test) return { kind: 'test', request: test };
+    if (conflict) return { kind: 'conflict', conflict };
+    if (this.needsSpecFile(task)) return { kind: 'specFile' };
+    return { kind: 'work' };
+  }
+
   private nextSession(task: Task): SessionPlan {
     const sessions = this.host.store.listSessions(task.id);
     const last = sessions.at(-1);
     // The spec author's answers to the user are not the implementer's work to continue.
     const work = this.withoutRevisions(task.id, sessions).at(-1);
-    const conflict = this.pendingMergeConflict(task.id);
-    // A merge the harness started leaves conflict markers, which come before anything else.
-    if (!conflict) {
-      const revision = this.pendingRevisionEvent(task.id);
-      if (revision) return this.specRevisionPlan(task, revision, last);
-      const decision = this.unansweredDecision(task.id);
-      if (decision) return this.afterSpecDecision(task, decision, work);
+    const step = this.nextStep(task);
+    switch (step.kind) {
+      case 'specRevision':
+        return this.specRevisionPlan(task, step.request, last);
+      case 'specDecision':
+        return this.afterSpecDecision(task, step.decision, work);
+      case 'review':
+        return this.reviewPlan(task, step.request, last);
+      case 'test':
+        return this.testPlan(task, step.request, last);
+      case 'conflict': {
+        const { base, files } = step.conflict;
+        return this.implement(task, mergeConflictPrompt(this.goal(task), base, files));
+      }
+      case 'specFile':
+        return this.specFilePlan(task, last);
+      case 'work':
+        return this.workPlan(task, work);
     }
-    const request = this.pendingReview(task.id);
-    if (request) return this.reviewPlan(task, request, last);
-    const testing = this.pendingTest(task.id);
-    if (testing) return this.testPlan(task, testing, last);
-    if (conflict) {
-      const prompt = mergeConflictPrompt(this.goal(task), conflict.base, conflict.files);
-      return this.implement(task, prompt);
-    }
-    if (this.needsSpecFile(task)) return this.specFilePlan(task, last);
+  }
+
+  /** The implementer's (or, while criteria are discussed, the spec author's) own work. */
+  private workPlan(task: Task, work: Session | undefined): SessionPlan {
     if (!work) return this.implement(task, this.firstPrompt(task));
     const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
     if (feedback !== null) return this.revisePlan(task, feedback, work);
@@ -171,15 +215,39 @@ export class Workflow {
     return sessions.filter((s) => !revisions.has(s.id));
   }
 
-  /** Agent profile of the task's next session, for per-provider quota checks. */
+  /**
+   * Agent profile of the task's next session, for per-provider quota checks. Chosen by the
+   * same rules as the session itself, so a quota blocks exactly the session it would pause.
+   */
   nextAgentId(task: Task): string {
-    const reviewer = task.agents.reviewer;
-    if (reviewer && this.pendingReview(task.id)) return reviewer;
-    if (task.agents.tester && this.pendingTest(task.id)) return task.agents.tester;
-    if (this.needsSpecFile(task) || this.pendingRevisionEvent(task.id)) {
-      return roleAgent(task.agents, 'spec')!;
+    switch (this.nextStep(task).kind) {
+      case 'specRevision':
+      case 'specFile':
+        return roleAgent(task.agents, 'spec')!;
+      case 'review':
+        return task.agents.reviewer!;
+      case 'test':
+        return task.agents.tester!;
+      default:
+        return this.activeAgent(task);
     }
-    return this.activeAgent(task);
+  }
+
+  /**
+   * Records that the session `sessionId` was given the request or decision its plan
+   * carries. Runs as the session starts, before the agent sees the prompt.
+   */
+  started(taskId: number, sessionId: string, plan: SessionPlan): void {
+    if (plan.delivers === undefined) return;
+    const delivery: SpecDelivery = { eventId: plan.delivers };
+    this.host.store.appendEvent(taskId, sessionId, 'spec_delivered', delivery);
+  }
+
+  /** The `spec_delivered` events for `eventId`, oldest first. */
+  private deliveries(taskId: number, eventId: number): StoredEvent[] {
+    return this.host.store
+      .eventsOfKind(taskId, 'spec_delivered')
+      .filter((e) => (e.data as SpecDelivery).eventId === eventId);
   }
 
   private reviewPlan(task: Task, request: ReviewRequest, last: Session | undefined): SessionPlan {
@@ -667,7 +735,8 @@ export class Workflow {
 
   /**
    * The user's request for a spec change waiting for the spec author: the latest one, unless
-   * the spec author already answered it. An implementer's own proposal does not answer it.
+   * the spec author already answered that very request. An implementer's own proposal, or
+   * an answer to an earlier request, does not answer it.
    */
   pendingSpecRevision(taskId: number): SpecRevisionRequest | null {
     return (this.pendingRevisionEvent(taskId)?.data as SpecRevisionRequest | undefined) ?? null;
@@ -679,44 +748,53 @@ export class Workflow {
     if (!request) return undefined;
     const answered = store
       .eventsOfKind(taskId, 'spec_change')
-      .some((e) => e.id > request.id && (e.data as SpecChangeProposal).from === 'user');
+      .some((e) => (e.data as SpecChangeProposal).requestId === request.id);
     return answered ? undefined : request;
   }
 
-  /** The proposed spec change waiting for the user, until it is approved, rejected or replied to. */
+  /**
+   * The proposed spec change waiting for the user, until it is approved or rejected, or
+   * while a request (a reply to it, or one that came in as it was written) waits for the
+   * spec author, whose answer supersedes it.
+   */
   specChange(taskId: number): SpecChangeProposal | null {
     const store = this.host.store;
     const proposal = store.lastEvent(taskId, 'spec_change');
-    if (!proposal) return null;
-    const later = [
-      store.lastEvent(taskId, 'spec_change_decision'),
-      store.lastEvent(taskId, 'spec_revision'),
-    ];
-    if (later.some((e) => e && e.id > proposal.id)) return null;
+    if (!proposal || this.pendingRevisionEvent(taskId)) return null;
+    const decision = store.lastEvent(taskId, 'spec_change_decision');
+    if (decision && decision.id > proposal.id) return null;
     return proposal.data as SpecChangeProposal;
   }
 
   /**
    * Records the user's request to change the spec, or their reply to a waiting change. The
-   * spec author answers it in the task's next session. Throws when the message is empty.
+   * spec author answers it in the task's next session. A request that comes in while an
+   * earlier one from review still waits keeps review as the place a rejection returns to.
+   * Throws when the message is empty.
    */
   requestSpecRevision(taskId: number, message: string, status: TaskStatus): void {
     const text = message.trim();
     if (!text) throw new Error('write what should change in the spec');
-    const request: SpecRevisionRequest = { message: text, status };
+    const earlier = this.pendingSpecRevision(taskId)?.status;
+    const request: SpecRevisionRequest = {
+      message: text,
+      status: earlier === 'review' ? 'review' : status,
+    };
     this.host.store.appendEvent(taskId, null, 'spec_revision', request);
     this.host.notice(taskId, 'spec change requested; the spec author will propose one');
   }
 
   /**
-   * A request made while a session ran is answered once it ends; a step that ended in review
-   * goes back to work for it, and a rejected change returns it there.
+   * A request made while a session or a chat ran is answered once it ends: a task that is
+   * back in review goes back to work for it, the reviewer's and tester's rounds count
+   * afresh, and a rejected change returns the task to review.
    */
-  private reviseAfterStep(taskId: number): void {
+  reviseAfterStep(taskId: number): void {
     const request = this.pendingSpecRevision(taskId);
     if (!request || this.host.store.getTask(taskId)?.status !== 'review') return;
     const moved: SpecRevisionRequest = { ...request, status: 'review' };
     this.host.store.appendEvent(taskId, null, 'spec_revision', moved);
+    this.sendBack(taskId);
     this.host.setStatus(taskId, 'queued');
   }
 
@@ -736,22 +814,24 @@ export class Workflow {
       last?.role === 'spec' &&
       last.endReason !== 'completed' &&
       this.canResume(task, last, agentId) &&
-      this.host.store.sessionHasEventsAfter(last.id, request.id);
+      this.deliveries(task.id, request.id).some((e) => e.sessionId === last.id);
     if (cutOff) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
     const { message } = request.data as SpecRevisionRequest;
-    const pending = this.lastProposalBefore(task.id, request.id);
-    return { ...base, resume: null, prompt: specRevisionPrompt(this.goal(task), message, pending) };
+    const pending = this.undecidedProposal(task.id);
+    const prompt = specRevisionPrompt(this.goal(task), message, pending);
+    return { ...base, resume: null, prompt, delivers: request.id };
   }
 
-  /** The criteria of the change proposed just before `requestId`, when the request replies to it. */
-  private lastProposalBefore(taskId: number, requestId: number): string | null {
+  /**
+   * The criteria of the latest change the user has not decided on, which a waiting request
+   * replies to or came in while it was written.
+   */
+  private undecidedProposal(taskId: number): string | null {
     const store = this.host.store;
-    const proposal = store.eventsOfKind(taskId, 'spec_change').findLast((e) => e.id < requestId);
+    const proposal = store.lastEvent(taskId, 'spec_change');
     if (!proposal) return null;
-    const decided = store
-      .eventsOfKind(taskId, 'spec_change_decision')
-      .some((e) => e.id > proposal.id && e.id < requestId);
-    if (decided) return null;
+    const decision = store.lastEvent(taskId, 'spec_change_decision');
+    if (decision && decision.id > proposal.id) return null;
     const { criteria, reply } = proposal.data as SpecChangeProposal;
     return criteria ?? reply;
   }
@@ -766,7 +846,13 @@ export class Workflow {
       this.interrupted(task, outcome); // the request stays pending and is answered again
       return;
     }
-    const request = this.pendingSpecRevision(task.id)!;
+    // The request this session was given, not one that came in while it ran.
+    const sessionId = this.host.store.listSessions(task.id).at(-1)!.id;
+    const delivery = this.host.store.lastSessionEvent(sessionId, 'spec_delivered')!;
+    const requestId = (delivery.data as SpecDelivery).eventId;
+    const request = this.host.store
+      .eventsOfKind(task.id, 'spec_revision')
+      .find((e) => e.id === requestId)!.data as SpecRevisionRequest;
     const reply = outcome.finalText;
     this.propose(task, {
       from: 'user',
@@ -775,7 +861,8 @@ export class Workflow {
       criteria: parseCriteria(reply),
       reply,
       onReject: request.status === 'review' ? 'review' : 'queued',
-      sessionId: this.host.store.listSessions(task.id).at(-1)?.id ?? null,
+      sessionId,
+      requestId,
     });
   }
 
@@ -792,12 +879,25 @@ export class Workflow {
       reply,
       onReject: 'queued',
       sessionId: null,
+      requestId: null,
     });
     return true;
   }
 
+  /**
+   * Stops for the user's decision, unless a request came in while the proposal was written:
+   * the spec author answers that first, starting from this proposal.
+   */
   private propose(task: Task, proposal: SpecChangeProposal): void {
     this.host.store.appendEvent(task.id, null, 'spec_change', proposal);
+    if (this.pendingRevisionEvent(task.id)) {
+      this.host.notice(
+        task.id,
+        'a newer spec change request is waiting; the spec author answers it next',
+      );
+      this.host.setStatus(task.id, 'queued');
+      return;
+    }
     this.host.notice(
       task.id,
       proposal.criteria
@@ -828,29 +928,36 @@ export class Workflow {
   }
 
   /**
-   * The latest decision on a spec change no session has acted on yet, when the implementer
-   * has to hear it: every approval, and the rejection of its own proposal.
+   * The latest decision on a spec change the implementer has to hear and has not heard yet:
+   * every approval, and the rejection of its own proposal. It is heard once a session given
+   * it got as far as logging anything; a chat in between tells the implementer nothing.
    */
-  private unansweredDecision(taskId: number): SpecChangeDecision | null {
+  private untoldDecision(taskId: number): StoredEvent | null {
     const event = this.host.store.lastEvent(taskId, 'spec_change_decision');
-    if (!event || this.host.store.hasSessionEventsAfter(taskId, event.id)) return null;
+    if (!event) return null;
     const decision = event.data as SpecChangeDecision;
-    return decision.approved || decision.from === 'implementer' ? decision : null;
+    if (!decision.approved && decision.from !== 'implementer') return null;
+    const heard = this.deliveries(taskId, event.id).some((e) =>
+      this.host.store.sessionHasEventsAfter(e.sessionId!, e.id),
+    );
+    return heard ? null : event;
   }
 
   /** The implementer goes on in its own conversation when it can, told what was decided. */
   private afterSpecDecision(
     task: Task,
-    decision: SpecChangeDecision,
+    event: StoredEvent,
     work: Session | undefined,
   ): SessionPlan {
+    const decision = event.data as SpecChangeDecision;
     const told = decision.approved
       ? specChangeApprovedPrompt(decision.criteria, this.specFile(task.id)!)
       : SPEC_CHANGE_REJECTED_PROMPT;
-    if (work && this.canResume(task, work, task.agents.implementer)) {
-      return this.implement(task, told, work);
-    }
-    return this.implement(task, continuationPrompt(this.goal(task), null, told));
+    const plan =
+      work && this.canResume(task, work, task.agents.implementer)
+        ? this.implement(task, told, work)
+        : this.implement(task, continuationPrompt(this.goal(task), null, told));
+    return { ...plan, delivers: event.id };
   }
 
   /**

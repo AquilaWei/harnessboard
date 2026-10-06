@@ -1049,7 +1049,10 @@ export class Harness {
     reason: ChatEnd['reason'],
   ): void {
     this.store.appendEvent(taskId, sessionId, 'chat_end', { reason } satisfies ChatEnd);
-    if (this.store.getTask(taskId)) this.setStatus(taskId, returnTo);
+    if (!this.store.getTask(taskId)) return;
+    this.setStatus(taskId, returnTo);
+    // A spec change asked for during the chat would otherwise wait in review forever.
+    this.workflow.reviseAfterStep(taskId);
   }
 
   /**
@@ -1317,6 +1320,7 @@ export class Harness {
         const agentSessionId = adapter.capabilities.sessionIds === 'harness' ? sessionId : null;
         this.store.startSession(sessionId, task.id, plan.role, plan.agentId, agentSessionId);
       }
+      this.workflow.started(task.id, sessionId, plan);
       this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
       this.setStatus(task.id, 'running');
       try {

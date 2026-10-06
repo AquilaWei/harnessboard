@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CreateTaskInput } from '@harnessboard/shared';
+import { ClaudeCodeAdapter } from '../src/claude-code.js';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
@@ -12,6 +13,7 @@ import {
   assistantText,
   init,
   makeRepo,
+  rateLimit,
   result,
   tempDir,
   writeFile,
@@ -135,6 +137,7 @@ describe('a spec change the user asks for while the task is in review', () => {
       reply: REVISED,
       onReject: 'review',
       sessionId: harness.store.listSessions(task.id).at(-1)!.id,
+      requestId: harness.store.lastEvent(task.id, 'spec_revision')!.id,
     });
   });
 
@@ -339,6 +342,7 @@ describe('a spec change the implementer proposes', () => {
       reply: PROPOSING,
       onReject: 'queued',
       sessionId: null,
+      requestId: null,
     });
   });
 
@@ -400,5 +404,187 @@ describe('a spec change the implementer proposes', () => {
   it('refuses a decision when no change is waiting', async () => {
     const task = await specced([session('done')]);
     expect(() => harness.rejectSpecChange(task.id)).toThrow(/no spec change waiting/);
+  });
+});
+
+/**
+ * Reopens the harness with a second profile for the spec author. With one profile the
+ * implementer goes on in the spec author's conversation, which a chat does not continue.
+ */
+async function withSpecAuthor(): Promise<void> {
+  await harness.shutdown();
+  harness.store.close();
+  const config = {
+    ...defaultConfig({}),
+    dataDir: path.join(dir, 'author'),
+    agents: {
+      claude: { provider: 'claude-code' as const, command: FAKE_CLAUDE, model: null },
+      author: { provider: 'claude-code' as const, command: FAKE_CLAUDE, model: null },
+    },
+    fallbackContextWindow: 100_000,
+  };
+  harness = Harness.open(config);
+}
+
+describe('a decision on a spec change with a chat waiting to be sent', () => {
+  beforeEach(withSpecAuthor);
+
+  it('still tells the implementer the approved criteria after the chat', async () => {
+    const task = await specced(
+      [session('done'), session(REVISED), session('just chatting'), session('adapted')],
+      { spec: 'author' },
+    );
+    harness.requestSpecRevision(task.id, 'Say hello instead');
+    await harness.waitForIdle();
+    harness.chat(task.id, 'How is it going?');
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    await runQueued();
+    expect(fakeRuns()[5]!.received[0]).toContain(
+      '[harness] The user approved a change to the spec.',
+    );
+  });
+
+  it('still tells the implementer its own change was rejected after the chat', async () => {
+    const task = await specced(
+      [session(PROPOSING), session('just chatting'), session('carried on')],
+      { spec: 'author' },
+    );
+    harness.chat(task.id, 'How is it going?');
+    harness.rejectSpecChange(task.id);
+    await harness.waitForIdle();
+    await runQueued();
+    expect(fakeRuns()[4]!.received[0]).toContain(
+      '[harness] The user rejected your proposed change to the spec.',
+    );
+  });
+});
+
+describe('a second spec change request while the spec author answers the first', () => {
+  const CAPITALISED = '## Changes\n- Capitalised.\n## Acceptance criteria\n- prints Hello';
+
+  async function askedTwice() {
+    const task = await specced([session('done'), session(REVISED), session(CAPITALISED)]);
+    const stop = harness.subscribe((event) => {
+      if (event.type !== 'task' || event.status !== 'running') return;
+      stop();
+      harness.requestSpecRevision(task.id, 'Capitalise it too');
+    });
+    harness.requestSpecRevision(task.id, 'Say hello instead');
+    await harness.waitForIdle();
+    await runQueued();
+    return task;
+  }
+
+  it('records the first answer for the first request', async () => {
+    const task = await askedTwice();
+    const reasons = harness.store
+      .eventsOfKind(task.id, 'spec_change')
+      .map((e) => (e.data as { reason: string }).reason);
+    expect(reasons).toEqual(['Say hello instead', 'Capitalise it too']);
+  });
+
+  it('asks the spec author about the second request, starting from the first answer', async () => {
+    await askedTwice();
+    const prompt = fakeRuns()[4]!.received[0]!;
+    expect([prompt.includes('Capitalise it too'), prompt.includes('- prints hello')]).toEqual([
+      true,
+      true,
+    ]);
+  });
+
+  it('waits for approval of the answer to the second request, returning to review if rejected', async () => {
+    const task = await askedTwice();
+    expect([
+      status(task.id),
+      harness.specChange(task.id)?.reason,
+      harness.specChange(task.id)?.onReject,
+    ]).toEqual(['awaiting_approval', 'Capitalise it too', 'review']);
+  });
+});
+
+describe('a spec change the user asks for while chatting about a task in review', () => {
+  beforeEach(withSpecAuthor);
+
+  async function askedDuringChat() {
+    const task = await specced([session('done'), session('chatted'), session(REVISED)], {
+      spec: 'author',
+    });
+    harness.chat(task.id, 'Can you tidy it?');
+    harness.requestSpecRevision(task.id, 'Say hello instead');
+    await harness.waitForIdle();
+    await runQueued();
+    return task;
+  }
+
+  it('is answered by the spec author once the chat ends', async () => {
+    const task = await askedDuringChat();
+    expect([status(task.id), harness.specChange(task.id)?.reason]).toEqual([
+      'awaiting_approval',
+      'Say hello instead',
+    ]);
+  });
+
+  it('returns the task to review when the change is rejected', async () => {
+    const task = await askedDuringChat();
+    harness.rejectSpecChange(task.id);
+    expect(status(task.id)).toBe('review');
+  });
+});
+
+describe('quota checks for a spec change with agents of different providers', () => {
+  const FUTURE_SEC = Math.floor(Date.now() / 1000) + 3600;
+  // The implementer's session uses up the Claude Code quota; the other profile is Codex's.
+  const quotaSpent = [[init(), rateLimit('allowed', 0.97, FUTURE_SEC), result('done')]];
+
+  beforeEach(async () => {
+    await harness.shutdown();
+    harness.store.close();
+    const config = {
+      ...defaultConfig({}),
+      dataDir: path.join(dir, 'providers'),
+      agents: {
+        claude: { provider: 'claude-code' as const, command: FAKE_CLAUDE, model: null },
+        codex: { provider: 'codex' as const, command: FAKE_CLAUDE, model: null },
+      },
+      fallbackContextWindow: 100_000,
+    };
+    // Every profile runs the fake CLI; the quota checked comes from the profile's provider.
+    harness = Harness.open(config, { adapterFactory: () => new ClaudeCodeAdapter(FAKE_CLAUDE) });
+  });
+
+  /** The user asks for a change while the implementer's step, which ends in review, runs. */
+  async function askedDuringStep(later: unknown[][][], reviewer: string) {
+    scenario(discussion, specFile, quotaSpent, ...later);
+    const task = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      queue: true,
+      reviewer,
+      spec: 'codex',
+    });
+    await harness.waitForIdle();
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    const stop = harness.subscribe((event) => {
+      if (event.type !== 'task' || event.status !== 'running') return;
+      stop();
+      harness.requestSpecRevision(task.id, 'Say hello instead');
+    });
+    await runQueued();
+    await runQueued();
+    return task;
+  }
+
+  it("answers the request when only the waiting reviewer's provider is out of quota", async () => {
+    const task = await askedDuringStep([session(REVISED)], 'claude');
+    expect(status(task.id)).toBe('awaiting_approval');
+  });
+
+  it('does not resume the implementer when only its own provider is out of quota', async () => {
+    const task = await askedDuringStep([session(REVISED), session('adapted')], 'codex');
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    expect([status(task.id), fakeRuns().length]).toEqual(['queued', 4]);
   });
 });

@@ -189,6 +189,20 @@ export interface SpecChangeProposal {
    * `null` for the implementer's. Later implementer sessions never continue it.
    */
   sessionId: string | null;
+  /**
+   * Id of the `spec_revision` event the spec author was given and answered; `null` for the
+   * implementer's. A request made while it answered stays waiting for its own answer.
+   */
+  requestId: number | null;
+}
+
+/**
+ * Stored as the `spec_delivered` event in the session whose prompt carries a request for a
+ * spec change or a decision on one, so it counts as told only once that session heard it.
+ */
+export interface SpecDelivery {
+  /** Id of the `spec_revision` or `spec_change_decision` event. */
+  eventId: number;
 }
 
 /** Stored as the `spec_change_decision` event when the user approves or rejects a change. */

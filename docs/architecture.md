@@ -124,8 +124,11 @@ can change through the same approval as the first spec. Two ways in:
 - The user asks (`Harness.requestSpecRevision`, `POST /api/tasks/:id/spec-revision`), stored as
   a `spec_revision` event. The next session is the spec author's, read-only and in a new
   conversation (`specRevisionPrompt`), and it comes before a pending review or test. A
-  request made while a session runs waits for that session to end; a step that then lands
-  in review goes back in line for it (`reviseAfterStep`).
+  request made while a session or a chat runs waits for it to end; a task that then lands
+  in review goes back in line for it (`reviseAfterStep`). The proposal records the id of
+  the request it answers (`requestId`), so a request that came in meanwhile stays waiting:
+  the spec author answers it next, starting from that proposal, and the user decides only
+  on the answer to the latest request.
 - The implementer ends its reply with a `SPEC CHANGE: <why>` line and the complete revised
   list (`parseSpecChange`). Implementers of a task with a spec file are told how
   (`SPEC_CHANGE_DUTY`). The step is then not sent for review or test.
@@ -143,7 +146,11 @@ the new criteria (`specChangeApprovedPrompt`). A rejection leaves the file and c
 they were. The implementer's own proposal is answered with `SPEC_CHANGE_REJECTED_PROMPT`;
 a user's request returns the task to review if it was there, and to the queue otherwise.
 The spec author's revision sessions are never what the implementer resumes
-(`withoutRevisions`).
+(`withoutRevisions`). A session whose prompt carries a request or a decision logs a
+`spec_delivered` event as it starts (`Workflow.started`); a decision counts as heard only
+once such a session logged anything after it, so a chat in between does not use it up.
+`Workflow.nextStep` picks what the next session is for, and both `nextSession` and the
+quota check (`nextAgentId`) go by it.
 
 Rounds count from the step's last pass (`APPROVE`, `TESTS: PASS`) or from the last
 `sent_back` event, which `Harness.queueTask` records when a human sends a task in review back
