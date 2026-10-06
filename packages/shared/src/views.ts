@@ -48,6 +48,8 @@ export interface TaskView extends Task {
   planFeedbackPending: boolean;
   /** Latest acceptance criteria a single task's agent proposed, until they are approved. */
   criteria: CriteriaProposal | null;
+  /** Where the agreed spec of a single task was written; `null` until then. */
+  specFile: string | null;
   /** A change to the spec of a task already being built, while it waits for the user. */
   specChange: SpecChangeProposal | null;
   /** True while the user's request to change the spec waits for the spec author. */

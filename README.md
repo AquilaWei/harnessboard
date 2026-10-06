@@ -53,6 +53,7 @@ hb done 1                            # mark it reviewed
 | `--criteria <text>` / `--no-discuss` on `add`                                         | Give acceptance criteria, or skip agreeing                           |
 | `--on-base` on `add` / `loop`                                                         | Work directly on the base branch, without a worktree (below)         |
 | `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> [--verify <command>]`   | Review, discuss and approve criteria or plan                         |
+| `hb spec <id> <text>` / `hb reject <id>`                                              | Ask to change the spec after work started; reject a proposed change  |
 | `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)                          |
 | `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them                          |
 | `hb agents`                                                                           | List agent profiles, and agent CLIs found without one                |
@@ -240,6 +241,24 @@ another agent: `hb add "..." --spec codex --spec-model <model>`, the **Spec auth
 the New task dialog, or `hb models <id> --spec <agent>`. With a different agent the
 conversation does not carry over: after you approve, the implementer starts a new session
 from the approved criteria.
+
+**Changing the spec after work has started:** once the spec file exists, a task that is
+running, queued, in review, stopped or failed can still have its criteria changed.
+
+1. **Ask:** click **Change the spec** in the task panel, say what should change and why, and
+   send it (or `hb spec <id> "..."`). A running task finishes its current step first. The
+   implementer can also stop and propose a change itself when it finds the spec wrong.
+2. **The spec author proposes:** it reads the spec file and your message without changing
+   anything, and answers with the complete revised criteria. The task waits in _Needs you_.
+3. **You decide** on the **Criteria** tab, which shows the current criteria next to the
+   proposed ones (or `hb plan <id>`):
+   - **approve** (`hb approve <id>`, or `--criteria "..."`): edit the proposed criteria if you
+     like, then approve. Harnessboard rewrites the criteria in the spec file, adds a dated
+     line under "Revisions", commits it, and the implementer and later reviews work to the
+     new criteria.
+   - **reply** (`hb feedback <id> "..."`): the spec author proposes again.
+   - **reject** (`hb reject <id>`): the spec stays as it is, and the task goes back to where
+     it was.
 
 **Tester (optional):** add a **tester** and every finished implementer step goes to it
 before review. It writes the tests the step is missing, runs the suite, commits the tests and

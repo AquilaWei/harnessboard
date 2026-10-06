@@ -1348,6 +1348,18 @@ th {
   justify-self: start;
 }
 
+/* The criteria in force next to a proposed change, so the two are compared line by line. */
+.spec-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.spec-reason {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
 .question-list {
   display: grid;
   gap: 12px;
@@ -1801,6 +1813,10 @@ th {
   .folder-actions {
     flex-wrap: wrap;
     margin-top: auto;
+  }
+
+  .spec-compare {
+    grid-template-columns: 1fr;
   }
 
   /* Touch targets for answering the agent (Apple and WCAG suggest 44px). */

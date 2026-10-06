@@ -12,7 +12,7 @@ import type {
 import { api } from '../api';
 import type { TaskAction } from '../board';
 import { useLiveEvents, useThrottled } from '../live';
-import { openReview, sendBackKey } from '../describe';
+import { canChangeSpec, openReview, sendBackKey } from '../describe';
 import { Description } from './Description';
 import { Markdown } from './Markdown';
 import { ChatPanel } from './ChatPanel';
@@ -235,6 +235,11 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                   s === 'waiting_quota') && (
                   <button type="button" className="btn danger" onClick={() => act('stop')}>
                     {t('actions.stop')}
+                  </button>
+                )}
+                {canChangeSpec(task) && tab !== 'criteria' && (
+                  <button type="button" className="btn ghost" onClick={() => setTab('criteria')}>
+                    {t('actions.changeSpec')}
                   </button>
                 )}
                 {task.latestSessionId && tab !== 'chat' && (

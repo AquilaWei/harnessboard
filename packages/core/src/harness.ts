@@ -321,6 +321,11 @@ export class Harness {
     return this.workflow.specChange(taskId);
   }
 
+  /** Repo-relative path of the task's spec file; `null` until the spec author wrote it. */
+  specFile(taskId: number): string | null {
+    return this.workflow.specFile(taskId);
+  }
+
   /** The review a task is waiting for, if its latest step has not been reviewed yet. */
   pendingReview(taskId: number): ReviewRequest | null {
     return this.workflow.pendingReview(taskId);

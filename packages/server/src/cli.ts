@@ -20,7 +20,13 @@ import type {
   TaskView,
 } from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
-import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
+import {
+  createEventFormatter,
+  formatFeature,
+  formatSpecChange,
+  formatTaskRow,
+  formatTokens,
+} from './format.js';
 import { t } from './i18n.js';
 import { openTarget } from './open.js';
 import { printUnconfigured, runServer } from './run.js';
@@ -91,7 +97,8 @@ program
   .action(async (id: number) => {
     const task = await client().getTask(id);
     if (task.mode === 'single') {
-      if (task.criteria) console.log(`${task.criteria.reply}\n\n${t('criteriaNext', { id })}`);
+      if (task.specChange) console.log(formatSpecChange(id, task.specChange));
+      else if (task.criteria) console.log(`${task.criteria.reply}\n\n${t('criteriaNext', { id })}`);
       else if (task.acceptance) console.log(task.acceptance);
       else console.log(t('noCriteria', { id }));
       return;
@@ -110,7 +117,7 @@ program
 
 program
   .command('feedback')
-  .description('reply to a proposed plan or acceptance criteria; the agent revises them')
+  .description('reply to a proposed plan, acceptance criteria or spec change; the agent revises it')
   .argument('<id>', 'task id', parseInteger)
   .argument('<message...>', 'your feedback')
   .action(async (id: number, words: string[]) => {
@@ -120,7 +127,7 @@ program
 
 program
   .command('approve')
-  .description('approve a proposed plan or acceptance criteria and start building')
+  .description('approve a proposed plan, acceptance criteria or spec change and start building')
   .argument('<id>', 'task id', parseInteger)
   .option('--verify <command>', 'loop tasks: verify command (required unless the task has one)')
   .option('--criteria <text>', 'single tasks: approve these criteria instead of the proposed ones')
@@ -131,6 +138,27 @@ program
       mode === 'single'
         ? await api.approveCriteria(id, o.criteria)
         : await api.approvePlan(id, o.verify);
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
+  .command('spec')
+  .description(
+    "ask the spec author to change a single task's spec after work started; you approve the change",
+  )
+  .argument('<id>', 'task id', parseInteger)
+  .argument('<message...>', 'what should change in the spec, and why')
+  .action(async (id: number, words: string[]) => {
+    const task = await client().requestSpecRevision(id, words.join(' '));
+    console.log(t('specRevisionRequested', { id, status: task.status }));
+  });
+
+program
+  .command('reject')
+  .description('reject a proposed spec change; the spec and criteria stay as they are')
+  .argument('<id>', 'task id', parseInteger)
+  .action(async (id: number) => {
+    const task = await client().rejectSpecChange(id);
     console.log(t('taskStatus', { id, status: task.status }));
   });
 
@@ -210,6 +238,8 @@ program
       for (const line of task.acceptance.split('\n')) console.log(`    ${line}`);
     }
     if (task.criteria) console.log(`  ${t('criteriaNext', { id })}`);
+    if (task.specChange) console.log(`  ${t('specChangeNext', { id })}`);
+    if (task.specRevisionPending) console.log(`  ${t('specRevisionWaiting')}`);
     if (task.context) {
       const c = task.context;
       const line = t('contextLine', {

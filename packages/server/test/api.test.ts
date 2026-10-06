@@ -211,6 +211,21 @@ describe('tasks API', () => {
     expect([view.specChange, view.specRevisionPending]).toEqual([null, false]);
   });
 
+  it('shows no spec file before the spec author wrote one', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}`, { headers: local });
+    expect(((await res.json()) as { specFile: unknown }).specFile).toBeNull();
+  });
+
+  it('shows the spec file once it was written', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    harness.store.appendEvent(id, null, 'spec_written', { path: 'docs/specs/1-x.md', head: 'abc' });
+    const res = await app.request(`/api/tasks/${id}`, { headers: local });
+    expect(((await res.json()) as { specFile: unknown }).specFile).toBe('docs/specs/1-x.md');
+  });
+
   it("includes the task's usage", async () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };

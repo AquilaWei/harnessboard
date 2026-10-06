@@ -121,7 +121,9 @@ listed as out of scope, so an unfinished list is never a reason to ask for chang
 **Spec changes.** Once a single task's spec file is written (`spec_written`), its criteria
 can change through the same approval as the first spec. Two ways in:
 
-- The user asks (`Harness.requestSpecRevision`, `POST /api/tasks/:id/spec-revision`), stored as
+- The user asks (`Harness.requestSpecRevision`, `POST /api/tasks/:id/spec-revision`; on the
+  board **Change the spec**, which shows while `canChangeSpec` holds for the view's
+  `specFile` and status, and `hb spec`), stored as
   a `spec_revision` event. The next session is the spec author's, read-only and in a new
   conversation (`specRevisionPrompt`), and it comes before a pending review or test. A
   request made while a session or a chat runs waits for it to end; a task that then lands

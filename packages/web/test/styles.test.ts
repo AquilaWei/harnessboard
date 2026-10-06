@@ -13,4 +13,10 @@ describe('styles.css', () => {
     expect(phone).toBeGreaterThan(css.indexOf('\n.folder-browser {'));
     expect(phone).toBeGreaterThan(css.indexOf('\n.folder-list {'));
   });
+
+  it('puts the phone rules after the spec comparison so the two columns stack on a phone', () => {
+    const phone = css.lastIndexOf('@media (max-width: 640px)');
+    expect(css.indexOf('\n  .spec-compare {', phone)).toBeGreaterThan(phone);
+    expect(phone).toBeGreaterThan(css.indexOf('\n.spec-compare {'));
+  });
 });

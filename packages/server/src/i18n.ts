@@ -54,6 +54,17 @@ const en = {
   criteriaNext:
     'Reply with `hb feedback {id} "..."`, or start with `hb approve {id}` (`--criteria "..."` to approve your own).',
   noCriteria: 'Task {id} has no acceptance criteria.',
+  specChangeFromUser: 'Proposed change to the spec you asked for: {reason}',
+  specChangeFromImplementer: 'The implementer proposes a change to the spec: {reason}',
+  specChangeCurrent: 'current criteria:',
+  specChangeProposed: 'proposed criteria:',
+  specChangeNoCriteria:
+    'proposed criteria: none in the reply; write them with `hb approve {id} --criteria "..."`',
+  specChangeNext:
+    'Approve with `hb approve {id}` (`--criteria "..."` to approve your own), reply with `hb feedback {id} "..."`, or keep the spec with `hb reject {id}`.',
+  specRevisionWaiting: 'your spec change request waits for the spec author',
+  specRevisionRequested:
+    'Task {id} is {status}; the spec author will propose a change for you to approve (see `hb plan {id}`).',
   autoOn: 'Task {id} allows unlisted tools without asking; dangerous ones still ask.',
   autoOff: 'Task {id} asks before every tool its rules do not allow.',
   chatEnded: '(the reply ended: {reason})',
@@ -123,6 +134,17 @@ const zhTW: Messages = {
   criteriaNext:
     '用 `hb feedback {id} "..."` 回覆意見，或用 `hb approve {id}` 確認開工（加 `--criteria "..."` 改用你自己寫的標準）。',
   noCriteria: '任務 {id} 沒有驗收標準。',
+  specChangeFromUser: '依照你的要求提出的規格修改：{reason}',
+  specChangeFromImplementer: '實作者提議修改規格：{reason}',
+  specChangeCurrent: '目前的驗收標準：',
+  specChangeProposed: '提議的驗收標準：',
+  specChangeNoCriteria:
+    '提議的驗收標準：回覆裡沒有；請用 `hb approve {id} --criteria "..."` 自己寫下',
+  specChangeNext:
+    '用 `hb approve {id}` 確認修改（加 `--criteria "..."` 改用你自己寫的標準），用 `hb feedback {id} "..."` 回覆意見，或用 `hb reject {id}` 維持原規格。',
+  specRevisionWaiting: '你要求的規格修改正在等規格撰寫者處理',
+  specRevisionRequested:
+    '任務 {id} 現在是 {status}；規格撰寫者會提出修改，等你確認（用 `hb plan {id}` 查看）。',
   autoOn: '任務 {id} 會自動允許規則外的工具；危險的仍會詢問。',
   autoOff: '任務 {id} 遇到規則外的工具都會先詢問。',
   chatEnded: '（回覆中斷：{reason}）',

@@ -235,6 +235,9 @@ export const api = {
     send<unknown>('POST', `/tasks/${id}/plan/approve`, { verifyCommand }),
   approveCriteria: (id: number, criteria: string) =>
     send<unknown>('POST', `/tasks/${id}/criteria/approve`, { criteria }),
+  requestSpecRevision: (id: number, message: string) =>
+    send<unknown>('POST', `/tasks/${id}/spec-revision`, { message }),
+  rejectSpecChange: (id: number) => send<unknown>('POST', `/tasks/${id}/spec-change/reject`),
   setAutoApprove: (id: number, on: boolean) =>
     send<unknown>('PUT', `/tasks/${id}/auto-approve`, { on }),
   mergeTask: (id: number) => send<MergeResult>('POST', `/tasks/${id}/merge`),

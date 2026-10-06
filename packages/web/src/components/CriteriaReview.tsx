@@ -5,8 +5,10 @@ import type { TaskDetail } from '@harnessboard/shared';
 import { api } from '../api';
 import { composeFeedback } from '../answers';
 import type { Answer } from '../answers';
+import { canChangeSpec } from '../describe';
 import { Markdown } from './Markdown';
 import { QuestionPicker } from './QuestionPicker';
+import { SpecChangeRequest, SpecChangeReview } from './SpecChange';
 
 interface Props {
   task: TaskDetail;
@@ -17,7 +19,8 @@ interface Props {
 /**
  * A single task's acceptance criteria. While they are being agreed: the agent's proposal
  * and the two ways forward, reply (it revises them in the same conversation) or approve
- * them as you edited them. Afterwards: the criteria the work is checked against.
+ * them as you edited them. Afterwards: the criteria the work is checked against, where a
+ * change to the spec is asked for and, once proposed, approved or rejected.
  */
 export function CriteriaReview({ task, onDone, onError }: Props) {
   const { t } = useTranslation();
@@ -33,14 +36,24 @@ export function CriteriaReview({ task, onDone, onError }: Props) {
     setAnswers([]);
   }, [proposal?.reply, proposal?.criteria]);
 
+  if (task.specChange) {
+    return (
+      <SpecChangeReview task={task} change={task.specChange} onDone={onDone} onError={onError} />
+    );
+  }
   if (!proposal) {
     if (task.acceptance) {
       return (
-        <section className="plan-section">
-          <h3>{t('criteria.agreed')}</h3>
-          <Markdown className="reply" text={task.acceptance} />
-          <small className="hint">{t('criteria.agreedHint')}</small>
-        </section>
+        <div className="plan-review">
+          <section className="plan-section">
+            <h3>{t('criteria.agreed')}</h3>
+            <Markdown className="reply" text={task.acceptance} />
+            <small className="hint">{t('criteria.agreedHint')}</small>
+          </section>
+          {canChangeSpec(task) && (
+            <SpecChangeRequest task={task} onDone={onDone} onError={onError} />
+          )}
+        </div>
       );
     }
     return <p className="hint">{t(task.confirmPlan ? 'criteria.reading' : 'criteria.none')}</p>;
