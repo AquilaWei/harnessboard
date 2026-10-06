@@ -61,6 +61,20 @@ describe('GeminiAdapter.buildArgs', () => {
     ]);
   });
 
+  it('adds each readable directory to the workspace', () => {
+    expect(
+      adapter.buildArgs({ ...spec, access: 'readOnly', readableDirs: ['/evidence/7'] }),
+    ).toEqual([
+      '--output-format',
+      'stream-json',
+      '--approval-mode',
+      'plan',
+      '--include-directories',
+      '/evidence/7',
+      '--prompt=do it',
+    ]);
+  });
+
   it('passes the model and resumes the session by its id', () => {
     expect(
       adapter.buildArgs({ ...spec, model: 'gemini-3-pro', sessionId: 'g-1', resume: true }),

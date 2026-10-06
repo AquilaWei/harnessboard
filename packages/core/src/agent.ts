@@ -29,6 +29,11 @@ export interface SessionSpec {
    * `edit` sessions of a CLI with `permissionPrompts`, and ignored with `skipPermissions`.
    */
   askPermission: boolean;
+  /**
+   * Directories outside `cwd` the session must be able to read, such as the review
+   * evidence of a reviewer without `readOnlyGit`. Absent or empty for none.
+   */
+  readableDirs?: string[];
 }
 
 /** Turns CLI output lines into events; see {@link AgentAdapter.createParser}. */

@@ -28,7 +28,8 @@ export class GeminiAdapter implements AgentAdapter {
    * every tool, and `auto_edit` approves file edits only. Without a terminal nothing can
    * answer an approval, so under `auto_edit` shell commands are refused, which also means
    * such a session can not commit. `plan` refuses git as well, so the harness gives a
-   * reviewer the git output (`readOnlyGit`). `allowedTools` are Claude-style rules that
+   * reviewer the git output (`readOnlyGit`) in files under `readableDirs`, which join the
+   * workspace with `--include-directories`. `allowedTools` are Claude-style rules that
    * Gemini does not understand, so they are not passed on.
    */
   buildArgs(spec: SessionSpec): string[] {
@@ -37,6 +38,7 @@ export class GeminiAdapter implements AgentAdapter {
     else if (spec.skipPermissions) args.push('--approval-mode', 'yolo');
     else args.push('--approval-mode', 'auto_edit');
     if (spec.model) args.push('--model', spec.model);
+    for (const dir of spec.readableDirs ?? []) args.push('--include-directories', dir);
     if (spec.resume) {
       if (!spec.sessionId) throw new Error('resuming a Gemini session needs its session id');
       args.push('--resume', spec.sessionId);

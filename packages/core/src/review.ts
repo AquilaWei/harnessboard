@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import type {
   Feature,
   ReviewRecord,
@@ -98,38 +100,46 @@ export function reviewPrompt(
 }
 
 /**
- * Characters of patch text {@link reviewEvidence} puts in a prompt, shared by all its
- * diffs. The prompt goes to the CLI as one argument, and Linux refuses a single argument
- * over 128 KiB; at three bytes per character for CJK text this stays below it with room
- * for the rest of the prompt.
+ * Characters of git output {@link reviewEvidence} quotes in a prompt, shared by all its
+ * commands. The prompt goes to the CLI as one argument, so it has to stay small: Linux
+ * refuses a single argument over 128 KiB, and Windows a whole command line over 32,767
+ * characters. Output past it is only in the evidence files.
  */
-export const EVIDENCE_PATCH_LIMIT = 40_000;
+export const EVIDENCE_INLINE_LIMIT = 12_000;
 
 /**
  * The output of the git commands {@link reviewPrompt} names, for a reviewer whose CLI
  * cannot run them in a read-only session (see `AgentCapabilities.readOnlyGit`): the log,
- * file summary and patch of the current stretch and of each earlier one, uncommitted
- * changes and `git status`. Patches past {@link EVIDENCE_PATCH_LIMIT} are cut, and the
- * reviewer is told to read those files instead. Throws when git fails in `dir`.
+ * file summary and patch of the current stretch and of each earlier one, `git status` and
+ * the uncommitted changes. Every output is written whole to its own file in `outDir`,
+ * which is emptied first and has to be readable by the session (`SessionSpec.readableDirs`);
+ * the returned prompt section quotes the outputs that fit {@link EVIDENCE_INLINE_LIMIT} and
+ * names the file of each, so nothing is lost when the patches are large. Throws when git
+ * fails in `dir` or `outDir` cannot be written.
  */
-export async function reviewEvidence(dir: string, request: ReviewRequest): Promise<string> {
-  let budget = EVIDENCE_PATCH_LIMIT;
-  const patch = (text: string): string => {
-    if (text.length <= budget) {
-      budget -= text.length;
-      return text;
+export async function reviewEvidence(
+  dir: string,
+  request: ReviewRequest,
+  outDir: string,
+): Promise<string> {
+  await rm(outDir, { recursive: true, force: true });
+  await mkdir(outDir, { recursive: true });
+  let budget = EVIDENCE_INLINE_LIMIT;
+  const block = async (command: string, file: string, output: string): Promise<string[]> => {
+    const text = output.trimEnd() || '(no output)';
+    const where = path.join(outDir, file);
+    await writeFile(where, `$ ${command}\n${text}\n`);
+    if (text.length > budget) {
+      const lines = text.split('\n').length;
+      return [
+        `$ ${command}`,
+        `(${lines} lines, too long to quote here: read all of \`${where}\`, in parts if needed)`,
+      ];
     }
-    const kept = text.slice(0, budget);
-    budget = 0;
-    return `${kept}\n[harness] The patch was cut here; read the files in the summary above directly.`;
+    budget -= text.length;
+    return [`$ ${command}`, `(also in \`${where}\`)`, '```', text, '```'];
   };
-  const block = (command: string, output: string): string[] => [
-    `$ ${command}`,
-    '```',
-    output.trimEnd() || '(no output)',
-    '```',
-  ];
-  const span = async (from: string, to: string): Promise<string[]> => {
+  const span = async (from: string, to: string, name: string): Promise<string[]> => {
     const range = `${from}..${to}`;
     const [log, stat, diff] = await Promise.all([
       git(dir, ['log', '--oneline', range]),
@@ -137,25 +147,30 @@ export async function reviewEvidence(dir: string, request: ReviewRequest): Promi
       git(dir, ['diff', range]),
     ]);
     return [
-      ...block(`git log --oneline ${range}`, log),
-      ...block(`git diff --stat ${range}`, stat),
-      ...block(`git diff ${range}`, patch(diff)),
+      ...(await block(`git log --oneline ${range}`, `${name}-log.txt`, log)),
+      ...(await block(`git diff --stat ${range}`, `${name}-stat.txt`, stat)),
+      ...(await block(`git diff ${range}`, `${name}-diff.txt`, diff)),
     ];
   };
   const lines = [
     'You cannot run shell commands in this session, so the harness ran the git commands',
-    'above for you. Their output follows; use your read tools for the surrounding code.',
+    'above for you and saved each output whole to a file you can read. What fits is quoted',
+    'below; read the files for the rest, and use your read tools for the surrounding code.',
     '',
-    ...(await span(request.since, 'HEAD')),
+    ...(await span(request.since, 'HEAD', 'current')),
   ];
   // `git diff HEAD` adds what `git status` alone does not show: the uncommitted edits.
   const [status, uncommitted] = await Promise.all([
     git(dir, ['status', '--porcelain']),
     git(dir, ['diff', 'HEAD']),
   ]);
-  lines.push(...block('git status --porcelain', status));
-  if (uncommitted.trim()) lines.push(...block('git diff HEAD', patch(uncommitted)));
-  for (const { from, to } of request.earlier ?? []) lines.push(...(await span(from, to)));
+  lines.push(...(await block('git status --porcelain', 'status.txt', status)));
+  if (uncommitted.trim()) {
+    lines.push(...(await block('git diff HEAD', 'uncommitted-diff.txt', uncommitted)));
+  }
+  for (const [i, { from, to }] of (request.earlier ?? []).entries()) {
+    lines.push(...(await span(from, to, `earlier-${i + 1}`)));
+  }
   return lines.join('\n');
 }
 

@@ -717,7 +717,7 @@ export class Harness {
   }
 
   /**
-   * Deletes a task with its history and removes its worktree directory, discarding any
+   * Deletes a task with its history and review evidence, and removes its worktree directory, discarding any
    * uncommitted changes there. The branch is kept, so committed work can still be merged.
    * A `base` task's folder is the repository itself, so nothing on disk is touched.
    * Throws when the task is missing or running (stop it first), or git cannot remove the
@@ -735,6 +735,7 @@ export class Harness {
     if (task.workspace === 'worktree' && task.worktreePath) {
       await this.discardWorktree(task.repoPath, task.worktreePath);
     }
+    await rm(this.evidenceDir(id), { recursive: true, force: true });
     this.store.deleteTask(id);
     this.emit({ type: 'deleted', taskId: id });
   }
@@ -1312,6 +1313,11 @@ export class Harness {
     }
   }
 
+  /** Where the git output for a reviewer without `readOnlyGit` is written (`reviewEvidence`). */
+  private evidenceDir(taskId: number): string {
+    return path.join(this.config.dataDir, 'evidence', String(taskId));
+  }
+
   private profilesOf(provider: AgentProvider): string[] {
     return Object.entries(this.config.agents)
       .filter(([, profile]) => profile.provider === provider)
@@ -1327,9 +1333,14 @@ export class Harness {
       let plan = this.workflow.plan(ready);
       await this.workflow.syncNotes(ready);
       const adapter = this.adapterFor(plan.agentId);
-      if (plan.review && !adapter.capabilities.readOnlyGit) {
-        const evidence = await reviewEvidence(ready.worktreePath!, plan.review);
-        plan = { ...plan, prompt: `${plan.prompt}\n\n${evidence}` };
+      if (plan.role === 'reviewer' && !adapter.capabilities.readOnlyGit) {
+        // The files stay until the next review, so a resumed reviewer can still read them.
+        const evidenceDir = this.evidenceDir(task.id);
+        if (plan.review) {
+          const evidence = await reviewEvidence(ready.worktreePath!, plan.review, evidenceDir);
+          plan = { ...plan, prompt: `${plan.prompt}\n\n${evidence}` };
+        }
+        if (existsSync(evidenceDir)) plan = { ...plan, readableDirs: [evidenceDir] };
       }
       const sessionId = plan.resume?.id ?? randomUUID();
       if (!plan.resume) {
@@ -1474,6 +1485,7 @@ export class Harness {
         skipPermissions: task.permission.skipPermissions,
         // Read-only sessions must not change anything, so they are never offered more tools.
         askPermission: plan.access === 'edit' && adapter.capabilities.permissionPrompts,
+        readableDirs: plan.readableDirs ?? [],
       },
       thresholds: resolveThresholds(task.contextPolicy),
       wrapUp,

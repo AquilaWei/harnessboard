@@ -106,6 +106,8 @@ export interface SessionPlan {
    * with only a request to go on.
    */
   review?: ReviewRequest;
+  /** Directories outside the worktree the session reads; set by the harness, see `SessionSpec`. */
+  readableDirs?: string[];
 }
 
 /** What a task's next session is for, in the order {@link Workflow} picks it. */

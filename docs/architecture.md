@@ -192,12 +192,12 @@ get `maxReviewRounds` again.
    - `quota`, if the CLI reports usage limits
 4. Declare `capabilities` honestly. The runner adapts to them:
 
-   | Capability          | `true` / `harness`                                                                             | `false` / `agent`                                                                             |
-   | ------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-   | `midTurnInput`      | Prompt and wrap-up request are written to stdin during the turn                                | Prompt goes in the arguments; the wrap-up is sent by resuming the session after the turn ends |
-   | `sessionIds`        | The harness picks the id and passes it                                                         | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it     |
-   | `permissionPrompts` | A tool outside the rules emits `permission_request`; the CLI waits for `encodePermissionReply` | Such tools are refused; the user widens the rules with `hb tools` and runs the task again     |
-   | `readOnlyGit`       | A read-only reviewer runs `git log`, `git diff` and `git status` itself                        | The harness runs them and adds their output to the reviewer's prompt (`reviewEvidence`)       |
+   | Capability          | `true` / `harness`                                                                             | `false` / `agent`                                                                                                      |
+   | ------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+   | `midTurnInput`      | Prompt and wrap-up request are written to stdin during the turn                                | Prompt goes in the arguments; the wrap-up is sent by resuming the session after the turn ends                          |
+   | `sessionIds`        | The harness picks the id and passes it                                                         | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it                              |
+   | `permissionPrompts` | A tool outside the rules emits `permission_request`; the CLI waits for `encodePermissionReply` | Such tools are refused; the user widens the rules with `hb tools` and runs the task again                              |
+   | `readOnlyGit`       | A read-only reviewer runs `git log`, `git diff` and `git status` itself                        | The harness runs them, saves the output to files the reviewer may read, and quotes it in the prompt (`reviewEvidence`) |
 
 5. Map `SessionSpec.access: 'readOnly'` to the CLI's most restrictive mode. Reviewers rely
    on it. The harness also compares HEAD and `git status` before and after every review,
@@ -250,9 +250,15 @@ a real run yet.
   command or git itself. Instead the harness runs the git commands the review prompt names
   (`reviewEvidence` in `review.ts`): log, `--stat` and patch of the current stretch and of a
   `base` task's earlier stretches, `git status --porcelain`, and `git diff HEAD` when there
-  are uncommitted edits. The output goes after the prompt. Patches share a budget of 40,000
-  characters, because the prompt is one argument and Linux refuses an argument over 128 KiB;
-  past it a patch is cut and the reviewer reads the files from the `--stat` list instead. `allowedTools` are Claude-style rules that Gemini does not understand, so
+  are uncommitted edits. Each output is written whole to its own file in
+  `<dataDir>/evidence/<task id>/` (`current-diff.txt`, `earlier-1-diff.txt`, `status.txt`,
+  ...), emptied before each review and removed with the task. The directory is passed as
+  `SessionSpec.readableDirs`, which Gemini gets as `--include-directories`, so plan mode may
+  read it; it is passed again when the reviewer is resumed. The prompt quotes outputs whole
+  while they fit a shared 12,000 characters (`EVIDENCE_INLINE_LIMIT`) and names the file of
+  every output, so deleted files, removed lines and earlier stretches stay reachable however
+  large the change is. The limit keeps the prompt, which is one argument, under Linux's 128 KiB
+  per argument and well inside Windows' 32,767-character command line. `allowedTools` are Claude-style rules that Gemini does not understand, so
   they are not passed on.
 - `stats` comes once, in the `result`, so no `context` events are emitted and Gemini manages
   its own context. Its per-model `input` (tokens not read from the cache) and `cached` become

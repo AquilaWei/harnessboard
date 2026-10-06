@@ -162,6 +162,56 @@ describe('a Gemini review of a base task with an earlier stretch', () => {
   });
 });
 
+describe('a Gemini review', () => {
+  /** Runs a task whose implementer commits hello.txt and that Gemini reviews; returns its id. */
+  async function reviewedByGemini(): Promise<number> {
+    scenario([
+      [init(), writeFile('hello.txt', 'hi there\n'), commitAll('add hello.txt'), result('ok')],
+    ]);
+    const task = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      confirmPlan: false,
+      reviewer: 'gemini',
+      queue: true,
+    });
+    await harness.waitForIdle();
+    harness.tick(); // the reviewer's session
+    await harness.waitForIdle();
+    return task.id;
+  }
+
+  /** The arguments the fake Gemini CLI got on its first run. */
+  function geminiArgs(): string[] {
+    const run = readFileSync(process.env.FAKE_GEMINI_LOG!, 'utf8').split('\n')[0]!;
+    return (JSON.parse(run) as { args: string[] }).args;
+  }
+
+  it('may read the directory holding the evidence files', async () => {
+    const id = await reviewedByGemini();
+    const evidence = path.join(dir, 'data', 'evidence', String(id));
+    const args = geminiArgs();
+    expect(
+      args.slice(args.indexOf('--include-directories'), args.indexOf('--include-directories') + 2),
+    ).toEqual(['--include-directories', evidence]);
+  });
+
+  it('finds the whole patch in the evidence directory', async () => {
+    const id = await reviewedByGemini();
+    const patch = readFileSync(
+      path.join(dir, 'data', 'evidence', String(id), 'current-diff.txt'),
+      'utf8',
+    );
+    expect(patch).toContain('+hi there');
+  });
+
+  it('has its evidence removed with the task', async () => {
+    const id = await reviewedByGemini();
+    await harness.deleteTask(id);
+    expect(existsSync(path.join(dir, 'data', 'evidence', String(id)))).toBe(false);
+  });
+});
+
 describe('a Claude review', () => {
   it('gets the git commands without their output, since it can run them', async () => {
     scenario(
