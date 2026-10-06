@@ -208,6 +208,8 @@ export const en = {
   card: {
     features: '{{verified}}/{{total}} features',
     reviewer: 'reviewed by {{agent}}',
+    onBase: 'on {{base}}',
+    onBaseHint: 'Works directly on this branch, without a worktree or a branch of its own',
     sessions_one: '{{count}} session',
     sessions_other: '{{count}} sessions',
   },
@@ -366,6 +368,11 @@ export const en = {
     base: 'Base',
     branch: 'Branch',
     worktree: 'Worktree',
+    workspace: 'Works on',
+    workspaces: {
+      worktree: 'Its own branch, merged after review',
+      base: 'Directly on {{base}}',
+    },
     mode: 'Mode',
     spec: 'Spec author',
     tester: 'Tester',
@@ -415,6 +422,16 @@ export const en = {
     discuss: 'Agree on acceptance criteria before work starts (recommended)',
     repo: 'Repository',
     repoHint: 'Path to any folder inside a git repository.',
+    workspace: 'Where the agent works',
+    workspaces: {
+      worktree: 'Work on a new branch (recommended)',
+      base: 'Work directly on {{base}}',
+    },
+    workspaceHints: {
+      worktree: 'Its own branch in a separate worktree. You merge it after review.',
+      base: 'Commits land on the branch in the repository folder as it goes, with nothing to merge. That branch must be checked out there, and only one such task works in a folder at a time.',
+    },
+    currentBranch: 'the current branch',
     mode: 'Kind of task',
     modes: {
       single: 'Single task',
@@ -741,6 +758,8 @@ export const zhTW: typeof en = {
   card: {
     features: '{{verified}}/{{total}} 項 feature',
     reviewer: '由 {{agent}} 審查',
+    onBase: '直接在 {{base}}',
+    onBaseHint: '直接在這個分支上工作，沒有自己的 worktree 或分支',
     sessions_one: '{{count}} 個 session',
     sessions_other: '{{count}} 個 session',
   },
@@ -895,6 +914,11 @@ export const zhTW: typeof en = {
     base: '基準',
     branch: '分支',
     worktree: 'Worktree',
+    workspace: '工作位置',
+    workspaces: {
+      worktree: '自己的分支，審查後合併',
+      base: '直接在 {{base}} 上',
+    },
     mode: '模式',
     spec: '規格作者',
     tester: '測試者',
@@ -942,6 +966,16 @@ export const zhTW: typeof en = {
     discuss: '開工前先討論驗收標準（建議）',
     repo: 'Repository',
     repoHint: 'git repository 內任一資料夾的路徑。',
+    workspace: 'Agent 在哪裡工作',
+    workspaces: {
+      worktree: '在新分支上工作（建議）',
+      base: '直接在 {{base}} 上工作',
+    },
+    workspaceHints: {
+      worktree: '在獨立的 worktree 裡用自己的分支工作，審查後由你合併。',
+      base: '直接在 repository 資料夾裡提交到這個分支，不需要合併。資料夾裡必須已經切到這個分支，而且同一個資料夾一次只能有一個這種任務在工作。',
+    },
+    currentBranch: '目前的分支',
     mode: '任務類型',
     modes: {
       single: '單次任務',

@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import spawn from 'cross-spawn';
-import { Argument, Command, InvalidArgumentError, Option } from 'commander';
+import { Argument, Command, Option } from 'commander';
 import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import {
   AGENT_PROVIDERS,
   APP_NAME,
   DEFAULT_COMMANDS,
-  DEFAULT_PRESET,
-  PERMISSION_PRESETS,
   definedOnly,
   formatCost,
   formatDuration,
@@ -18,7 +16,6 @@ import type {
   AgentProvider,
   PermissionRequest,
   PlanQuestion,
-  TaskSize,
   TaskUsage,
   TaskView,
 } from '@harnessboard/shared';
@@ -27,6 +24,8 @@ import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from
 import { t } from './i18n.js';
 import { openTarget } from './open.js';
 import { printUnconfigured, runServer } from './run.js';
+import { parseInteger, parsePresets, taskInput, withTaskOptions } from './task-options.js';
+import type { AddOptions, LoopInput } from './task-options.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const FOLLOW_INTERVAL_MS = 500;
@@ -50,77 +49,8 @@ program
   .description('start the scheduler and the local API')
   .action(() => runServer(config()));
 
-/** Options shared by `add` and `loop`. */
-function withTaskOptions(command: Command): Command {
-  return command
-    .option('-C, --repo <dir>', 'repository to work in', process.cwd())
-    .option('--title <title>', 'short title (defaults to the first line of the prompt)')
-    .option('--criteria <text>', 'acceptance criteria: what must hold for the work to be done')
-    .option('--base <ref>', 'git ref to branch from (defaults to the current branch)')
-    .addOption(
-      new Option('--size <size>', 'task size; sets the soft context threshold').choices([
-        'small',
-        'medium',
-        'large',
-      ]),
-    )
-    .option(
-      '--compact <pct>',
-      'compact the conversation at this context % (0: never)',
-      parseInteger,
-    )
-    .option('--soft <pct>', 'soft context threshold in percent', parseInteger)
-    .option('--hard <pct>', 'hard context threshold in percent', parseInteger)
-    .option(
-      '--preset <ids>',
-      `permission presets, comma-separated: ${PERMISSION_PRESETS.map((p) => p.id).join(', ')} or none (default ${DEFAULT_PRESET})`,
-      parsePresets,
-    )
-    .option('--allow <rules...>', 'more tool rules the agent may use without asking')
-    .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
-    .option(
-      '--no-auto-approve',
-      'ask before every tool the rules do not allow, instead of only dangerous ones',
-    )
-    .option('--model <model>', 'model for the implementer, e.g. opus, sonnet, haiku')
-    .option(
-      '--spec <agent>',
-      'agent profile that writes the acceptance criteria (default: implementer)',
-    )
-    .option('--spec-model <model>', 'model for the spec author')
-    .option('--tester <agent>', 'agent profile that writes and runs tests for each finished step')
-    .option('--tester-model <model>', 'model for the tester')
-    .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
-    .option('--reviewer-model <model>', 'model for the reviewer')
-    .option('--no-queue', 'leave the task in the backlog');
-}
-
 async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): Promise<void> {
-  const task = await client().createTask(
-    definedOnly({
-      prompt,
-      ...loop,
-      acceptance: o.criteria,
-      repo: o.repo,
-      title: o.title,
-      baseRef: o.base,
-      size: o.size,
-      compactPct: o.compact,
-      softPct: o.soft,
-      hardPct: o.hard,
-      allowedTools: allowedTools(o.preset, o.allow),
-      skipPermissions: o.skipPermissions,
-      autoApprove: o.autoApprove,
-      spec: o.spec,
-      specModel: o.specModel,
-      tester: o.tester,
-      testerModel: o.testerModel,
-      reviewer: o.reviewer === 'none' ? null : o.reviewer,
-      implementerModel: o.model,
-      reviewerModel: o.reviewerModel,
-      queue: o.queue,
-    }),
-  );
+  const task = await client().createTask(taskInput(prompt, o, loop));
   console.log(t('taskCreated', { id: task.id, status: task.status }));
 }
 
@@ -273,7 +203,8 @@ program
     const task = await client().getTask(id);
     console.log(formatTaskRow(task));
     console.log(`  repo:     ${task.repoPath} (${task.baseRef})`);
-    console.log(`  worktree: ${task.worktreePath ?? '-'} ${task.branch ?? ''}`);
+    if (task.workspace === 'base') console.log(`  ${t('onBase', { base: task.baseRef })}`);
+    else console.log(`  worktree: ${task.worktreePath ?? '-'} ${task.branch ?? ''}`);
     if (task.acceptance) {
       console.log(`  ${t('criteriaHeading')}`);
       for (const line of task.acceptance.split('\n')) console.log(`    ${line}`);
@@ -623,35 +554,6 @@ program
     await new Promise<void>((resolve) => child.once('close', () => resolve()));
   });
 
-interface LoopInput {
-  mode?: 'loop';
-  verifyCommand?: string;
-  confirmPlan?: boolean;
-}
-
-interface AddOptions {
-  repo: string;
-  criteria?: string;
-  title?: string;
-  base?: string;
-  size?: TaskSize;
-  compact?: number;
-  soft?: number;
-  hard?: number;
-  preset?: string[];
-  allow?: string[];
-  skipPermissions?: boolean;
-  autoApprove?: boolean;
-  reviewer?: string;
-  model?: string;
-  reviewerModel?: string;
-  spec?: string;
-  specModel?: string;
-  tester?: string;
-  testerModel?: string;
-  queue: boolean;
-}
-
 interface ModelsOptions {
   model?: string;
   spec?: string;
@@ -681,34 +583,6 @@ function pickRequest(task: TaskView, requestId?: string): PermissionRequest {
 }
 
 /** Comma-separated preset ids; `none` for no preset. Unknown ids are rejected here. */
-function parsePresets(value: string): string[] {
-  const ids = value
-    .split(',')
-    .map((id) => id.trim())
-    .filter((id) => id && id !== 'none');
-  try {
-    presetRules(ids);
-  } catch (err) {
-    throw new InvalidArgumentError((err as Error).message);
-  }
-  return ids;
-}
-
-/**
- * Rules to send, or `undefined` to let the server choose. `--allow` alone adds to the
- * default preset, so extra rules never silently take away the git commands.
- */
-function allowedTools(presets?: string[], allow?: string[]): string[] | undefined {
-  if (!presets && !allow) return undefined;
-  return [...new Set([...presetRules(presets ?? [DEFAULT_PRESET]), ...(allow ?? [])])];
-}
-
-function parseInteger(value: string): number {
-  const n = Number(value);
-  if (!Number.isInteger(n)) throw new InvalidArgumentError('not an integer');
-  return n;
-}
-
 program.parseAsync().catch((err: unknown) => {
   const message =
     err instanceof ServerUnavailableError

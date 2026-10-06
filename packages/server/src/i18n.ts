@@ -23,6 +23,7 @@ const en = {
   openBaseTask:
     'Task {id} works directly on {base} in the repository folder, which hb open cannot reserve ' +
     'for it. Use hb chat {id} instead.',
+  onBase: 'works directly on {base} in the repository folder (no worktree or branch)',
   opening: 'Opening session {session} in {dir}',
   emptyDiff: 'No changes yet.',
   untracked: 'Untracked files:',
@@ -91,6 +92,7 @@ const zhTW: Messages = {
   noSession: '任務 {id} 還沒有開始任何 session。',
   openBaseTask:
     '任務 {id} 直接在儲存庫資料夾的 {base} 上工作，hb open 無法替它保留這個資料夾。請改用 hb chat {id}。',
+  onBase: '直接在 repository 資料夾的 {base} 上工作（沒有 worktree 或分支）',
   opening: '在 {dir} 開啟 session {session}',
   emptyDiff: '目前沒有變更。',
   untracked: '未追蹤的檔案：',

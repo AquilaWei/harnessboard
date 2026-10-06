@@ -51,6 +51,7 @@ hb done 1                            # mark it reviewed
 | `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                                              |
 | `hb loop <goal> [--verify <command>]` [same options as `add`]                         | Start a Loop task (see below)                                        |
 | `--criteria <text>` / `--no-discuss` on `add`                                         | Give acceptance criteria, or skip agreeing                           |
+| `--on-base` on `add` / `loop`                                                         | Work directly on the base branch, without a worktree (below)         |
 | `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> [--verify <command>]`   | Review, discuss and approve criteria or plan                         |
 | `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)                          |
 | `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them                          |
@@ -80,6 +81,21 @@ worktree and branch are removed.
   one); merge again when you are happy with it.
 - **Mark done without merging** keeps the old behaviour: the branch stays for you to merge.
 - Needs git 2.38 or later.
+
+**Working directly on the base branch** (`--on-base`, or **Work directly on …** in New
+task) skips the worktree and the branch. The agent works in the repository folder itself, so
+its commits land on the base branch as it goes and there is nothing to merge: approving the
+review marks the task done. The card shows **on main** (or whichever branch it is).
+
+- The base branch must be checked out in that folder when the task starts.
+- Only one such task holds a folder at a time, from when it is queued until it is done,
+  stopped or failed (review included). Starting another one there, or merging another task
+  into that branch, is refused with the number of the task holding it.
+- Its diff and commit list cover only what it committed while it held the folder, not
+  commits you or other tasks made in between. Changes already uncommitted in the folder
+  when it starts count as its work.
+- `hb open` is refused for these tasks; use `hb chat` instead.
+- Deleting one removes its history only: no folder and no branch.
 
 **Deleting a task** (`hb delete`, or **Delete** in the task panel) removes its history and
 its worktree folder, including edits that were not committed. The branch is kept, so

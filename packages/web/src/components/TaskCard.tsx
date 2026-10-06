@@ -59,6 +59,11 @@ export function TaskCard({ task, onOpen, onAction, onDragStart, onDragEnd, dragg
             {t(`status.${task.status}`)}
           </span>
           {task.mode === 'loop' && <span className="badge">{t('loop.badge')}</span>}
+          {task.workspace === 'base' && (
+            <span className="badge" title={t('card.onBaseHint')}>
+              {t('card.onBase', { base: task.baseRef })}
+            </span>
+          )}
         </span>
       </button>
       <Description task={task} />

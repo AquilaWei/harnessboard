@@ -41,26 +41,27 @@ hb open 1                            # 在 Claude Code 互動模式中接手這�
 hb done 1                            # 標記為已審核完成
 ```
 
-| 指令                                                                                | 用途                                        |
-| ----------------------------------------------------------------------------------- | ------------------------------------------- |
-| `hb add <提示> [--size small\|medium\|large] [--soft N --hard N] [--allow 規則...]` | 建立並排入任務                              |
-| `hb loop <目標> [--verify <指令>]`（其餘選項與 `add` 相同）                         | 建立 Loop 任務（見下方）                    |
-| `add` 加上 `--criteria <文字>`／`--no-discuss`                                      | 直接給驗收標準，或跳過討論                  |
-| `hb plan <id>`／`hb feedback <id> <意見>`／`hb approve <id> [--verify <指令>]`      | 檢視、討論、確認驗收標準或規格              |
-| `add`／`loop` 加上 `--reviewer <agent>`                                             | 由另一個 agent 審查每一步（見下方）         |
-| `add`／`loop` 加上 `--model <m>`／`--reviewer-model <m>`；`hb models <id>`          | 每個任務各自選模型；查看或修改              |
-| `hb agents`                                                                         | 列出 agent 設定檔，以及找到但還沒設定的 CLI |
-| `hb ls` / `hb show <id>`                                                            | 列出任務／顯示 session 與上下文用量         |
-| `hb logs <id> [-f]`                                                                 | 印出或持續追蹤紀錄                          |
-| `hb stop <id>` / `hb resume <id>`                                                   | 停止，或重新排入                            |
-| `hb diff <id>` / `hb open <id>` / `hb done <id>`                                    | 審核、互動接手、完成                        |
-| `hb chat <id> <訊息>`                                                               | 傳訊息給任務的 agent，印出它的回覆          |
-| `hb commits <id>`                                                                   | 列出任務分支上的 commit                     |
-| `hb merge <id>`                                                                     | 把審核過的任務合併回基準分支                |
-| `hb delete <id>`                                                                    | 刪除沒在執行的任務（見下方）                |
-| `hb allow <id> [--suggested] [--rule 規則...] [--global]`／`hb deny <id> [原因]`    | 回覆 agent 正在等的工具請求                 |
-| `add`／`loop` 加上 `--no-auto-approve`；`hb auto <id> [on\|off]`；`hb global-tools` | 調整詢問多寡：見下方「權限」                |
-| `add`／`loop` 加上 `--preset git,node,...`；`hb tools <id> [規則...]`               | 選擇允許的工具；查看或修改                  |
+| 指令                                                                                | 用途                                          |
+| ----------------------------------------------------------------------------------- | --------------------------------------------- |
+| `hb add <提示> [--size small\|medium\|large] [--soft N --hard N] [--allow 規則...]` | 建立並排入任務                                |
+| `hb loop <目標> [--verify <指令>]`（其餘選項與 `add` 相同）                         | 建立 Loop 任務（見下方）                      |
+| `add` 加上 `--criteria <文字>`／`--no-discuss`                                      | 直接給驗收標準，或跳過討論                    |
+| `add`／`loop` 加上 `--on-base`                                                      | 直接在基準分支上工作，不開 worktree（見下方） |
+| `hb plan <id>`／`hb feedback <id> <意見>`／`hb approve <id> [--verify <指令>]`      | 檢視、討論、確認驗收標準或規格                |
+| `add`／`loop` 加上 `--reviewer <agent>`                                             | 由另一個 agent 審查每一步（見下方）           |
+| `add`／`loop` 加上 `--model <m>`／`--reviewer-model <m>`；`hb models <id>`          | 每個任務各自選模型；查看或修改                |
+| `hb agents`                                                                         | 列出 agent 設定檔，以及找到但還沒設定的 CLI   |
+| `hb ls` / `hb show <id>`                                                            | 列出任務／顯示 session 與上下文用量           |
+| `hb logs <id> [-f]`                                                                 | 印出或持續追蹤紀錄                            |
+| `hb stop <id>` / `hb resume <id>`                                                   | 停止，或重新排入                              |
+| `hb diff <id>` / `hb open <id>` / `hb done <id>`                                    | 審核、互動接手、完成                          |
+| `hb chat <id> <訊息>`                                                               | 傳訊息給任務的 agent，印出它的回覆            |
+| `hb commits <id>`                                                                   | 列出任務分支上的 commit                       |
+| `hb merge <id>`                                                                     | 把審核過的任務合併回基準分支                  |
+| `hb delete <id>`                                                                    | 刪除沒在執行的任務（見下方）                  |
+| `hb allow <id> [--suggested] [--rule 規則...] [--global]`／`hb deny <id> [原因]`    | 回覆 agent 正在等的工具請求                   |
+| `add`／`loop` 加上 `--no-auto-approve`；`hb auto <id> [on\|off]`；`hb global-tools` | 調整詢問多寡：見下方「權限」                  |
+| `add`／`loop` 加上 `--preset git,node,...`；`hb tools <id> [規則...]`               | 選擇允許的工具；查看或修改                    |
 
 **合併任務**（`hb merge`，或在待審核任務的面板按「合併到 main」）會用一個合併 commit
 （`Merge task #N: <標題>`）把任務分支合併回它出發的分支，任務的每個 commit 都會保留。
@@ -73,6 +74,19 @@ hb done 1                            # 標記為已審核完成
   審查者的話也會再審一次），確認沒問題後再合併一次。
 - 「只標為完成，不合併」保留原本的做法：分支留著讓你自己合併。
 - 需要 git 2.38 以上。
+
+**直接在基準分支上工作**（`--on-base`，或在新增任務對話框選「直接在 … 上工作」）不建立
+worktree 也不開分支。agent 直接在 repository 資料夾裡工作，commit 會一路落在基準分支上，
+不需要合併：審核通過就標為完成。卡片上會顯示「直接在 main」（或實際的分支名稱）。
+
+- 任務開始時，那個資料夾必須已經切到基準分支。
+- 同一個資料夾一次只能有一個這種任務，從排入開始到完成、停止或失敗為止（包括待審核）。
+  這段期間在同一個資料夾啟動另一個這種任務，或把別的任務合併進那個分支，都會被拒絕，並告訴
+  你是哪個任務占用著。
+- 它的 diff 和 commit 清單只算它占用資料夾期間自己 commit 的內容，不包括你或其他任務在中間
+  做的 commit。開始時資料夾裡已經有、還沒 commit 的修改，會算成它的工作。
+- 這種任務不能用 `hb open`，請改用 `hb chat`。
+- 刪除時只刪掉它的紀錄，不會刪資料夾也不會刪分支。
 
 **刪除任務**（`hb delete`，或任務面板裡的「刪除」）會刪掉它的紀錄和 worktree 資料夾，
 還沒 commit 的修改也會一起消失。分支會保留，已經 commit 的成果仍然可以合併；不需要時再用

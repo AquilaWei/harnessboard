@@ -183,6 +183,27 @@ Gemini does not report a subscription quota the way Claude Code's `rate_limit_ev
 Its adapter should report a usage-limit error as an error `result` with
 `apiErrorStatus: 429`. The task then waits `quotaRetryMinutes` and retries.
 
+## Workspaces
+
+A task's `workspace` says where its agents work. It is chosen when the task is created
+(`CreateTaskInput.workspace`, `hb add --on-base`, the New task dialog) and never changes.
+
+- **`worktree` (default):** the first start adds a worktree under the data directory, on a
+  new branch from `baseRef`. The diff and commits are measured from `baseRef`. The branch is
+  merged after review (`hb merge`), or left for the user with Mark done.
+- **`base`:** `worktreePath` is set to the repository folder, `branch` stays null, and its
+  commits land on `baseRef`, which must be checked out there. Everything that runs in
+  `worktreePath` (sessions, the verify command, notes) needs no special case. Delete, merge
+  and `hb open` do: they check `workspace` first, because that path is not theirs to remove.
+- **One `base` task per folder:** a `base` task holds its folder while it is in one of
+  `HOLDS_FOLDER` (`core/src/harness.ts`), review included, and while its session is still
+  winding up. Queueing or chatting with another `base` task there, or merging into that
+  branch, is refused while it does.
+- **History of a `base` task:** with no branch of its own, its work is the stretches between
+  the commit at the start of a session and the one at its end (`startCommit`, `endCommit`,
+  `priorSpans`). Commits made by others while it let go of the folder fall between stretches
+  and are left out of its diff, commits and review requests.
+
 ## Data and state
 
 - **Where data lives:** everything durable is in the SQLite store. Tasks and sessions are

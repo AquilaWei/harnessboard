@@ -36,6 +36,12 @@ are test versions that have not been accepted on real machines yet.
   or fails, even while the board is closed. Tapping it opens the task on the tab that needs
   you. A push holds only the task's number, title and status. On an iPhone this needs iOS
   16.4 or later and the board added to the Home Screen.
+- **Work directly on the base branch.** New task has a choice between "Work on a new branch
+  (recommended)" and "Work directly on main" (or whichever branch), and `hb add` / `hb loop`
+  have `--on-base`. Such a task works in the repository folder itself, with no worktree or
+  branch: its commits land on the branch as it goes and there is nothing to merge after
+  review. Only one of them works in a folder at a time. The card shows "on main" and the
+  task panel shows where a task works; `hb show` says so too.
 
 ## 0.0.21 - 2026-10-04
 
