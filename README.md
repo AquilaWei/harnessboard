@@ -557,8 +557,9 @@ Supported providers: `claude-code`, `codex` and `gemini`. A Codex profile uses t
 an API key. Codex can not ask about a tool: its sandbox decides, so permission rules and
 prompts do not apply to it. A Gemini profile uses the signed-in
 [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`, with the prompt on stdin). It can not ask
-about a tool either: reviewers run in its read-only `plan` mode, which allows no shell, so
-the harness runs `git log`, `git diff` and `git status` for them. Each output is saved whole
+about a tool either: reviewers run in its read-only `plan` mode, which allows no shell, plus
+an admin policy that forbids leaving plan mode (headless Gemini would otherwise switch itself
+to `yolo`). So the harness runs `git log`, `git diff` and `git status` for them. Each output is saved whole
 under `<data dir>/evidence/<task id>/`, which the reviewer may read (`--include-directories`);
 the prompt quotes what fits in 12,000 characters and names the files for the rest. Tasks that
 skip permissions (the default) run in `yolo` mode, and other tasks in `auto_edit` mode, where

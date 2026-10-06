@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -12,6 +12,15 @@ import { tempDir } from './helpers.js';
 const FAKE_GEMINI = fileURLToPath(new URL('./fixtures/fake-gemini.mjs', import.meta.url));
 
 const adapter = new GeminiAdapter('gemini');
+
+/** Denies leaving plan mode, which headless Gemini would otherwise approve and turn into yolo. */
+const READ_ONLY_POLICY = `# Written by Harnessboard for read-only (reviewer) sessions.
+[[rule]]
+toolName = "exit_plan_mode"
+decision = "deny"
+priority = 999
+denyMessage = "This session is read-only and must stay in Plan Mode."
+`;
 
 function run(lines: unknown[]): AgentEvent[] {
   const parse = adapter.createParser();
@@ -55,7 +64,32 @@ describe('GeminiAdapter.buildArgs', () => {
       'stream-json',
       '--approval-mode',
       'plan',
+      '--admin-policy',
+      expect.stringMatching(/read-only\.toml$/),
     ]);
+  });
+
+  it('gives a new read-only session a policy that keeps it in plan mode', () => {
+    const args = adapter.buildArgs({ ...spec, access: 'readOnly' });
+    const policy = readFileSync(args[args.indexOf('--admin-policy') + 1]!, 'utf8');
+    expect(policy).toBe(READ_ONLY_POLICY);
+  });
+
+  it('gives a resumed read-only session the same policy', () => {
+    const args = adapter.buildArgs({ ...spec, access: 'readOnly', sessionId: 'g-1', resume: true });
+    const policy = readFileSync(args[args.indexOf('--admin-policy') + 1]!, 'utf8');
+    expect(policy).toBe(READ_ONLY_POLICY);
+  });
+
+  it('writes the policy again when its file was cleaned away', () => {
+    const first = adapter.buildArgs({ ...spec, access: 'readOnly' });
+    rmSync(first[first.indexOf('--admin-policy') + 1]!);
+    const args = adapter.buildArgs({ ...spec, access: 'readOnly' });
+    expect(readFileSync(args[args.indexOf('--admin-policy') + 1]!, 'utf8')).toBe(READ_ONLY_POLICY);
+  });
+
+  it('gives an edit session no admin policy', () => {
+    expect(adapter.buildArgs({ ...spec, skipPermissions: true })).not.toContain('--admin-policy');
   });
 
   it('adds each readable directory to the workspace', () => {
@@ -66,6 +100,8 @@ describe('GeminiAdapter.buildArgs', () => {
       'stream-json',
       '--approval-mode',
       'plan',
+      '--admin-policy',
+      expect.stringMatching(/read-only\.toml$/),
       '--include-directories',
       '/evidence/7',
     ]);
@@ -399,6 +435,8 @@ describe('a long prompt through the gemini.cmd shim', () => {
         'stream-json',
         '--approval-mode',
         'plan',
+        '--admin-policy',
+        expect.stringMatching(/read-only\.toml$/),
         '--include-directories',
         '/evidence/7',
         '--resume',

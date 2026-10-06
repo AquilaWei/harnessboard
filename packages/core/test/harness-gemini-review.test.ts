@@ -205,6 +205,13 @@ describe('a Gemini review', () => {
     expect(patch).toContain('+hi there');
   });
 
+  it('is given a policy that keeps it in plan mode', async () => {
+    await reviewedByGemini();
+    const args = geminiArgs();
+    const policy = readFileSync(args[args.indexOf('--admin-policy') + 1]!, 'utf8');
+    expect(policy).toContain('toolName = "exit_plan_mode"\ndecision = "deny"');
+  });
+
   it('has its evidence removed with the task', async () => {
     const id = await reviewedByGemini();
     await harness.deleteTask(id);

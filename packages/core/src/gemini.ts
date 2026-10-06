@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import type { AgentEvent, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, LineParser, SessionSpec } from './agent.js';
 
@@ -31,11 +34,18 @@ export class GeminiAdapter implements AgentAdapter {
    * reviewer the git output (`readOnlyGit`) in files under `readableDirs`, which join the
    * workspace with `--include-directories`. `allowedTools` are Claude-style rules that
    * Gemini does not understand, so they are not passed on.
+   *
+   * Headless, Gemini approves `exit_plan_mode` by itself and then switches to `yolo`, so
+   * `plan` alone would let a reviewer gain edits and shell. A read-only session, new or
+   * resumed, therefore also gets {@link READ_ONLY_POLICY} with `--admin-policy`. Gemini
+   * ignores that flag when the machine already has system policies, which then decide.
+   * Throws if the policy file can not be written.
    */
   buildArgs(spec: SessionSpec): string[] {
     const args = ['--output-format', 'stream-json'];
-    if (spec.access === 'readOnly') args.push('--approval-mode', 'plan');
-    else if (spec.skipPermissions) args.push('--approval-mode', 'yolo');
+    if (spec.access === 'readOnly') {
+      args.push('--approval-mode', 'plan', '--admin-policy', readOnlyPolicyFile());
+    } else if (spec.skipPermissions) args.push('--approval-mode', 'yolo');
     else args.push('--approval-mode', 'auto_edit');
     if (spec.model) args.push('--model', spec.model);
     for (const dir of spec.readableDirs ?? []) args.push('--include-directories', dir);
@@ -132,6 +142,36 @@ export class GeminiAdapter implements AgentAdapter {
       }
     };
   }
+}
+
+/**
+ * Keeps a read-only session in plan mode. Gemini's own rules allow `exit_plan_mode` without
+ * a terminal (priority 1.070); an admin policy ranks 5 + priority / 1000, so this deny wins
+ * in every mode. The plan-mode catch-all still refuses edits and shell.
+ */
+const READ_ONLY_POLICY = `# Written by Harnessboard for read-only (reviewer) sessions.
+[[rule]]
+toolName = "exit_plan_mode"
+decision = "deny"
+priority = 999
+denyMessage = "This session is read-only and must stay in Plan Mode."
+`;
+
+let policyDir: string | null = null;
+
+/**
+ * The path of {@link READ_ONLY_POLICY}, written on first use into a private temporary
+ * directory (so no other user can change it) and again if something cleaned it away.
+ * Synchronous because `buildArgs` is; the file is tiny.
+ */
+function readOnlyPolicyFile(): string {
+  policyDir ??= mkdtempSync(path.join(tmpdir(), 'harnessboard-gemini-'));
+  const file = path.join(policyDir, 'read-only.toml');
+  if (!existsSync(file)) {
+    mkdirSync(policyDir, { recursive: true, mode: 0o700 });
+    writeFileSync(file, READ_ONLY_POLICY);
+  }
+  return file;
 }
 
 interface GeminiLine {
