@@ -7,7 +7,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
+import { GeminiAdapter } from '../src/gemini.js';
 import { Harness } from '../src/harness.js';
+import { createAdapter } from '../src/providers.js';
 import {
   FAKE_CLAUDE,
   askBash,
@@ -26,6 +28,8 @@ const FAKE_GEMINI = fileURLToPath(new URL('./fixtures/fake-gemini.mjs', import.m
 let dir: string;
 let repo: string;
 let harness: Harness;
+/** Stands in for Gemini's system policy folder, which is empty unless a test fills it. */
+let systemPolicies: string;
 
 beforeEach(() => {
   dir = tempDir('gemini-review');
@@ -55,7 +59,13 @@ beforeEach(() => {
     },
     fallbackContextWindow: 100_000,
   };
-  harness = Harness.open(config);
+  systemPolicies = tempDir('gemini-system-policies');
+  harness = Harness.open(config, {
+    adapterFactory: (profile) =>
+      profile.provider === 'gemini'
+        ? new GeminiAdapter(profile.command, systemPolicies)
+        : createAdapter(profile),
+  });
 });
 
 afterEach(async () => {
@@ -205,11 +215,23 @@ describe('a Gemini review', () => {
     expect(patch).toContain('+hi there');
   });
 
-  it('is given a policy that keeps it in plan mode', async () => {
+  it('is given a policy that allows only reading', async () => {
     await reviewedByGemini();
     const args = geminiArgs();
     const policy = readFileSync(args[args.indexOf('--admin-policy') + 1]!, 'utf8');
-    expect(policy).toContain('toolName = "exit_plan_mode"\ndecision = "deny"');
+    expect(policy).toContain('toolName = "*"\ndecision = "deny"');
+  });
+
+  it('is not started when the machine has system policies', async () => {
+    writeFileSync(path.join(systemPolicies, 'company.toml'), '');
+    await reviewedByGemini();
+    expect(geminiPrompt()).toBeNull();
+  });
+
+  it('fails its task when the machine has system policies', async () => {
+    writeFileSync(path.join(systemPolicies, 'company.toml'), '');
+    const id = await reviewedByGemini();
+    expect(harness.store.getTask(id)!.status).toBe('failed');
   });
 
   it('has its evidence removed with the task', async () => {

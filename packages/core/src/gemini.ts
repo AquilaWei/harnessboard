@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { AgentEvent, RunUsage } from '@harnessboard/shared';
@@ -24,7 +24,14 @@ export class GeminiAdapter implements AgentAdapter {
     readOnlyGit: false,
   };
 
-  constructor(readonly command: string) {}
+  /**
+   * `systemPoliciesDir` is where Gemini looks for the machine's system policies; tests point
+   * it at a directory of their own.
+   */
+  constructor(
+    readonly command: string,
+    private readonly systemPoliciesDir = SYSTEM_POLICIES_DIR,
+  ) {}
 
   /**
    * Access maps to `--approval-mode`: `plan` is Gemini's read-only mode, `yolo` approves
@@ -35,15 +42,17 @@ export class GeminiAdapter implements AgentAdapter {
    * workspace with `--include-directories`. `allowedTools` are Claude-style rules that
    * Gemini does not understand, so they are not passed on.
    *
-   * Headless, Gemini approves `exit_plan_mode` by itself and then switches to `yolo`, so
-   * `plan` alone would let a reviewer gain edits and shell. A read-only session, new or
-   * resumed, therefore also gets {@link READ_ONLY_POLICY} with `--admin-policy`. Gemini
-   * ignores that flag when the machine already has system policies, which then decide.
-   * Throws if the policy file can not be written.
+   * `plan` alone is not read-only: headless, Gemini approves `exit_plan_mode` by itself and
+   * then switches to `yolo`, and the user's own allowances (settings, `~/.gemini/policies`)
+   * outrank plan mode's refusals. A read-only session, new or resumed, therefore also gets
+   * {@link READ_ONLY_POLICY} with `--admin-policy`, which outranks both. Gemini ignores that
+   * flag when the machine has system policies, so then the session is refused instead.
+   * Throws if there are system policies or the policy file can not be written.
    */
   buildArgs(spec: SessionSpec): string[] {
     const args = ['--output-format', 'stream-json'];
     if (spec.access === 'readOnly') {
+      refuseIfSystemPolicies(this.systemPoliciesDir);
       args.push('--approval-mode', 'plan', '--admin-policy', readOnlyPolicyFile());
     } else if (spec.skipPermissions) args.push('--approval-mode', 'yolo');
     else args.push('--approval-mode', 'auto_edit');
@@ -145,17 +154,51 @@ export class GeminiAdapter implements AgentAdapter {
 }
 
 /**
- * Keeps a read-only session in plan mode. Gemini's own rules allow `exit_plan_mode` without
- * a terminal (priority 1.070); an admin policy ranks 5 + priority / 1000, so this deny wins
- * in every mode. The plan-mode catch-all still refuses edits and shell.
+ * Lets a read-only session only read and search. Admin rules rank 5 + priority / 1000, above
+ * every user allowance (at most 4.999) and Gemini's own rules (1.x), so the catch-all deny
+ * (5.900) refuses edits, shell, MCP tools, subagents and `exit_plan_mode` in every mode,
+ * and only the tools listed under it (5.950) run.
  */
 const READ_ONLY_POLICY = `# Written by Harnessboard for read-only (reviewer) sessions.
 [[rule]]
-toolName = "exit_plan_mode"
+toolName = "*"
 decision = "deny"
-priority = 999
-denyMessage = "This session is read-only and must stay in Plan Mode."
+priority = 900
+denyMessage = "This session is read-only: it may only read and search files."
+
+[[rule]]
+toolName = ["read_file", "read_many_files", "glob", "grep_search", "list_directory", "google_web_search"]
+decision = "allow"
+priority = 950
 `;
+
+/** Where Gemini looks for system policies (`Storage.getSystemPoliciesDir` in its source). */
+const SYSTEM_POLICIES_DIR =
+  process.platform === 'darwin'
+    ? '/Library/Application Support/GeminiCli/policies'
+    : process.platform === 'win32'
+      ? 'C:\\ProgramData\\gemini-cli\\policies'
+      : '/etc/gemini-cli/policies';
+
+/**
+ * Gemini ignores `--admin-policy` once its system policy directory holds a `.toml` file, so
+ * a read-only session could then not be held to {@link READ_ONLY_POLICY}. A directory that
+ * can not be read is fine: Gemini then can not read it either and keeps the admin policy.
+ */
+function refuseIfSystemPolicies(dir: string): void {
+  let files: string[];
+  try {
+    files = readdirSync(dir);
+  } catch {
+    return;
+  }
+  if (files.some((f) => f.endsWith('.toml'))) {
+    throw new Error(
+      `Gemini ignores --admin-policy because ${dir} has system policies, so a read-only ` +
+        'session could edit files and run commands; use another reviewer on this machine',
+    );
+  }
+}
 
 let policyDir: string | null = null;
 

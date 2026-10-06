@@ -249,16 +249,24 @@ a real run yet.
 - Access maps to `--approval-mode`: `plan` (read-only) for reviewers, `yolo` for edit sessions
   that skip permissions, and `auto_edit` for the others. Without a terminal nothing can answer
   an approval, so under `auto_edit` shell commands are refused and the session can not
-  commit. Headless, Gemini approves `exit_plan_mode` by itself and then switches to `yolo`,
-  so plan mode alone would let a reviewer gain edits and shell. Every read-only session, new
-  or resumed, therefore also gets `--admin-policy` with a policy file the adapter writes once
-  per process into a private temporary directory (`read-only.toml`, rewritten if it was
-  cleaned away). Its one rule denies `exit_plan_mode`; as an admin rule it ranks 5.999, above
-  Gemini's own headless allow (1.070), so the session stays in plan mode, where edits and
-  shell are refused and reading files, the evidence directory included, is still allowed.
-  Gemini ignores `--admin-policy` when the machine has its own system policies (for example
-  `/etc/gemini-cli/policies` on Linux); those then decide. This was checked against the
-  policy engine of `@google/gemini-cli-core` 0.62.0, not a real run. The harness's git check
+  commit. Plan mode alone is not read-only: headless, Gemini approves `exit_plan_mode` by
+  itself and then switches to `yolo`, and the user's own allowances (`tools.allowed`,
+  `--allowed-tools`, rules in `~/.gemini/policies`, all user tier 4.x) outrank plan mode's
+  refusals (default tier 1.x). Every read-only session, new or resumed, therefore also gets
+  `--admin-policy` with a policy file the adapter writes once per process into a private
+  temporary directory (`read-only.toml`, rewritten if it was cleaned away). Admin rules rank
+  5 + priority / 1000: a catch-all deny (5.900) refuses every tool in every mode, MCP tools,
+  subagents and `exit_plan_mode` included, and an allowlist above it (5.950) lets through
+  only `read_file`, `read_many_files`, `glob`, `grep_search`, `list_directory` and
+  `google_web_search`, so the evidence directory can still be read. Gemini ignores
+  `--admin-policy` once its system policy directory (`/etc/gemini-cli/policies`,
+  `/Library/Application Support/GeminiCli/policies` or `C:\ProgramData\gemini-cli\policies`)
+  holds a `.toml` file, so `buildArgs` then throws and the runner reports the session as
+  failed to start instead of running a reviewer that could write. `gemini-policy.test.ts`
+  runs the generated file through the policy engine of `@google/gemini-cli-core` 0.62.0
+  (installed by CI outside the workspace, `HARNESSBOARD_TEST_GEMINI_CORE`; skipped without
+  it) next to user allowances for writes and shell and next to a system policy; a real CLI
+  run is still unchecked. The harness's git check
   after a review still runs, but only finds changes once they are made. Plan mode allows no
   shell, so a Gemini reviewer can not run the verify
   command or git itself. Instead the harness runs the git commands the review prompt names

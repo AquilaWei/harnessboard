@@ -10,7 +10,9 @@ are test versions that have not been accepted on real machines yet.
 - **Gemini as a third agent.** Harnessboard finds the `gemini` command on your PATH and
   offers a profile for it (`hb agents --add gemini`), so Gemini can implement, review, test,
   write the spec or design the UI, next to Claude and Codex. It runs through the signed-in
-  Gemini CLI. Reviewers use its read-only `plan` mode, which can not run git, so the harness
+  Gemini CLI. Reviewers use its `plan` mode with a policy that lets them only read and
+  search, even when your Gemini settings allow more; on a machine with Gemini system
+  policies, which would override it, a Gemini reviewer is refused. They can not run git, so the harness
   gives a Gemini reviewer the commits and diff it is judging, including a base task's
   earlier stretches of work. Large diffs are saved whole to files the reviewer reads, so
   nothing is cut. Gemini does not report usage, so the

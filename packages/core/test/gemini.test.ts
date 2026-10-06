@@ -11,15 +11,21 @@ import { tempDir } from './helpers.js';
 
 const FAKE_GEMINI = fileURLToPath(new URL('./fixtures/fake-gemini.mjs', import.meta.url));
 
-const adapter = new GeminiAdapter('gemini');
+/** No system policies, whatever the test machine has in Gemini's system policy folder. */
+const adapter = new GeminiAdapter('gemini', tempDir('gemini-no-system-policies'));
 
-/** Denies leaving plan mode, which headless Gemini would otherwise approve and turn into yolo. */
+/** Only reading and searching is allowed; as admin rules these outrank the user's allowances. */
 const READ_ONLY_POLICY = `# Written by Harnessboard for read-only (reviewer) sessions.
 [[rule]]
-toolName = "exit_plan_mode"
+toolName = "*"
 decision = "deny"
-priority = 999
-denyMessage = "This session is read-only and must stay in Plan Mode."
+priority = 900
+denyMessage = "This session is read-only: it may only read and search files."
+
+[[rule]]
+toolName = ["read_file", "read_many_files", "glob", "grep_search", "list_directory", "google_web_search"]
+decision = "allow"
+priority = 950
 `;
 
 function run(lines: unknown[]): AgentEvent[] {
@@ -69,7 +75,7 @@ describe('GeminiAdapter.buildArgs', () => {
     ]);
   });
 
-  it('gives a new read-only session a policy that keeps it in plan mode', () => {
+  it('gives a new read-only session a policy that allows only reading', () => {
     const args = adapter.buildArgs({ ...spec, access: 'readOnly' });
     const policy = readFileSync(args[args.indexOf('--admin-policy') + 1]!, 'utf8');
     expect(policy).toBe(READ_ONLY_POLICY);
@@ -86,6 +92,29 @@ describe('GeminiAdapter.buildArgs', () => {
     rmSync(first[first.indexOf('--admin-policy') + 1]!);
     const args = adapter.buildArgs({ ...spec, access: 'readOnly' });
     expect(readFileSync(args[args.indexOf('--admin-policy') + 1]!, 'utf8')).toBe(READ_ONLY_POLICY);
+  });
+
+  it('refuses a read-only session when the machine has system policies', () => {
+    const system = tempDir('gemini-system-policies');
+    writeFileSync(path.join(system, 'company.toml'), '');
+    const guarded = new GeminiAdapter('gemini', system);
+    expect(() => guarded.buildArgs({ ...spec, access: 'readOnly' })).toThrow(
+      /ignores --admin-policy/,
+    );
+  });
+
+  it('starts a read-only session when the system policy folder holds no policy file', () => {
+    const system = tempDir('gemini-system-policies');
+    writeFileSync(path.join(system, 'README.md'), '');
+    const guarded = new GeminiAdapter('gemini', system);
+    expect(guarded.buildArgs({ ...spec, access: 'readOnly' })).toContain('--admin-policy');
+  });
+
+  it('starts an edit session when the machine has system policies', () => {
+    const system = tempDir('gemini-system-policies');
+    writeFileSync(path.join(system, 'company.toml'), '');
+    const guarded = new GeminiAdapter('gemini', system);
+    expect(guarded.buildArgs({ ...spec, skipPermissions: true })).toContain('yolo');
   });
 
   it('gives an edit session no admin policy', () => {
@@ -402,7 +431,7 @@ describe('a long prompt through the gemini.cmd shim', () => {
 
   function session(sessionSpec: SessionSpec) {
     return runSession({
-      adapter: new GeminiAdapter(command()),
+      adapter: new GeminiAdapter(command(), tempDir('gemini-no-system-policies')),
       spec: { ...sessionSpec, cwd: dir },
       thresholds: { compactPct: null, softPct: 60, hardPct: 80 },
       contextWindow: 1_000_000,
