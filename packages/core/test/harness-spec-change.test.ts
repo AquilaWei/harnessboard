@@ -532,6 +532,25 @@ describe('a spec change the user asks for while chatting about a task in review'
   });
 });
 
+describe('a newer spec change request after an earlier answer was cut off', () => {
+  const IMPLEMENTED = [[init('impl'), assistantText('done', 10_000), result('done')]];
+  const CUT_OFF = [
+    [init('cut-off'), assistantText('reading', 10_000), { ...result('boom'), is_error: true }],
+  ];
+
+  it('resumes the implementer in its own conversation, not the cut-off answer', async () => {
+    const task = await specced([IMPLEMENTED, CUT_OFF, session(REVISED), session('adapted')]);
+    harness.requestSpecRevision(task.id, 'Say hi loudly');
+    await harness.waitForIdle();
+    harness.requestSpecRevision(task.id, 'Say hello instead');
+    await harness.waitForIdle();
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    const args = fakeRuns()[5]!.args;
+    expect(args[args.indexOf('--resume') + 1]).toBe('impl');
+  });
+});
+
 describe('quota checks for a spec change with agents of different providers', () => {
   const FUTURE_SEC = Math.floor(Date.now() / 1000) + 3600;
   // The implementer's session uses up the Claude Code quota; the other profile is Codex's.
@@ -554,7 +573,7 @@ describe('quota checks for a spec change with agents of different providers', ()
   });
 
   /** The user asks for a change while the implementer's step, which ends in review, runs. */
-  async function askedDuringStep(later: unknown[][][], reviewer: string) {
+  async function askedDuringStep(later: unknown[][][], reviewer: string | null) {
     scenario(discussion, specFile, quotaSpent, ...later);
     const task = await harness.createTask({
       prompt: 'Add a greeting',
@@ -586,5 +605,31 @@ describe('quota checks for a spec change with agents of different providers', ()
     harness.approveCriteria(task.id);
     await harness.waitForIdle();
     expect([status(task.id), fakeRuns().length]).toEqual(['queued', 4]);
+  });
+
+  it('still tells the implementer an approval made while it waited after a later request is rejected', async () => {
+    const CAPITALISED = '## Changes\n- Capitalised.\n## Acceptance criteria\n- prints Hello';
+    const task = await askedDuringStep(
+      [session(REVISED), session(CAPITALISED), session('adapted')],
+      null,
+    );
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    harness.requestSpecRevision(task.id, 'Capitalise it too');
+    await runQueued();
+    harness.rejectSpecChange(task.id);
+    await harness.waitForIdle();
+    // The Claude Code quota is free again once the harness pauses only above 99 %.
+    await harness.shutdown();
+    harness = new Harness({ ...harness.config, quotaPauseUtilization: 0.99 }, harness.store, {
+      adapterFactory: () => new ClaudeCodeAdapter(FAKE_CLAUDE),
+    });
+    await harness.start();
+    await runQueued();
+    const prompt = fakeRuns()[5]!.received[0]!;
+    expect([
+      prompt.includes('[harness] The user approved a change to the spec.'),
+      prompt.includes('- prints hello'),
+    ]).toEqual([true, true]);
   });
 });

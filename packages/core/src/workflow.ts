@@ -92,16 +92,16 @@ export interface SessionPlan {
   resume: Session | null;
   prompt: string;
   /**
-   * The `spec_revision` or `spec_change_decision` event the prompt carries; recorded with
-   * {@link Workflow.started} so it counts as delivered only to the session that heard it.
+   * The `spec_revision` or `spec_change_decision` events the prompt carries; recorded with
+   * {@link Workflow.started} so they count as delivered only to the session that heard them.
    */
-  delivers?: number;
+  delivers?: number[];
 }
 
 /** What a task's next session is for, in the order {@link Workflow} picks it. */
 type NextStep =
   | { kind: 'specRevision'; request: StoredEvent }
-  | { kind: 'specDecision'; decision: StoredEvent }
+  | { kind: 'specDecision'; decisions: StoredEvent[] }
   | { kind: 'review'; request: ReviewRequest }
   | { kind: 'test'; request: TestRequest }
   | { kind: 'conflict'; conflict: MergeConflict }
@@ -150,8 +150,8 @@ export class Workflow {
     if (!conflict) {
       const revision = this.pendingRevisionEvent(task.id);
       if (revision) return { kind: 'specRevision', request: revision };
-      const decision = this.untoldDecision(task.id);
-      if (decision) return { kind: 'specDecision', decision };
+      const decisions = this.untoldDecisions(task.id);
+      if (decisions.length > 0) return { kind: 'specDecision', decisions };
     }
     const review = this.pendingReview(task.id);
     if (review) return { kind: 'review', request: review };
@@ -172,7 +172,7 @@ export class Workflow {
       case 'specRevision':
         return this.specRevisionPlan(task, step.request, last);
       case 'specDecision':
-        return this.afterSpecDecision(task, step.decision, work);
+        return this.afterSpecDecision(task, step.decisions, work);
       case 'review':
         return this.reviewPlan(task, step.request, last);
       case 'test':
@@ -205,12 +205,19 @@ export class Workflow {
     return this.continuation(task, task.mode === 'single' ? this.handoffNote(task) : null);
   }
 
-  /** `sessions` without the spec author's read-only answers to requests for a spec change. */
+  /**
+   * `sessions` without the spec author's read-only answers to requests for a spec change.
+   * They are told by the request each was given as it started, so one cut off before it
+   * proposed anything, and then left for a newer request, is still left out.
+   */
   private withoutRevisions(taskId: number, sessions: Session[]): Session[] {
+    const store = this.host.store;
+    const requests = new Set(store.eventsOfKind(taskId, 'spec_revision').map((e) => e.id));
     const revisions = new Set(
-      this.host.store
-        .eventsOfKind(taskId, 'spec_change')
-        .map((e) => (e.data as SpecChangeProposal).sessionId),
+      store
+        .eventsOfKind(taskId, 'spec_delivered')
+        .filter((e) => requests.has((e.data as SpecDelivery).eventId))
+        .map((e) => e.sessionId),
     );
     return sessions.filter((s) => !revisions.has(s.id));
   }
@@ -234,13 +241,14 @@ export class Workflow {
   }
 
   /**
-   * Records that the session `sessionId` was given the request or decision its plan
+   * Records that the session `sessionId` was given the request or decisions its plan
    * carries. Runs as the session starts, before the agent sees the prompt.
    */
   started(taskId: number, sessionId: string, plan: SessionPlan): void {
-    if (plan.delivers === undefined) return;
-    const delivery: SpecDelivery = { eventId: plan.delivers };
-    this.host.store.appendEvent(taskId, sessionId, 'spec_delivered', delivery);
+    for (const eventId of plan.delivers ?? []) {
+      const delivery: SpecDelivery = { eventId };
+      this.host.store.appendEvent(taskId, sessionId, 'spec_delivered', delivery);
+    }
   }
 
   /** The `spec_delivered` events for `eventId`, oldest first. */
@@ -819,7 +827,7 @@ export class Workflow {
     const { message } = request.data as SpecRevisionRequest;
     const pending = this.undecidedProposal(task.id);
     const prompt = specRevisionPrompt(this.goal(task), message, pending);
-    return { ...base, resume: null, prompt, delivers: request.id };
+    return { ...base, resume: null, prompt, delivers: [request.id] };
   }
 
   /**
@@ -928,36 +936,49 @@ export class Workflow {
   }
 
   /**
-   * The latest decision on a spec change the implementer has to hear and has not heard yet:
-   * every approval, and the rejection of its own proposal. It is heard once a session given
-   * it got as far as logging anything; a chat in between tells the implementer nothing.
+   * Every decision on a spec change the implementer has to hear and has not heard yet,
+   * oldest first: each approval, and each rejection of its own proposal. A decision is
+   * heard once a session given it got as far as logging anything; a chat in between tells
+   * the implementer nothing, and neither does a later decision it need not hear (the
+   * rejection of the user's own request), so an approval before that one stays untold.
    */
-  private untoldDecision(taskId: number): StoredEvent | null {
-    const event = this.host.store.lastEvent(taskId, 'spec_change_decision');
-    if (!event) return null;
-    const decision = event.data as SpecChangeDecision;
-    if (!decision.approved && decision.from !== 'implementer') return null;
-    const heard = this.deliveries(taskId, event.id).some((e) =>
-      this.host.store.sessionHasEventsAfter(e.sessionId!, e.id),
-    );
-    return heard ? null : event;
+  private untoldDecisions(taskId: number): StoredEvent[] {
+    const store = this.host.store;
+    return store.eventsOfKind(taskId, 'spec_change_decision').filter((event) => {
+      const decision = event.data as SpecChangeDecision;
+      if (!decision.approved && decision.from !== 'implementer') return false;
+      const heard = this.deliveries(taskId, event.id).some((e) =>
+        store.sessionHasEventsAfter(e.sessionId!, e.id),
+      );
+      return !heard;
+    });
   }
 
-  /** The implementer goes on in its own conversation when it can, told what was decided. */
+  /**
+   * The implementer goes on in its own conversation when it can, told what was decided:
+   * the latest approval, whose criteria replace every earlier one's, and each rejection of
+   * its own proposals, in the order they were made. All of `events` count as delivered.
+   */
   private afterSpecDecision(
     task: Task,
-    event: StoredEvent,
+    events: StoredEvent[],
     work: Session | undefined,
   ): SessionPlan {
-    const decision = event.data as SpecChangeDecision;
-    const told = decision.approved
-      ? specChangeApprovedPrompt(decision.criteria, this.specFile(task.id)!)
-      : SPEC_CHANGE_REJECTED_PROMPT;
+    const approval = events.findLast((e) => (e.data as SpecChangeDecision).approved);
+    const told = events
+      .filter((e) => e === approval || !(e.data as SpecChangeDecision).approved)
+      .map((e) => {
+        const decision = e.data as SpecChangeDecision;
+        return decision.approved
+          ? specChangeApprovedPrompt(decision.criteria, this.specFile(task.id)!)
+          : SPEC_CHANGE_REJECTED_PROMPT;
+      })
+      .join('\n\n');
     const plan =
       work && this.canResume(task, work, task.agents.implementer)
         ? this.implement(task, told, work)
         : this.implement(task, continuationPrompt(this.goal(task), null, told));
-    return { ...plan, delivers: event.id };
+    return { ...plan, delivers: events.map((e) => e.id) };
   }
 
   /**

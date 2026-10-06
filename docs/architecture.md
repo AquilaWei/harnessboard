@@ -145,10 +145,13 @@ file itself so it holds exactly the approved criteria. The implementer is then r
 the new criteria (`specChangeApprovedPrompt`). A rejection leaves the file and criteria as
 they were. The implementer's own proposal is answered with `SPEC_CHANGE_REJECTED_PROMPT`;
 a user's request returns the task to review if it was there, and to the queue otherwise.
-The spec author's revision sessions are never what the implementer resumes
-(`withoutRevisions`). A session whose prompt carries a request or a decision logs a
-`spec_delivered` event as it starts (`Workflow.started`); a decision counts as heard only
-once such a session logged anything after it, so a chat in between does not use it up.
+A session whose prompt carries a request or decisions logs a `spec_delivered` event for
+each as it starts (`Workflow.started`). The spec author's revision sessions, told by the
+request delivered to them, are never what the implementer resumes (`withoutRevisions`),
+even one cut off before it proposed anything. A decision counts as heard only once such a
+session logged anything after it, so a chat in between does not use it up. Every unheard
+approval and rejection of the implementer's own proposal is told together, so rejecting a
+later request of the user does not hide an approval the implementer has not heard yet.
 `Workflow.nextStep` picks what the next session is for, and both `nextSession` and the
 quota check (`nextAgentId`) go by it.
 
