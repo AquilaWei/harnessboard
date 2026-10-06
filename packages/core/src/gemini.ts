@@ -3,11 +3,11 @@ import type { AgentEvent, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, LineParser, SessionSpec } from './agent.js';
 
 /**
- * Drives `gemini --prompt ... --output-format stream-json`. Event names and fields follow
+ * Drives `gemini --output-format stream-json` with the prompt on stdin. Event names and fields follow
  * the stream-json types in the Gemini CLI source (`packages/core/src/output/types.ts`);
  * they have not been checked against a real run yet, so everything is read defensively.
  *
- * Gemini takes its prompt as an argument, assigns its own session ids, and cannot pause to
+ * Gemini reads its prompt from stdin, assigns its own session ids, and cannot pause to
  * ask about a tool: its approval mode decides. It reports tokens only once, at the end of
  * the run, so no `context` events are emitted and Gemini manages its own context.
  */
@@ -43,9 +43,16 @@ export class GeminiAdapter implements AgentAdapter {
       if (!spec.sessionId) throw new Error('resuming a Gemini session needs its session id');
       args.push('--resume', spec.sessionId);
     }
-    // One argument with `=`, so a prompt starting with `-` is not read as an option.
-    args.push(`--prompt=${spec.prompt}`);
-    return args;
+    return args; // the prompt goes to stdin (encodePrompt)
+  }
+
+  /**
+   * Gemini runs headless when stdin is not a terminal and takes all of stdin as the prompt.
+   * Not an argument: through `gemini.cmd` a prompt longer than cmd.exe's 8,191-character
+   * command line would fail before Gemini starts, and a review prompt is often that long.
+   */
+  encodePrompt(text: string): string {
+    return text;
   }
 
   interactiveResumeArgs(agentSessionId: string): string[] {
@@ -53,7 +60,7 @@ export class GeminiAdapter implements AgentAdapter {
   }
 
   encodeMessage(): string {
-    throw new Error('Gemini takes its prompt as an argument, not on stdin');
+    throw new Error('Gemini reads only its first prompt from stdin, not further messages');
   }
 
   encodePermissionReply(): string {

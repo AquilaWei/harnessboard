@@ -71,8 +71,8 @@ function scenario(...sessions: unknown[][][]): void {
 function geminiPrompt(): string | null {
   const file = process.env.FAKE_GEMINI_LOG!;
   if (!existsSync(file)) return null;
-  const run = JSON.parse(readFileSync(file, 'utf8').split('\n')[0]!) as { args: string[] };
-  return run.args.find((a) => a.startsWith('--prompt='))!.slice('--prompt='.length);
+  const run = JSON.parse(readFileSync(file, 'utf8').split('\n')[0]!) as { stdin: string };
+  return run.stdin;
 }
 
 const git = (cwd: string, ...args: string[]) =>

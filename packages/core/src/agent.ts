@@ -13,7 +13,10 @@ export interface SessionSpec {
   sessionId: string | null;
   /** Continue `sessionId` instead of starting a new session. */
   resume: boolean;
-  /** First message; adapters without stdin input pass it as an argument. */
+  /**
+   * First message. Adapters without `midTurnInput` pass it as an argument unless they
+   * implement {@link AgentAdapter.encodePrompt}.
+   */
   prompt: string;
   model: string | null;
   access: SessionAccess;
@@ -84,6 +87,13 @@ export interface AgentAdapter {
   buildArgs(spec: SessionSpec): string[];
   /** Encodes one user message for stdin; only called when `midTurnInput` is true. */
   encodeMessage(text: string): string;
+  /**
+   * Encodes the whole prompt for stdin, which the runner closes right after it. Only for
+   * CLIs without `midTurnInput`. A CLI that reads its prompt there takes one of any
+   * length, while a prompt argument fails on Windows: a `.cmd` shim runs through cmd.exe,
+   * whose command line holds at most 8,191 characters. Absent: the prompt is an argument.
+   */
+  encodePrompt?(text: string): string;
   /** Encodes the answer to a permission request; only called with `permissionPrompts`. */
   encodePermissionReply(
     request: Extract<AgentEvent, { kind: 'permission_request' }>,

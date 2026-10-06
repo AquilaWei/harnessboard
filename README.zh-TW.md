@@ -476,9 +476,10 @@ hb agents --add codex --id fast --model gpt-6-luna
 目前支援的 provider：`claude-code`、`codex` 和 `gemini`。Codex 設定檔使用已登入的
 [Codex CLI](https://github.com/openai/codex)（`codex exec`），用 ChatGPT 方案登入就不需要 API 金鑰。
 Codex 不能逐項詢問工具權限，由它自己的沙箱決定，所以權限規則與提示對它不適用。Gemini 設定檔使用已登入的
-[Gemini CLI](https://github.com/google-gemini/gemini-cli)（`gemini --prompt`），它也不能逐項詢問：
+[Gemini CLI](https://github.com/google-gemini/gemini-cli)（`gemini`，提示從 stdin 送入），它也不能逐項詢問：
 審查者用它唯讀的 `plan` 模式執行；這個模式不能跑 shell，所以由 harness 代跑 `git log`、
-`git diff` 和 `git status`，把結果附在審查者的提示裡（diff 太大時會截斷，審查者再直接讀那些檔案）。
+`git diff` 和 `git status`。每份輸出都完整存成檔案，放在 `<data dir>/evidence/<task id>/`，
+審查者可以讀取這個目錄（`--include-directories`）；提示裡只引用放得進 12,000 字元的部分，其餘的寫出檔名。
 略過權限檢查的任務（預設）用 `yolo` 模式，其他任務用 `auto_edit` 模式，這時 shell 指令會被拒絕。
 Gemini 不會回報用量，所以頁首沒有它的額度；遇到用量上限的錯誤時，任務會暫停，稍後再重試。
 Gemini 的轉接層還沒有用真的 CLI 測過。要再加入其他 CLI 的做法寫在

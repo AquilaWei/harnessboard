@@ -194,7 +194,7 @@ get `maxReviewRounds` again.
 
    | Capability          | `true` / `harness`                                                                             | `false` / `agent`                                                                                                      |
    | ------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-   | `midTurnInput`      | Prompt and wrap-up request are written to stdin during the turn                                | Prompt goes in the arguments; the wrap-up is sent by resuming the session after the turn ends                          |
+   | `midTurnInput`      | Prompt and wrap-up request are written to stdin during the turn                                | Prompt goes in the arguments, or on stdin with `encodePrompt`; the wrap-up is sent by resuming the session             |
    | `sessionIds`        | The harness picks the id and passes it                                                         | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it                              |
    | `permissionPrompts` | A tool outside the rules emits `permission_request`; the CLI waits for `encodePermissionReply` | Such tools are refused; the user widens the rules with `hb tools` and runs the task again                              |
    | `readOnlyGit`       | A read-only reviewer runs `git log`, `git diff` and `git status` itself                        | The harness runs them, saves the output to files the reviewer may read, and quotes it in the prompt (`reviewEvidence`) |
@@ -228,7 +228,7 @@ get `maxReviewRounds` again.
 
 ## The Gemini adapter
 
-`core/src/gemini.ts` drives `gemini --prompt=<prompt> --output-format stream-json`. Its event
+`core/src/gemini.ts` drives `gemini --output-format stream-json` with the prompt on stdin. Its event
 names and fields follow the stream-json types in the Gemini CLI source
 (`packages/core/src/output/types.ts`) and the CLI reference; it has not been checked against
 a real run yet.
@@ -240,9 +240,12 @@ a real run yet.
   `result` (`status`, `error`, `stats`). The parser joins assistant chunks into one message,
   which ends at the next `tool_use` or at the `result`; the result's text is the last
   message, so the adapter provides `createParser()` like Codex.
-- The prompt goes in as one `--prompt=...` argument, so a prompt starting with `-` is not read
-  as an option. It resumes with `--resume <session id>`, and `hb open` runs
-  `gemini --resume <session id>`.
+- The prompt goes to stdin (`encodePrompt`), which the runner closes after it: Gemini runs
+  headless when stdin is not a terminal and takes all of it (up to 8 MB) as the prompt. An
+  argument would fail on Windows, where `gemini` is a `gemini.cmd` shim run through cmd.exe,
+  whose whole command line holds at most 8,191 characters; a review prompt with its evidence
+  is often longer. On stdin a prompt starting with `-` is not read as an option either. It
+  resumes with `--resume <session id>`, and `hb open` runs `gemini --resume <session id>`.
 - Access maps to `--approval-mode`: `plan` (read-only) for reviewers, `yolo` for edit sessions
   that skip permissions, and `auto_edit` for the others. Without a terminal nothing can answer
   an approval, so under `auto_edit` shell commands are refused and the session can not
@@ -257,9 +260,9 @@ a real run yet.
   read it; it is passed again when the reviewer is resumed. The prompt quotes outputs whole
   while they fit a shared 12,000 characters (`EVIDENCE_INLINE_LIMIT`) and names the file of
   every output, so deleted files, removed lines and earlier stretches stay reachable however
-  large the change is. The limit keeps the prompt, which is one argument, under Linux's 128 KiB
-  per argument and well inside Windows' 32,767-character command line. `allowedTools` are Claude-style rules that Gemini does not understand, so
-  they are not passed on.
+  large the change is. The limit keeps the prompt short enough to read; it is not needed for
+  delivery, since the prompt goes on stdin. `allowedTools` are Claude-style rules that Gemini
+  does not understand, so they are not passed on.
 - `stats` comes once, in the `result`, so no `context` events are emitted and Gemini manages
   its own context. Its per-model `input` (tokens not read from the cache) and `cached` become
   `input` and `cacheRead`.

@@ -101,9 +101,8 @@ export function reviewPrompt(
 
 /**
  * Characters of git output {@link reviewEvidence} quotes in a prompt, shared by all its
- * commands. The prompt goes to the CLI as one argument, so it has to stay small: Linux
- * refuses a single argument over 128 KiB, and Windows a whole command line over 32,767
- * characters. Output past it is only in the evidence files.
+ * commands, so a large change does not bury the review instructions. Output past it is
+ * only in the evidence files.
  */
 export const EVIDENCE_INLINE_LIMIT = 12_000;
 

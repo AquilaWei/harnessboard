@@ -37,7 +37,6 @@ describe('GeminiAdapter.buildArgs', () => {
       'stream-json',
       '--approval-mode',
       'auto_edit',
-      '--prompt=do it',
     ]);
   });
 
@@ -47,7 +46,6 @@ describe('GeminiAdapter.buildArgs', () => {
       'stream-json',
       '--approval-mode',
       'yolo',
-      '--prompt=do it',
     ]);
   });
 
@@ -57,7 +55,6 @@ describe('GeminiAdapter.buildArgs', () => {
       'stream-json',
       '--approval-mode',
       'plan',
-      '--prompt=do it',
     ]);
   });
 
@@ -71,7 +68,6 @@ describe('GeminiAdapter.buildArgs', () => {
       'plan',
       '--include-directories',
       '/evidence/7',
-      '--prompt=do it',
     ]);
   });
 
@@ -87,12 +83,15 @@ describe('GeminiAdapter.buildArgs', () => {
       'gemini-3-pro',
       '--resume',
       'g-1',
-      '--prompt=do it',
     ]);
   });
 
-  it('keeps a prompt that starts with a dash inside the prompt option', () => {
-    expect(adapter.buildArgs({ ...spec, prompt: '--help me' }).at(-1)).toBe('--prompt=--help me');
+  it('leaves a prompt that starts with a dash out of the arguments', () => {
+    expect(adapter.buildArgs({ ...spec, prompt: '--help me' })).not.toContain('--help me');
+  });
+
+  it('sends the prompt unchanged on stdin', () => {
+    expect(adapter.encodePrompt('--help me\nplease')).toBe('--help me\nplease');
   });
 
   it('refuses to resume without a session id', () => {
@@ -301,13 +300,17 @@ describe('a session with the fake gemini CLI', () => {
     expect(events[0]).toEqual({ kind: 'init', sessionId: 'g-7', model: 'gemini-3-pro' });
   });
 
-  it('passes the prompt to the CLI as an argument', async () => {
+  it('passes the prompt to the CLI on stdin', async () => {
     scenario([{ type: 'result', status: 'success' }]);
     await session([], 'build the thing');
     const logged = JSON.parse(readFileSync(process.env.FAKE_GEMINI_LOG!, 'utf8')) as {
       args: string[];
+      stdin: string;
     };
-    expect(logged.args.at(-1)).toBe('--prompt=build the thing');
+    expect(logged).toEqual({
+      args: ['--output-format', 'stream-json', '--approval-mode', 'auto_edit'],
+      stdin: 'build the thing',
+    });
   });
 
   it('pauses for quota when the CLI reports a usage limit', async () => {
@@ -329,5 +332,79 @@ describe('a session with the fake gemini CLI', () => {
         detail: 'agent exited with code 41 before a result: Please set an Auth method',
       }),
     );
+  });
+});
+
+// On Windows `gemini` is a `gemini.cmd` shim, run through cmd.exe, whose command line holds
+// at most 8,191 characters; a prompt passed as an argument longer than that never arrives.
+describe('a long prompt through the gemini.cmd shim', () => {
+  const LONG_PROMPT = `review this\n${'x'.repeat(20_000)}\nend of prompt`;
+  let dir: string;
+
+  beforeEach(() => {
+    dir = tempDir('gemini-shim');
+    process.env.FAKE_GEMINI_LOG = path.join(dir, 'fake.log');
+    const file = path.join(dir, 'scenario.json');
+    writeFileSync(file, JSON.stringify({ runs: [[{ type: 'result', status: 'success' }]] }));
+    process.env.FAKE_GEMINI_SCENARIO = file;
+  });
+
+  /** The shim npm installs on Windows; elsewhere the fake script itself. */
+  function command(): string {
+    if (process.platform !== 'win32') return FAKE_GEMINI;
+    const shim = path.join(dir, 'gemini.cmd');
+    writeFileSync(shim, `@node "${FAKE_GEMINI}" %*\r\n`);
+    return shim;
+  }
+
+  function logged(): { args: string[]; stdin: string } {
+    return JSON.parse(readFileSync(process.env.FAKE_GEMINI_LOG!, 'utf8')) as {
+      args: string[];
+      stdin: string;
+    };
+  }
+
+  function session(sessionSpec: SessionSpec) {
+    return runSession({
+      adapter: new GeminiAdapter(command()),
+      spec: { ...sessionSpec, cwd: dir },
+      thresholds: { compactPct: null, softPct: 60, hardPct: 80 },
+      contextWindow: 1_000_000,
+      signal: new AbortController().signal,
+      onEvent: () => {},
+      onNotice: () => {},
+      onStderr: () => {},
+    });
+  }
+
+  it('delivers the whole prompt to a new session', async () => {
+    const outcome = await session({ ...spec, prompt: LONG_PROMPT });
+    expect(outcome.reason).toBe('completed');
+    expect(logged().stdin).toBe(LONG_PROMPT);
+  });
+
+  it('delivers the whole prompt to a resumed session', async () => {
+    const outcome = await session({
+      ...spec,
+      access: 'readOnly',
+      readableDirs: ['/evidence/7'],
+      sessionId: 'g-7',
+      resume: true,
+      prompt: LONG_PROMPT,
+    });
+    expect(outcome.reason).toBe('completed');
+    expect(logged()).toEqual({
+      args: [
+        '--output-format',
+        'stream-json',
+        '--approval-mode',
+        'plan',
+        '--include-directories',
+        '/evidence/7',
+        '--resume',
+        'g-7',
+      ],
+      stdin: LONG_PROMPT,
+    });
   });
 });
