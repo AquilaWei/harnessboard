@@ -148,8 +148,10 @@ a user's request returns the task to review if it was there, and to the queue ot
 A session whose prompt carries a request or decisions logs a `spec_delivered` event for
 each as it starts (`Workflow.started`). The spec author's revision sessions, told by the
 request delivered to them, are never what the implementer resumes (`withoutRevisions`),
-even one cut off before it proposed anything. A decision counts as heard only once such a
-session logged anything after it, so a chat in between does not use it up. Every unheard
+even one cut off before it proposed anything. A decision counts as heard only once the agent of
+such a session reported anything after it (`Store.sessionHasAgentEventsAfter`): a chat in
+between does not use it up, and neither does a launch that failed, for which the harness
+still logs usage, stderr and the deliveries themselves. Every unheard
 approval and rejection of the implementer's own proposal is told together, so rejecting a
 later request of the user does not hide an approval the implementer has not heard yet.
 `Workflow.nextStep` picks what the next session is for, and both `nextSession` and the

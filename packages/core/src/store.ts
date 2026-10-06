@@ -348,6 +348,21 @@ export class Store {
     return row !== undefined;
   }
 
+  /**
+   * Whether the agent itself reported anything in one session after event `afterId`, so it
+   * was running when that event was given to it. What the harness logs for a session (usage,
+   * notices, stderr, deliveries) is left out: it is logged even when the CLI never started.
+   */
+  sessionHasAgentEventsAfter(sessionId: string, afterId: number): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 FROM events WHERE session_id = ? AND id > ?
+           AND kind IN ('init', 'text', 'tool_use', 'context', 'compact', 'result') LIMIT 1`,
+      )
+      .get(sessionId, afterId);
+    return row !== undefined;
+  }
+
   /** Most recent event of one kind within a session, e.g. its final result. */
   lastSessionEvent(sessionId: string, kind: string): StoredEvent | undefined {
     const row = this.db

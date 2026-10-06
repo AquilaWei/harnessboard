@@ -938,7 +938,8 @@ export class Workflow {
   /**
    * Every decision on a spec change the implementer has to hear and has not heard yet,
    * oldest first: each approval, and each rejection of its own proposal. A decision is
-   * heard once a session given it got as far as logging anything; a chat in between tells
+   * heard once the agent of a session given it reported anything, so a launch that failed
+   * leaves it unheard though the harness logged usage for it; a chat in between tells
    * the implementer nothing, and neither does a later decision it need not hear (the
    * rejection of the user's own request), so an approval before that one stays untold.
    */
@@ -948,7 +949,7 @@ export class Workflow {
       const decision = event.data as SpecChangeDecision;
       if (!decision.approved && decision.from !== 'implementer') return false;
       const heard = this.deliveries(taskId, event.id).some((e) =>
-        store.sessionHasEventsAfter(e.sessionId!, e.id),
+        store.sessionHasAgentEventsAfter(e.sessionId!, e.id),
       );
       return !heard;
     });

@@ -11,6 +11,7 @@ import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
   assistantText,
+  exitWith,
   init,
   makeRepo,
   rateLimit,
@@ -631,5 +632,57 @@ describe('quota checks for a spec change with agents of different providers', ()
       prompt.includes('[harness] The user approved a change to the spec.'),
       prompt.includes('- prints hello'),
     ]).toEqual([true, true]);
+  });
+});
+
+describe('a spec change decision given to an agent CLI that failed to start', () => {
+  const FAILED = [[exitWith(1, 'could not start')]];
+
+  it('is told again when the implementer is retried', async () => {
+    const task = await specced([session(PROPOSING), FAILED, session('adapted')]);
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    expect(fakeRuns()[4]!.received[0]).toContain(
+      '[harness] The user approved a change to the spec.',
+    );
+  });
+
+  describe('with two decisions waiting', () => {
+    beforeEach(withSpecAuthor);
+
+    async function retried() {
+      const task = await specced(
+        [
+          session(PROPOSING),
+          session('just chatting'),
+          session(REVISED),
+          FAILED,
+          session('adapted'),
+        ],
+        { spec: 'author' },
+      );
+      harness.chat(task.id, 'How is it going?');
+      harness.rejectSpecChange(task.id);
+      await harness.waitForIdle();
+      harness.requestSpecRevision(task.id, 'Say hello instead');
+      await runQueued();
+      harness.approveCriteria(task.id);
+      await harness.waitForIdle();
+      harness.queueTask(task.id);
+      await harness.waitForIdle();
+      return fakeRuns()[6]!.received[0]!;
+    }
+
+    it('tells the implementer its rejected proposal again', async () => {
+      expect(await retried()).toContain(
+        '[harness] The user rejected your proposed change to the spec.',
+      );
+    });
+
+    it('tells the implementer the approved criteria again', async () => {
+      expect(await retried()).toContain('[harness] The user approved a change to the spec.');
+    });
   });
 });
