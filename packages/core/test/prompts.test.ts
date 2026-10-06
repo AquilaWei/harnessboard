@@ -4,7 +4,9 @@ import {
   criteriaPrompt,
   parseCriteria,
   parseQuestions,
+  parseSpecChange,
   specFilePrompt,
+  specRevisionPrompt,
   taskGoal,
 } from '../src/prompts.js';
 import { reviewPrompt, testPrompt } from '../src/review.js';
@@ -240,6 +242,47 @@ describe('reviewPrompt for a loop step', () => {
     const none = [{ id: 'F1', description: 'stops are tappable', passes: false }];
     expect(reviewPrompt('goal', request, { features: none })).toContain(
       'Features marked done, which must work and be tested:\n- (none)',
+    );
+  });
+});
+
+describe('parseSpecChange', () => {
+  it('reads the reason and the criteria under the marker line', () => {
+    const reply = 'Built it.\nSPEC CHANGE: hi is too short\n- prints hello\n- exits 0';
+    expect(parseSpecChange(reply)).toEqual({
+      reason: 'hi is too short',
+      criteria: '- prints hello\n- exits 0',
+    });
+  });
+
+  it('stops at the notes section', () => {
+    const reply = 'SPEC CHANGE: shorter\n- prints hello\n## Notes\n- did things';
+    expect(parseSpecChange(reply)?.criteria).toBe('- prints hello');
+  });
+
+  it('gives no criteria when the marker has no list', () => {
+    expect(parseSpecChange('SPEC CHANGE: unclear')).toEqual({ reason: 'unclear', criteria: null });
+  });
+
+  it('finds nothing in a reply without the marker', () => {
+    expect(parseSpecChange('Done.\n## Notes\n- spec change not needed')).toBeNull();
+  });
+});
+
+describe('specRevisionPrompt', () => {
+  it("quotes the user's message", () => {
+    expect(specRevisionPrompt('Add a greeting', 'Say hello', null)).toContain('\n\nSay hello\n');
+  });
+
+  it('asks for the complete revised criteria under the criteria heading', () => {
+    expect(specRevisionPrompt('Add a greeting', 'Say hello', null)).toContain(
+      '## Acceptance criteria\n- The complete revised list',
+    );
+  });
+
+  it('quotes the change the user replied to', () => {
+    expect(specRevisionPrompt('Add a greeting', 'Capitalise', '- prints hello')).toContain(
+      'The change proposed before, which the user replied to:\n- prints hello',
     );
   });
 });

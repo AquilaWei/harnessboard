@@ -185,6 +185,32 @@ describe('tasks API', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(/not waiting/);
   });
 
+  it('refuses a spec change for a task without a spec file', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(
+      `/api/tasks/${id}/spec-revision`,
+      { message: 'Say hello' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/no spec file/);
+  });
+
+  it('refuses to reject a spec change when none is waiting', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(`/api/tasks/${id}/spec-change/reject`, {}, { [CLIENT_HEADER]: 'test' });
+    expect(((await res.json()) as { error: string }).error).toMatch(/no spec change waiting/);
+  });
+
+  it('shows no spec change on a new task', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}`, { headers: local });
+    const view = (await res.json()) as { specChange: unknown; specRevisionPending: boolean };
+    expect([view.specChange, view.specRevisionPending]).toEqual([null, false]);
+  });
+
   it("includes the task's usage", async () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };

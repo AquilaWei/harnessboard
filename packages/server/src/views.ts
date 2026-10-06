@@ -51,6 +51,8 @@ export function taskView(task: Task, harness: Harness): TaskView {
     plan: task.mode === 'loop' ? planSummary(task.id, store) : null,
     planFeedbackPending: harness.pendingPlanFeedback(task.id) !== null,
     criteria: harness.criteriaProposal(task),
+    specChange: harness.specChange(task.id),
+    specRevisionPending: harness.pendingSpecRevision(task.id) !== null,
     merge: harness.lastMerge(task.id),
     permissionRequests: harness.permissionRequests(task.id),
     usage: taskUsage(task.id, store, sessions, harness.activity(task.id) !== null),

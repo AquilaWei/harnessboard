@@ -68,6 +68,15 @@ export interface SpecRecord {
   head: string;
 }
 
+/** Stored as the `spec_revised` event once an approved change is committed to the spec file. */
+export interface SpecRevisionRecord {
+  path: string;
+  /** HEAD after the revised spec was committed. */
+  head: string;
+  /** The date written into the file's Revisions entry, `YYYY-MM-DD` (UTC). */
+  date: string;
+}
+
 /** Stored as the `test_report` event after a tester session. */
 export interface TestReport {
   round: number;

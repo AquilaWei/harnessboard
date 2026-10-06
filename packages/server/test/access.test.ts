@@ -335,6 +335,18 @@ describe('sensitive routes from a paired remote device', () => {
     expect(res.status).toBe(401);
   });
 
+  it('answers 401 reauth to POST /tasks/:id/spec-revision after 5 minutes', async () => {
+    clock = 6 * MINUTE;
+    const res = await write('POST', '/api/tasks/1/spec-revision', paired, { message: 'x' });
+    expect(res.status).toBe(401);
+  });
+
+  it('answers 401 reauth to POST /tasks/:id/spec-change/reject after 5 minutes', async () => {
+    clock = 6 * MINUTE;
+    const res = await write('POST', '/api/tasks/1/spec-change/reject', paired);
+    expect(res.status).toBe(401);
+  });
+
   it('does not ask for a passkey on GET /tasks/:id after 5 minutes', async () => {
     clock = 6 * MINUTE;
     const res = await app.request('/api/tasks/1', { headers: paired });

@@ -159,6 +159,7 @@ version rules.
        - `POST /tasks`;
        - `POST /tasks/:id/permission`;
        - plan feedback and approve, criteria approve;
+       - a spec change: `POST /tasks/:id/spec-revision` and `POST /tasks/:id/spec-change/reject`;
        - `POST /tasks/:id/chat`;
        - `POST /tasks/:id/merge`;
        - `POST /tasks/:id/complete`;

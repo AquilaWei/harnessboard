@@ -302,6 +302,12 @@ export function createApi(
     return c.json(harness.approveCriteria(taskId(c), (body as { criteria?: string }).criteria));
   });
 
+  app.post('/tasks/:id/spec-revision', async (c) => {
+    const { message } = await c.req.json<{ message: string }>();
+    return c.json(harness.requestSpecRevision(taskId(c), message ?? ''));
+  });
+  app.post('/tasks/:id/spec-change/reject', (c) => c.json(harness.rejectSpecChange(taskId(c))));
+
   app.get('/tasks/:id/chat', (c) => c.json(chatTranscript(taskId(c), harness.store)));
   app.post('/tasks/:id/chat', async (c) => {
     const { message } = await c.req.json<{ message: string }>();

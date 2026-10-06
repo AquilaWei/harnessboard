@@ -53,6 +53,7 @@ const SENSITIVE_ROUTES: { method: string | null; path: RegExp }[] = [
   { method: 'POST', path: /^\/api\/tasks\/[^/]+\/permission$/ },
   { method: 'POST', path: /^\/api\/tasks\/[^/]+\/plan\/(feedback|approve)$/ },
   { method: 'POST', path: /^\/api\/tasks\/[^/]+\/criteria\/approve$/ },
+  { method: 'POST', path: /^\/api\/tasks\/[^/]+\/spec-(revision|change\/reject)$/ },
   { method: 'POST', path: /^\/api\/tasks\/[^/]+\/chat$/ },
   { method: 'POST', path: /^\/api\/tasks\/[^/]+\/merge$/ },
   { method: 'POST', path: /^\/api\/tasks\/[^/]+\/complete$/ },

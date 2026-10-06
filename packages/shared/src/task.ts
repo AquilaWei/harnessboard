@@ -153,6 +153,54 @@ export interface CriteriaApproval {
   criteria: string;
 }
 
+/** Who asked for a change to a spec that work has already started on. */
+export type SpecChangeOrigin = 'user' | 'implementer';
+
+/**
+ * Stored as the `spec_revision` event when the user asks to change a single task's spec
+ * after the spec file was written, and again for each reply to a proposed change. The spec
+ * author answers it in a read-only session with a {@link SpecChangeProposal}.
+ */
+export interface SpecRevisionRequest {
+  message: string;
+  /** The task's status when asked; a rejected change returns a task that was in review there. */
+  status: TaskStatus;
+}
+
+/**
+ * Stored as the `spec_change` event: revised acceptance criteria waiting for the user, from
+ * the spec author answering a {@link SpecRevisionRequest} or from the implementer's
+ * `SPEC CHANGE:` block. Nothing more is built until the user approves or rejects it.
+ */
+export interface SpecChangeProposal {
+  from: SpecChangeOrigin;
+  /** Why: the user's message, or the reason on the implementer's marker line. */
+  reason: string;
+  /** The criteria in force when the change was proposed. */
+  previous: string;
+  /** The complete revised criteria; `null` when the reply had none, so the user writes them. */
+  criteria: string | null;
+  /** The reply the proposal was read from. */
+  reply: string;
+  /** Status a rejection returns the task to. */
+  onReject: 'queued' | 'review';
+  /**
+   * The spec author's read-only session that wrote a proposal from the user's request;
+   * `null` for the implementer's. Later implementer sessions never continue it.
+   */
+  sessionId: string | null;
+}
+
+/** Stored as the `spec_change_decision` event when the user approves or rejects a change. */
+export interface SpecChangeDecision {
+  approved: boolean;
+  from: SpecChangeOrigin;
+  reason: string;
+  previous: string;
+  /** The criteria now in force: the approved ones, or the unchanged `previous`. */
+  criteria: string;
+}
+
 /** Stored as the `merged` event when a task's branch was merged into its base. */
 export interface MergeRecord {
   base: string;

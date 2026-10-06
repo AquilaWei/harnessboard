@@ -42,6 +42,15 @@ are test versions that have not been accepted on real machines yet.
   branch: its commits land on the branch as it goes and there is nothing to merge after
   review. Only one of them works in a folder at a time. The card shows "on main" and the
   task panel shows where a task works; `hb show` says so too.
+- **Change the spec after work has started.** A task with a spec file can have its
+  acceptance criteria changed while it is being built or is in review: ask through
+  `POST /api/tasks/:id/spec-revision`, and the spec author proposes revised criteria for you
+  to approve, as for the first spec. The implementer can also stop and propose a change
+  itself when it finds the spec wrong. Nothing more is built until you decide. Approving
+  rewrites the criteria in `docs/specs/<id>-<title>.md`, adds a dated entry under
+  "Revisions", commits the file, and the implementer and later reviews work to the new
+  criteria. Rejecting leaves the spec as it was and the work carries on. The board and `hb`
+  get buttons and a command for this next.
 
 ## 0.0.21 - 2026-10-04
 

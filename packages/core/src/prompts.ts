@@ -349,3 +349,84 @@ export function specFilePrompt(
   );
   return lines.join('\n');
 }
+
+/** Line an implementer starts its proposed spec change with; see {@link parseSpecChange}. */
+export const SPEC_CHANGE_MARKER = 'SPEC CHANGE:';
+
+/** Told to the implementer of a task with a spec file, so it can propose a change to it. */
+export const SPEC_CHANGE_DUTY = [
+  'If you find that the agreed spec is wrong or cannot be met as written, do not build around',
+  'it. Commit what you have, then end your reply (before any notes section) with a block that',
+  `starts with a line \`${SPEC_CHANGE_MARKER} <why, in one line>\`, followed by the complete`,
+  'revised acceptance criteria list, one per line. The user decides on it before anything more',
+  'is built.',
+].join('\n');
+
+/** A spec change an implementer proposed: the reason and the revised criteria. */
+export interface ProposedSpecChange {
+  reason: string;
+  /** The list under the marker line; `null` when there is none. */
+  criteria: string | null;
+}
+
+/**
+ * The block an implementer ends its reply with to propose a spec change: the line starting
+ * with {@link SPEC_CHANGE_MARKER} and the lines after it, up to the next level-1 or level-2
+ * heading (its notes section). `null` when the reply has no marker line.
+ */
+export function parseSpecChange(reply: string): ProposedSpecChange | null {
+  const lines = reply.split('\n');
+  const start = lines.findIndex((line) => line.trim().startsWith(SPEC_CHANGE_MARKER));
+  if (start < 0) return null;
+  const reason = lines[start]!.trim().slice(SPEC_CHANGE_MARKER.length).trim();
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^#{1,2}\s/.test(line));
+  const criteria = (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
+  return { reason, criteria: criteria || null };
+}
+
+/**
+ * Sent to the spec author when the user asks to change the spec of a task already being
+ * built. `pending` is the change still waiting for the user, when the message replies to it.
+ * The session is read-only; its reply becomes the proposal the user approves or rejects.
+ */
+export function specRevisionPrompt(goal: string, message: string, pending: string | null): string {
+  const lines = [
+    '[harness] Work on the task below has started, and the user wants to change its spec:',
+    '',
+    message,
+  ];
+  if (pending) lines.push('', `The change proposed before, which the user replied to:\n${pending}`);
+  lines.push(
+    '',
+    `The task as it stands:\n${goal}`,
+    '',
+    'This session is read-only: study the spec and the work so far, but do not change anything.',
+    'Reply in this shape:',
+    '## Changes',
+    '- What changes in the spec and why, and what this means for the work already done.',
+    CRITERIA_HEADING,
+    '- The complete revised list, not only the changed lines: one concrete, observable check',
+    '  per line.',
+    '',
+    'The user approves or rejects your proposal; nothing is changed until then.',
+  );
+  return lines.join('\n');
+}
+
+/** Sent to the implementer once the user approved a change to the spec. */
+export function specChangeApprovedPrompt(criteria: string, specPath: string): string {
+  return [
+    `[harness] The user approved a change to the spec. \`${specPath}\` now has these`,
+    'acceptance criteria, which replace the earlier ones:',
+    '',
+    criteria,
+    '',
+    'Change the work so that every criterion holds, check them as far as you can, and commit.',
+  ].join('\n');
+}
+
+/** Sent to the implementer when the user rejected the spec change it proposed. */
+export const SPEC_CHANGE_REJECTED_PROMPT =
+  '[harness] The user rejected your proposed change to the spec. The spec and its ' +
+  'acceptance criteria stay as they are: continue the task against them.';

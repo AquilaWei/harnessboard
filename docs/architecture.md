@@ -118,6 +118,33 @@ restart picks up exactly where the task was. A loop step's reviewer gets the lat
 snapshot: the features marked done are what it judges, and the features still to come are
 listed as out of scope, so an unfinished list is never a reason to ask for changes.
 
+**Spec changes.** Once a single task's spec file is written (`spec_written`), its criteria
+can change through the same approval as the first spec. Two ways in:
+
+- The user asks (`Harness.requestSpecRevision`, `POST /api/tasks/:id/spec-revision`), stored as
+  a `spec_revision` event. The next session is the spec author's, read-only and in a new
+  conversation (`specRevisionPrompt`), and it comes before a pending review or test. A
+  request made while a session runs waits for that session to end; a step that then lands
+  in review goes back in line for it (`reviseAfterStep`).
+- The implementer ends its reply with a `SPEC CHANGE: <why>` line and the complete revised
+  list (`parseSpecChange`). Implementers of a task with a spec file are told how
+  (`SPEC_CHANGE_DUTY`). The step is then not sent for review or test.
+
+Either way a `spec_change` proposal (`SpecChangeProposal`: old and new criteria, who, why)
+puts the task in `awaiting_approval`, and nothing is built until the user decides. A reply
+(`planFeedback`) becomes a new `spec_revision`. `approveCriteria` approves a waiting change
+too (`approveSpecChange`), and `rejectSpecChange` rejects it; both store a
+`spec_change_decision`. On approval the criteria are saved on the task, so every later
+goal, review and test uses them. Before the next session, `Workflow.reviseSpecFile`
+rewrites the criteria section of the spec file and adds a dated line under "Revisions"
+(`core/src/spec.ts`), then commits only that file (`spec_revised`). The harness writes the
+file itself so it holds exactly the approved criteria. The implementer is then resumed with
+the new criteria (`specChangeApprovedPrompt`). A rejection leaves the file and criteria as
+they were. The implementer's own proposal is answered with `SPEC_CHANGE_REJECTED_PROMPT`;
+a user's request returns the task to review if it was there, and to the queue otherwise.
+The spec author's revision sessions are never what the implementer resumes
+(`withoutRevisions`).
+
 Rounds count from the step's last pass (`APPROVE`, `TESTS: PASS`) or from the last
 `sent_back` event, which `Harness.queueTask` records when a human sends a task in review back
 to work. The implementer then gets the last review's feedback, and the reviewer and tester

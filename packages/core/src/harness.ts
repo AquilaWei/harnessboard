@@ -49,6 +49,8 @@ import type {
   QuotaInfo,
   UsageRecord,
   ReviewRequest,
+  SpecChangeProposal,
+  SpecRevisionRequest,
   Task,
   TaskActivity,
   TaskAgents,
@@ -307,6 +309,16 @@ export class Harness {
   /** The user's reply to a plan that the planner has not handled yet. */
   pendingPlanFeedback(taskId: number): string | null {
     return this.workflow.pendingPlanFeedback(taskId);
+  }
+
+  /** The user's request to change a task's spec, while it waits for the spec author. */
+  pendingSpecRevision(taskId: number): SpecRevisionRequest | null {
+    return this.workflow.pendingSpecRevision(taskId);
+  }
+
+  /** The change to a task's spec that waits for the user to approve or reject it. */
+  specChange(taskId: number): SpecChangeProposal | null {
+    return this.workflow.specChange(taskId);
   }
 
   /** The review a task is waiting for, if its latest step has not been reviewed yet. */
@@ -725,7 +737,13 @@ export class Harness {
       throw new Error(`task ${id} is ${task.status}, not waiting for plan approval`);
     }
     if (!message.trim()) throw new Error('feedback is empty');
-    this.store.appendEvent(id, null, 'plan_feedback', { message: message.trim() });
+    const change = this.workflow.specChange(id);
+    if (change) {
+      // A reply to a proposed spec change goes to the spec author, who proposes it again.
+      this.workflow.requestSpecRevision(id, message, change.onReject);
+    } else {
+      this.store.appendEvent(id, null, 'plan_feedback', { message: message.trim() });
+    }
     const queued = this.setStatus(id, 'queued');
     this.tick();
     return queued;
@@ -777,6 +795,9 @@ export class Harness {
    */
   approveCriteria(id: number, criteria?: string): Task {
     const task = this.requireTask(id);
+    if (task.status === 'awaiting_approval' && this.workflow.specChange(id)) {
+      return this.approveSpecChange(id, criteria);
+    }
     if (task.mode !== 'single' || task.status !== 'awaiting_approval') {
       throw new Error(`task ${id} is not waiting for its acceptance criteria to be approved`);
     }
@@ -795,6 +816,76 @@ export class Harness {
   /** Latest proposed criteria of a single task, until they are approved. */
   criteriaProposal(task: Task): CriteriaProposal | null {
     return this.workflow.criteriaProposal(task);
+  }
+
+  /**
+   * Asks the spec author to propose a change to the spec of a single task that is already
+   * being built. The task then waits for the user's approval as it did for the first spec.
+   * A running task is asked once its current session ends; a task in review, stopped or
+   * failed goes back in line for it. Throws when the task has no spec file yet, is waiting
+   * for an approval or done, the message is empty, or it works on the base while another
+   * task holds the folder.
+   */
+  requestSpecRevision(id: number, message: string): Task {
+    const task = this.requireTask(id);
+    if (task.mode !== 'single' || !this.workflow.specFile(id)) {
+      throw new Error(`task ${id} has no spec file to change`);
+    }
+    if (['backlog', 'awaiting_approval', 'done'].includes(task.status)) {
+      throw new Error(`task ${id} is ${task.status}; a spec change needs work under way`);
+    }
+    const text = optionalText(message, 'message') ?? '';
+    const idle = !this.running.has(id) && ['review', 'stopped', 'failed'].includes(task.status);
+    if (idle && task.workspace === 'base') this.assertFolderFree(task);
+    this.workflow.requestSpecRevision(id, text, task.status);
+    if (!idle) {
+      this.emit({ type: 'task', taskId: id, status: task.status });
+      return this.requireTask(id);
+    }
+    // The change may need more work, so the reviewer's and tester's rounds count afresh.
+    if (task.status === 'review') this.workflow.sendBack(id);
+    const queued = this.setStatus(id, 'queued', { resumeAt: null });
+    this.tick();
+    return queued;
+  }
+
+  /**
+   * Approves the waiting spec change: its criteria (or `criteria`, e.g. after the user
+   * edited them) become the task's, the spec file is rewritten and committed before the next
+   * session, and the implementer goes on against them. Throws when no change is waiting or
+   * there are no criteria to approve.
+   */
+  approveSpecChange(id: number, criteria?: string): Task {
+    const task = this.requireSpecChange(id);
+    const decision = this.workflow.decideSpecChange(task, true, optionalText(criteria, 'criteria'));
+    this.store.updateTask(id, { acceptance: decision.criteria });
+    this.notice(id, 'spec change approved; revising the spec');
+    const queued = this.setStatus(id, 'queued');
+    this.tick();
+    return queued;
+  }
+
+  /**
+   * Rejects the waiting spec change: the spec file and criteria stay as they are, and the
+   * task goes back to where it was, the implementer's work or review. Throws when no change
+   * is waiting.
+   */
+  rejectSpecChange(id: number): Task {
+    const task = this.requireSpecChange(id);
+    const { onReject } = this.workflow.specChange(id)!;
+    this.workflow.decideSpecChange(task, false);
+    this.notice(id, 'spec change rejected; the spec stays as it is');
+    const next = this.setStatus(id, onReject);
+    if (onReject === 'queued') this.tick();
+    return next;
+  }
+
+  private requireSpecChange(id: number): Task {
+    const task = this.requireTask(id);
+    if (task.status !== 'awaiting_approval' || !this.workflow.specChange(id)) {
+      throw new Error(`task ${id} has no spec change waiting for a decision`);
+    }
+    return task;
   }
 
   /**
@@ -1216,6 +1307,7 @@ export class Harness {
     this.running.set(task.id, controller);
     try {
       const ready = await this.ensureWorktree(task);
+      await this.workflow.reviseSpecFile(ready);
       const plan = this.workflow.plan(ready);
       await this.workflow.syncNotes(ready);
       const adapter = this.adapterFor(plan.agentId);
