@@ -761,3 +761,137 @@ describe('a base task whose tester was stopped and resumed after another base ta
     ]).toEqual([true, true, true]);
   });
 });
+
+/** Writes and commits hello.txt, then talks, so a chat can continue the conversation. */
+const ADD_HELLO_AND_TALK = [
+  init(),
+  writeFile('hello.txt', 'hi\n'),
+  commitAll('add hello.txt'),
+  assistantText('done', 10_000),
+  result('done'),
+];
+
+/** Base task 1 committed hello.txt; its `role` (reviewer or tester) was stopped partway. */
+async function stoppedCheck(role: 'reviewer' | 'tester') {
+  const start = git(repo, 'rev-parse', 'HEAD');
+  const first = await harness.createTask({
+    prompt: 'Add a greeting',
+    repo,
+    workspace: 'base',
+    confirmPlan: false,
+    reviewer: role === 'reviewer' ? 'claude' : null,
+    tester: role === 'tester' ? 'claude' : null,
+    queue: true,
+  });
+  await harness.waitForIdle();
+  const hello = git(repo, 'rev-parse', 'HEAD');
+  harness.tick();
+  await waitUntil(() => (harness.store.listSessions(first.id)[1]?.contextTokens ?? 0) > 0);
+  harness.stopTask(first.id);
+  await harness.waitForIdle();
+  return { first, start, hello };
+}
+
+/**
+ * {@link stoppedCheck}, then base task 2 committed world.txt and is done, then a chat with
+ * task 1 that changed nothing, then task 1 was resumed and `role` answered `reply`.
+ */
+async function checkResumedAfterAnotherAndChat(role: 'reviewer' | 'tester', reply: string) {
+  scenario([ADD_HELLO_AND_TALK], [READ_AND_HANG], [ADD_WORLD], [TALK], [[init(), result(reply)]]);
+  const { first, start, hello } = await stoppedCheck(role);
+  const second = await createBaseTask('Another change');
+  await harness.waitForIdle();
+  harness.completeTask(second.id);
+  harness.chat(first.id, 'How is it going?');
+  await harness.waitForIdle();
+  harness.queueTask(first.id);
+  await harness.waitForIdle();
+  return { start, hello, resumed: fakeRuns()[4]! };
+}
+
+describe('a base task whose stopped reviewer resumes after another base task and a chat', () => {
+  it('gives the reviewer the scope rebuilt while it was stopped', async () => {
+    const { start, hello, resumed } = await checkResumedAfterAnotherAndChat(
+      'reviewer',
+      'VERDICT: APPROVE',
+    );
+    expect([
+      resumed.args.includes('--resume'),
+      resumed.received[0]!.startsWith('[harness] While you were stopped'),
+      resumed.received[0]!.includes(`git diff ${start}..${hello}`),
+    ]).toEqual([true, true, true]);
+  });
+});
+
+describe('a base task whose stopped tester resumes after another base task and a chat', () => {
+  it('gives the tester the scope rebuilt while it was stopped', async () => {
+    const { start, hello, resumed } = await checkResumedAfterAnotherAndChat(
+      'tester',
+      'TESTS: PASS',
+    );
+    expect([
+      resumed.args.includes('--resume'),
+      resumed.received[0]!.startsWith('[harness] While you were stopped'),
+      resumed.received[0]!.includes(`git diff ${start}..${hello}`),
+    ]).toEqual([true, true, true]);
+  });
+});
+
+/**
+ * {@link stoppedCheck}, then a chat with task 1 committed bye.txt and left draft.txt
+ * uncommitted, then task 1 was resumed and `role` answered `reply`.
+ */
+async function checkResumedAfterChatChanges(role: 'reviewer' | 'tester', reply: string) {
+  const addByeAndDraft = [
+    init(),
+    writeFile('bye.txt', 'bye\n'),
+    commitAll('add bye.txt'),
+    writeFile('draft.txt', 'draft\n'),
+    result('ok'),
+  ];
+  scenario([ADD_HELLO_AND_TALK], [READ_AND_HANG], [addByeAndDraft], [[init(), result(reply)]]);
+  const { first } = await stoppedCheck(role);
+  harness.chat(first.id, 'Say goodbye too');
+  await harness.waitForIdle();
+  const bye = git(repo, 'rev-parse', 'HEAD');
+  harness.queueTask(first.id);
+  await harness.waitForIdle();
+  return { first, bye, resumed: fakeRuns()[3]! };
+}
+
+describe('a base task whose stopped reviewer resumes after a chat changed the folder', () => {
+  it('takes the verdict instead of blaming the reviewer for the chat', async () => {
+    const { first } = await checkResumedAfterChatChanges('reviewer', 'VERDICT: APPROVE');
+    const review = harness.store.lastEvent(first.id, 'review')!.data as { verdict: string };
+    expect(review.verdict).toBe('approve');
+  });
+
+  it('asks the reviewer to check up to the commit the chat made', async () => {
+    const { first, bye, resumed } = await checkResumedAfterChatChanges(
+      'reviewer',
+      'VERDICT: APPROVE',
+    );
+    const request = harness.store.lastEvent(first.id, 'review_request')!.data as { head: string };
+    expect([request.head, resumed.received[0]!.startsWith('[harness] While you were')]).toEqual([
+      bye,
+      true,
+    ]);
+  });
+});
+
+describe('a base task whose stopped tester resumes after a chat changed the folder', () => {
+  it('takes the verdict instead of blaming the tester for the chat', async () => {
+    const { first } = await checkResumedAfterChatChanges('tester', 'TESTS: PASS');
+    const report = harness.store.lastEvent(first.id, 'test_report')!.data as { verdict: string };
+    expect(report.verdict).toBe('pass');
+  });
+
+  it('asks the tester to check up to the commit the chat made', async () => {
+    const { first, bye, resumed } = await checkResumedAfterChatChanges('tester', 'TESTS: PASS');
+    const request = harness.store.lastEvent(first.id, 'test_request')!.data as { head: string };
+    expect([request.head, resumed.received[0]!.startsWith('[harness] While you were')]).toEqual([
+      bye,
+      true,
+    ]);
+  });
+});

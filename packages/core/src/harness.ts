@@ -903,7 +903,10 @@ export class Harness {
       const adapter = this.adapterFor(session.agentId);
       const outcome = await this.runOne(ready, session.id, plan, adapter, controller.signal, true)
         // Before the task returns to its status and may let go of the folder.
-        .finally(() => this.endOnBase(ready));
+        .finally(async () => {
+          await this.endOnBase(ready);
+          await this.workflow.refreshAfterChat(ready);
+        });
       reason = outcome.reason;
     } catch (err) {
       this.notice(task.id, `chat failed: ${(err as Error).message}`);

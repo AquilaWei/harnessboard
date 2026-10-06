@@ -156,8 +156,8 @@ export class Workflow {
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
     const base = { role: 'reviewer', agentId: reviewer, access: 'readOnly' } as const;
-    const seen = this.requestSeen(task.id, 'review_request');
-    if (resumable && seen) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    if (resumable && this.requestSeen(task.id, 'review_request', last))
+      return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
     const snapshot = task.mode === 'loop' ? this.snapshots(task.id).at(-1) : undefined;
     const prompt = reviewPrompt(this.goal(task), request, {
       verify: snapshot?.verify ?? null,
@@ -217,8 +217,8 @@ export class Workflow {
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
     const base = { role: 'tester', agentId: tester, access: 'edit' } as const;
-    const seen = this.requestSeen(task.id, 'test_request');
-    if (resumable && seen) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    if (resumable && this.requestSeen(task.id, 'test_request', last))
+      return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
     const prompt = testPrompt(
       this.goal(task),
       request,
@@ -784,30 +784,63 @@ export class Workflow {
    * for those commits. The round stays the same. Throws when git cannot read the folder.
    */
   async refreshPending(task: Task): Promise<void> {
-    const review = this.pendingReview(task.id);
-    const test = this.pendingTest(task.id);
-    if (!review && !test) return;
-    const dir = task.worktreePath!;
-    const [head, status] = await Promise.all([headCommit(dir), porcelainStatus(dir)]);
-    const scope = { ...(await this.stepBase(task)), head, status };
-    const store = this.host.store;
-    if (review) {
-      store.appendEvent(task.id, null, 'review_request', { ...scope, round: review.round });
-    }
-    if (test) store.appendEvent(task.id, null, 'test_request', { ...scope, round: test.round });
-    this.host.notice(
-      task.id,
+    await this.rebuildPending(
+      task,
+      () => true,
       'other work landed in the folder; the waiting check now leaves it out',
     );
   }
 
   /**
-   * Whether a session already ran for the latest request of `kind`; one rebuilt by
-   * {@link refreshPending} has not been seen by the session it interrupted.
+   * Rebuilds a review or test request still waiting when a chat changed the folder after
+   * it was made. The chat's commits join what is checked, and its edits leave the baseline,
+   * so the reviewer or tester is not blamed for them. Throws when git cannot read the folder.
    */
-  private requestSeen(taskId: number, kind: 'review_request' | 'test_request'): boolean {
+  async refreshAfterChat(task: Task): Promise<void> {
+    await this.rebuildPending(
+      task,
+      (request, head, status) => request.head !== head || request.status !== status,
+      'a chat changed the folder; the waiting check now covers it',
+    );
+  }
+
+  /** Appends a new copy of each pending request that `stale` rejects, with the same round. */
+  private async rebuildPending(
+    task: Task,
+    stale: (request: ReviewRequest | TestRequest, head: string, status: string) => boolean,
+    notice: string,
+  ): Promise<void> {
+    const review = this.pendingReview(task.id);
+    const test = this.pendingTest(task.id);
+    if (!review && !test) return;
+    const dir = task.worktreePath!;
+    const [head, status] = await Promise.all([headCommit(dir), porcelainStatus(dir)]);
+    const staleReview = review && stale(review, head, status);
+    const staleTest = test && stale(test, head, status);
+    if (!staleReview && !staleTest) return;
+    const scope = { ...(await this.stepBase(task)), head, status };
+    const store = this.host.store;
+    if (staleReview) {
+      store.appendEvent(task.id, null, 'review_request', { ...scope, round: review.round });
+    }
+    if (staleTest) {
+      store.appendEvent(task.id, null, 'test_request', { ...scope, round: test.round });
+    }
+    this.host.notice(task.id, notice);
+  }
+
+  /**
+   * Whether `session` already received the latest request of `kind`. Other sessions' events
+   * (a chat with the implementer) say nothing about it, and one rebuilt by
+   * {@link refreshPending} or {@link refreshAfterChat} after it stopped is still news to it.
+   */
+  private requestSeen(
+    taskId: number,
+    kind: 'review_request' | 'test_request',
+    session: Session,
+  ): boolean {
     const event = this.host.store.lastEvent(taskId, kind);
-    return event !== undefined && this.host.store.hasSessionEventsAfter(taskId, event.id);
+    return event !== undefined && this.host.store.sessionHasEventsAfter(session.id, event.id);
   }
 
   /** Sends new commits to the reviewer, or moves on when there is none. */

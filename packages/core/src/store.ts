@@ -340,6 +340,14 @@ export class Store {
     return row !== undefined;
   }
 
+  /** Whether one session logged anything after event `afterId`, e.g. it received a request. */
+  sessionHasEventsAfter(sessionId: string, afterId: number): boolean {
+    const row = this.db
+      .prepare('SELECT 1 FROM events WHERE session_id = ? AND id > ? LIMIT 1')
+      .get(sessionId, afterId);
+    return row !== undefined;
+  }
+
   /** Most recent event of one kind within a session, e.g. its final result. */
   lastSessionEvent(sessionId: string, kind: string): StoredEvent | undefined {
     const row = this.db
