@@ -10,6 +10,7 @@ import {
 } from '@harnessboard/shared';
 import type {
   AgentRole,
+  CommitSpan,
   CriteriaProposal,
   FeatureSnapshot,
   MergeConflict,
@@ -639,20 +640,41 @@ export class Workflow {
   }
 
   /**
-   * Commit the next review or test of a step is measured from. An approval from an earlier
-   * stretch of a `base` task does not count: the commits between it and where the current
-   * stretch started are other work in the folder.
+   * What the next review or test of a step covers: from `since` to HEAD, plus a `base`
+   * task's `earlier` stretches nobody approved yet. Those are listed one by one because
+   * the commits between them are other work in the folder.
    */
-  private async stepBase(task: Task): Promise<string> {
+  private async stepBase(task: Task): Promise<{ since: string; earlier: CommitSpan[] }> {
     const dir = task.worktreePath!;
     const approved = this.reviews(task.id).findLast((r) => r.verdict === 'approve');
     const base = await mergeBase(dir, diffBase(task));
-    if (!approved) return base;
-    const earlier =
-      task.workspace === 'base' &&
-      approved.head !== base &&
-      (await isMergedInto(dir, approved.head, base));
-    return earlier ? base : approved.head;
+    if (task.workspace !== 'base') return { since: approved?.head ?? base, earlier: [] };
+    if (approved && (await isMergedInto(dir, base, approved.head))) {
+      return { since: approved.head, earlier: [] };
+    }
+    return { since: base, earlier: await this.unapprovedSpans(dir, task, approved?.head) };
+  }
+
+  /**
+   * A `base` task's earlier stretches after its last approval (all of them without one);
+   * the stretch the approval falls in counts from the approved commit on.
+   */
+  private async unapprovedSpans(
+    dir: string,
+    task: Task,
+    approved: string | undefined,
+  ): Promise<CommitSpan[]> {
+    const spans = task.priorSpans.filter((span) => span.from !== span.to);
+    if (!approved) return spans;
+    for (let i = spans.length - 1; i >= 0; i--) {
+      const { from, to } = spans[i]!;
+      const within =
+        (await isMergedInto(dir, from, approved)) && (await isMergedInto(dir, approved, to));
+      if (!within) continue;
+      const rest = spans.slice(i + 1);
+      return approved === to ? rest : [{ from: approved, to }, ...rest];
+    }
+    return spans;
   }
 
   /**
@@ -674,7 +696,7 @@ export class Workflow {
       return;
     }
     const round = this.roundsSince(task.id, 'test_report', 'pass') + 1;
-    const request: TestRequest = { round, since: await this.stepBase(task), head, status };
+    const request: TestRequest = { round, ...(await this.stepBase(task)), head, status };
     this.host.store.appendEvent(task.id, null, 'test_request', request);
     this.host.notice(task.id, `sent to ${task.agents.tester} for testing (round ${round})`);
     this.host.setStatus(task.id, 'queued');
@@ -771,8 +793,7 @@ export class Workflow {
       return;
     }
     const round = this.roundsSince(task.id, 'review', 'approve') + 1;
-    const since = await this.stepBase(task);
-    const request: ReviewRequest = { round, since, head, status };
+    const request: ReviewRequest = { round, ...(await this.stepBase(task)), head, status };
     this.host.store.appendEvent(task.id, null, 'review_request', request);
     this.host.notice(task.id, `sent for review to ${task.agents.reviewer} (round ${round})`);
     this.host.setStatus(task.id, 'queued');

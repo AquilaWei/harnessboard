@@ -7,7 +7,7 @@ import {
   specFilePrompt,
   taskGoal,
 } from '../src/prompts.js';
-import { reviewPrompt } from '../src/review.js';
+import { reviewPrompt, testPrompt } from '../src/review.js';
 
 describe('parseCriteria', () => {
   it('takes the lines under the criteria heading up to the next heading', () => {
@@ -149,6 +149,41 @@ describe('reviewPrompt', () => {
 
   it('does not mention later steps for a single task', () => {
     expect(reviewPrompt('goal', request)).not.toContain('later steps');
+  });
+});
+
+describe('reviewPrompt for a base task with earlier unreviewed work', () => {
+  const request = {
+    round: 1,
+    since: 'c3',
+    earlier: [{ from: 'a1', to: 'b2' }],
+    head: 'd4',
+    status: '',
+  };
+
+  it('asks the reviewer to check the earlier stretch too', () => {
+    expect(reviewPrompt('goal', request)).toContain(
+      '`git log --oneline a1..b2` and `git diff a1..b2`',
+    );
+  });
+
+  it('does not mention earlier work when there is none', () => {
+    expect(reviewPrompt('goal', { ...request, earlier: [] })).not.toContain('earlier work');
+  });
+});
+
+describe('testPrompt for a base task with earlier unreviewed work', () => {
+  it('asks the tester to check the earlier stretch too', () => {
+    const request = {
+      round: 1,
+      since: 'c3',
+      earlier: [{ from: 'a1', to: 'b2' }],
+      head: 'd4',
+      status: '',
+    };
+    expect(testPrompt('goal', request, null, false)).toContain(
+      '`git log --oneline a1..b2` and `git diff a1..b2`',
+    );
   });
 });
 

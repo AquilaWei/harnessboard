@@ -552,7 +552,10 @@ export class Harness {
     return null;
   }
 
-  /** The `base` task other than `except` using the repository folder, if any. */
+  /**
+   * The `base` task other than `except` using the repository folder, if any. A task whose
+   * session is still being wound up holds it too, whatever status the workflow gave it.
+   */
   private folderHolder(repo: string, except: number): Task | undefined {
     return this.store
       .listTasks()
@@ -561,7 +564,7 @@ export class Harness {
           t.id !== except &&
           t.workspace === 'base' &&
           t.repoPath === repo &&
-          HOLDS_FOLDER.includes(t.status),
+          (this.running.has(t.id) || HOLDS_FOLDER.includes(t.status)),
       );
   }
 
@@ -1178,11 +1181,15 @@ export class Harness {
       }
       this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
       this.setStatus(task.id, 'running');
-      const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal)
-        // Before the workflow moves the task on and may let go of the folder.
-        .finally(() => this.endOnBase(ready));
-      this.store.endSession(sessionId, outcome.reason);
-      await this.workflow.finish(ready, plan, outcome, controller.signal);
+      try {
+        const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal);
+        this.store.endSession(sessionId, outcome.reason);
+        await this.workflow.finish(ready, plan, outcome, controller.signal);
+      } finally {
+        // After the workflow's own commits (a spec it committed), and while `running` still
+        // holds the folder, so no other task's commits can come first.
+        await this.endOnBase(ready);
+      }
     } catch (err) {
       this.notice(task.id, `task failed: ${(err as Error).message}`);
       this.setStatus(task.id, 'failed');

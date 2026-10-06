@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  CommitSpan,
   CriteriaApproval,
   CriteriaProposal,
   MergeConflict,
@@ -23,6 +24,11 @@ export interface ReviewRequest {
   round: number;
   /** Commit the reviewer diffs against: the last approved head, or the task's base. */
   since: string;
+  /**
+   * A `base` task's earlier stretches of its own work still to check, oldest first; the
+   * commits between them are other work in the folder. Missing in requests stored before.
+   */
+  earlier?: CommitSpan[];
   head: string;
   /** `git status --porcelain` output at request time. */
   status: string;
@@ -44,6 +50,11 @@ export interface TestRequest {
   round: number;
   /** Commit the step is measured from: the last approved head, or the task's base. */
   since: string;
+  /**
+   * A `base` task's earlier stretches of its own work still to check, oldest first; the
+   * commits between them are other work in the folder. Missing in requests stored before.
+   */
+  earlier?: CommitSpan[];
   head: string;
   /** `git status --porcelain` output at request time. */
   status: string;

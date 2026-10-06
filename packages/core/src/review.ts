@@ -40,6 +40,21 @@ export interface ReviewContext {
   guidelines?: Guideline[];
 }
 
+/**
+ * Lines naming a `base` task's earlier stretches of work, which the agent checks as well;
+ * the commits between them are other work in the folder and are left out.
+ */
+function earlierWork(request: ReviewRequest | TestRequest): string[] {
+  const spans = request.earlier ?? [];
+  if (spans.length === 0) return [];
+  return [
+    "- the task's earlier work, one stretch each (the commits between them are not its work):",
+    ...spans.map(
+      ({ from, to }) => `  - \`git log --oneline ${from}..${to}\` and \`git diff ${from}..${to}\``,
+    ),
+  ];
+}
+
 /** First message of a reviewer session. It runs read-only in the implementer's worktree. */
 export function reviewPrompt(
   goal: string,
@@ -55,6 +70,7 @@ export function reviewPrompt(
     `Review everything between ${request.since} and HEAD:`,
     `- \`git log --oneline ${request.since}..HEAD\` and \`git diff ${request.since}..HEAD\``,
     '- `git status` for anything left uncommitted',
+    ...earlierWork(request),
     'Read the surrounding code where you need context.',
   ];
   if (verify) {
@@ -169,6 +185,7 @@ export function testPrompt(
     `The implementer's work is everything between ${request.since} and HEAD:`,
     `- \`git log --oneline ${request.since}..HEAD\` and \`git diff ${request.since}..HEAD\``,
     '- `git status` for anything left uncommitted',
+    ...earlierWork(request),
     '',
     hasCriteria
       ? 'Make sure every acceptance criterion is covered by a test that would fail without it.'

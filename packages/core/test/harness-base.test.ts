@@ -498,6 +498,88 @@ describe('an approved base task resumed after another base task worked in the fo
   });
 });
 
+describe('a base task stopped before its first review and resumed after another base task', () => {
+  async function resumedRequest() {
+    scenario(
+      [
+        [
+          init(),
+          writeFile('hello.txt', 'hi\n'),
+          commitAll('add hello.txt'),
+          askBash('r1', 'node hello.js', 'node *'),
+          hang,
+        ],
+      ],
+      [ADD_WORLD],
+      [ADD_BYE],
+      [[init(), result('VERDICT: APPROVE')]],
+    );
+    const start = git(repo, 'rev-parse', 'HEAD');
+    const first = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      workspace: 'base',
+      confirmPlan: false,
+      reviewer: 'claude',
+      autoApprove: false,
+      queue: true,
+    });
+    await waitForStatus(first.id, 'awaiting_permission');
+    const hello = git(repo, 'rev-parse', 'HEAD');
+    harness.stopTask(first.id);
+    await harness.waitForIdle();
+    const second = await createBaseTask('Another change');
+    await harness.waitForIdle();
+    harness.completeTask(second.id);
+    const back = git(repo, 'rev-parse', 'HEAD');
+    harness.queueTask(first.id);
+    await harness.waitForIdle();
+    const request = harness.store.lastEvent(first.id, 'review_request')!.data as {
+      since: string;
+      earlier?: { from: string; to: string }[];
+    };
+    return { request, start, hello, back };
+  }
+
+  it('asks for a review of its stretch from before the other task as well', async () => {
+    const { request, start, hello } = await resumedRequest();
+    expect(request.earlier).toEqual([{ from: start, to: hello }]);
+  });
+
+  it('asks for a review of its current stretch from where it came back', async () => {
+    const { request, back } = await resumedRequest();
+    expect(request.since).toBe(back);
+  });
+});
+
+describe('a base task whose spec author left the spec uncommitted', () => {
+  it('counts the spec commit the harness made as its own work', async () => {
+    const proposal = 'I read main.js.\n## Acceptance criteria\n- prints hi';
+    scenario(
+      [[init(), assistantText(proposal, 10_000), result(proposal)]],
+      [[init(), writeFile('docs/specs/001-add-a-greeting.md', '# Spec'), result('written')]],
+      [ADD_HELLO],
+    );
+    const task = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      workspace: 'base',
+      reviewer: null,
+      queue: true,
+    });
+    await harness.waitForIdle();
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    harness.tick(); // the implementer's session
+    await harness.waitForIdle();
+    const commits = await harness.commits(task.id);
+    expect(commits.map((c) => c.subject)).toEqual([
+      'add hello.txt',
+      'docs: add spec for Add a greeting',
+    ]);
+  });
+});
+
 /** A worktree task with a committed file waiting for review, then a base task (not started). */
 async function reviewedWorktreeTaskAndBaseTask() {
   scenario(
