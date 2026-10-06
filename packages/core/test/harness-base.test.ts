@@ -895,3 +895,67 @@ describe('a base task whose stopped tester resumes after a chat changed the fold
     ]);
   });
 });
+
+/**
+ * {@link stoppedCheck}, then a chat with task 1 committed bye.txt and left draft.txt
+ * uncommitted before the process died mid-chat; after the restart task 1 was resumed and
+ * `role` answered `reply`.
+ */
+async function checkResumedAfterInterruptedChat(role: 'reviewer' | 'tester', reply: string) {
+  scenario([ADD_HELLO_AND_TALK], [READ_AND_HANG], [[init(), result(reply)]]);
+  const { first } = await stoppedCheck(role);
+  const stopped = harness.store.getTask(first.id)!;
+  const implementer = harness.store.listSessions(first.id)[0]!;
+  // What the store holds when the process dies mid-chat.
+  harness.store.appendEvent(first.id, implementer.id, 'chat_message', {
+    text: 'Say goodbye too',
+    returnTo: stopped.status,
+  });
+  harness.store.updateTask(first.id, { status: 'running' });
+  commitFile(repo, 'bye.txt', 'bye\n');
+  writeFileSync(path.join(repo, 'draft.txt'), 'draft\n');
+  const bye = git(repo, 'rev-parse', 'HEAD');
+  const restarted = new Harness(harness.config, harness.store);
+  await restarted.start();
+  restarted.queueTask(first.id);
+  await restarted.waitForIdle();
+  await restarted.shutdown();
+  return { first, bye, resumed: fakeRuns()[2]! };
+}
+
+describe('a base task whose stopped reviewer resumes after a chat cut off by a crash', () => {
+  it('takes the verdict instead of blaming the reviewer for the chat', async () => {
+    const { first } = await checkResumedAfterInterruptedChat('reviewer', 'VERDICT: APPROVE');
+    const review = harness.store.lastEvent(first.id, 'review')!.data as { verdict: string };
+    expect(review.verdict).toBe('approve');
+  });
+
+  it('asks the reviewer to check up to the commit the chat made', async () => {
+    const { first, bye, resumed } = await checkResumedAfterInterruptedChat(
+      'reviewer',
+      'VERDICT: APPROVE',
+    );
+    const request = harness.store.lastEvent(first.id, 'review_request')!.data as { head: string };
+    expect([request.head, resumed.received[0]!.startsWith('[harness] While you were')]).toEqual([
+      bye,
+      true,
+    ]);
+  });
+});
+
+describe('a base task whose stopped tester resumes after a chat cut off by a crash', () => {
+  it('takes the verdict instead of blaming the tester for the chat', async () => {
+    const { first } = await checkResumedAfterInterruptedChat('tester', 'TESTS: PASS');
+    const report = harness.store.lastEvent(first.id, 'test_report')!.data as { verdict: string };
+    expect(report.verdict).toBe('pass');
+  });
+
+  it('asks the tester to check up to the commit the chat made', async () => {
+    const { first, bye, resumed } = await checkResumedAfterInterruptedChat('tester', 'TESTS: PASS');
+    const request = harness.store.lastEvent(first.id, 'test_request')!.data as { head: string };
+    expect([request.head, resumed.received[0]!.startsWith('[harness] While you were')]).toEqual([
+      bye,
+      true,
+    ]);
+  });
+});

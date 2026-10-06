@@ -393,7 +393,9 @@ export class Harness {
    * Starts periodic scheduling. Tasks left `running` or `awaiting_permission` by a previous
    * process that died are re-queued, because their agent process no longer exists.
    * A `base` task among them first gets the end its session never recorded, before any
-   * other task can start, so the commits it made before the crash stay its work.
+   * other task can start, so the commits it made before the crash stay its work. A chat cut
+   * off by the crash also rebuilds a review or test still waiting, so the chat's changes are
+   * not blamed on the reviewer or tester.
    */
   async start(): Promise<void> {
     for (const task of this.store.listTasks()) {
@@ -402,6 +404,7 @@ export class Harness {
       // A chat is the user's own conversation, not workflow work to pick up again.
       const chat = this.unansweredChat(task.id);
       if (chat && interrupted) {
+        await this.refreshInterruptedChat(task.id);
         this.endChat(task.id, chat.sessionId, chat.message.returnTo, 'stopped');
         continue;
       }
@@ -428,6 +431,24 @@ export class Harness {
         task.id,
         `could not record where the interrupted session left ${task.repoPath}: ` +
           (err as Error).message,
+      );
+    }
+  }
+
+  /**
+   * Rebuilds a review or test still waiting when a chat was cut off by a crash, as
+   * {@link runChat} would have when it ended. Without it the check keeps its old baseline
+   * and the reviewer or tester is blamed for what the chat changed. When git cannot read
+   * the folder the task is told and the check keeps its old scope.
+   */
+  private async refreshInterruptedChat(taskId: number): Promise<void> {
+    const task = this.requireTask(taskId); // after endInterrupted recorded the end
+    try {
+      await this.workflow.refreshAfterChat(task);
+    } catch (err) {
+      this.notice(
+        task.id,
+        `could not update the waiting check after the interrupted chat: ` + (err as Error).message,
       );
     }
   }
