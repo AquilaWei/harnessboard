@@ -145,6 +145,12 @@ export async function changedPaths(dir: string, head: string): Promise<string[]>
   return [...tracked.split('\n'), ...untracked.split('\n')].filter((p) => p !== '');
 }
 
+/** Files the commits of `span` changed, as in `git diff --name-only from to`. */
+export async function spanPaths(dir: string, span: CommitSpan): Promise<string[]> {
+  const out = await git(dir, ['diff', '--name-only', '--no-renames', span.from, span.to]);
+  return out.split('\n').filter((p) => p !== '');
+}
+
 /** Whether `file` is part of the commit at HEAD. */
 export async function isCommitted(dir: string, file: string): Promise<boolean> {
   try {

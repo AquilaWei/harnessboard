@@ -83,6 +83,7 @@ import {
   isMergedInto,
   mergeBase,
   porcelainStatus,
+  spanPaths,
 } from './worktree.js';
 
 /** Who runs the next session of a task, what it is asked, and whether it resumes one. */
@@ -154,8 +155,11 @@ export class Workflow {
     if (!conflict) {
       const revision = this.pendingRevisionEvent(task.id);
       if (revision) return { kind: 'specRevision', request: revision };
+      // Before the implementer starts, it hears the decided spec in its first prompt instead.
       const decisions = this.untoldDecisions(task.id);
-      if (decisions.length > 0) return { kind: 'specDecision', decisions };
+      if (decisions.length > 0 && this.implementationStarted(task.id)) {
+        return { kind: 'specDecision', decisions };
+      }
     }
     const review = this.pendingReview(task.id);
     if (review) return { kind: 'review', request: review };
@@ -261,6 +265,36 @@ export class Workflow {
       const delivery: SpecDelivery = { eventId };
       this.host.store.appendEvent(taskId, sessionId, 'spec_delivered', delivery);
     }
+    // Marks where building from the spec began; the session's role row can be the spec
+    // author's when the implementer continues the discussion.
+    if (
+      plan.role === 'implementer' &&
+      this.specFile(taskId) &&
+      !this.implementationStarted(taskId)
+    ) {
+      this.host.store.appendEvent(taskId, sessionId, 'implementation_started', {});
+    }
+  }
+
+  /**
+   * The implementer began building from the committed spec: a session it was started in
+   * reached the agent. A designer's, a chat's or the spec author's answer to a request for
+   * a spec change does not count, nor does a launch that failed. Implementer sessions from
+   * before this was recorded count when their agent reported anything after the spec.
+   */
+  private implementationStarted(taskId: number): boolean {
+    const store = this.host.store;
+    const written = store.lastEvent(taskId, 'spec_written');
+    if (!written) return false;
+    const marked = store
+      .eventsOfKind(taskId, 'implementation_started')
+      .some((e) => e.id > written.id && store.sessionHasAgentEventsAfter(e.sessionId!, e.id));
+    return (
+      marked ||
+      store
+        .listSessions(taskId)
+        .some((s) => s.role === 'implementer' && store.sessionHasAgentEventsAfter(s.id, written.id))
+    );
   }
 
   /** The `spec_delivered` events for `eventId`, oldest first. */
@@ -445,16 +479,14 @@ export class Workflow {
   }
 
   /**
-   * The criteria were approved and no session has run since the spec (and its UI design,
-   * when a designer added one) was committed, so the last work session was the discussion.
-   * A resumed session keeps its record, so this is told by events rather than sessions.
+   * The spec is committed and the implementer has not started on it, so the last work
+   * session was the discussion. The designer's session and the spec author's answers to
+   * requests for a spec change in between do not count.
    */
   private justSpecced(task: Task): boolean {
-    if (task.mode !== 'single') return false;
-    const written =
-      this.host.store.lastEvent(task.id, 'design_written') ??
-      this.host.store.lastEvent(task.id, 'spec_written');
-    return !!written && !this.host.store.hasSessionEventsAfter(task.id, written.id);
+    return (
+      task.mode === 'single' && !!this.specFile(task.id) && !this.implementationStarted(task.id)
+    );
   }
 
   /** The designer added its UI design section to the task's spec file. */
@@ -492,16 +524,12 @@ export class Workflow {
   /**
    * A designer is set, the spec is committed, and neither the designer nor the implementer
    * has finished with it yet. A designer chosen after the implementer started is not run,
-   * because the UI would already be built without its design. The implementer may have
-   * continued the discussion's session, so it is told by events rather than session roles.
+   * because the UI would already be built without its design. Requests for a spec change
+   * answered while the design is unwritten leave it to run before the implementer.
    */
   private needsDesign(task: Task): boolean {
-    const store = this.host.store;
-    const written = store.lastEvent(task.id, 'spec_written');
-    if (!task.agents.designer || !written || this.designed(task.id)) return false;
-    return !store
-      .listSessions(task.id)
-      .some((s) => s.role !== 'designer' && store.sessionHasEventsAfter(s.id, written.id));
+    if (!task.agents.designer || !this.specFile(task.id) || this.designed(task.id)) return false;
+    return !this.implementationStarted(task.id);
   }
 
   /** The designer's session; one cut off by a quota, stop or error goes on where it was. */
@@ -537,7 +565,7 @@ export class Workflow {
     }
     const dir = task.worktreePath!;
     const spec = this.host.store.lastEvent(task.id, 'spec_written')!.data as SpecRecord;
-    const stray = (await changedPaths(dir, spec.head)).filter((p) => p !== spec.path);
+    const stray = (await this.changedSince(task, spec.head)).filter((p) => p !== spec.path);
     if (stray.length > 0) {
       this.host.notice(
         task.id,
@@ -560,6 +588,25 @@ export class Workflow {
     this.host.store.appendEvent(task.id, null, 'design_written', record);
     this.host.notice(task.id, `UI design committed in ${spec.path}`);
     this.host.setStatus(task.id, 'queued');
+  }
+
+  /**
+   * Files the task changed after its own commit `since`, up to the working tree. A `base`
+   * task counts only its own stretches of work in the folder, so commits another task or
+   * the user made there while it let go are not blamed on it.
+   */
+  private async changedSince(task: Task, since: string): Promise<string[]> {
+    const dir = task.worktreePath!;
+    const live = task.startCommit;
+    if (task.workspace !== 'base' || !live || (await isMergedInto(dir, live, since))) {
+      return changedPaths(dir, since);
+    }
+    const closed = await this.spansAfter(dir, task, since);
+    const paths = await Promise.all([
+      ...closed.map((s) => spanPaths(dir, s)),
+      changedPaths(dir, live),
+    ]);
+    return [...new Set(paths.flat())];
   }
 
   /**
@@ -628,17 +675,20 @@ export class Workflow {
 
   /**
    * Continues the discussion's conversation, which already knows the repository, now
-   * allowed to edit; starts afresh with the agreed goal when that is not possible.
+   * allowed to edit; starts afresh with the agreed goal when that is not possible. Spec
+   * changes approved before it starts are in those criteria, so they count as delivered.
    */
   private startAfterDiscussion(task: Task, last: Session): SessionPlan {
     const resumable = this.canResume(task, last, task.agents.implementer);
-    if (resumable)
-      return this.implement(
-        task,
-        criteriaApprovedPrompt(task.acceptance!, this.specFile(task.id), this.designed(task.id)),
-        last,
-      );
-    return this.implement(task, this.goal(task));
+    const plan = resumable
+      ? this.implement(
+          task,
+          criteriaApprovedPrompt(task.acceptance!, this.specFile(task.id), this.designed(task.id)),
+          last,
+        )
+      : this.implement(task, this.goal(task));
+    const decisions = this.untoldDecisions(task.id).map((e) => e.id);
+    return decisions.length > 0 ? { ...plan, delivers: decisions } : plan;
   }
 
   /** The user's reply to the latest proposal, if the planner has not seen it yet. */
@@ -1146,27 +1196,26 @@ export class Workflow {
     if (approved && (await isMergedInto(dir, base, approved.head))) {
       return { since: approved.head, earlier: [] };
     }
-    return { since: base, earlier: await this.unapprovedSpans(dir, task, approved?.head) };
+    return { since: base, earlier: await this.spansAfter(dir, task, approved?.head) };
   }
 
   /**
-   * A `base` task's earlier stretches after its last approval (all of them without one);
-   * the stretch the approval falls in counts from the approved commit on.
+   * A `base` task's earlier stretches after its own commit `since` (all of them without
+   * one), such as its last approval; the stretch `since` falls in counts from it on.
    */
-  private async unapprovedSpans(
+  private async spansAfter(
     dir: string,
     task: Task,
-    approved: string | undefined,
+    since: string | undefined,
   ): Promise<CommitSpan[]> {
     const spans = task.priorSpans.filter((span) => span.from !== span.to);
-    if (!approved) return spans;
+    if (!since) return spans;
     for (let i = spans.length - 1; i >= 0; i--) {
       const { from, to } = spans[i]!;
-      const within =
-        (await isMergedInto(dir, from, approved)) && (await isMergedInto(dir, approved, to));
+      const within = (await isMergedInto(dir, from, since)) && (await isMergedInto(dir, since, to));
       if (!within) continue;
       const rest = spans.slice(i + 1);
-      return approved === to ? rest : [{ from: approved, to }, ...rest];
+      return since === to ? rest : [{ from: since, to }, ...rest];
     }
     return spans;
   }

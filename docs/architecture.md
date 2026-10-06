@@ -63,12 +63,17 @@ The installers come from `electron-builder`. They take their version from
     tasks with a user interface. Once `spec_written` is recorded, one session with edit access
     adds a `## UI design` section to the spec file and commits it (`designPrompt`;
     `design_written` event). The harness stops the task if any other file changed since the
-    spec was committed, or the file has no such heading, and commits the file itself when the
-    designer left it uncommitted. From then on `taskGoal` and `criteriaApprovedPrompt` tell
-    the implementer and the reviewer to follow that section. The designer runs only for a
-    task with a spec file (a single task whose criteria were approved), and not when it is
-    chosen after the implementer has started. Its session is never one the implementer
-    resumes.
+    spec was committed (for a `base` task, only within its own commit spans, so others'
+    commits in the folder are not counted), or the file has no such heading, and commits the
+    file itself when the designer left it uncommitted. From then on `taskGoal` and
+    `criteriaApprovedPrompt` tell the implementer and the reviewer to follow that section.
+    The designer runs only for a task with a spec file (a single task whose criteria were
+    approved), and not when it is chosen after the implementer has started. The start is the
+    `implementation_started` event the first implementer session after the spec logs, once
+    its agent reports anything; the designer's, a chat's and the spec author's revision
+    sessions do not count. Spec change decisions made before that are not sent as a separate
+    session: the implementer's first prompt already carries the decided criteria. Its
+    session is never one the implementer resumes.
   - `implementer`: edits files and commits. For a task with a spec file it is also told to
     keep the README, changelog and docs in step (`DOCS_DUTY`), and the reviewer checks that.
   - `tester`: optional, single tasks only. After an implementer step, one session with edit

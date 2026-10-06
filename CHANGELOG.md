@@ -60,8 +60,10 @@ are test versions that have not been accepted on real machines yet.
   (None by default), and `hb add` / `hb models` have `--designer`. With a designer, once the
   approved spec is committed it adds a "UI design" section to the spec file before anything
   is built; the implementer follows it and the reviewer checks against it. A designer that
-  changes any other file, or adds no such section, stops the task for you. Tasks without a
-  designer work as before.
+  changes any other file, or adds no such section, stops the task for you. A spec change
+  approved or rejected before the design is written still has the designer run before the
+  implementer, and on the base branch, commits you or another task made while the designer
+  was stopped are not blamed on it. Tasks without a designer work as before.
 
 ## 0.0.21 - 2026-10-04
 

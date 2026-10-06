@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // The optional UI designer: adds a UI design section to the spec before anything is built.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CreateTaskInput } from '@harnessboard/shared';
@@ -10,6 +10,8 @@ import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
   assistantText,
+  commitAll,
+  hang,
   init,
   makeRepo,
   result,
@@ -235,6 +237,135 @@ describe('a designer chosen after the implementer started', () => {
     harness.queueTask(task.id);
     await harness.waitForIdle();
     expect(sessions(task.id).map(([role]) => role)).toEqual(['spec', 'implementer']);
+  });
+});
+
+const REVISED = '## Changes\n- Hello, not hi.\n## Acceptance criteria\n- prints hello';
+const designerStopped = [[init(), assistantText('designing', 10_000), hang]];
+
+/** Approves the criteria, then stops the designer as it works and asks for a spec change. */
+async function revisedBeforeDesign() {
+  const task = await harness.createTask({
+    prompt: 'Add a greeting',
+    repo,
+    queue: true,
+    reviewer: null,
+    spec: 'writer',
+    designer: 'artist',
+  });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await harness.waitForIdle();
+  harness.tick(); // the designer starts and hangs
+  await new Promise((r) => setTimeout(r, 300));
+  harness.stopTask(task.id);
+  await harness.waitForIdle();
+  harness.requestSpecRevision(task.id, 'Say hello instead');
+  await harness.waitForIdle(); // the spec author proposes the change
+  return task;
+}
+
+describe('a spec change decided while the design is unwritten', () => {
+  beforeEach(() =>
+    scenario(discussion, specFile, designerStopped, session(REVISED), design, implementation),
+  );
+
+  it('runs the designer before the implementer once the change is approved', async () => {
+    const task = await revisedBeforeDesign();
+    harness.approveSpecChange(task.id);
+    await harness.waitForIdle(); // the designer
+    await runQueued(); // the implementer
+    expect(sessions(task.id).map(([role]) => role)).toEqual([
+      'spec',
+      'designer',
+      'spec',
+      'designer',
+      'implementer',
+    ]);
+  });
+
+  it('runs the designer before the implementer once the change is rejected', async () => {
+    const task = await revisedBeforeDesign();
+    harness.rejectSpecChange(task.id);
+    await harness.waitForIdle(); // the designer
+    await runQueued(); // the implementer
+    expect(sessions(task.id).map(([role]) => role)).toEqual([
+      'spec',
+      'designer',
+      'spec',
+      'designer',
+      'implementer',
+    ]);
+  });
+
+  it('gives the implementer the approved criteria as it starts, and not again after', async () => {
+    const task = await revisedBeforeDesign();
+    harness.approveSpecChange(task.id);
+    await harness.waitForIdle(); // the designer
+    await runQueued(); // the implementer
+    expect([
+      fakeRuns()[5]!.received[0]!.includes('- prints hello'),
+      status(task.id),
+      sessions(task.id).length,
+    ]).toEqual([true, 'review', 5]);
+  });
+});
+
+describe('a designer of a task on the base branch', () => {
+  const git = (...args: string[]) =>
+    execFileSync('git', args, { cwd: repo, stdio: 'pipe' }).toString().trim();
+
+  /** Stops the designer as it works, then the user commits `other.txt` in the folder. */
+  async function interrupted() {
+    const task = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      workspace: 'base',
+      queue: true,
+      reviewer: null,
+      spec: 'writer',
+      designer: 'artist',
+    });
+    await harness.waitForIdle();
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    harness.tick(); // the designer starts and hangs
+    await new Promise((r) => setTimeout(r, 300));
+    harness.stopTask(task.id);
+    await harness.waitForIdle();
+    writeFileSync(path.join(repo, 'other.txt'), 'theirs');
+    git('add', 'other.txt');
+    git('commit', '-q', '-m', 'add other.txt');
+    harness.queueTask(task.id);
+    await harness.waitForIdle(); // the designer again
+    return task;
+  }
+
+  it('is not blamed for a commit made in the folder while it was stopped', async () => {
+    scenario(discussion, specFile, designerStopped, design);
+    const task = await interrupted();
+    expect([status(task.id), notices(task.id).at(-1)]).toEqual([
+      'queued',
+      `UI design committed in ${SPEC_PATH}`,
+    ]);
+  });
+
+  it('is still stopped for a file it committed itself before it was stopped', async () => {
+    const stray = [
+      [
+        init(),
+        writeFile('notes.txt', 'mine'),
+        commitAll('notes'),
+        assistantText('x', 10_000),
+        hang,
+      ],
+    ];
+    scenario(discussion, specFile, stray, design);
+    const task = await interrupted();
+    expect([status(task.id), notices(task.id).at(-1)]).toEqual([
+      'failed',
+      'the designer changed files other than the spec: notes.txt; stopping for a human',
+    ]);
   });
 });
 
