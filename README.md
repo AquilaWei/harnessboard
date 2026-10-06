@@ -260,6 +260,15 @@ running, queued, in review, stopped or failed can still have its criteria change
    - **reject** (`hb reject <id>`): the spec stays as it is, and the task goes back to where
      it was.
 
+**Designer (optional):** for work with a user interface, add a **designer**. After the spec
+is committed, and before anything is built, it adds a "UI design" section to the spec file
+(screens, layout, text, states and behaviour, in the project's existing style) and commits
+it. The implementer is told to follow that section and the reviewer checks the work against
+it. It may only change the spec file; anything else stops the task. Use
+`--designer codex --designer-model <model>`, the **Designer** menu (None by default), or
+`hb models <id> --designer <agent|none>`. It applies to single tasks whose criteria you
+approve; leave it at None for work without a UI.
+
 **Tester (optional):** add a **tester** and every finished implementer step goes to it
 before review. It writes the tests the step is missing, runs the suite, commits the tests and
 answers `TESTS: PASS` or `TESTS: FAIL`. A failure goes back to the implementer (up to the same

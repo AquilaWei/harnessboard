@@ -30,7 +30,7 @@ export function isProfileId(id: string): boolean {
 }
 
 /** What a session was asked to do. */
-export type AgentRole = 'spec' | 'implementer' | 'tester' | 'reviewer';
+export type AgentRole = 'spec' | 'designer' | 'implementer' | 'tester' | 'reviewer';
 
 /**
  * A model a profile's CLI offers (`GET /api/agents/:id/models`), as the platform describes
@@ -79,6 +79,13 @@ export interface TaskAgents {
   tester?: string | null;
   /** Model for the tester; absent or `null` uses the profile's model. */
   testerModel?: string | null;
+  /**
+   * Agent that adds a "UI design" section to the spec file once the spec is written, before
+   * the implementer starts. Absent or `null` skips it, as for a task without a UI.
+   */
+  designer?: string | null;
+  /** Model for the designer; absent or `null` uses the profile's model. */
+  designerModel?: string | null;
   /** Review rounds per step before the task goes to a human anyway. */
   maxReviewRounds: number;
 }
@@ -111,10 +118,14 @@ export interface NewAgentProfile {
   model: string | null;
 }
 
-/** The agent profile that plays `role` in a task; `null` when the role is off (no reviewer or tester). */
+/**
+ * The agent profile that plays `role` in a task; `null` when the role is off (no reviewer,
+ * tester or designer).
+ */
 export function roleAgent(agents: TaskAgents, role: AgentRole): string | null {
   if (role === 'reviewer') return agents.reviewer;
   if (role === 'tester') return agents.tester ?? null;
+  if (role === 'designer') return agents.designer ?? null;
   if (role === 'spec') return agents.spec ?? agents.implementer;
   return agents.implementer;
 }
@@ -124,6 +135,7 @@ export function roleModel(agents: TaskAgents, role: AgentRole): string | null {
   if (role === 'reviewer') return agents.reviewerModel ?? null;
   if (role === 'implementer') return agents.implementerModel ?? null;
   if (role === 'tester') return agents.testerModel ?? null;
+  if (role === 'designer') return agents.designerModel ?? null;
   // A spec author left unset is the implementer, so it keeps the implementer's model too.
   if (agents.specModel) return agents.specModel;
   return agents.spec ? null : (agents.implementerModel ?? null);

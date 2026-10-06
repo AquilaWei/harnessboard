@@ -57,6 +57,8 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
     specModel: null,
     tester: null,
     testerModel: null,
+    designer: null,
+    designerModel: null,
   });
   const [title, setTitle] = useState('');
   const [base, setBase] = useState('');
@@ -116,6 +118,8 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           specModel: who.spec ? who.specModel : null,
           tester: who.tester,
           testerModel: who.tester ? who.testerModel : null,
+          designer: who.designer,
+          designerModel: who.designer ? who.designerModel : null,
           title: title.trim() || undefined,
           baseRef: base.trim() || undefined,
           workspace: workspace === 'base' ? workspace : undefined,

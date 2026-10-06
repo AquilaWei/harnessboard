@@ -47,6 +47,8 @@ import {
   criteriaApprovedPrompt,
   criteriaPrompt,
   criteriaRevisionPrompt,
+  designPrompt,
+  hasDesignSection,
   initializerPrompt,
   loopSessionPrompt,
   mergeConflictPrompt,
@@ -75,6 +77,7 @@ import {
   changedPaths,
   commitFile,
   diffBase,
+  git,
   headCommit,
   isCommitted,
   isMergedInto,
@@ -106,6 +109,7 @@ type NextStep =
   | { kind: 'test'; request: TestRequest }
   | { kind: 'conflict'; conflict: MergeConflict }
   | { kind: 'specFile' }
+  | { kind: 'design' }
   | { kind: 'work' };
 
 /** What the workflow needs from the harness: persistence and status changes that notify. */
@@ -159,14 +163,18 @@ export class Workflow {
     if (test) return { kind: 'test', request: test };
     if (conflict) return { kind: 'conflict', conflict };
     if (this.needsSpecFile(task)) return { kind: 'specFile' };
+    if (this.needsDesign(task)) return { kind: 'design' };
     return { kind: 'work' };
   }
 
   private nextSession(task: Task): SessionPlan {
     const sessions = this.host.store.listSessions(task.id);
     const last = sessions.at(-1);
-    // The spec author's answers to the user are not the implementer's work to continue.
-    const work = this.withoutRevisions(task.id, sessions).at(-1);
+    // The spec author's answers to the user and the designer's session are not the
+    // implementer's work to continue.
+    const work = this.withoutRevisions(task.id, sessions)
+      .filter((s) => s.role !== 'designer')
+      .at(-1);
     const step = this.nextStep(task);
     switch (step.kind) {
       case 'specRevision':
@@ -183,6 +191,8 @@ export class Workflow {
       }
       case 'specFile':
         return this.specFilePlan(task, last);
+      case 'design':
+        return this.designPlan(task, last);
       case 'work':
         return this.workPlan(task, work);
     }
@@ -235,6 +245,8 @@ export class Workflow {
         return task.agents.reviewer!;
       case 'test':
         return task.agents.tester!;
+      case 'design':
+        return task.agents.designer!;
       default:
         return this.activeAgent(task);
     }
@@ -289,6 +301,7 @@ export class Workflow {
       return { phase: 'writingSpec', agentId: plan.agentId };
     }
     if (plan.role === 'tester') return { phase: 'testing', agentId: plan.agentId };
+    if (plan.role === 'designer') return { phase: 'designing', agentId: plan.agentId };
     // Planning lasts until the plan is approved, including revisions after feedback, and
     // covers the spec author answering a request to change the spec.
     const planning =
@@ -405,7 +418,7 @@ export class Workflow {
 
   /** The task as the agents are given it: the request plus any agreed criteria and spec file. */
   private goal(task: Task): string {
-    return taskGoal(task.prompt, task.acceptance, this.specFile(task.id));
+    return taskGoal(task.prompt, task.acceptance, this.specFile(task.id), this.designed(task.id));
   }
 
   private firstPrompt(task: Task): string {
@@ -432,13 +445,21 @@ export class Workflow {
   }
 
   /**
-   * The criteria were approved and no session has run since, so `last` was the discussion.
+   * The criteria were approved and no session has run since the spec (and its UI design,
+   * when a designer added one) was committed, so the last work session was the discussion.
    * A resumed session keeps its record, so this is told by events rather than sessions.
    */
   private justSpecced(task: Task): boolean {
     if (task.mode !== 'single') return false;
-    const written = this.host.store.lastEvent(task.id, 'spec_written');
+    const written =
+      this.host.store.lastEvent(task.id, 'design_written') ??
+      this.host.store.lastEvent(task.id, 'spec_written');
     return !!written && !this.host.store.hasSessionEventsAfter(task.id, written.id);
+  }
+
+  /** The designer added its UI design section to the task's spec file. */
+  private designed(taskId: number): boolean {
+    return !!this.host.store.lastEvent(taskId, 'design_written');
   }
 
   /** Repository-relative path of the committed spec, once the spec author has written it. */
@@ -466,6 +487,79 @@ export class Workflow {
       !!this.host.store.lastEvent(task.id, 'criteria_approved') &&
       !this.host.store.lastEvent(task.id, 'spec_written')
     );
+  }
+
+  /**
+   * A designer is set, the spec is committed, and neither the designer nor the implementer
+   * has finished with it yet. A designer chosen after the implementer started is not run,
+   * because the UI would already be built without its design. The implementer may have
+   * continued the discussion's session, so it is told by events rather than session roles.
+   */
+  private needsDesign(task: Task): boolean {
+    const store = this.host.store;
+    const written = store.lastEvent(task.id, 'spec_written');
+    if (!task.agents.designer || !written || this.designed(task.id)) return false;
+    return !store
+      .listSessions(task.id)
+      .some((s) => s.role !== 'designer' && store.sessionHasEventsAfter(s.id, written.id));
+  }
+
+  /** The designer's session; one cut off by a quota, stop or error goes on where it was. */
+  private designPlan(task: Task, last: Session | undefined): SessionPlan {
+    const designer = task.agents.designer!;
+    const resumable =
+      last?.role === 'designer' &&
+      last.agentId === designer &&
+      last.endReason !== 'completed' &&
+      last.agentSessionId !== null &&
+      last.contextTokens > 0 &&
+      this.hasBudget(task, last);
+    const base = { role: 'designer', agentId: designer, access: 'edit' } as const;
+    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    const prompt = designPrompt(this.specFile(task.id)!, this.goal(task));
+    return { ...base, resume: null, prompt };
+  }
+
+  /**
+   * Checks the designer added a UI design section to the spec file and changed nothing
+   * else, commits the file itself if the designer left it uncommitted, and records it for
+   * the implementer and reviewer.
+   */
+  private async finishDesign(task: Task, outcome: SessionOutcome): Promise<void> {
+    if (outcome.reason === 'handoff' || outcome.reason === 'context_hard_limit') {
+      this.host.notice(task.id, 'the designer ran out of context before writing the UI design');
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    if (outcome.reason !== 'completed') {
+      this.interrupted(task, outcome); // the design is still unwritten, so it is asked again
+      return;
+    }
+    const dir = task.worktreePath!;
+    const spec = this.host.store.lastEvent(task.id, 'spec_written')!.data as SpecRecord;
+    const stray = (await changedPaths(dir, spec.head)).filter((p) => p !== spec.path);
+    if (stray.length > 0) {
+      this.host.notice(
+        task.id,
+        `the designer changed files other than the spec: ${stray.join(', ')}; stopping for a human`,
+      );
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    const file = path.join(dir, spec.path);
+    if (!existsSync(file) || !hasDesignSection(await readFile(file, 'utf8'))) {
+      this.host.notice(task.id, `the designer did not add a UI design section to ${spec.path}`);
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    if ((await git(dir, ['status', '--porcelain', '--', spec.path])) !== '') {
+      await commitFile(dir, spec.path, `docs: add UI design to ${spec.path}`);
+      this.host.notice(task.id, `the designer left ${spec.path} uncommitted; committed it`);
+    }
+    const record: SpecRecord = { path: spec.path, head: await headCommit(dir) };
+    this.host.store.appendEvent(task.id, null, 'design_written', record);
+    this.host.notice(task.id, `UI design committed in ${spec.path}`);
+    this.host.setStatus(task.id, 'queued');
   }
 
   /**
@@ -541,7 +635,7 @@ export class Workflow {
     if (resumable)
       return this.implement(
         task,
-        criteriaApprovedPrompt(task.acceptance!, this.specFile(task.id)),
+        criteriaApprovedPrompt(task.acceptance!, this.specFile(task.id), this.designed(task.id)),
         last,
       );
     return this.implement(task, this.goal(task));
@@ -663,6 +757,10 @@ export class Workflow {
     }
     if (plan.role === 'tester') {
       await this.finishTest(task, plan, outcome);
+      return;
+    }
+    if (plan.role === 'designer') {
+      await this.finishDesign(task, outcome);
       return;
     }
     switch (outcome.reason) {

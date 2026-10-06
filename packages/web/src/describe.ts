@@ -93,6 +93,8 @@ function describeRunning(task: TaskView): Description {
       return d(task.plan ? 'revisingPlan' : 'planning', 'working', { agent });
     case 'writingSpec':
       return d('writingSpec', 'working', { agent });
+    case 'designing':
+      return d('designing', 'working', { agent });
     case 'testing':
       return d('testing', 'working', { agent });
     case 'implementing':

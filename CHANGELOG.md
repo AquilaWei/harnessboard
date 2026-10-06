@@ -56,6 +56,12 @@ are test versions that have not been accepted on real machines yet.
   Reject change and a reply box; `hb plan <id>` shows both lists with
   the spec author's reply, and `hb reject <id>`
   rejects the change. Cards say when a change waits for you or for the spec author.
+- **Optional UI designer.** New task and the task panel's agents have a **Designer** menu
+  (None by default), and `hb add` / `hb models` have `--designer`. With a designer, once the
+  approved spec is committed it adds a "UI design" section to the spec file before anything
+  is built; the implementer follows it and the reviewer checks against it. A designer that
+  changes any other file, or adds no such section, stops the task for you. Tasks without a
+  designer work as before.
 
 ## 0.0.21 - 2026-10-04
 

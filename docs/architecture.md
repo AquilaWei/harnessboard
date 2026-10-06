@@ -56,9 +56,19 @@ The installers come from `electron-builder`. They take their version from
     harness stops the task if anything else changed, and commits the file itself when the
     author left it uncommitted. `Workflow.goal()` tells later agents to read the file.
     The proposal also carries a short design (files, interfaces, risks), which goes into the
-    file, so there is no separate designer. `task.agents.spec` is optional; without it the
+    file; the user interface is left to the optional `designer`. `task.agents.spec` is optional; without it the
     implementer plays this role. When the same agent plays both roles the spec-writing session is also what the implementer
     resumes; otherwise the implementer starts a new session from the approved criteria.
+  - `designer`: optional, off by default (`task.agents.designer` absent or `null`), for
+    tasks with a user interface. Once `spec_written` is recorded, one session with edit access
+    adds a `## UI design` section to the spec file and commits it (`designPrompt`;
+    `design_written` event). The harness stops the task if any other file changed since the
+    spec was committed, or the file has no such heading, and commits the file itself when the
+    designer left it uncommitted. From then on `taskGoal` and `criteriaApprovedPrompt` tell
+    the implementer and the reviewer to follow that section. The designer runs only for a
+    task with a spec file (a single task whose criteria were approved), and not when it is
+    chosen after the implementer has started. Its session is never one the implementer
+    resumes.
   - `implementer`: edits files and commits. For a task with a spec file it is also told to
     keep the README, changelog and docs in step (`DOCS_DUTY`), and the reviewer checks that.
   - `tester`: optional, single tasks only. After an implementer step, one session with edit
@@ -98,10 +108,10 @@ implementer step done ──► review_request ──► reviewer session (read-
 For a single task the roles run in this order:
 
 ```
-spec ─► spec file ─► implementer ─► tester ─► reviewer
+spec ─► spec file ─► designer ─► implementer ─► tester ─► reviewer
 ```
 
-The tester is off unless the task names an agent for it; the spec author defaults to the
+The designer and the tester are off unless the task names an agent for them; the spec author defaults to the
 implementer, and the reviewer to `defaultReviewer`. A
 failing test report or a `CHANGES` verdict returns to the implementer, and the step then
 passes through the later roles again.

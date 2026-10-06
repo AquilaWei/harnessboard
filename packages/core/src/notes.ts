@@ -15,6 +15,7 @@ export const NOTES_HEADING = '## Notes';
 
 const ROLE_NAMES: Record<AgentRole, string> = {
   spec: 'Spec author',
+  designer: 'Designer',
   implementer: 'Implementer',
   tester: 'Tester',
   reviewer: 'Reviewer',

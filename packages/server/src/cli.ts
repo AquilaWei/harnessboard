@@ -376,6 +376,8 @@ program
   .option('--model <model>', 'implementer model, or "default" for the profile model')
   .option('--spec <agent>', 'spec author profile, or "implementer" to let the implementer write it')
   .option('--spec-model <model>', 'spec author model, or "default" for the profile model')
+  .option('--designer <agent>', 'designer profile, or "none" to skip the UI design')
+  .option('--designer-model <model>', 'designer model, or "default" for the profile model')
   .option('--tester <agent>', 'tester profile, or "none" to skip testing')
   .option('--tester-model <model>', 'tester model, or "default" for the profile model')
   .option('--reviewer <agent>', 'reviewer profile, or "none"')
@@ -387,6 +389,8 @@ program
       implementerModel: model(o.model),
       spec: o.spec === undefined ? undefined : o.spec === 'implementer' ? null : o.spec,
       specModel: model(o.specModel),
+      designer: o.designer === undefined ? undefined : o.designer === 'none' ? null : o.designer,
+      designerModel: model(o.designerModel),
       tester: o.tester === undefined ? undefined : o.tester === 'none' ? null : o.tester,
       testerModel: model(o.testerModel),
       reviewer: o.reviewer === undefined ? undefined : o.reviewer === 'none' ? null : o.reviewer,
@@ -401,6 +405,7 @@ program
         ? `spec         ${a.spec}  ${shown(a.specModel)}`
         : `spec         ${t('sameAsImplementer')}`,
     );
+    console.log(`designer     ${a.designer ?? '-'}  ${a.designer ? shown(a.designerModel) : ''}`);
     console.log(`implementer  ${a.implementer}  ${shown(a.implementerModel)}`);
     console.log(`tester       ${a.tester ?? '-'}  ${a.tester ? shown(a.testerModel) : ''}`);
     console.log(`reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel) : ''}`);
@@ -588,6 +593,8 @@ interface ModelsOptions {
   model?: string;
   spec?: string;
   specModel?: string;
+  designer?: string;
+  designerModel?: string;
   tester?: string;
   testerModel?: string;
   reviewer?: string;

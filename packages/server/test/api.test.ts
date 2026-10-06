@@ -455,6 +455,18 @@ describe('reviewed tasks', () => {
     expect(task.agents.reviewer).toBe('checker');
   });
 
+  it('sets a designer and its model on a task', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}/agents`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ designer: 'checker', designerModel: 'opus' }),
+    });
+    const { agents } = (await res.json()) as Task;
+    expect([agents.designer, agents.designerModel]).toEqual(['checker', 'opus']);
+  });
+
   it('rejects a reviewer that is not a profile', async () => {
     const res = await post(
       '/api/tasks',

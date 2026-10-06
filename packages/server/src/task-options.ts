@@ -33,6 +33,8 @@ export interface AddOptions {
   specModel?: string;
   tester?: string;
   testerModel?: string;
+  designer?: string;
+  designerModel?: string;
   queue: boolean;
 }
 
@@ -78,6 +80,11 @@ export function withTaskOptions(command: Command): Command {
       'agent profile that writes the acceptance criteria (default: implementer)',
     )
     .option('--spec-model <model>', 'model for the spec author')
+    .option(
+      '--designer <agent>',
+      'agent profile that adds a UI design to the approved spec before implementation',
+    )
+    .option('--designer-model <model>', 'model for the designer')
     .option('--tester <agent>', 'agent profile that writes and runs tests for each finished step')
     .option('--tester-model <model>', 'model for the tester')
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
@@ -106,6 +113,8 @@ export function taskInput(prompt: string, o: AddOptions, loop: LoopInput = {}): 
     specModel: o.specModel,
     tester: o.tester,
     testerModel: o.testerModel,
+    designer: o.designer,
+    designerModel: o.designerModel,
     reviewer: o.reviewer === 'none' ? null : o.reviewer,
     implementerModel: o.model,
     reviewerModel: o.reviewerModel,

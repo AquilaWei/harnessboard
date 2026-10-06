@@ -107,7 +107,14 @@ export interface RoleNote {
  * to the agent in the task's conversation, outside the workflow.
  */
 export type TaskPhase =
-  'planning' | 'writingSpec' | 'implementing' | 'testing' | 'verifying' | 'reviewing' | 'chatting';
+  | 'planning'
+  | 'writingSpec'
+  | 'designing'
+  | 'implementing'
+  | 'testing'
+  | 'verifying'
+  | 'reviewing'
+  | 'chatting';
 
 export interface TaskActivity {
   phase: TaskPhase;

@@ -191,6 +191,9 @@ export interface CreateTaskInput {
   /** Tests each finished step before review; omitted or `null` skips testing. */
   tester?: string | null;
   testerModel?: string | null;
+  /** Adds a UI design to the spec before implementation; omitted or `null` skips it. */
+  designer?: string | null;
+  designerModel?: string | null;
   /**
    * Loop tasks: optional while `confirmPlan` is on (the default), because it can be set
    * when the plan is approved; otherwise required unless `.harnessboard.json` sets one.
@@ -265,5 +268,7 @@ export type AgentsUpdate = Partial<
     | 'specModel'
     | 'tester'
     | 'testerModel'
+    | 'designer'
+    | 'designerModel'
   >
 >;

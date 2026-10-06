@@ -26,4 +26,15 @@ describe('task options', () => {
       baseRef: 'develop',
     });
   });
+
+  it('pass --designer and --designer-model on', () => {
+    expect(parse('--designer', 'artist', '--designer-model', 'opus', '-C', '/repo')).toMatchObject({
+      designer: 'artist',
+      designerModel: 'opus',
+    });
+  });
+
+  it('leave the designer to the server without --designer', () => {
+    expect(parse('-C', '/repo')).not.toHaveProperty('designer');
+  });
 });

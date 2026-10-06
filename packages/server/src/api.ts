@@ -250,7 +250,15 @@ export function createApi(
       update.reviewer = body.reviewer;
     if (typeof body.spec === 'string' || body.spec === null) update.spec = body.spec;
     if (typeof body.tester === 'string' || body.tester === null) update.tester = body.tester;
-    for (const key of ['implementerModel', 'reviewerModel', 'specModel', 'testerModel'] as const) {
+    if (typeof body.designer === 'string' || body.designer === null)
+      update.designer = body.designer;
+    for (const key of [
+      'implementerModel',
+      'reviewerModel',
+      'specModel',
+      'testerModel',
+      'designerModel',
+    ] as const) {
       const value = body[key];
       if (typeof value === 'string' || value === null) update[key] = value;
     }

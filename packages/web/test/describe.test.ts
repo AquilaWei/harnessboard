@@ -48,6 +48,19 @@ describe('describeTask', () => {
     });
   });
 
+  it('names the designer adding the UI design', () => {
+    const task = {
+      ...base,
+      status: 'running',
+      activity: { phase: 'designing', agentId: 'artist' },
+    } as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'designing',
+      tone: 'working',
+      vars: { agent: 'artist' },
+    });
+  });
+
   it('says the harness is running the verify command', () => {
     const task = {
       ...base,
