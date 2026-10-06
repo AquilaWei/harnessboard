@@ -1,7 +1,7 @@
 # Architecture
 
 This page is for contributors. It covers how Harnessboard is put together, how agents and
-roles fit in, and what adding another agent CLI (such as Gemini) involves.
+roles fit in, and what adding another agent CLI involves.
 
 ## Packages
 
@@ -201,7 +201,8 @@ get `maxReviewRounds` again.
 5. Map `SessionSpec.access: 'readOnly'` to the CLI's most restrictive mode. Reviewers rely
    on it. The harness also compares HEAD and `git status` before and after every review,
    and stops the task if anything changed.
-6. Add tests that drive a scripted fake CLI (see `core/test/fixtures/fake-claude.mjs` and
+6. Add tests that drive a scripted fake CLI (see `core/test/fixtures/fake-claude.mjs`,
+   `core/test/fixtures/fake-gemini.mjs` and
    `PromptArgAdapter` in `core/test/helpers.ts`, which already acts like a prompt-as-argument
    CLI).
 
@@ -223,21 +224,38 @@ get `maxReviewRounds` again.
 - Not seen in real output yet, so read defensively: `file_change` items and usage-limit
   errors (a message containing "usage limit" or "rate limit" counts as 429).
 
-## Notes for the planned providers
+## The Gemini adapter
 
-These come from the vendors' documentation and have not been checked against real output
-yet. Check them against the real CLIs before relying on them.
+`core/src/gemini.ts` drives `gemini --prompt=<prompt> --output-format stream-json`. Its event
+names and fields follow the stream-json types in the Gemini CLI source
+(`packages/core/src/output/types.ts`) and the CLI reference; it has not been checked against
+a real run yet.
 
-- **Google Gemini CLI:**
-  - `gemini -p "<prompt>" --output-format stream-json` prints JSONL events: `init` (with the
-    session id), `message`, `tool_use`, `tool_result`, `error` and `result` (with stats).
-  - It resumes with `--resume <id>`.
-  - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
-  - Read-only mode: check which approval mode or sandbox flag refuses edits.
-
-Gemini does not report a subscription quota the way Claude Code's `rate_limit_event` does.
-Its adapter should report a usage-limit error as an error `result` with
-`apiErrorStatus: 429`. The task then waits `quotaRetryMinutes` and retries.
+- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
+- Output is JSONL: `init` (with `session_id` and `model`), `message` (`role`, `content`, and
+  `delta: true` for chunks), `tool_use`, `tool_result`, `error` (`severity`, `message`) and
+  `result` (`status`, `error`, `stats`). The parser joins assistant chunks into one message,
+  which ends at the next `tool_use` or at the `result`; the result's text is the last
+  message, so the adapter provides `createParser()` like Codex.
+- The prompt goes in as one `--prompt=...` argument, so a prompt starting with `-` is not read
+  as an option. It resumes with `--resume <session id>`, and `hb open` runs
+  `gemini --resume <session id>`.
+- Access maps to `--approval-mode`: `plan` (read-only) for reviewers, `yolo` for edit sessions
+  that skip permissions, and `auto_edit` for the others. Without a terminal nothing can answer
+  an approval, so under `auto_edit` shell commands are refused and the session can not
+  commit. Plan mode allows no shell either, so a Gemini reviewer can not run the verify
+  command itself. `allowedTools` are Claude-style rules that Gemini does not understand, so
+  they are not passed on.
+- `stats` comes once, in the `result`, so no `context` events are emitted and Gemini manages
+  its own context. Its per-model `input` (tokens not read from the cache) and `cached` become
+  `input` and `cacheRead`.
+- Gemini reports no subscription quota the way Claude Code's `rate_limit_event` does. A failed
+  `result` whose message mentions quota, rate limits, `RESOURCE_EXHAUSTED` or 429 is reported
+  with `apiErrorStatus: 429`; the task then waits `quotaRetryMinutes` and retries. Without an
+  error in the `result`, the last `error` event with severity `error` supplies the message.
+- Gemini CLI can not list its models, so the adapter has no `listModels` and model ids are
+  typed.
+- Tests drive `core/test/fixtures/fake-gemini.mjs`, which prints scripted stream-json lines.
 
 ## Workspaces
 

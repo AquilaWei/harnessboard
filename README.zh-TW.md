@@ -103,7 +103,7 @@ worktree 也不開分支。agent 直接在 repository 資料夾裡工作，commi
 - **或自己打包**：步驟見下方的[自己打包安裝檔](#自己打包安裝檔)。
 - **安裝檔**：Linux 有 .deb（Debian、Ubuntu）、.rpm（Fedora、openSUSE）和 AppImage（任何發行版），macOS 有 .dmg（Intel 和 Apple 晶片），
   Windows 有安裝程式（.exe）。
-- **仍然需要**：git 和 agent CLI（`claude`、`codex`）。程式會用跟終端機一樣的方式找到它們，
+- **仍然需要**：git 和 agent CLI（`claude`、`codex`、`gemini`）。程式會用跟終端機一樣的方式找到它們，
   包括 `~/.local/bin`、nvm 和 Homebrew 安裝的。
 - **關掉視窗會繼續在背景執行**，留在系統匣／選單列，任務照跑。要結束請在那裡按
   **結束 Harnessboard**，執行中的 agent 會被正常停止。沒有系統匣的桌面（例如原生 GNOME），
@@ -320,11 +320,12 @@ hb add "Add input validation to the signup form" --reviewer opus
 
 **模型**：每個任務可以分別替執行者和審查者選模型，例如用 Haiku 實作、用 Opus 審查：
 `hb add "..." --model haiku --reviewer claude --reviewer-model opus`，或在「新增任務」對話框
-的模型選單選。審查者可以是任何 Claude Code 或 Codex 設定檔，讓不同廠商的 agent 互相檢查（Gemini 規劃中）。
+的模型選單選。審查者可以是任何 Claude Code、Codex 或 Gemini 設定檔，讓不同廠商的 agent 互相檢查。
 
 模型選單會列出各平台提供給你帳號的模型和說明：Claude Code 讀它自己 `/model` 選單用的目錄
 （快取在 `~/.claude` 下；還沒有快取時改列別名 `opus`、`sonnet`、`fable`、`haiku`），Codex 讀它的
 模型目錄（`codex debug models`）。舊模型放在**更多模型**底下，也仍然可以手動輸入其他模型 ID。
+Gemini CLI 無法列出模型，所以 Gemini 的模型 ID 要自己輸入。
 命令列可用 `hb agents --models <設定檔>` 查看。
 
 ## 網頁看板
@@ -451,7 +452,7 @@ API 只接受 loopback 的 `Host` 標頭，以及你為[手機存取](#手機存
   `verifyCommand`。
 
 **Agent 設定檔**：每個設定檔指定一個 agent CLI 以及執行方式。`claude` 一定存在。
-Harnessboard 會在 PATH 上找 `claude` 和 `codex` 指令，找到但還沒有設定檔的會提示你
+Harnessboard 會在 PATH 上找 `claude`、`codex` 和 `gemini` 指令，找到但還沒有設定檔的會提示你
 （`hb serve` 的輸出、`hb agents`，以及**設定 → Agents**）。在**設定**裡按一下就能加入，或用：
 
 ```bash
@@ -466,15 +467,20 @@ hb agents --add codex --id fast --model gpt-6-luna
   "agents": {
     "claude": { "provider": "claude-code", "command": "claude", "model": null },
     "opus": { "provider": "claude-code", "command": "claude", "model": "opus" },
-    "codex": { "provider": "codex", "command": "codex", "model": null }
+    "codex": { "provider": "codex", "command": "codex", "model": null },
+    "gemini": { "provider": "gemini", "command": "gemini", "model": null }
   }
 }
 ```
 
-目前支援的 provider：`claude-code` 和 `codex`。Codex 設定檔使用已登入的
+目前支援的 provider：`claude-code`、`codex` 和 `gemini`。Codex 設定檔使用已登入的
 [Codex CLI](https://github.com/openai/codex)（`codex exec`），用 ChatGPT 方案登入就不需要 API 金鑰。
-Codex 不能逐項詢問工具權限，由它自己的沙箱決定，所以權限規則與提示對它不適用。之後要加入 Gemini
-等其他 CLI 的設計，寫在 [docs/architecture.md](docs/architecture.md)。
+Codex 不能逐項詢問工具權限，由它自己的沙箱決定，所以權限規則與提示對它不適用。Gemini 設定檔使用已登入的
+[Gemini CLI](https://github.com/google-gemini/gemini-cli)（`gemini --prompt`），它也不能逐項詢問：
+審查者用它唯讀的 `plan` 模式執行，略過權限檢查的任務（預設）用 `yolo` 模式，其他任務用
+`auto_edit` 模式，這時 shell 指令會被拒絕。Gemini 不會回報用量，所以頁首沒有它的額度；遇到用量上限的
+錯誤時，任務會暫停，稍後再重試。Gemini 的轉接層還沒有用真的 CLI 測過。要再加入其他 CLI 的做法寫在
+[docs/architecture.md](docs/architecture.md)。
 
 **權限**：任務以 `--permission-mode acceptEdits` 執行，再加上一份允許的工具規則，例如
 `Bash(npm *)`：

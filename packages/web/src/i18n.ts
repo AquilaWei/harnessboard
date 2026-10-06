@@ -25,7 +25,7 @@ export const en = {
     notRepo: 'Not inside a git repository. Pick another folder, or run this in it:',
     noCommits: 'This repository has no commits yet. Make a first commit, then try again.',
   },
-  providers: { 'claude-code': 'Claude', codex: 'Codex' },
+  providers: { 'claude-code': 'Claude', codex: 'Codex', gemini: 'Gemini' },
   quota: {
     titleFor: '{{name}} subscription quota',
     fiveHour: '5-hour window',
@@ -616,7 +616,7 @@ export const zhTW: typeof en = {
     notRepo: '不在 git repository 裡。請換一個資料夾，或在這個資料夾執行：',
     noCommits: '這個 repository 還沒有任何 commit，請先 commit 一次再試。',
   },
-  providers: { 'claude-code': 'Claude', codex: 'Codex' },
+  providers: { 'claude-code': 'Claude', codex: 'Codex', gemini: 'Gemini' },
   quota: {
     titleFor: '{{name}} 訂閱額度',
     fiveHour: '5 小時區間',

@@ -117,7 +117,7 @@ in its own window. **Click the icon and the board is there.**
 - **Builds:** .deb (Debian, Ubuntu), .rpm (Fedora, openSUSE) and AppImage (any distribution)
   on Linux, .dmg (Intel and Apple silicon) on macOS, an
   installer (.exe) on Windows.
-- **Still needed:** git and the agent CLIs (`claude`, `codex`). The app finds them the way
+- **Still needed:** git and the agent CLIs (`claude`, `codex`, `gemini`). The app finds them the way
   your terminal does, including `~/.local/bin`, nvm and Homebrew.
 - **Closing the window keeps it running** in the tray / menu bar, so tasks go on. Use
   **Quit Harnessboard** there to stop it; running agents are stopped cleanly. On a desktop
@@ -362,13 +362,13 @@ hb add "Add input validation to the signup form" --reviewer opus
 **Models:** each task can pick its own model for the implementer and for the reviewer, for
 example Haiku to build and Opus to review: `hb add "..." --model haiku --reviewer claude
 --reviewer-model opus`, or the model menus in the New task dialog. Today the reviewer can be
-any Claude Code or Codex profile, so different vendors can check each other (Gemini is planned).
+any Claude Code, Codex or Gemini profile, so different vendors can check each other.
 
 The model menus list what each platform offers your account, with its description: Claude
 Code's own model menu (read from the catalog it caches under `~/.claude`, or its aliases
 `opus`, `sonnet`, `fable` and `haiku` before it has one) and Codex's model catalog
 (`codex debug models`). Older models sit under **More models**, and any other model id can
-still be typed. On the command line: `hb agents --models <profile>`.
+still be typed. Gemini CLI can not list its models, so for Gemini the model id is typed. On the command line: `hb agents --models <profile>`.
 
 ## Web board
 
@@ -529,7 +529,7 @@ environment < CLI flags.
   `verifyCommand`.
 
 **Agent profiles:** each profile names an agent CLI and how to run it. `claude` always exists.
-Harnessboard looks for the `claude` and `codex` commands on your PATH and points out any that
+Harnessboard looks for the `claude`, `codex` and `gemini` commands on your PATH and points out any that
 have no profile yet (in `hb serve`'s output, `hb agents` and **Settings → Agents**). Add one
 with one click in **Settings**, or:
 
@@ -546,16 +546,22 @@ second Claude with another model:
   "agents": {
     "claude": { "provider": "claude-code", "command": "claude", "model": null },
     "opus": { "provider": "claude-code", "command": "claude", "model": "opus" },
-    "codex": { "provider": "codex", "command": "codex", "model": null }
+    "codex": { "provider": "codex", "command": "codex", "model": null },
+    "gemini": { "provider": "gemini", "command": "gemini", "model": null }
   }
 }
 ```
 
-Supported providers: `claude-code` and `codex`. A Codex profile uses the signed-in
+Supported providers: `claude-code`, `codex` and `gemini`. A Codex profile uses the signed-in
 [Codex CLI](https://github.com/openai/codex) (`codex exec`), so a ChatGPT plan works without
 an API key. Codex can not ask about a tool: its sandbox decides, so permission rules and
-prompts do not apply to it. The design for adding other CLIs, such as Gemini, is in
-[docs/architecture.md](docs/architecture.md).
+prompts do not apply to it. A Gemini profile uses the signed-in
+[Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini --prompt`). It can not ask
+about a tool either: reviewers run in its read-only `plan` mode, tasks that skip permissions
+(the default) in `yolo` mode, and other tasks in `auto_edit` mode, where shell commands are
+refused. Gemini does not report usage, so it has no quota reading on the board; a usage-limit
+error pauses the task and retries it later. The Gemini adapter has not been tried against the
+real CLI yet. How to add another CLI is in [docs/architecture.md](docs/architecture.md).
 
 **Permissions:** tasks run with `--permission-mode acceptEdits` and a list of allowed tool
 rules such as `Bash(npm *)`:
