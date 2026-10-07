@@ -100,6 +100,26 @@ export function reviewPrompt(
 }
 
 /**
+ * Message to a reviewer that is resumed for its next round: it already has the task and its
+ * own findings, so it only hears what changed since `reviewedHead`, the head it judged.
+ */
+export function reviewFollowUpPrompt(request: ReviewRequest, reviewedHead: string): string {
+  return [
+    'The implementer answered your requested changes. This is review round ' +
+      `${request.round}; you still have the task and your earlier findings.`,
+    '',
+    `Check what changed since you last reviewed (${reviewedHead}):`,
+    `- \`git log --oneline ${reviewedHead}..HEAD\` and \`git diff ${reviewedHead}..HEAD\``,
+    '- `git status` for anything left uncommitted',
+    ...earlierWork(request),
+    'Confirm each of your earlier findings is fixed, and look for problems the new changes add.',
+    '',
+    `Make the first line of your reply exactly \`${VERDICT_APPROVE}\` or \`${VERDICT_CHANGES}\`.`,
+    `After ${VERDICT_CHANGES}, list each required change with the file and what to do.`,
+  ].join('\n');
+}
+
+/**
  * Characters of git output {@link reviewEvidence} quotes in a prompt, shared by all its
  * commands, so a large change does not bury the review instructions. Output past it is
  * only in the evidence files.

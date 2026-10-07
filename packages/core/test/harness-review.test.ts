@@ -176,6 +176,32 @@ describe('a reviewer that requests changes', () => {
     expect(fakeRuns()[2]!.received[0]).not.toContain('Original task:');
   });
 
+  const twoRounds = () =>
+    scenario(
+      sessionWithContext('done', writeFile('hello.txt', 'hi')),
+      sessionWithContext('VERDICT: CHANGES\n- greet by name in hello.txt'),
+      sessionWithContext('fixed', writeFile('hello.txt', 'hi Ada')),
+      sessionWithContext('VERDICT: APPROVE'),
+    );
+
+  it('resumes the reviewer conversation for the next round', async () => {
+    twoRounds();
+    await createReviewed();
+    await runQueued();
+    await runQueued();
+    await runQueued();
+    expect(fakeRuns()[3]!.args).toContain('--resume');
+  });
+
+  it('tells a resumed reviewer only what changed, not the whole task again', async () => {
+    twoRounds();
+    await createReviewed();
+    await runQueued();
+    await runQueued();
+    await runQueued();
+    expect(fakeRuns()[3]!.received[0]).not.toContain('Task given to the implementer');
+  });
+
   it('hands the task to a human after the last allowed round', async () => {
     scenario(
       session('done', writeFile('hello.txt', 'hi')),

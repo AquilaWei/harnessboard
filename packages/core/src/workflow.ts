@@ -66,6 +66,7 @@ import {
   parseTestVerdict,
   parseVerdict,
   reviewFeedback,
+  reviewFollowUpPrompt,
   reviewPrompt,
   testFeedback,
   testPrompt,
@@ -337,6 +338,16 @@ export class Workflow {
     const base = { role: 'reviewer', agentId: reviewer, access: 'readOnly' } as const;
     if (resumable && this.requestSeen(task.id, 'review_request', last))
       return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    const earlier = this.priorReviewer(task, request, reviewer);
+    // Round 2 and later: the reviewer goes on in its own conversation with only what changed.
+    if (earlier) {
+      return {
+        ...base,
+        resume: earlier.session,
+        prompt: reviewFollowUpPrompt(request, earlier.head),
+        review: request,
+      };
+    }
     const snapshot = task.mode === 'loop' ? this.snapshots(task.id).at(-1) : undefined;
     const prompt = reviewPrompt(this.goal(task), request, {
       verify: snapshot?.verify ?? null,
@@ -355,6 +366,33 @@ export class Workflow {
       };
     }
     return { ...base, resume: null, prompt, review: request };
+  }
+
+  /**
+   * The reviewer's own finished conversation and the head it judged, when this review is the
+   * round after one that asked for changes and that conversation still has room.
+   */
+  private priorReviewer(
+    task: Task,
+    request: ReviewRequest,
+    agentId: string,
+  ): { session: Session; head: string } | null {
+    const record = this.host.store.lastEvent(task.id, 'review')?.data as ReviewRecord | undefined;
+    const session = this.host.store.listSessions(task.id).findLast((s) => s.role === 'reviewer');
+    if (
+      request.round < 2 ||
+      record?.verdict !== 'changes' ||
+      record.round !== request.round - 1 ||
+      !session ||
+      session.agentId !== agentId ||
+      session.endReason !== 'completed' ||
+      session.agentSessionId === null ||
+      session.contextTokens <= 0 ||
+      !this.hasBudget(task, session)
+    ) {
+      return null;
+    }
+    return { session, head: record.head };
   }
 
   /** The phase a planned session works in. */
