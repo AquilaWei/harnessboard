@@ -10,6 +10,7 @@ const newTask = {
   prompt: 'do it',
   repoPath: '/repo',
   baseRef: 'main',
+  workspace: 'worktree' as const,
   mode: 'single' as const,
   verifyCommand: null,
   acceptance: null,
@@ -135,8 +136,10 @@ describe('Store', () => {
     first.close();
     const db = new DatabaseSync(file);
     db.exec(
-      `DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
-       ALTER TABLE tasks DROP COLUMN confirm_plan; PRAGMA user_version = 3;`,
+      `DROP TABLE devices; DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
+       ALTER TABLE tasks DROP COLUMN confirm_plan; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans;
+       PRAGMA user_version = 3;`,
     );
     db.close();
     expect(new Store(file).getTask(id)!.confirmPlan).toBe(false);
@@ -154,9 +157,65 @@ describe('Store', () => {
     const { id } = first.createTask(newTask);
     first.close();
     const db = new DatabaseSync(file);
-    db.exec(`ALTER TABLE tasks DROP COLUMN acceptance; PRAGMA user_version = 5;`);
+    db.exec(
+      `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN acceptance;
+       ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; PRAGMA user_version = 5;`,
+    );
     db.close();
     expect(new Store(file).getTask(id)!.acceptance).toBeNull();
+  });
+
+  it('reads tasks from before the workspace choice as worktree tasks', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    const { id } = first.createTask(newTask);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(
+      `ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; PRAGMA user_version = 9;`,
+    );
+    db.close();
+    const task = new Store(file).getTask(id)!;
+    expect([task.workspace, task.startCommit]).toEqual(['worktree', null]);
+  });
+
+  it('stores a base task with no start commit until it starts', () => {
+    const store = new Store(':memory:');
+    const task = store.createTask({ ...newTask, workspace: 'base' });
+    expect([task.workspace, task.startCommit]).toEqual(['base', null]);
+  });
+
+  it('stores the commit a base task started at', () => {
+    const store = new Store(':memory:');
+    const { id } = store.createTask({ ...newTask, workspace: 'base' });
+    expect(store.updateTask(id, { startCommit: 'abc123' }).startCommit).toBe('abc123');
+  });
+
+  it('stores where a base task last ended and its earlier stretches', () => {
+    const store = new Store(':memory:');
+    const { id } = store.createTask({ ...newTask, workspace: 'base' });
+    const task = store.updateTask(id, {
+      endCommit: 'def456',
+      priorSpans: [{ from: 'a', to: 'b' }],
+    });
+    expect([task.endCommit, task.priorSpans]).toEqual(['def456', [{ from: 'a', to: 'b' }]]);
+  });
+
+  it('gives tasks from before end commits no end and no earlier stretches', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    const { id } = first.createTask({ ...newTask, workspace: 'base' });
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(
+      `ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans;
+       PRAGMA user_version = 10;`,
+    );
+    db.close();
+    const task = new Store(file).getTask(id)!;
+    expect([task.endCommit, task.priorSpans]).toEqual([null, []]);
   });
 
   it('stores an updated permission list as JSON', () => {
@@ -164,5 +223,254 @@ describe('Store', () => {
     const { id } = store.createTask(newTask);
     const permission = { allowedTools: ['Bash(npm test)'], skipPermissions: false };
     expect(store.updateTask(id, { permission }).permission).toEqual(permission);
+  });
+});
+
+const passkey = { credentialId: 'cred-1', publicKey: new Uint8Array([1, 2, 3]), counter: 4 };
+const pushSubscription = {
+  endpoint: 'https://push.example/abc',
+  keys: { p256dh: 'p256dh-key', auth: 'auth-secret' },
+};
+
+describe('Store devices', () => {
+  it('finds a device by the token it was added with', () => {
+    const store = new Store(':memory:');
+    store.addDevice('Pixel', 'token-one', 1000);
+    expect(store.findDeviceByToken('token-one')).toEqual({
+      id: 1,
+      name: 'Pixel',
+      createdAt: 1000,
+      lastSeenAt: 1000,
+      passkey: null,
+      verifiedAt: null,
+      lastActiveAt: null,
+    });
+  });
+
+  it('finds no device for an unknown token', () => {
+    const store = new Store(':memory:');
+    store.addDevice('Pixel', 'token-one', 1000);
+    expect(store.findDeviceByToken('token-two')).toBeUndefined();
+  });
+
+  it('stores only a hash of the token', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const store = new Store(file);
+    store.addDevice('Pixel', 'raw-device-token', 1000);
+    store.close();
+    const db = new DatabaseSync(file);
+    const rows = JSON.stringify(db.prepare('SELECT * FROM devices').all());
+    db.close();
+    expect(rows).not.toContain('raw-device-token');
+  });
+
+  it('lists devices in the order they were paired', () => {
+    const store = new Store(':memory:');
+    store.addDevice('Pixel', 'token-one', 1000);
+    store.addDevice('iPad', 'token-two', 2000);
+    expect(store.listDevices().map((d) => d.name)).toEqual(['Pixel', 'iPad']);
+  });
+
+  it('no longer finds a revoked device by its token', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.revokeDevice(id);
+    expect(store.findDeviceByToken('token-one')).toBeUndefined();
+  });
+
+  it('reports that revoking an unknown device changed nothing', () => {
+    const store = new Store(':memory:');
+    expect(store.revokeDevice(7)).toBe(false);
+  });
+
+  it('does not give a new device the id of a revoked one', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.revokeDevice(id);
+    expect(store.addDevice('iPad', 'token-two', 2000).id).toBe(2);
+  });
+
+  it('records when a device was last seen', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.touchDevice(id, 5000);
+    expect(store.findDeviceByToken('token-one')!.lastSeenAt).toBe(5000);
+  });
+
+  it('records when a device was last active without changing its passkey check time', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    store.markDeviceActive(id, 7000);
+    const device = store.findDeviceByToken('token-one')!;
+    expect([device.verifiedAt, device.lastActiveAt]).toEqual([2000, 7000]);
+  });
+
+  it('stores a passkey and counts registering it as a passkey check', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    expect(store.findDeviceByToken('token-one')).toEqual({
+      id: 1,
+      name: 'Pixel',
+      createdAt: 1000,
+      lastSeenAt: 1000,
+      passkey: { credentialId: 'cred-1', publicKey: new Uint8Array([1, 2, 3]), counter: 4 },
+      verifiedAt: 2000,
+      lastActiveAt: 2000,
+    });
+  });
+
+  it('does not replace a passkey a device already has', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    const replaced = store.setDevicePasskey(
+      id,
+      { credentialId: 'cred-2', publicKey: new Uint8Array([9]), counter: 0 },
+      3000,
+    );
+    expect([replaced, store.findDeviceByToken('token-one')!.passkey!.credentialId]).toEqual([
+      false,
+      'cred-1',
+    ]);
+  });
+
+  it('records a passed passkey check with the new counter', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    store.markDeviceVerified(id, 5, 3000);
+    const device = store.findDeviceByToken('token-one')!;
+    expect([device.passkey!.counter, device.verifiedAt, device.lastActiveAt]).toEqual([
+      5, 3000, 3000,
+    ]);
+  });
+
+  it('refuses a passkey check whose counter is not above the stored one', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, passkey, 2000);
+    store.markDeviceVerified(id, 5, 3000);
+    const marked = store.markDeviceVerified(id, 4, 4000);
+    const device = store.findDeviceByToken('token-one')!;
+    expect([marked, device.passkey!.counter, device.verifiedAt, device.lastActiveAt]).toEqual([
+      false,
+      5,
+      3000,
+      3000,
+    ]);
+  });
+
+  it('accepts a passkey check from a passkey whose counter stays at 0', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setDevicePasskey(id, { ...passkey, counter: 0 }, 2000);
+    const marked = store.markDeviceVerified(id, 0, 3000);
+    expect([marked, store.findDeviceByToken('token-one')!.verifiedAt]).toEqual([true, 3000]);
+  });
+
+  it('keeps devices paired before passkeys, without a passkey', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    first.addDevice('Pixel', 'token-one', 1000);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(
+      `ALTER TABLE devices DROP COLUMN credential_id; ALTER TABLE devices DROP COLUMN public_key;
+       ALTER TABLE devices DROP COLUMN sign_count; ALTER TABLE devices DROP COLUMN verified_at;
+       ALTER TABLE devices DROP COLUMN last_active_at; ALTER TABLE devices DROP COLUMN push_subscription;
+       ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; PRAGMA user_version = 7;`,
+    );
+    db.close();
+    expect(new Store(file).findDeviceByToken('token-one')).toEqual({
+      id: 1,
+      name: 'Pixel',
+      createdAt: 1000,
+      lastSeenAt: 1000,
+      passkey: null,
+      verifiedAt: null,
+      lastActiveAt: null,
+    });
+  });
+
+  it('stores a push subscription on its device', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setPushSubscription(id, pushSubscription);
+    expect(store.listPushSubscriptions()).toEqual([
+      {
+        deviceId: 1,
+        subscription: {
+          endpoint: 'https://push.example/abc',
+          keys: { p256dh: 'p256dh-key', auth: 'auth-secret' },
+        },
+      },
+    ]);
+  });
+
+  it('replaces the push subscription a device had', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setPushSubscription(id, pushSubscription);
+    store.setPushSubscription(id, { ...pushSubscription, endpoint: 'https://push.example/new' });
+    expect(store.listPushSubscriptions().map((p) => p.subscription.endpoint)).toEqual([
+      'https://push.example/new',
+    ]);
+  });
+
+  it('clears a push subscription with null', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setPushSubscription(id, pushSubscription);
+    store.setPushSubscription(id, null);
+    expect(store.listPushSubscriptions()).toEqual([]);
+  });
+
+  it('removes the push subscription when the device is revoked', () => {
+    const store = new Store(':memory:');
+    const { id } = store.addDevice('Pixel', 'token-one', 1000);
+    store.setPushSubscription(id, pushSubscription);
+    store.revokeDevice(id);
+    expect(store.listPushSubscriptions()).toEqual([]);
+  });
+
+  it('stores no push subscription for a device that is gone', () => {
+    const store = new Store(':memory:');
+    expect(store.setPushSubscription(7, pushSubscription)).toBe(false);
+  });
+
+  it('keeps devices paired before push, without a subscription', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    first.addDevice('Pixel', 'token-one', 1000);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(
+      `ALTER TABLE devices DROP COLUMN push_subscription; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans;
+       PRAGMA user_version = 8;`,
+    );
+    db.close();
+    const store = new Store(file);
+    expect([store.listDevices().length, store.listPushSubscriptions()]).toEqual([1, []]);
+  });
+
+  it('adds the devices table to a database from before phone access', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const first = new Store(file);
+    const { id } = first.createTask(newTask);
+    first.close();
+    const db = new DatabaseSync(file);
+    db.exec(
+      `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; PRAGMA user_version = 6;`,
+    );
+    db.close();
+    const store = new Store(file);
+    store.addDevice('Pixel', 'token-one', 1000);
+    expect(store.listDevices().map((d) => d.name)).toEqual(['Pixel']);
+    expect(store.getTask(id)!.title).toBe('t');
   });
 });

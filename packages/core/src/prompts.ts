@@ -53,6 +53,15 @@ export const QUOTA_RESUME_PROMPT =
   '[harness] The usage limit has reset. Continue the task from where you stopped.';
 
 /**
+ * Sent to a stopped reviewer or tester of a `base` task when its request was rebuilt because
+ * other work landed in the folder meanwhile; the scope it was given before is out of date.
+ */
+export const SCOPE_CHANGED_PROMPT =
+  '[harness] While you were stopped, other work was committed in this folder. ' +
+  'What you were checking has changed: drop the ranges you were given before and check ' +
+  'only the ones below.';
+
+/**
  * First session of a loop task: plan the work as a feature list, implement nothing yet.
  * Without a verify command the planner proposes one; the user confirms it before building.
  */
@@ -156,11 +165,21 @@ export const CRITERIA_HEADING = '## Acceptance criteria';
 export const DOCS_DUTY =
   'Keep the README, the changelog entry for unreleased changes and any docs the change makes wrong in step with it, in the same work.';
 
-/** The task as every implementer and reviewer sees it: the request plus agreed criteria. */
+/** Heading of the section a designer adds to the spec file; see {@link hasDesignSection}. */
+export const DESIGN_HEADING = 'UI design';
+
+/** Told with the spec file once a designer added its section, to whoever builds or checks. */
+const DESIGN_DUTY = `Its "${DESIGN_HEADING}" section is how the user interface must look and behave; the work must follow it.`;
+
+/**
+ * The task as every implementer and reviewer sees it: the request plus agreed criteria.
+ * `designed` says the spec file has a designer's UI design section.
+ */
 export function taskGoal(
   prompt: string,
   acceptance: string | null,
   specPath: string | null = null,
+  designed = false,
 ): string {
   const lines = [prompt];
   if (specPath) {
@@ -168,6 +187,7 @@ export function taskGoal(
       '',
       `The spec agreed with the user is committed in \`${specPath}\`. Read it first; it is the`,
       'reference for what to build.',
+      ...(designed ? [DESIGN_DUTY] : []),
       '',
       DOCS_DUTY,
     );
@@ -229,13 +249,21 @@ export function criteriaRevisionPrompt(message: string): string {
   ].join('\n');
 }
 
-/** Sent when resuming the discussion session after the user approved the criteria. */
-export function criteriaApprovedPrompt(criteria: string, specPath: string | null): string {
+/**
+ * Sent when resuming the discussion session after the user approved the criteria;
+ * `designed` as in {@link taskGoal}.
+ */
+export function criteriaApprovedPrompt(
+  criteria: string,
+  specPath: string | null,
+  designed = false,
+): string {
   return [
     '[harness] The user approved these acceptance criteria:',
     '',
     criteria,
     ...(specPath ? ['', `The full spec is committed in \`${specPath}\`.`] : []),
+    ...(specPath && designed ? [DESIGN_DUTY] : []),
     '',
     'You may now change files. Implement the task so that every criterion holds, check them',
     'as far as you can, and commit your work.',
@@ -340,3 +368,111 @@ export function specFilePrompt(
   );
   return lines.join('\n');
 }
+
+/**
+ * Sent to the designer once the spec is committed: add a UI design section to the spec file
+ * and commit it, before anyone builds. `goal` is the task with its spec, as in {@link taskGoal}.
+ */
+export function designPrompt(specPath: string, goal: string): string {
+  return [
+    `[harness] You are the UI designer of this task. Its spec is committed in \`${specPath}\`.`,
+    'Read it and the user interface code it touches, then design the UI for it before anyone',
+    'builds it.',
+    '',
+    `Task:\n${goal}`,
+    '',
+    `Add a section headed \`## ${DESIGN_HEADING}\` to \`${specPath}\` and change nothing else.`,
+    'Describe the screens or components to add or change, their layout, the text they show,',
+    'their states (empty, loading, error) and how they respond to the user, following the',
+    "styles and components the project already has. Do not change the spec's other sections.",
+    'The implementer builds from this section and the reviewer checks the work against it, so',
+    'be concrete and keep it short.',
+    `Then commit only that file with the message \`docs: add UI design to ${specPath}\`.`,
+  ].join('\n');
+}
+
+/** Whether a spec file's Markdown has the designer's section (any heading level). */
+export function hasDesignSection(markdown: string): boolean {
+  return new RegExp(`^#{1,6}\\s+${DESIGN_HEADING}\\s*$`, 'im').test(markdown);
+}
+
+/** Line an implementer starts its proposed spec change with; see {@link parseSpecChange}. */
+export const SPEC_CHANGE_MARKER = 'SPEC CHANGE:';
+
+/** Told to the implementer of a task with a spec file, so it can propose a change to it. */
+export const SPEC_CHANGE_DUTY = [
+  'If you find that the agreed spec is wrong or cannot be met as written, do not build around',
+  'it. Commit what you have, then end your reply (before any notes section) with a block that',
+  `starts with a line \`${SPEC_CHANGE_MARKER} <why, in one line>\`, followed by the complete`,
+  'revised acceptance criteria list, one per line. The user decides on it before anything more',
+  'is built.',
+].join('\n');
+
+/** A spec change an implementer proposed: the reason and the revised criteria. */
+export interface ProposedSpecChange {
+  reason: string;
+  /** The list under the marker line; `null` when there is none. */
+  criteria: string | null;
+}
+
+/**
+ * The block an implementer ends its reply with to propose a spec change: the line starting
+ * with {@link SPEC_CHANGE_MARKER} and the lines after it, up to the next level-1 or level-2
+ * heading (its notes section). `null` when the reply has no marker line.
+ */
+export function parseSpecChange(reply: string): ProposedSpecChange | null {
+  const lines = reply.split('\n');
+  const start = lines.findIndex((line) => line.trim().startsWith(SPEC_CHANGE_MARKER));
+  if (start < 0) return null;
+  const reason = lines[start]!.trim().slice(SPEC_CHANGE_MARKER.length).trim();
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^#{1,2}\s/.test(line));
+  const criteria = (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
+  return { reason, criteria: criteria || null };
+}
+
+/**
+ * Sent to the spec author when the user asks to change the spec of a task already being
+ * built. `pending` is the change still waiting for the user, when the message replies to it.
+ * The session is read-only; its reply becomes the proposal the user approves or rejects.
+ */
+export function specRevisionPrompt(goal: string, message: string, pending: string | null): string {
+  const lines = [
+    '[harness] Work on the task below has started, and the user wants to change its spec:',
+    '',
+    message,
+  ];
+  if (pending) lines.push('', `The change proposed before, which the user replied to:\n${pending}`);
+  lines.push(
+    '',
+    `The task as it stands:\n${goal}`,
+    '',
+    'This session is read-only: study the spec and the work so far, but do not change anything.',
+    'Reply in this shape:',
+    '## Changes',
+    '- What changes in the spec and why, and what this means for the work already done.',
+    CRITERIA_HEADING,
+    '- The complete revised list, not only the changed lines: one concrete, observable check',
+    '  per line.',
+    '',
+    'The user approves or rejects your proposal; nothing is changed until then.',
+  );
+  return lines.join('\n');
+}
+
+/** Sent to the implementer once the user approved a change to the spec. */
+export function specChangeApprovedPrompt(criteria: string, specPath: string): string {
+  return [
+    `[harness] The user approved a change to the spec. \`${specPath}\` now has these`,
+    'acceptance criteria, which replace the earlier ones:',
+    '',
+    criteria,
+    '',
+    'Change the work so that every criterion holds, check them as far as you can, and commit.',
+  ].join('\n');
+}
+
+/** Sent to the implementer when the user rejected the spec change it proposed. */
+export const SPEC_CHANGE_REJECTED_PROMPT =
+  '[harness] The user rejected your proposed change to the spec. The spec and its ' +
+  'acceptance criteria stay as they are: continue the task against them.';

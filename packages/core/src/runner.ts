@@ -156,7 +156,10 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
     );
     kill = child.kill;
     if (streaming) child.write(adapter.encodeMessage(turnSpec.prompt));
-    else child.closeInput(); // the prompt went in as an argument
+    else {
+      if (adapter.encodePrompt) child.write(adapter.encodePrompt(turnSpec.prompt));
+      child.closeInput(); // otherwise the prompt went in as an argument
+    }
 
     function handle(event: AgentEvent): void {
       if (event.kind === 'result' && event.usage) usage = event.usage;

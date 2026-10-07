@@ -4,8 +4,11 @@ import type {
   CriteriaProposal,
   MergeRecord,
   Session,
+  SpecChangeProposal,
   Task,
   TaskMode,
+  TaskStatus,
+  TaskWorkspace,
 } from './task.js';
 import type { Feature, LoopProgress } from './loop.js';
 import type { ReviewRecord, TaskActivity } from './review.js';
@@ -45,6 +48,12 @@ export interface TaskView extends Task {
   planFeedbackPending: boolean;
   /** Latest acceptance criteria a single task's agent proposed, until they are approved. */
   criteria: CriteriaProposal | null;
+  /** Where the agreed spec of a single task was written; `null` until then. */
+  specFile: string | null;
+  /** A change to the spec of a task already being built, while it waits for the user. */
+  specChange: SpecChangeProposal | null;
+  /** True while the user's request to change the spec waits for the spec author. */
+  specRevisionPending: boolean;
   /** Set once the task's branch was merged into its base. */
   merge: MergeRecord | null;
   /** Tool uses the running session waits on the user to allow or deny, oldest first. */
@@ -62,6 +71,38 @@ export interface TaskDetail extends TaskView {
 /** The server's version, for showing next to the board's name. */
 export interface VersionInfo {
   version: string;
+}
+
+/** Reply of `POST /api/pairing`: the one-time code the phone sends to `POST /api/pair`. */
+export interface PairingCode {
+  code: string;
+  /** Epoch ms after which the code is refused. */
+  expiresAt: number;
+}
+
+/** Reply of `GET /api/pairing/setup`: what the computer needs to let a phone reach it. */
+export interface PairingSetup {
+  /** This machine's Tailscale name, or `null` when Tailscale is missing or not running. */
+  tailscaleHost: string | null;
+  /** The port the board listens on, for the `tailscale serve --bg <port>` command. */
+  port: number;
+}
+
+/** Body of `POST /api/pair`. */
+export interface PairRequest {
+  code: string;
+  /** What the device list calls the phone, e.g. "Pixel 9". */
+  name: string;
+}
+
+/**
+ * Reply of a passed `POST /api/passkey` or `POST /api/auth/verify`. The web sends `session` in
+ * the `x-harnessboard-session` header (`?session=` on `GET /api/events`) and keeps it in page
+ * memory only, so opening the board again needs another passkey check.
+ */
+export interface PasskeySession {
+  ok: true;
+  session: string;
 }
 
 export interface HarnessStatus {
@@ -85,6 +126,43 @@ export interface Settings {
   allowedTools: string[];
   /** Files with the rules every reviewer checks the work against; `~` is the home folder. */
   reviewGuidelines: string[];
+  /** Host names a paired device may reach the board through; empty for loopback only. */
+  remoteHosts: string[];
+}
+
+/** A phone or other remote device paired with the board. */
+export interface Device {
+  id: number;
+  name: string;
+  createdAt: number;
+  /** Time of the device's last request, or of pairing before it made one. */
+  lastSeenAt: number;
+}
+
+/** Body of `GET /api/push/key`: the board's VAPID public key, for `PushManager.subscribe`. */
+export interface PushKey {
+  /** Uncompressed P-256 public key, base64url. */
+  publicKey: string;
+}
+
+/**
+ * Body of `POST /api/push/subscribe`: what `PushSubscription.toJSON()` gives, without the
+ * expiration time the board does not use.
+ */
+export interface PushSubscriptionInfo {
+  /** The push service URL the board posts to; always https. */
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
+/**
+ * What a push to a paired phone carries. It passes through the browser vendor's push service, so
+ * it holds only what the notification shows: never the diff, the chat or the prompt.
+ */
+export interface PushPayload {
+  taskId: number;
+  title: string;
+  status: TaskStatus;
 }
 
 /** Body of `POST /api/tasks`. */
@@ -94,6 +172,11 @@ export interface CreateTaskInput {
   repo: string;
   title?: string;
   baseRef?: string;
+  /**
+   * Defaults to `worktree`. A `base` task needs `baseRef` checked out in the repository
+   * folder when it starts, and only one at a time may work in that folder.
+   */
+  workspace?: TaskWorkspace;
   mode?: TaskMode;
   /** Agent profile ids; default to `claude` and the configured default reviewer. */
   implementer?: string;
@@ -108,6 +191,9 @@ export interface CreateTaskInput {
   /** Tests each finished step before review; omitted or `null` skips testing. */
   tester?: string | null;
   testerModel?: string | null;
+  /** Adds a UI design to the spec before implementation; omitted or `null` skips it. */
+  designer?: string | null;
+  designerModel?: string | null;
   /**
    * Loop tasks: optional while `confirmPlan` is on (the default), because it can be set
    * when the plan is approved; otherwise required unless `.harnessboard.json` sets one.
@@ -182,5 +268,7 @@ export type AgentsUpdate = Partial<
     | 'specModel'
     | 'tester'
     | 'testerModel'
+    | 'designer'
+    | 'designerModel'
   >
 >;

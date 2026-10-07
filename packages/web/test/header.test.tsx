@@ -13,6 +13,7 @@ const html = (version: string | null) =>
       version={version}
       onNewTask={() => {}}
       onSettings={() => {}}
+      onAttention={() => {}}
     />,
   );
 

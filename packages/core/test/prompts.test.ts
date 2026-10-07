@@ -4,10 +4,12 @@ import {
   criteriaPrompt,
   parseCriteria,
   parseQuestions,
+  parseSpecChange,
   specFilePrompt,
+  specRevisionPrompt,
   taskGoal,
 } from '../src/prompts.js';
-import { reviewPrompt } from '../src/review.js';
+import { reviewPrompt, testPrompt } from '../src/review.js';
 
 describe('parseCriteria', () => {
   it('takes the lines under the criteria heading up to the next heading', () => {
@@ -152,6 +154,41 @@ describe('reviewPrompt', () => {
   });
 });
 
+describe('reviewPrompt for a base task with earlier unreviewed work', () => {
+  const request = {
+    round: 1,
+    since: 'c3',
+    earlier: [{ from: 'a1', to: 'b2' }],
+    head: 'd4',
+    status: '',
+  };
+
+  it('asks the reviewer to check the earlier stretch too', () => {
+    expect(reviewPrompt('goal', request)).toContain(
+      '`git log --oneline a1..b2` and `git diff a1..b2`',
+    );
+  });
+
+  it('does not mention earlier work when there is none', () => {
+    expect(reviewPrompt('goal', { ...request, earlier: [] })).not.toContain('earlier work');
+  });
+});
+
+describe('testPrompt for a base task with earlier unreviewed work', () => {
+  it('asks the tester to check the earlier stretch too', () => {
+    const request = {
+      round: 1,
+      since: 'c3',
+      earlier: [{ from: 'a1', to: 'b2' }],
+      head: 'd4',
+      status: '',
+    };
+    expect(testPrompt('goal', request, null, false)).toContain(
+      '`git log --oneline a1..b2` and `git diff a1..b2`',
+    );
+  });
+});
+
 describe('reviewPrompt with review guidelines', () => {
   const request = { round: 1, since: 'abc', head: 'def', status: '' };
   const guidelines = [{ file: '~/rules.md', text: '- tests contain no logic\n' }];
@@ -205,6 +242,47 @@ describe('reviewPrompt for a loop step', () => {
     const none = [{ id: 'F1', description: 'stops are tappable', passes: false }];
     expect(reviewPrompt('goal', request, { features: none })).toContain(
       'Features marked done, which must work and be tested:\n- (none)',
+    );
+  });
+});
+
+describe('parseSpecChange', () => {
+  it('reads the reason and the criteria under the marker line', () => {
+    const reply = 'Built it.\nSPEC CHANGE: hi is too short\n- prints hello\n- exits 0';
+    expect(parseSpecChange(reply)).toEqual({
+      reason: 'hi is too short',
+      criteria: '- prints hello\n- exits 0',
+    });
+  });
+
+  it('stops at the notes section', () => {
+    const reply = 'SPEC CHANGE: shorter\n- prints hello\n## Notes\n- did things';
+    expect(parseSpecChange(reply)?.criteria).toBe('- prints hello');
+  });
+
+  it('gives no criteria when the marker has no list', () => {
+    expect(parseSpecChange('SPEC CHANGE: unclear')).toEqual({ reason: 'unclear', criteria: null });
+  });
+
+  it('finds nothing in a reply without the marker', () => {
+    expect(parseSpecChange('Done.\n## Notes\n- spec change not needed')).toBeNull();
+  });
+});
+
+describe('specRevisionPrompt', () => {
+  it("quotes the user's message", () => {
+    expect(specRevisionPrompt('Add a greeting', 'Say hello', null)).toContain('\n\nSay hello\n');
+  });
+
+  it('asks for the complete revised criteria under the criteria heading', () => {
+    expect(specRevisionPrompt('Add a greeting', 'Say hello', null)).toContain(
+      '## Acceptance criteria\n- The complete revised list',
+    );
+  });
+
+  it('quotes the change the user replied to', () => {
+    expect(specRevisionPrompt('Add a greeting', 'Capitalise', '- prints hello')).toContain(
+      'The change proposed before, which the user replied to:\n- prints hello',
     );
   });
 });

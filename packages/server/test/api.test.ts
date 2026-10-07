@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
 import type { Task } from '@harnessboard/shared';
-import { CLIENT_HEADER, createApi, localOnly } from '../src/api.js';
+import { CLIENT_HEADER, access } from '../src/access.js';
+import { createApi } from '../src/api.js';
+import { Sessions } from '../src/session.js';
 
 const PORT = 4999;
 let harness: Harness;
@@ -42,8 +44,9 @@ beforeEach(() => {
   };
   harness = Harness.open(config);
   app = new Hono();
-  app.use('*', localOnly(PORT));
-  app.route('/api', createApi(harness));
+  const sessions = new Sessions();
+  app.use('*', access(harness, sessions));
+  app.route('/api', createApi(harness, sessions));
 });
 
 afterEach(() => harness.store.close());
@@ -70,6 +73,37 @@ describe('localOnly', () => {
   it('allows reads from loopback without the client header', async () => {
     const res = await app.request('/api/tasks', { headers: local });
     expect(res.status).toBe(200);
+  });
+});
+
+describe('settings API', () => {
+  it('returns the remote hosts that PUT /settings saved', async () => {
+    const put = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: '1' },
+      body: JSON.stringify({ remoteHosts: ['box.tail1234.ts.net'] }),
+    });
+    expect(put.status).toBe(200);
+    const res = await app.request('/api/settings', { headers: local });
+    expect(((await res.json()) as { remoteHosts: string[] }).remoteHosts).toEqual([
+      'box.tail1234.ts.net',
+    ]);
+  });
+
+  it('writes the remote hosts to the settings file', async () => {
+    const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-settings-'));
+    const settingsFile = path.join(dir, 'config.json');
+    const saving = Harness.open({ ...defaultConfig({}), dataDir: dir }, { settingsFile });
+    const api = new Hono().route('/api', createApi(saving, new Sessions()));
+    await api.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ remoteHosts: ['box.tail1234.ts.net'] }),
+    });
+    saving.store.close();
+    expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({
+      remoteHosts: ['box.tail1234.ts.net'],
+    });
   });
 });
 
@@ -149,6 +183,47 @@ describe('tasks API', () => {
       { [CLIENT_HEADER]: 'test' },
     );
     expect(((await res.json()) as { error: string }).error).toMatch(/not waiting/);
+  });
+
+  it('refuses a spec change for a task without a spec file', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(
+      `/api/tasks/${id}/spec-revision`,
+      { message: 'Say hello' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(((await res.json()) as { error: string }).error).toMatch(/no spec file/);
+  });
+
+  it('refuses to reject a spec change when none is waiting', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(`/api/tasks/${id}/spec-change/reject`, {}, { [CLIENT_HEADER]: 'test' });
+    expect(((await res.json()) as { error: string }).error).toMatch(/no spec change waiting/);
+  });
+
+  it('shows no spec change on a new task', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}`, { headers: local });
+    const view = (await res.json()) as { specChange: unknown; specRevisionPending: boolean };
+    expect([view.specChange, view.specRevisionPending]).toEqual([null, false]);
+  });
+
+  it('shows no spec file before the spec author wrote one', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}`, { headers: local });
+    expect(((await res.json()) as { specFile: unknown }).specFile).toBeNull();
+  });
+
+  it('shows the spec file once it was written', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    harness.store.appendEvent(id, null, 'spec_written', { path: 'docs/specs/1-x.md', head: 'abc' });
+    const res = await app.request(`/api/tasks/${id}`, { headers: local });
+    expect(((await res.json()) as { specFile: unknown }).specFile).toBe('docs/specs/1-x.md');
   });
 
   it("includes the task's usage", async () => {
@@ -378,6 +453,18 @@ describe('reviewed tasks', () => {
     );
     const task = (await res.json()) as { agents: { reviewer: string } };
     expect(task.agents.reviewer).toBe('checker');
+  });
+
+  it('sets a designer and its model on a task', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await app.request(`/api/tasks/${id}/agents`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ designer: 'checker', designerModel: 'opus' }),
+    });
+    const { agents } = (await res.json()) as Task;
+    expect([agents.designer, agents.designerModel]).toEqual(['checker', 'opus']);
   });
 
   it('rejects a reviewer that is not a profile', async () => {

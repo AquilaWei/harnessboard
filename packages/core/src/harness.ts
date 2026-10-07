@@ -31,6 +31,7 @@ import type {
   ChatQueueCleared,
   ChatQueued,
   CommitInfo,
+  CommitSpan,
   CreateTaskInput,
   CriteriaApproval,
   CriteriaProposal,
@@ -48,6 +49,8 @@ import type {
   QuotaInfo,
   UsageRecord,
   ReviewRequest,
+  SpecChangeProposal,
+  SpecRevisionRequest,
   Task,
   TaskActivity,
   TaskAgents,
@@ -68,9 +71,11 @@ import type { EditableSettings, HarnessConfig } from './config.js';
 import { resolveRepository } from './folders.js';
 import { readGuidelines } from './guidelines.js';
 import { readPlan } from './loop.js';
+import { copyNotes } from './notes.js';
 import { probe } from './process.js';
 import { createAdapter } from './providers.js';
 import type { AdapterFactory } from './providers.js';
+import { reviewEvidence } from './review.js';
 import { runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
 import { dueForRetry, quotaBlocks, startable } from './scheduler.js';
@@ -84,14 +89,18 @@ import {
   branchName,
   commitDiff,
   commitLog,
+  commitRange,
   commitTree,
   currentRef,
   deleteMergedBranch,
+  diffBase,
+  headCommit,
   isLocalBranch,
   isMergedInto,
   mergeTree,
   porcelainStatus,
   pruneWorktrees,
+  rangeDiff,
   removeWorktree,
   resolveCommit,
   startMerge,
@@ -133,6 +142,18 @@ interface HeldReplies {
 }
 
 const STARTABLE: TaskStatus[] = ['backlog', 'stopped', 'failed', 'review', 'waiting_quota'];
+/**
+ * A `base` task in one of these is using the repository folder: it works there, or its
+ * work there waits for an answer or a review that another task's commits would mix into.
+ */
+const HOLDS_FOLDER: TaskStatus[] = [
+  'queued',
+  'running',
+  'awaiting_permission',
+  'waiting_quota',
+  'awaiting_approval',
+  'review',
+];
 /** A task can be chatted with while nothing else is about to run in its conversation. */
 const CHATTABLE: TaskStatus[] = ['stopped', 'failed', 'review', 'done'];
 
@@ -142,6 +163,8 @@ const CHATTABLE: TaskStatus[] = ['stopped', 'failed', 'review', 'done'];
  */
 export class Harness {
   private readonly running = new Map<number, AbortController>();
+  /** Merges in progress by task id, so no `base` task starts in the folder they change. */
+  private readonly merging = new Map<number, { repo: string; base: string }>();
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   private readonly adapters = new Map<string, AgentAdapter>();
@@ -290,6 +313,21 @@ export class Harness {
     return this.workflow.pendingPlanFeedback(taskId);
   }
 
+  /** The user's request to change a task's spec, while it waits for the spec author. */
+  pendingSpecRevision(taskId: number): SpecRevisionRequest | null {
+    return this.workflow.pendingSpecRevision(taskId);
+  }
+
+  /** The change to a task's spec that waits for the user to approve or reject it. */
+  specChange(taskId: number): SpecChangeProposal | null {
+    return this.workflow.specChange(taskId);
+  }
+
+  /** Repo-relative path of the task's spec file; `null` until the spec author wrote it. */
+  specFile(taskId: number): string | null {
+    return this.workflow.specFile(taskId);
+  }
+
   /** The review a task is waiting for, if its latest step has not been reviewed yet. */
   pendingReview(taskId: number): ReviewRequest | null {
     return this.workflow.pendingReview(taskId);
@@ -341,6 +379,7 @@ export class Harness {
       this.config;
     const allowedTools = [...this.config.allowedTools];
     const reviewGuidelines = [...this.config.reviewGuidelines];
+    const remoteHosts = [...this.config.remoteHosts];
     return {
       maxConcurrent,
       quotaPauseUtilization,
@@ -348,6 +387,7 @@ export class Harness {
       defaultReviewer,
       allowedTools,
       reviewGuidelines,
+      remoteHosts,
     };
   }
 
@@ -371,22 +411,65 @@ export class Harness {
   /**
    * Starts periodic scheduling. Tasks left `running` or `awaiting_permission` by a previous
    * process that died are re-queued, because their agent process no longer exists.
+   * A `base` task among them first gets the end its session never recorded, before any
+   * other task can start, so the commits it made before the crash stay its work. A chat cut
+   * off by the crash also rebuilds a review or test still waiting, so the chat's changes are
+   * not blamed on the reviewer or tester.
    */
-  start(): void {
+  async start(): Promise<void> {
     for (const task of this.store.listTasks()) {
+      const interrupted = task.status === 'running' || task.status === 'awaiting_permission';
+      if (interrupted) await this.endInterrupted(task);
       // A chat is the user's own conversation, not workflow work to pick up again.
       const chat = this.unansweredChat(task.id);
-      if (chat && (task.status === 'running' || task.status === 'awaiting_permission')) {
+      if (chat && interrupted) {
+        await this.refreshInterruptedChat(task.id);
         this.endChat(task.id, chat.sessionId, chat.message.returnTo, 'stopped');
         continue;
       }
       // A task that waited for permission asks again once its session resumes.
-      if (task.status === 'running' || task.status === 'awaiting_permission') {
-        this.setStatus(task.id, 'queued');
-      }
+      if (interrupted) this.setStatus(task.id, 'queued');
     }
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.tick();
+  }
+
+  /**
+   * Records where a `base` task's session cut off by a crash left HEAD. Without it the end
+   * stays where that session started, so its commits would look like other work in the
+   * folder. Commits made by hand before the restart count as its work too; there is no way
+   * to tell them apart. When git cannot read the folder the task is told and keeps the old
+   * end.
+   */
+  private async endInterrupted(task: Task): Promise<void> {
+    if (task.workspace !== 'base' || !task.startCommit) return;
+    try {
+      await this.endOnBase(task);
+    } catch (err) {
+      this.notice(
+        task.id,
+        `could not record where the interrupted session left ${task.repoPath}: ` +
+          (err as Error).message,
+      );
+    }
+  }
+
+  /**
+   * Rebuilds a review or test still waiting when a chat was cut off by a crash, as
+   * {@link runChat} would have when it ended. Without it the check keeps its old baseline
+   * and the reviewer or tester is blamed for what the chat changed. When git cannot read
+   * the folder the task is told and the check keeps its old scope.
+   */
+  private async refreshInterruptedChat(taskId: number): Promise<void> {
+    const task = this.requireTask(taskId); // after endInterrupted recorded the end
+    try {
+      await this.workflow.refreshAfterChat(task);
+    } catch (err) {
+      this.notice(
+        task.id,
+        `could not update the waiting check after the interrupted chat: ` + (err as Error).message,
+      );
+    }
   }
 
   /** Stops scheduling and every running session; resolves once they have ended. */
@@ -407,9 +490,14 @@ export class Harness {
    * Validates the repository and thresholds, then records the task.
    * Throws when `repo` is missing, not inside a git repository with a commit, the context policy is invalid, a
    * loop task has no verify command (from the input or the project's config file), an
-   * allowed-tools entry is not a tool rule, or an agent profile or model id is invalid.
+   * allowed-tools entry is not a tool rule, an agent profile or model id is invalid, or the
+   * workspace is unknown.
    */
   async createTask(input: CreateTaskInput): Promise<Task> {
+    const workspace = input.workspace ?? 'worktree';
+    if (workspace !== 'worktree' && workspace !== 'base') {
+      throw new Error(`unknown workspace ${String(workspace)}; use worktree or base`);
+    }
     const repoPath = await resolveRepository(input.repo);
     const project = loadProjectConfig(repoPath);
     const contextPolicy = {
@@ -446,6 +534,8 @@ export class Harness {
       specModel: modelOrNull(input.specModel),
       tester: input.tester ?? null,
       testerModel: modelOrNull(input.testerModel),
+      designer: input.designer ?? null,
+      designerModel: modelOrNull(input.designerModel),
     };
     this.checkProfiles(agents);
     const task = this.store.createTask({
@@ -453,6 +543,7 @@ export class Harness {
       prompt: input.prompt,
       repoPath,
       baseRef: input.baseRef ?? project.baseRef ?? (await currentRef(repoPath)),
+      workspace,
       mode,
       verifyCommand: mode === 'loop' ? verifyCommand : null,
       acceptance,
@@ -476,13 +567,15 @@ export class Harness {
 
   /**
    * Puts a task in line to run. A task in review is sent back to work with the last review's
-   * feedback and fresh review rounds. Throws when it is missing, running, queued or done.
+   * feedback and fresh review rounds. Throws when it is missing, running, queued or done,
+   * or it works on the base while another such task holds the same repository folder.
    */
   queueTask(id: number): Task {
     const task = this.requireTask(id);
     if (!STARTABLE.includes(task.status)) {
       throw new Error(`task ${id} is ${task.status} and cannot be queued`);
     }
+    if (task.workspace === 'base') this.assertFolderFree(task);
     if (task.status === 'review') {
       this.workflow.sendBack(id);
       this.notice(id, 'sent back to work by you; review rounds start again');
@@ -490,6 +583,53 @@ export class Harness {
     const queued = this.setStatus(id, 'queued', { resumeAt: null });
     this.tick();
     return queued;
+  }
+
+  /**
+   * Two agents in one folder would edit the same files and mix their commits into each
+   * other's review, so only one `base` task may hold a repository folder at a time. A merge
+   * into the branch checked out there moves its files, so none may start during one either.
+   */
+  private assertFolderFree(task: Task): void {
+    const busy = this.folderBusy(task);
+    if (busy) throw new Error(busy);
+  }
+
+  /** Why the `base` task may not use its repository folder now, or null when it may. */
+  private folderBusy(task: Task): string | null {
+    const other = this.folderHolder(task.repoPath, task.id);
+    if (other) {
+      return (
+        `task ${other.id} already works directly on ${other.baseRef} in ${task.repoPath} ` +
+        `(${other.status}); finish or stop it before starting task ${task.id}`
+      );
+    }
+    const merge = [...this.merging].find(
+      ([, m]) => m.repo === task.repoPath && m.base === task.baseRef,
+    );
+    if (merge) {
+      return (
+        `task ${merge[0]} is being merged into ${task.baseRef} in ${task.repoPath}; ` +
+        `start task ${task.id} again once the merge is done`
+      );
+    }
+    return null;
+  }
+
+  /**
+   * The `base` task other than `except` using the repository folder, if any. A task whose
+   * session is still being wound up holds it too, whatever status the workflow gave it.
+   */
+  private folderHolder(repo: string, except: number): Task | undefined {
+    return this.store
+      .listTasks()
+      .find(
+        (t) =>
+          t.id !== except &&
+          t.workspace === 'base' &&
+          t.repoPath === repo &&
+          (this.running.has(t.id) || HOLDS_FOLDER.includes(t.status)),
+      );
   }
 
   /** Stops a running or queued task. The worktree and branch are kept. */
@@ -519,7 +659,8 @@ export class Harness {
       (update.implementer !== undefined && update.implementer !== task.agents.implementer) ||
       (update.reviewer !== undefined && update.reviewer !== task.agents.reviewer) ||
       (update.spec !== undefined && update.spec !== (task.agents.spec ?? null)) ||
-      (update.tester !== undefined && update.tester !== (task.agents.tester ?? null));
+      (update.tester !== undefined && update.tester !== (task.agents.tester ?? null)) ||
+      (update.designer !== undefined && update.designer !== (task.agents.designer ?? null));
     if (swapsAgent && (this.running.has(id) || task.status === 'running')) {
       throw new Error(`task ${id} is running; stop it before changing its agents`);
     }
@@ -530,6 +671,10 @@ export class Harness {
     if (update.specModel !== undefined) agents.specModel = modelOrNull(update.specModel);
     if (update.tester !== undefined) agents.tester = update.tester;
     if (update.testerModel !== undefined) agents.testerModel = modelOrNull(update.testerModel);
+    if (update.designer !== undefined) agents.designer = update.designer;
+    if (update.designerModel !== undefined) {
+      agents.designerModel = modelOrNull(update.designerModel);
+    }
     if (update.implementerModel !== undefined) {
       agents.implementerModel = modelOrNull(update.implementerModel);
     }
@@ -573,8 +718,9 @@ export class Harness {
   }
 
   /**
-   * Deletes a task with its history and removes its worktree directory, discarding any
+   * Deletes a task with its history and review evidence, and removes its worktree directory, discarding any
    * uncommitted changes there. The branch is kept, so committed work can still be merged.
+   * A `base` task's folder is the repository itself, so nothing on disk is touched.
    * Throws when the task is missing or running (stop it first), or git cannot remove the
    * worktree; the task is then left as it was.
    */
@@ -587,7 +733,10 @@ export class Harness {
     if (task.status === 'queued' || task.status === 'waiting_quota') {
       this.setStatus(id, 'stopped', { resumeAt: null });
     }
-    if (task.worktreePath) await this.discardWorktree(task.repoPath, task.worktreePath);
+    if (task.workspace === 'worktree' && task.worktreePath) {
+      await this.discardWorktree(task.repoPath, task.worktreePath);
+    }
+    await rm(this.evidenceDir(id), { recursive: true, force: true });
     this.store.deleteTask(id);
     this.emit({ type: 'deleted', taskId: id });
   }
@@ -603,7 +752,13 @@ export class Harness {
       throw new Error(`task ${id} is ${task.status}, not waiting for plan approval`);
     }
     if (!message.trim()) throw new Error('feedback is empty');
-    this.store.appendEvent(id, null, 'plan_feedback', { message: message.trim() });
+    const change = this.workflow.specChange(id);
+    if (change) {
+      // A reply to a proposed spec change goes to the spec author, who proposes it again.
+      this.workflow.requestSpecRevision(id, message, change.onReject);
+    } else {
+      this.store.appendEvent(id, null, 'plan_feedback', { message: message.trim() });
+    }
     const queued = this.setStatus(id, 'queued');
     this.tick();
     return queued;
@@ -655,6 +810,9 @@ export class Harness {
    */
   approveCriteria(id: number, criteria?: string): Task {
     const task = this.requireTask(id);
+    if (task.status === 'awaiting_approval' && this.workflow.specChange(id)) {
+      return this.approveSpecChange(id, criteria);
+    }
     if (task.mode !== 'single' || task.status !== 'awaiting_approval') {
       throw new Error(`task ${id} is not waiting for its acceptance criteria to be approved`);
     }
@@ -676,6 +834,76 @@ export class Harness {
   }
 
   /**
+   * Asks the spec author to propose a change to the spec of a single task that is already
+   * being built. The task then waits for the user's approval as it did for the first spec.
+   * A running task is asked once its current session ends; a task in review, stopped or
+   * failed goes back in line for it. Throws when the task has no spec file yet, is waiting
+   * for an approval or done, the message is empty, or it works on the base while another
+   * task holds the folder.
+   */
+  requestSpecRevision(id: number, message: string): Task {
+    const task = this.requireTask(id);
+    if (task.mode !== 'single' || !this.workflow.specFile(id)) {
+      throw new Error(`task ${id} has no spec file to change`);
+    }
+    if (['backlog', 'awaiting_approval', 'done'].includes(task.status)) {
+      throw new Error(`task ${id} is ${task.status}; a spec change needs work under way`);
+    }
+    const text = optionalText(message, 'message') ?? '';
+    const idle = !this.running.has(id) && ['review', 'stopped', 'failed'].includes(task.status);
+    if (idle && task.workspace === 'base') this.assertFolderFree(task);
+    this.workflow.requestSpecRevision(id, text, task.status);
+    if (!idle) {
+      this.emit({ type: 'task', taskId: id, status: task.status });
+      return this.requireTask(id);
+    }
+    // The change may need more work, so the reviewer's and tester's rounds count afresh.
+    if (task.status === 'review') this.workflow.sendBack(id);
+    const queued = this.setStatus(id, 'queued', { resumeAt: null });
+    this.tick();
+    return queued;
+  }
+
+  /**
+   * Approves the waiting spec change: its criteria (or `criteria`, e.g. after the user
+   * edited them) become the task's, the spec file is rewritten and committed before the next
+   * session, and the implementer goes on against them. Throws when no change is waiting or
+   * there are no criteria to approve.
+   */
+  approveSpecChange(id: number, criteria?: string): Task {
+    const task = this.requireSpecChange(id);
+    const decision = this.workflow.decideSpecChange(task, true, optionalText(criteria, 'criteria'));
+    this.store.updateTask(id, { acceptance: decision.criteria });
+    this.notice(id, 'spec change approved; revising the spec');
+    const queued = this.setStatus(id, 'queued');
+    this.tick();
+    return queued;
+  }
+
+  /**
+   * Rejects the waiting spec change: the spec file and criteria stay as they are, and the
+   * task goes back to where it was, the implementer's work or review. Throws when no change
+   * is waiting.
+   */
+  rejectSpecChange(id: number): Task {
+    const task = this.requireSpecChange(id);
+    const { onReject } = this.workflow.specChange(id)!;
+    this.workflow.decideSpecChange(task, false);
+    this.notice(id, 'spec change rejected; the spec stays as it is');
+    const next = this.setStatus(id, onReject);
+    if (onReject === 'queued') this.tick();
+    return next;
+  }
+
+  private requireSpecChange(id: number): Task {
+    const task = this.requireTask(id);
+    if (task.status !== 'awaiting_approval' || !this.workflow.specChange(id)) {
+      throw new Error(`task ${id} has no spec change waiting for a decision`);
+    }
+    return task;
+  }
+
+  /**
    * Writes `message` into the task's latest implementer conversation and runs the agent
    * until it replies, as if typed in that session: it may edit files, its tool rules and
    * permission prompts apply, and nothing moves on in the workflow. The task then returns
@@ -683,7 +911,8 @@ export class Harness {
    * While the task is busy (running, queued, waiting for quota or approval) the message is
    * kept as pending instead and sent when the current step ends; see {@link pendingChat}.
    * Throws when the message is empty, or the task is idle and there is no conversation to
-   * continue or its context is full.
+   * continue, its context is full, or it works on the base while another task holds or a
+   * merge changes the same repository folder.
    */
   chat(id: number, message: string): Task {
     const task = this.requireTask(id);
@@ -694,6 +923,7 @@ export class Harness {
       this.emit({ type: 'task', taskId: id, status: task.status });
       return task;
     }
+    if (task.workspace === 'base') this.assertFolderFree(task);
     const target = this.chatTarget(task);
     if (typeof target === 'string') throw new Error(target);
     return this.startChat(task, target, text);
@@ -729,12 +959,14 @@ export class Harness {
   /**
    * Sends the pending messages of an idle task as one turn. A task that has stopped drops
    * them when they cannot be sent, since nothing would change that; a queued one keeps them
-   * for after its next step, which may start a conversation they fit into.
+   * for after its next step, which may start a conversation they fit into. A `base` task
+   * whose folder another task holds keeps them until a later tick finds the folder free.
    * Returns true when a reply started.
    */
   private deliverPendingChat(task: Task): boolean {
     const pending = this.pendingChat(task.id);
     if (pending.length === 0) return false;
+    if (task.workspace === 'base' && this.folderBusy(task)) return false;
     const target = this.chatTarget(task);
     if (typeof target === 'string') {
       if (CHATTABLE.includes(task.status)) {
@@ -760,7 +992,9 @@ export class Harness {
     if (
       contextPct(session.contextTokens, window) >= resolveThresholds(task.contextPolicy).hardPct
     ) {
-      return `the conversation of task ${task.id} is full; continue it with hb open ${task.id}`;
+      // hb open refuses a `base` task, so it is not suggested for one.
+      const hint = task.workspace === 'base' ? '' : `; continue it with hb open ${task.id}`;
+      return `the conversation of task ${task.id} is full${hint}`;
     }
     return session;
   }
@@ -785,6 +1019,7 @@ export class Harness {
   ): Promise<void> {
     let reason: ChatEnd['reason'] = 'error';
     try {
+      const ready = task.workspace === 'base' ? await this.startOnBase(task) : task;
       const plan: SessionPlan = {
         role: 'implementer',
         agentId: session.agentId,
@@ -793,7 +1028,13 @@ export class Harness {
         prompt: text,
       };
       const adapter = this.adapterFor(session.agentId);
-      const outcome = await this.runOne(task, session.id, plan, adapter, controller.signal, true);
+      await adapter.ensureReady?.();
+      const outcome = await this.runOne(ready, session.id, plan, adapter, controller.signal, true)
+        // Before the task returns to its status and may let go of the folder.
+        .finally(async () => {
+          await this.endOnBase(ready);
+          await this.workflow.refreshAfterChat(ready);
+        });
       reason = outcome.reason;
     } catch (err) {
       this.notice(task.id, `chat failed: ${(err as Error).message}`);
@@ -824,7 +1065,10 @@ export class Harness {
     reason: ChatEnd['reason'],
   ): void {
     this.store.appendEvent(taskId, sessionId, 'chat_end', { reason } satisfies ChatEnd);
-    if (this.store.getTask(taskId)) this.setStatus(taskId, returnTo);
+    if (!this.store.getTask(taskId)) return;
+    this.setStatus(taskId, returnTo);
+    // A spec change asked for during the chat would otherwise wait in review forever.
+    this.workflow.reviseAfterStep(taskId);
   }
 
   /**
@@ -837,13 +1081,45 @@ export class Harness {
    * into the task's worktree instead, its agent is queued to resolve the conflicts and
    * commit, and the task comes back for review (and another merge) afterwards.
    * Throws when the task is not in review, has uncommitted changes or nothing to merge, its
-   * base is not a local branch, or git refuses.
+   * base is not a local branch, git refuses, or a `base` task works on that base in the
+   * repository folder (the merge would move its files underneath its agent). A `base` task
+   * has nothing to merge: its commits are on the base already, and {@link completeTask}
+   * finishes it.
    */
   async mergeTask(id: number): Promise<MergeResult> {
     const task = this.requireTask(id);
     if (task.status !== 'review') throw new Error(`task ${id} is ${task.status}, not review`);
+    if (task.workspace === 'base') {
+      throw new Error(
+        `task ${id} works directly on ${task.baseRef}, so there is nothing to merge; mark it done`,
+      );
+    }
     const { repoPath: repo, baseRef: base, branch, worktreePath: dir } = task;
     if (!branch || !dir) throw new Error(`task ${id} has no branch to merge`);
+    const holder = this.folderHolder(repo, id);
+    if (holder?.baseRef === base) {
+      throw new Error(
+        `task ${holder.id} works directly on ${base} in ${repo} (${holder.status}); ` +
+          `finish or stop it before merging task ${id}`,
+      );
+    }
+    // Registered before the first await, so no `base` task can start while git works.
+    this.merging.set(id, { repo, base });
+    try {
+      return await this.mergeInto(task, repo, base, branch, dir);
+    } finally {
+      this.merging.delete(id);
+    }
+  }
+
+  private async mergeInto(
+    task: Task,
+    repo: string,
+    base: string,
+    branch: string,
+    dir: string,
+  ): Promise<MergeResult> {
+    const id = task.id;
     if ((await porcelainStatus(dir)) !== '') {
       throw new Error(
         `task ${id} has uncommitted changes in its worktree; commit or discard them first`,
@@ -903,10 +1179,35 @@ export class Harness {
     return this.setStatus(id, 'done');
   }
 
+  /**
+   * Everything the task changed. A `base` task's earlier stretches come first, one patch
+   * each; untracked files are only shown while it holds the folder, since after that they
+   * may be anyone's.
+   */
   async diff(id: number): Promise<WorktreeDiff> {
     const task = this.requireTask(id);
     if (!task.worktreePath) return { diff: '', untracked: [] };
-    return worktreeDiff(task.worktreePath, task.baseRef);
+    if (task.workspace === 'worktree') return worktreeDiff(task.worktreePath, diffBase(task));
+    const { closed, liveFrom } = this.baseHistory(task);
+    const patches = await Promise.all(closed.map((span) => rangeDiff(task.repoPath, span)));
+    const live = liveFrom
+      ? await worktreeDiff(task.repoPath, liveFrom)
+      : { diff: '', untracked: [] };
+    return { diff: [...patches, live.diff].join(''), untracked: live.untracked };
+  }
+
+  /**
+   * A `base` task's stretches of work in the repository folder. While it holds the folder its
+   * current stretch runs up to the working tree (`liveFrom`); once it lets go, the stretch
+   * ends where its last session left HEAD, so later work in the folder is not counted as its.
+   */
+  private baseHistory(task: Task): { closed: CommitSpan[]; liveFrom: string | null } {
+    const holds = this.running.has(task.id) || HOLDS_FOLDER.includes(task.status);
+    if (holds || task.endCommit === null) {
+      return { closed: task.priorSpans, liveFrom: task.startCommit };
+    }
+    const last = { from: task.startCommit!, to: task.endCommit };
+    return { closed: [...task.priorSpans, last], liveFrom: null };
   }
 
   /** The task's notes file: what each role reported, kept even after the worktree is gone. */
@@ -914,11 +1215,20 @@ export class Harness {
     return { markdown: this.workflow.renderedNotes(this.requireTask(id)) };
   }
 
-  /** Commits on the task's branch since its base, newest first; none before it has a worktree. */
+  /**
+   * Commits on the task's branch since its base, or a `base` task's commits since it
+   * started, newest first; none before it has a worktree.
+   */
   async commits(id: number): Promise<CommitInfo[]> {
     const task = this.requireTask(id);
     if (!task.worktreePath) return [];
-    return commitLog(task.worktreePath, task.baseRef);
+    if (task.workspace === 'worktree') return commitLog(task.worktreePath, diffBase(task));
+    const { closed, liveFrom } = this.baseHistory(task);
+    const logs = await Promise.all([
+      ...closed.map((span) => commitRange(task.repoPath, span)),
+      ...(liveFrom ? [commitLog(task.repoPath, liveFrom)] : []),
+    ]);
+    return logs.reverse().flat();
   }
 
   /**
@@ -1005,6 +1315,11 @@ export class Harness {
     }
   }
 
+  /** Where the git output for a reviewer without `readOnlyGit` is written (`reviewEvidence`). */
+  private evidenceDir(taskId: number): string {
+    return path.join(this.config.dataDir, 'evidence', String(taskId));
+  }
+
   private profilesOf(provider: AgentProvider): string[] {
     return Object.entries(this.config.agents)
       .filter(([, profile]) => profile.provider === provider)
@@ -1016,20 +1331,45 @@ export class Harness {
     this.running.set(task.id, controller);
     try {
       const ready = await this.ensureWorktree(task);
-      const plan = this.workflow.plan(ready);
-      await this.workflow.syncNotes(ready);
-      const adapter = this.adapterFor(plan.agentId);
-      const sessionId = plan.resume?.id ?? randomUUID();
-      if (!plan.resume) {
-        // CLIs that assign their own ids report them in `init`; see runOne.
-        const agentSessionId = adapter.capabilities.sessionIds === 'harness' ? sessionId : null;
-        this.store.startSession(sessionId, task.id, plan.role, plan.agentId, agentSessionId);
+      try {
+        await this.workflow.reviseSpecFile(ready);
+        let plan = this.workflow.plan(ready);
+        await this.workflow.syncNotes(ready);
+        const adapter = this.adapterFor(plan.agentId);
+        // Before any session is recorded, so a sandbox that can not run fails the task cleanly.
+        await adapter.ensureReady?.();
+        if (plan.role === 'reviewer' && !adapter.capabilities.readOnlyGit) {
+          // The files stay until the next review, so a resumed reviewer can still read them.
+          const evidenceDir = this.evidenceDir(task.id);
+          if (plan.review) {
+            const evidence = await reviewEvidence(ready.worktreePath!, plan.review, evidenceDir);
+            plan = { ...plan, prompt: `${plan.prompt}\n\n${evidence}` };
+          }
+          const notes = this.workflow.renderedNotes(ready);
+          if (notes !== null) {
+            const copy = copyNotes(evidenceDir, notes);
+            plan = { ...plan, prompt: `${plan.prompt}\n\n${copy}` };
+          }
+          if (existsSync(evidenceDir)) plan = { ...plan, readableDirs: [evidenceDir] };
+        }
+        const sessionId = plan.resume?.id ?? randomUUID();
+        if (!plan.resume) {
+          // CLIs that assign their own ids report them in `init`; see runOne.
+          const agentSessionId = adapter.capabilities.sessionIds === 'harness' ? sessionId : null;
+          this.store.startSession(sessionId, task.id, plan.role, plan.agentId, agentSessionId);
+        }
+        this.workflow.started(task.id, sessionId, plan);
+        this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
+        this.setStatus(task.id, 'running');
+        const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal);
+        this.store.endSession(sessionId, outcome.reason);
+        await this.workflow.finish(ready, plan, outcome, controller.signal);
+      } finally {
+        // Also when a step before the session failed after the harness committed (a revised
+        // spec): those commits are the task's work. After the workflow's own commits, and
+        // while `running` still holds the folder, so no other task's commits can come first.
+        await this.endOnBase(ready);
       }
-      this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
-      this.setStatus(task.id, 'running');
-      const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal);
-      this.store.endSession(sessionId, outcome.reason);
-      await this.workflow.finish(ready, plan, outcome, controller.signal);
     } catch (err) {
       this.notice(task.id, `task failed: ${(err as Error).message}`);
       this.setStatus(task.id, 'failed');
@@ -1042,11 +1382,67 @@ export class Harness {
   }
 
   private async ensureWorktree(task: Task): Promise<Task> {
+    // Checked before every session: the user may have switched branches since the last one.
+    if (task.workspace === 'base') return this.startOnBase(task);
     if (task.worktreePath) return task;
     const branch = branchName(task.id, task.title);
     const dir = worktreePath(this.config.dataDir, task.repoPath, task.id);
     await addWorktree(task.repoPath, dir, branch, task.baseRef);
     return this.store.updateTask(task.id, { branch, worktreePath: dir });
+  }
+
+  /**
+   * A `base` task works in the repository folder itself, so its commits land on the base
+   * branch, which must be checked out there. The commit it starts at is kept, since without
+   * a branch of its own that is the only way to tell its work from what came before.
+   * When HEAD moved after its last session (another task or the user committed while it let
+   * go of the folder), that stretch is closed and a new one starts here, so those commits
+   * never count as its work; a review or test waiting to run is rebuilt to leave them out
+   * too. Uncommitted changes already in the folder count as its work.
+   * Throws when the base is not checked out there.
+   */
+  private async startOnBase(task: Task): Promise<Task> {
+    await this.assertOnBase(task);
+    const head = await headCommit(task.repoPath);
+    if (!task.startCommit) {
+      return this.store.updateTask(task.id, {
+        worktreePath: task.repoPath,
+        startCommit: head,
+        endCommit: head,
+      });
+    }
+    // No end: a task from before end commits were kept; its history stays as it was.
+    if (task.endCommit === null || task.endCommit === head) return task;
+    const resumed = this.store.updateTask(task.id, {
+      priorSpans: [...task.priorSpans, { from: task.startCommit, to: task.endCommit }],
+      startCommit: head,
+      endCommit: head,
+    });
+    await this.workflow.refreshPending(resumed);
+    return resumed;
+  }
+
+  /**
+   * Records where a `base` task's session left HEAD: once the task lets go of the folder,
+   * its history ends there. Throws when git cannot read HEAD.
+   */
+  private async endOnBase(task: Task): Promise<void> {
+    if (task.workspace !== 'base') return;
+    this.store.updateTask(task.id, { endCommit: await headCommit(task.repoPath) });
+  }
+
+  /**
+   * Throws unless the repository folder has the task's base branch checked out, so a `base`
+   * task's agent never edits and commits on whatever branch the user switched to.
+   */
+  private async assertOnBase(task: Task): Promise<void> {
+    const repo = task.repoPath;
+    if (!(await isLocalBranch(repo, task.baseRef)) || (await currentRef(repo)) !== task.baseRef) {
+      throw new Error(
+        `task ${task.id} works directly on ${task.baseRef}, but ${repo} does not have that ` +
+          `branch checked out; check it out there and start the task again`,
+      );
+    }
   }
 
   private async discardWorktree(repo: string, dir: string): Promise<void> {
@@ -1099,6 +1495,7 @@ export class Harness {
         skipPermissions: task.permission.skipPermissions,
         // Read-only sessions must not change anything, so they are never offered more tools.
         askPermission: plan.access === 'edit' && adapter.capabilities.permissionPrompts,
+        readableDirs: plan.readableDirs ?? [],
       },
       thresholds: resolveThresholds(task.contextPolicy),
       wrapUp,
@@ -1257,6 +1654,7 @@ export class Harness {
       agents.reviewer,
       agents.spec ?? null,
       agents.tester ?? null,
+      agents.designer ?? null,
     ]) {
       if (id !== null && !this.config.agents[id]) {
         throw new Error(`agent profile "${id}" is not configured`);

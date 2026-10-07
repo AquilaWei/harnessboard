@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type {
+  CommitSpan,
   CriteriaApproval,
   CriteriaProposal,
   MergeConflict,
@@ -23,6 +24,11 @@ export interface ReviewRequest {
   round: number;
   /** Commit the reviewer diffs against: the last approved head, or the task's base. */
   since: string;
+  /**
+   * A `base` task's earlier stretches of its own work still to check, oldest first; the
+   * commits between them are other work in the folder. Missing in requests stored before.
+   */
+  earlier?: CommitSpan[];
   head: string;
   /** `git status --porcelain` output at request time. */
   status: string;
@@ -44,6 +50,11 @@ export interface TestRequest {
   round: number;
   /** Commit the step is measured from: the last approved head, or the task's base. */
   since: string;
+  /**
+   * A `base` task's earlier stretches of its own work still to check, oldest first; the
+   * commits between them are other work in the folder. Missing in requests stored before.
+   */
+  earlier?: CommitSpan[];
   head: string;
   /** `git status --porcelain` output at request time. */
   status: string;
@@ -55,6 +66,15 @@ export interface SpecRecord {
   path: string;
   /** HEAD after the spec was committed. */
   head: string;
+}
+
+/** Stored as the `spec_revised` event once an approved change is committed to the spec file. */
+export interface SpecRevisionRecord {
+  path: string;
+  /** HEAD after the revised spec was committed. */
+  head: string;
+  /** The date written into the file's Revisions entry, `YYYY-MM-DD` (UTC). */
+  date: string;
 }
 
 /** Stored as the `test_report` event after a tester session. */
@@ -87,7 +107,14 @@ export interface RoleNote {
  * to the agent in the task's conversation, outside the workflow.
  */
 export type TaskPhase =
-  'planning' | 'writingSpec' | 'implementing' | 'testing' | 'verifying' | 'reviewing' | 'chatting';
+  | 'planning'
+  | 'writingSpec'
+  | 'designing'
+  | 'implementing'
+  | 'testing'
+  | 'verifying'
+  | 'reviewing'
+  | 'chatting';
 
 export interface TaskActivity {
   phase: TaskPhase;

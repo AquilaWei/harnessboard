@@ -33,8 +33,13 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
+      # Gemini's own policy engine, outside the workspace, for gemini-policy.test.ts.
+      - run: npm install --no-save --prefix "$RUNNER_TEMP/gemini" @google/gemini-cli-core@0.62.0
+        shell: bash
       # The tests drive a fake claude CLI (packages/core/test/fixtures), so no account is needed.
       - run: pnpm test
+        env:
+          HARNESSBOARD_TEST_GEMINI_CORE: ${{ runner.temp }}/gemini/node_modules/@google/gemini-cli-core
 
   # Installers for the desktop app, built only once every test job passed.
   desktop:

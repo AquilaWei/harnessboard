@@ -771,9 +771,13 @@ summary:focus-visible {
   box-shadow: var(--shadow-lg);
 }
 
+/* Scrolls on its own when permission requests or review findings run long, so it never
+   pushes the tabs and body out of the fixed panel, where nothing could scroll to them. */
 .drawer-head {
   display: grid;
   gap: 12px;
+  max-height: 60%;
+  overflow-y: auto;
   padding: 16px 20px 12px;
 }
 
@@ -838,6 +842,8 @@ summary:focus-visible {
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
+  /* overflow-x lets a flex column squash the row to nothing; keep it whole in the drawer. */
+  flex-shrink: 0;
 }
 
 .tab {
@@ -1157,68 +1163,6 @@ th {
   white-space: pre-wrap;
 }
 
-/* ---------- small screens ---------- */
-
-@media (max-width: 1000px) {
-  .board {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 640px) {
-  .row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
-  }
-
-  .header {
-    padding: 10px 16px;
-  }
-
-  .summary {
-    order: 3;
-    width: 100%;
-  }
-
-  .header-actions {
-    margin-left: auto;
-  }
-
-  .board {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 12px 16px 32px;
-  }
-
-  .stage {
-    min-height: 0;
-  }
-
-  .drawer-head,
-  .drawer-body {
-    padding-left: 16px;
-    padding-right: 16px;
-  }
-
-  .tabs {
-    padding: 0 16px;
-  }
-
-  .row,
-  .choice-cards {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .popover {
-    position: fixed;
-    top: 110px;
-    right: 16px;
-    left: 16px;
-    width: auto;
-  }
-}
-
 /* ---------- folder picker ---------- */
 
 .field > label {
@@ -1402,6 +1346,18 @@ th {
 
 .plan-section > .btn {
   justify-self: start;
+}
+
+/* The criteria in force next to a proposed change, so the two are compared line by line. */
+.spec-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.spec-reason {
+  margin: 0;
+  white-space: pre-wrap;
 }
 
 .question-list {
@@ -1701,4 +1657,171 @@ th {
 
 .chat-input textarea {
   width: 100%;
+}
+
+/* Phone access: the settings section and the screens a phone sees before it is paired. */
+.serve-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.serve-command code {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.pairing img {
+  display: block;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pairing .mono {
+  overflow-wrap: anywhere;
+}
+
+.gate {
+  width: min(420px, calc(100vw - 32px));
+  margin: 15vh auto 0;
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+/* ---------- small screens ---------- */
+
+/* Last in the file, so these overrides win over the base rules of every section above. */
+
+/* Shown only at phone width, by the rule in the 640px block below. */
+.phone-only {
+  display: none;
+}
+
+@media (max-width: 1000px) {
+  .board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .header {
+    padding: 10px 16px;
+  }
+
+  .summary {
+    order: 3;
+    width: 100%;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
+  .board {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px 16px 32px;
+  }
+
+  .stage {
+    min-height: 0;
+  }
+
+  .drawer-head,
+  .drawer-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .tabs {
+    padding: 0 16px;
+  }
+
+  .row,
+  .choice-cards {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .popover {
+    position: fixed;
+    top: 110px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+  }
+
+  .phone-only {
+    display: inline-flex;
+  }
+
+  /* The board shows one tab at a time (Board.tsx); the tabs sit inside its padding. */
+  .board-tabs {
+    padding: 0;
+  }
+
+  .board-tabs .tab {
+    min-height: 44px;
+  }
+
+  .drawer {
+    width: 100vw;
+  }
+
+  /* New task and settings fill the screen, so the keyboard does not hide half a centred form. */
+  .modal,
+  .modal.wide {
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
+    padding: 16px;
+    border-radius: 0;
+    transform: none;
+  }
+
+  .folder-browser {
+    position: fixed;
+    inset: 0;
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .folder-list {
+    flex: 1;
+    max-height: none;
+  }
+
+  .folder {
+    min-height: 44px;
+  }
+
+  /* Stays at the bottom while the list is loading or failed, where Close is the only way out. */
+  .folder-actions {
+    flex-wrap: wrap;
+    margin-top: auto;
+  }
+
+  .spec-compare {
+    grid-template-columns: 1fr;
+  }
+
+  /* Touch targets for answering the agent (Apple and WCAG suggest 44px). */
+  .permission button,
+  .plan-review button {
+    min-height: 44px;
+  }
 }

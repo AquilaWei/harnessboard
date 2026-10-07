@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_PRESET, PERMISSION_PRESETS, definedOnly, presetRules } from '@harnessboard/shared';
-import type { AgentInfo, Settings, TaskMode, TaskSize } from '@harnessboard/shared';
+import type { AgentInfo, Settings, TaskMode, TaskSize, TaskWorkspace } from '@harnessboard/shared';
 import { api } from '../api';
 import { parseRules } from '../rules';
 import { AgentFields } from './AgentFields';
@@ -57,9 +57,12 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
     specModel: null,
     tester: null,
     testerModel: null,
+    designer: null,
+    designerModel: null,
   });
   const [title, setTitle] = useState('');
   const [base, setBase] = useState('');
+  const [workspace, setWorkspace] = useState<TaskWorkspace>('worktree');
   const [size, setSize] = useState<TaskSize>(settings.defaultContextPolicy.size ?? 'medium');
   const [custom, setCustom] = useState(false);
   const [soft, setSoft] = useState(40);
@@ -115,8 +118,11 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           specModel: who.spec ? who.specModel : null,
           tester: who.tester,
           testerModel: who.tester ? who.testerModel : null,
+          designer: who.designer,
+          designerModel: who.designer ? who.designerModel : null,
           title: title.trim() || undefined,
           baseRef: base.trim() || undefined,
+          workspace: workspace === 'base' ? workspace : undefined,
           size,
           softPct: custom ? soft : undefined,
           hardPct: custom ? hard : undefined,
@@ -208,6 +214,25 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
         )}
 
         <FolderField value={repo} onChange={setRepo} recent={recent} />
+
+        <fieldset className="choice-cards">
+          <legend>{t('form.workspace')}</legend>
+          {(['worktree', 'base'] as const).map((w) => (
+            <label key={w} className={`choice ${workspace === w ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="workspace"
+                value={w}
+                checked={workspace === w}
+                onChange={() => setWorkspace(w)}
+              />
+              <strong>
+                {t(`form.workspaces.${w}`, { base: base.trim() || t('form.currentBranch') })}
+              </strong>
+              <small>{t(`form.workspaceHints.${w}`)}</small>
+            </label>
+          ))}
+        </fieldset>
 
         {mode === 'loop' && (
           <label className="field">

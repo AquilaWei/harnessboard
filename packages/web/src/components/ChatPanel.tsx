@@ -134,9 +134,12 @@ export function ChatPanel({ task, onSent, onError }: Props) {
             {busy ? t('chat.queue') : t('chat.send')}
           </button>
           <span className="hint">{t('chat.hint')}</span>
-          <button type="button" className="btn ghost" onClick={() => void copyOpen()}>
-            {copied ? t('actions.copied') : t('actions.copyOpen')}
-          </button>
+          {/* hb open refuses a base task: it could not keep other agents out of the folder. */}
+          {task.workspace !== 'base' && (
+            <button type="button" className="btn ghost" onClick={() => void copyOpen()}>
+              {copied ? t('actions.copied') : t('actions.copyOpen')}
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -51,7 +51,9 @@ hb done 1                            # mark it reviewed
 | `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                                              |
 | `hb loop <goal> [--verify <command>]` [same options as `add`]                         | Start a Loop task (see below)                                        |
 | `--criteria <text>` / `--no-discuss` on `add`                                         | Give acceptance criteria, or skip agreeing                           |
+| `--on-base` on `add` / `loop`                                                         | Work directly on the base branch, without a worktree (below)         |
 | `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> [--verify <command>]`   | Review, discuss and approve criteria or plan                         |
+| `hb spec <id> <text>` / `hb reject <id>`                                              | Ask to change the spec after work started; reject a proposed change  |
 | `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)                          |
 | `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them                          |
 | `hb agents`                                                                           | List agent profiles, and agent CLIs found without one                |
@@ -81,6 +83,21 @@ worktree and branch are removed.
 - **Mark done without merging** keeps the old behaviour: the branch stays for you to merge.
 - Needs git 2.38 or later.
 
+**Working directly on the base branch** (`--on-base`, or **Work directly on …** in New
+task) skips the worktree and the branch. The agent works in the repository folder itself, so
+its commits land on the base branch as it goes and there is nothing to merge: approving the
+review marks the task done. The card shows **on main** (or whichever branch it is).
+
+- The base branch must be checked out in that folder when the task starts.
+- Only one such task holds a folder at a time, from when it is queued until it is done,
+  stopped or failed (review included). Starting another one there, or merging another task
+  into that branch, is refused with the number of the task holding it.
+- Its diff and commit list cover only what it committed while it held the folder, not
+  commits you or other tasks made in between. Changes already uncommitted in the folder
+  when it starts count as its work.
+- `hb open` is refused for these tasks; use `hb chat` instead.
+- Deleting one removes its history only: no folder and no branch.
+
 **Deleting a task** (`hb delete`, or **Delete** in the task panel) removes its history and
 its worktree folder, including edits that were not committed. The branch is kept, so
 committed work can still be merged; remove it with `git branch -D` when you no longer need
@@ -100,7 +117,7 @@ in its own window. **Click the icon and the board is there.**
 - **Builds:** .deb (Debian, Ubuntu), .rpm (Fedora, openSUSE) and AppImage (any distribution)
   on Linux, .dmg (Intel and Apple silicon) on macOS, an
   installer (.exe) on Windows.
-- **Still needed:** git and the agent CLIs (`claude`, `codex`). The app finds them the way
+- **Still needed:** git and the agent CLIs (`claude`, `codex`, `gemini`). The app finds them the way
   your terminal does, including `~/.local/bin`, nvm and Homebrew.
 - **Closing the window keeps it running** in the tray / menu bar, so tasks go on. Use
   **Quit Harnessboard** there to stop it; running agents are stopped cleanly. On a desktop
@@ -225,6 +242,33 @@ the New task dialog, or `hb models <id> --spec <agent>`. With a different agent 
 conversation does not carry over: after you approve, the implementer starts a new session
 from the approved criteria.
 
+**Changing the spec after work has started:** once the spec file exists, a task that is
+running, queued, in review, stopped or failed can still have its criteria changed.
+
+1. **Ask:** click **Change the spec** in the task panel, say what should change and why, and
+   send it (or `hb spec <id> "..."`). A running task finishes its current step first. The
+   implementer can also stop and propose a change itself when it finds the spec wrong.
+2. **The spec author proposes:** it reads the spec file and your message without changing
+   anything, and answers with the complete revised criteria. The task waits in _Needs you_.
+3. **You decide** on the **Criteria** tab, which shows the current criteria next to the
+   proposed ones (or `hb plan <id>`):
+   - **approve** (`hb approve <id>`, or `--criteria "..."`): edit the proposed criteria if you
+     like, then approve. Harnessboard rewrites the criteria in the spec file, adds a dated
+     line under "Revisions", commits it, and the implementer and later reviews work to the
+     new criteria.
+   - **reply** (`hb feedback <id> "..."`): the spec author proposes again.
+   - **reject** (`hb reject <id>`): the spec stays as it is, and the task goes back to where
+     it was.
+
+**Designer (optional):** for work with a user interface, add a **designer**. After the spec
+is committed, and before anything is built, it adds a "UI design" section to the spec file
+(screens, layout, text, states and behaviour, in the project's existing style) and commits
+it. The implementer is told to follow that section and the reviewer checks the work against
+it. It may only change the spec file; anything else stops the task. Use
+`--designer codex --designer-model <model>`, the **Designer** menu (None by default), or
+`hb models <id> --designer <agent|none>`. It applies to single tasks whose criteria you
+approve; leave it at None for work without a UI.
+
 **Tester (optional):** add a **tester** and every finished implementer step goes to it
 before review. It writes the tests the step is missing, runs the suite, commits the tests and
 answers `TESTS: PASS` or `TESTS: FAIL`. A failure goes back to the implementer (up to the same
@@ -318,13 +362,13 @@ hb add "Add input validation to the signup form" --reviewer opus
 **Models:** each task can pick its own model for the implementer and for the reviewer, for
 example Haiku to build and Opus to review: `hb add "..." --model haiku --reviewer claude
 --reviewer-model opus`, or the model menus in the New task dialog. Today the reviewer can be
-any Claude Code or Codex profile, so different vendors can check each other (Gemini is planned).
+any Claude Code, Codex or Gemini profile, so different vendors can check each other.
 
 The model menus list what each platform offers your account, with its description: Claude
 Code's own model menu (read from the catalog it caches under `~/.claude`, or its aliases
 `opus`, `sonnet`, `fable` and `haiku` before it has one) and Codex's model catalog
 (`codex debug models`). Older models sit under **More models**, and any other model id can
-still be typed. On the command line: `hb agents --models <profile>`.
+still be typed. Gemini CLI can not list its models, so for Gemini the model id is typed. On the command line: `hb agents --models <profile>`.
 
 ## Web board
 
@@ -384,8 +428,73 @@ still be typed. On the command line: `hb agents --models <profile>`.
     waits for permission, approval or review, or fails, while the board is open but not in
     front. Click it to open the task.
 
-The API accepts only loopback `Host` headers, and it requires a custom header on every
-write. A web page you visit cannot drive your agents through the browser.
+The API accepts only loopback `Host` headers, plus the remote hosts you add for
+[phone access](#phone-access), and it requires a custom header on every write. A web page you
+visit cannot drive your agents through the browser.
+
+## Phone access
+
+Follow progress, approve, answer and create tasks from your phone, from anywhere. The board
+stays on your computer; the phone reaches it through [Tailscale](https://tailscale.com), so
+nothing is opened to the internet.
+
+1. **Install Tailscale** on the computer and the phone, signed in to the same tailnet. Turn
+   on MagicDNS and HTTPS certificates in the Tailscale admin console.
+2. **Add the remote host:** on the computer, open **Settings → Phone access**. It shows this
+   computer's Tailscale name (`<machine>.<tailnet>.ts.net`); click **Add as remote host**
+   and **Save**.
+3. **Serve the board on the tailnet**, once, with the command the section shows (the port is
+   the board's, 4317 by default):
+
+   ```bash
+   tailscale serve --bg 4317
+   ```
+
+   The first HTTPS request can take about 30 seconds while Tailscale issues the certificate.
+   `tailscale serve reset` turns it off again.
+
+4. **Pair the phone:** click **Pair a phone** and scan the QR code with the phone's camera.
+   The code works once, for 5 minutes. Give the phone a name, then tap **Create passkey**:
+   the phone asks for your fingerprint, face or screen lock. The phone is paired only once
+   the passkey is made.
+5. **Add to Home Screen** (optional on Android, needed for push on an iPhone): in Chrome's
+   menu, **Add to Home Screen** (on Safari, in the Share menu). The Harnessboard icon then
+   opens the board full screen, without the address bar.
+6. **Turn on push notifications** (optional): on the phone, open **Settings** and switch on
+   **Notify me when a task needs me**, then allow notifications. The phone gets a push when
+   a task waits for permission, approval or review, or fails, even with the board closed.
+   Tapping it opens the task on the tab that needs you (after unlocking, if the board was
+   locked). A push carries only the task's number, title and status, never its changes or
+   chat. Switching it off, or revoking the phone, stops the pushes.
+
+**How the passkey protects the board**
+
+- **Unlock:** the board locks each time it is opened on the phone (a reload or a server
+  restart counts) and after 30 minutes without use. **Unlock** asks for the passkey.
+- **Sensitive actions** ask again when the last check is more than 5 minutes old: creating,
+  starting, approving, answering, merging or deleting tasks, and changing settings, agents,
+  tool rules or paired devices. The action carries on once you confirm.
+- **Lost phone:** revoke it under **Settings → Phone access → Paired devices**; it loses
+  access on its next request. There are no backup codes: pair the new phone the same way.
+- **Browsers inside apps** (LINE, for example) cannot use passkeys. The board says so; open
+  the page in Chrome or Safari from the app's menu, and the pairing code goes along.
+- **On the computer itself** nothing changes: no pairing and no passkey.
+
+**Recommended Tailscale settings**
+
+- **Two-factor login** on the account that owns the tailnet.
+- **Device approval**, so a new device cannot join the tailnet without you.
+- **An access rule (ACL)** that lets only your phone reach this computer, so other devices
+  or shared nodes in the tailnet cannot even load the pairing page.
+
+**Limits**
+
+- **The computer must be on** and Harnessboard running (desktop app or `hb serve`). A
+  sleeping computer cannot be reached.
+- **Push notifications on an iPhone** need iOS 16.4 or later and the board opened from the
+  Home Screen; in Safari itself the switch says push is not available.
+- Tailscale Funnel (the public internet) is always refused. Another HTTPS reverse proxy
+  works too: add its host name as a remote host.
 
 ## How the context budget works
 
@@ -420,7 +529,7 @@ environment < CLI flags.
   `verifyCommand`.
 
 **Agent profiles:** each profile names an agent CLI and how to run it. `claude` always exists.
-Harnessboard looks for the `claude` and `codex` commands on your PATH and points out any that
+Harnessboard looks for the `claude`, `codex` and `gemini` commands on your PATH and points out any that
 have no profile yet (in `hb serve`'s output, `hb agents` and **Settings → Agents**). Add one
 with one click in **Settings**, or:
 
@@ -437,16 +546,30 @@ second Claude with another model:
   "agents": {
     "claude": { "provider": "claude-code", "command": "claude", "model": null },
     "opus": { "provider": "claude-code", "command": "claude", "model": "opus" },
-    "codex": { "provider": "codex", "command": "codex", "model": null }
+    "codex": { "provider": "codex", "command": "codex", "model": null },
+    "gemini": { "provider": "gemini", "command": "gemini", "model": null }
   }
 }
 ```
 
-Supported providers: `claude-code` and `codex`. A Codex profile uses the signed-in
+Supported providers: `claude-code`, `codex` and `gemini`. A Codex profile uses the signed-in
 [Codex CLI](https://github.com/openai/codex) (`codex exec`), so a ChatGPT plan works without
 an API key. Codex can not ask about a tool: its sandbox decides, so permission rules and
-prompts do not apply to it. The design for adding other CLIs, such as Gemini, is in
-[docs/architecture.md](docs/architecture.md).
+prompts do not apply to it. A Gemini profile uses the signed-in
+[Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`, with the prompt on stdin). It can not ask
+about a tool either: reviewers run in its `plan` mode plus an admin policy that lets them
+only read and search files. The policy outranks your own Gemini allowances (settings,
+`~/.gemini/policies`) and keeps headless Gemini from leaving plan mode for `yolo`. Gemini
+ignores it on a machine with system policies (`/etc/gemini-cli/policies` and the like), so
+there a Gemini reviewer is not started and its task fails; pick another reviewer. With no
+shell, the harness runs `git log`, `git diff` and `git status` for them. Each output is saved whole
+under `<data dir>/evidence/<task id>/`, which the reviewer may read (`--include-directories`);
+the prompt quotes what fits in 12,000 characters and names the files for the rest. Gemini's read
+tools skip the git-ignored `.harnessboard/notes.md`, so a copy of the notes goes there too. Tasks that
+skip permissions (the default) run in `yolo` mode, and other tasks in `auto_edit` mode, where
+shell commands are refused. Gemini does not report usage, so it has no quota reading on the
+board; a usage-limit error pauses the task and retries it later. The Gemini adapter has not
+been tried against the real CLI yet. How to add another CLI is in [docs/architecture.md](docs/architecture.md).
 
 **Permissions:** tasks run with `--permission-mode acceptEdits` and a list of allowed tool
 rules such as `Bash(npm *)`:
@@ -480,12 +603,60 @@ rules such as `Bash(npm *)`:
   runs. Tasks created before 0.0.10 keep their old setting.
 - `--skip-permissions` removes all checks; use it only in a sandbox.
 
+**Docker sandbox** (off by default): add `"sandbox": "docker"` and an image to a profile, and
+every session of that profile runs in a container with `docker run`:
+
+```json
+{
+  "agents": {
+    "boxed": {
+      "provider": "claude-code",
+      "command": "claude",
+      "model": null,
+      "sandbox": "docker",
+      "sandboxImage": "my-agents:latest"
+    }
+  }
+}
+```
+
+- **Mounted, each at the same path as on your computer:** the task's folder, the git
+  directory a worktree commits to (read-only for reviewers), the CLI's login and settings
+  (`~/.claude` and `~/.claude.json`, `~/.codex` or `~/.gemini`) and a Gemini reviewer's
+  evidence folder (read-only). Nothing else of your computer is visible to the agent.
+- **You build the image:** it needs the profile's `command` on its PATH, plus whatever the
+  task runs (git, node, your build tools). Harnessboard does not pull or build it.
+- **Commits carry your git identity:** your `~/.gitconfig` is not mounted, so the `user.name`
+  and `user.email` git uses in the task's folder are passed in as `GIT_AUTHOR_*` and
+  `GIT_COMMITTER_*`. Nothing else from your git config is (commit signing, aliases, hooks
+  paths). If git has no identity on your computer, commits fail in the container too; set one
+  with `git config --global user.name "Your Name"` and `git config --global user.email you@example.com`.
+- **Gemini reviewers stay read-only:** the image's Gemini system policy folder
+  (`/etc/gemini-cli/policies`) is replaced by an empty one they can not write to, so it can
+  not switch off their read-only policy. A computer with its own system policies still
+  refuses Gemini reviewers, in a container or not.
+- **When docker is missing** or its daemon does not answer, the task fails with that reason;
+  the agent is never run outside the container instead.
+- **Limits:** Linux and macOS only (Windows paths can not be mounted at the same path). The
+  agent runs with your user id and `HOME`; that home is an empty, writable folder that holds
+  only what is mounted (the login, settings and task folder) and is thrown away with the container, so caches
+  (`~/.npm` and the like) start empty on every session. No other environment variables are passed in, so
+  sign in through the CLI rather than with an API key variable; `CLAUDE_CONFIG_DIR`,
+  `CODEX_HOME` and `GEMINI_CLI_HOME` are not followed. The network stays open, so the agent
+  can still reach its API and anything else online. On SELinux hosts the container runs
+  without SELinux labels instead of relabelling your folders. The git directory is the whole
+  repository's, so the agent can still change other branches. Not yet tried with a real
+  agent CLI in a container.
+
 ## Development
 
 ```bash
 corepack enable        # provides the pinned pnpm version
 pnpm install
 pnpm test              # uses a fake claude CLI; no account needed
+# optional: also run the Gemini read-only policy tests against Gemini's own policy engine
+npm install --no-save --prefix /tmp/gemini-core @google/gemini-cli-core@0.62.0
+HARNESSBOARD_TEST_GEMINI_CORE=/tmp/gemini-core/node_modules/@google/gemini-cli-core pnpm test
 pnpm lint && pnpm typecheck
 pnpm --filter @harnessboard/web dev   # UI with hot reload; proxies /api to a running `hb serve`
 ```

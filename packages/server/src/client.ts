@@ -21,7 +21,7 @@ import type {
   TimelineEntry,
   WorktreeDiff,
 } from '@harnessboard/shared';
-import { CLIENT_HEADER } from './api.js';
+import { CLIENT_HEADER } from './access.js';
 
 export class ServerUnavailableError extends Error {}
 
@@ -39,6 +39,9 @@ export class ApiClient {
     this.post<Task>(`/tasks/${id}/plan/approve`, verifyCommand ? { verifyCommand } : {});
   approveCriteria = (id: number, criteria?: string) =>
     this.post<Task>(`/tasks/${id}/criteria/approve`, criteria ? { criteria } : {});
+  requestSpecRevision = (id: number, message: string) =>
+    this.post<Task>(`/tasks/${id}/spec-revision`, { message });
+  rejectSpecChange = (id: number) => this.post<Task>(`/tasks/${id}/spec-change/reject`);
   listTasks = () => this.get<TaskView[]>('/tasks');
   getTask = (id: number) => this.get<TaskDetail>(`/tasks/${id}`);
   createTask = (input: CreateTaskInput) => this.post<TaskView>('/tasks', input);

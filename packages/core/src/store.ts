@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type {
   AgentRole,
+  CommitSpan,
   ContextPolicy,
+  Device,
   PermissionPolicy,
+  PushSubscriptionInfo,
   Session,
   SessionEndReason,
   StoredEvent,
@@ -13,6 +17,7 @@ import type {
   TaskAgents,
   TaskMode,
   TaskStatus,
+  TaskWorkspace,
 } from '@harnessboard/shared';
 
 export interface NewTask {
@@ -20,6 +25,7 @@ export interface NewTask {
   prompt: string;
   repoPath: string;
   baseRef: string;
+  workspace: TaskWorkspace;
   mode: TaskMode;
   verifyCommand: string | null;
   acceptance: string | null;
@@ -75,7 +81,55 @@ const MIGRATIONS = [
   `ALTER TABLE tasks ADD COLUMN confirm_plan INTEGER NOT NULL DEFAULT 0;`,
   `CREATE TABLE counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL);`,
   `ALTER TABLE tasks ADD COLUMN acceptance TEXT;`,
+  // AUTOINCREMENT so a revoked device's id never names a newer device in a stale list.
+  `CREATE TABLE devices (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     name TEXT NOT NULL,
+     token_hash TEXT NOT NULL UNIQUE,
+     created_at INTEGER NOT NULL,
+     last_seen_at INTEGER NOT NULL
+   );`,
+  // The device's passkey, and when it last passed a passkey check or made a request after one.
+  `ALTER TABLE devices ADD COLUMN credential_id TEXT;
+   ALTER TABLE devices ADD COLUMN public_key BLOB;
+   ALTER TABLE devices ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0;
+   ALTER TABLE devices ADD COLUMN verified_at INTEGER;
+   ALTER TABLE devices ADD COLUMN last_active_at INTEGER;`,
+  // The device's Web Push subscription as JSON; on the device row so revoking removes it.
+  `ALTER TABLE devices ADD COLUMN push_subscription TEXT;`,
+  // Where a task works; older tasks all had a worktree. A `base` task's starting commit.
+  `ALTER TABLE tasks ADD COLUMN workspace TEXT NOT NULL DEFAULT 'worktree';
+   ALTER TABLE tasks ADD COLUMN start_commit TEXT;`,
+  // Where a `base` task's work last ended, and its earlier stretches as JSON.
+  `ALTER TABLE tasks ADD COLUMN end_commit TEXT;
+   ALTER TABLE tasks ADD COLUMN prior_spans TEXT NOT NULL DEFAULT '[]';`,
 ];
+
+/** A device's Web Push subscription, with the device it reaches. */
+export interface DevicePush {
+  deviceId: number;
+  subscription: PushSubscriptionInfo;
+}
+
+/** A device's registered passkey: what the server needs to check its signatures. */
+export interface Passkey {
+  /** base64url credential id, as WebAuthn reports it. */
+  credentialId: string;
+  /** COSE-encoded public key. */
+  publicKey: Uint8Array<ArrayBuffer>;
+  /** The authenticator's signature counter; many passkeys always report 0. */
+  counter: number;
+}
+
+/** A paired device with what the access check needs; never sent to the web as is. */
+export interface DeviceRecord extends Device {
+  /** Null until the device registers a passkey right after pairing. */
+  passkey: Passkey | null;
+  /** Time of the last passkey check the device passed, or null for none. */
+  verifiedAt: number | null;
+  /** Time of the device's last activity after a passkey check, or null for none. */
+  lastActiveAt: number | null;
+}
 
 /**
  * SQLite persistence for tasks, sessions and the event log.
@@ -100,10 +154,10 @@ export class Store {
   createTask(input: NewTask, now = Date.now()): Task {
     const result = this.db
       .prepare(
-        `INSERT INTO tasks (id, title, prompt, repo_path, base_ref, mode, verify_command,
-                            acceptance, confirm_plan, status, context_policy, permission,
-                            agents, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (id, title, prompt, repo_path, base_ref, workspace, mode,
+                            verify_command, acceptance, confirm_plan, status, context_policy,
+                            permission, agents, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'backlog', ?, ?, ?, ?, ?)`,
       )
       .run(
         this.nextTaskId(),
@@ -111,6 +165,7 @@ export class Store {
         input.prompt,
         input.repoPath,
         input.baseRef,
+        input.workspace,
         input.mode,
         input.verifyCommand,
         input.acceptance,
@@ -141,6 +196,9 @@ export class Store {
         | 'status'
         | 'branch'
         | 'worktreePath'
+        | 'startCommit'
+        | 'endCommit'
+        | 'priorSpans'
         | 'resumeAt'
         | 'verifyCommand'
         | 'acceptance'
@@ -154,6 +212,9 @@ export class Store {
       status: 'status',
       branch: 'branch',
       worktreePath: 'worktree_path',
+      startCommit: 'start_commit',
+      endCommit: 'end_commit',
+      priorSpans: 'prior_spans',
       resumeAt: 'resume_at',
       verifyCommand: 'verify_command',
       acceptance: 'acceptance',
@@ -279,6 +340,29 @@ export class Store {
     return row !== undefined;
   }
 
+  /** Whether one session logged anything after event `afterId`, e.g. it received a request. */
+  sessionHasEventsAfter(sessionId: string, afterId: number): boolean {
+    const row = this.db
+      .prepare('SELECT 1 FROM events WHERE session_id = ? AND id > ? LIMIT 1')
+      .get(sessionId, afterId);
+    return row !== undefined;
+  }
+
+  /**
+   * Whether the agent itself reported anything in one session after event `afterId`, so it
+   * was running when that event was given to it. What the harness logs for a session (usage,
+   * notices, stderr, deliveries) is left out: it is logged even when the CLI never started.
+   */
+  sessionHasAgentEventsAfter(sessionId: string, afterId: number): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 FROM events WHERE session_id = ? AND id > ?
+           AND kind IN ('init', 'text', 'tool_use', 'context', 'compact', 'result') LIMIT 1`,
+      )
+      .get(sessionId, afterId);
+    return row !== undefined;
+  }
+
   /** Most recent event of one kind within a session, e.g. its final result. */
   lastSessionEvent(sessionId: string, kind: string): StoredEvent | undefined {
     const row = this.db
@@ -331,6 +415,107 @@ export class Store {
   }
 
   /**
+   * Registers a paired device. Only the SHA-256 of `token` is kept, so a copy of the
+   * database does not let anyone sign in as the device. Throws if the token is already used.
+   */
+  addDevice(name: string, token: string, now = Date.now()): Device {
+    const result = this.db
+      .prepare(
+        'INSERT INTO devices (name, token_hash, created_at, last_seen_at) VALUES (?, ?, ?, ?)',
+      )
+      .run(name, hashToken(token), now, now);
+    return toDevice(
+      this.db.prepare('SELECT * FROM devices WHERE id = ?').get(Number(result.lastInsertRowid))!,
+    );
+  }
+
+  /** The device a cookie token belongs to; undefined for an unknown or revoked token. */
+  findDeviceByToken(token: string): DeviceRecord | undefined {
+    const row = this.db.prepare('SELECT * FROM devices WHERE token_hash = ?').get(hashToken(token));
+    return row ? toDeviceRecord(row) : undefined;
+  }
+
+  /**
+   * Stores the device's passkey and counts its registration as a passkey check. False when the
+   * device is gone or already has a passkey: a stolen cookie must not replace the owner's passkey.
+   */
+  setDevicePasskey(id: number, passkey: Passkey, now = Date.now()): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE devices SET credential_id = ?, public_key = ?, sign_count = ?, verified_at = ?,
+                            last_active_at = ?
+         WHERE id = ? AND credential_id IS NULL`,
+      )
+      .run(passkey.credentialId, passkey.publicKey, passkey.counter, now, now, id);
+    return Number(result.changes) > 0;
+  }
+
+  /**
+   * Records a passed passkey check and the authenticator's new signature counter. False, with
+   * nothing changed, when the counter is not above the stored one, as it can mean a cloned
+   * authenticator; a counter that stays at 0 passes, since many passkeys never count. The check
+   * is part of the update, so a slower check that finishes after a newer one cannot roll the
+   * counter back.
+   */
+  markDeviceVerified(id: number, counter: number, now = Date.now()): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE devices SET sign_count = ?, verified_at = ?, last_active_at = ?
+         WHERE id = ? AND credential_id IS NOT NULL
+           AND (sign_count < ? OR (sign_count = 0 AND ? = 0))`,
+      )
+      .run(counter, now, now, id, counter, counter);
+    return Number(result.changes) > 0;
+  }
+
+  listDevices(): Device[] {
+    return this.db.prepare('SELECT * FROM devices ORDER BY id').all().map(toDevice);
+  }
+
+  /** Deletes the device, so its token stops working at once. False when there was none. */
+  revokeDevice(id: number): boolean {
+    return Number(this.db.prepare('DELETE FROM devices WHERE id = ?').run(id).changes) > 0;
+  }
+
+  touchDevice(id: number, now = Date.now()): void {
+    this.db.prepare('UPDATE devices SET last_seen_at = ? WHERE id = ?').run(now, id);
+  }
+
+  /**
+   * Records activity of an unlocked device, which keeps it from locking after being idle. The
+   * caller decides that the device is unlocked; this does not check it.
+   */
+  markDeviceActive(id: number, now = Date.now()): void {
+    this.db.prepare('UPDATE devices SET last_active_at = ? WHERE id = ?').run(now, id);
+  }
+
+  /**
+   * Sets the device's push subscription, replacing any earlier one, or clears it with null. A
+   * device has one subscription: subscribing again from a new browser on the phone replaces it.
+   * False when the device is gone.
+   */
+  setPushSubscription(id: number, subscription: PushSubscriptionInfo | null): boolean {
+    const json = subscription === null ? null : JSON.stringify(subscription);
+    const result = this.db
+      .prepare('UPDATE devices SET push_subscription = ? WHERE id = ?')
+      .run(json, id);
+    return Number(result.changes) > 0;
+  }
+
+  /** Every paired device's push subscription, oldest device first. */
+  listPushSubscriptions(): DevicePush[] {
+    return this.db
+      .prepare(
+        'SELECT id, push_subscription FROM devices WHERE push_subscription IS NOT NULL ORDER BY id',
+      )
+      .all()
+      .map((row) => ({
+        deviceId: Number(row.id),
+        subscription: JSON.parse(String(row.push_subscription)) as PushSubscriptionInfo,
+      }));
+  }
+
+  /**
    * Ids are never reused, even after the newest task is deleted: its branch is kept and is
    * named after the id, so a new task with the same id could collide with it.
    */
@@ -373,6 +558,10 @@ function toTask(row: Row): Task {
     baseRef: String(row.base_ref),
     branch: (row.branch as string | null) ?? null,
     worktreePath: (row.worktree_path as string | null) ?? null,
+    workspace: row.workspace as TaskWorkspace,
+    startCommit: (row.start_commit as string | null) ?? null,
+    endCommit: (row.end_commit as string | null) ?? null,
+    priorSpans: JSON.parse(String(row.prior_spans)) as CommitSpan[],
     status: row.status as TaskStatus,
     mode: row.mode as TaskMode,
     verifyCommand: (row.verify_command as string | null) ?? null,
@@ -400,6 +589,35 @@ function toSession(row: Row): Session {
     contextTokens: Number(row.context_tokens),
     contextWindow: row.context_window == null ? null : Number(row.context_window),
   };
+}
+
+function toDevice(row: Row): Device {
+  return {
+    id: Number(row.id),
+    name: String(row.name),
+    createdAt: Number(row.created_at),
+    lastSeenAt: Number(row.last_seen_at),
+  };
+}
+
+function toDeviceRecord(row: Row): DeviceRecord {
+  return {
+    ...toDevice(row),
+    passkey:
+      row.credential_id == null
+        ? null
+        : {
+            credentialId: String(row.credential_id),
+            publicKey: new Uint8Array(row.public_key as Uint8Array),
+            counter: Number(row.sign_count),
+          },
+    verifiedAt: row.verified_at == null ? null : Number(row.verified_at),
+    lastActiveAt: row.last_active_at == null ? null : Number(row.last_active_at),
+  };
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
 }
 
 function toEvent(row: Row): StoredEvent {

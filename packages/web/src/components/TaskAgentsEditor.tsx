@@ -34,6 +34,8 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
       specModel: a.specModel ?? null,
       tester: a.tester ?? null,
       testerModel: a.testerModel ?? null,
+      designer: a.designer ?? null,
+      designerModel: a.designerModel ?? null,
     });
     api.agents().then(setAgents, (e: Error) => onError(e.message));
   };
@@ -57,6 +59,10 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
       <div className="tool-rules">
         <span className="mono">
           {t('fields.spec')}: {a.spec ? `${a.spec} · ${model(a.specModel)}` : t('form.specSame')}
+        </span>
+        <span className="mono">
+          {t('fields.designer')}:{' '}
+          {a.designer ? `${a.designer} · ${model(a.designerModel)}` : t('fields.none')}
         </span>
         <span className="mono">
           {a.implementer} · {model(a.implementerModel)}

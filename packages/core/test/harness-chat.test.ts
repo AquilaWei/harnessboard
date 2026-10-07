@@ -211,7 +211,7 @@ describe('a chat cut off by a restart', () => {
     });
     harness.store.updateTask(task.id, { status: 'running' });
     const restarted = new Harness(harness.config, harness.store);
-    restarted.start();
+    await restarted.start();
     await restarted.shutdown();
     expect(status(task.id)).toBe('review');
   });
@@ -360,7 +360,7 @@ describe('a pending chat message after a restart', () => {
     const task = await finishedTask();
     harness.store.appendEvent(task.id, null, 'chat_queued', { text: 'Still there?' });
     const restarted = new Harness(harness.config, harness.store);
-    restarted.start();
+    await restarted.start();
     await restarted.waitForIdle();
     await restarted.shutdown();
     expect(fakeRuns()[1]!.received).toEqual(['Still there?']);

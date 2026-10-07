@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import type { CommitInfo, WorktreeDiff } from '@harnessboard/shared';
+import type { CommitInfo, CommitSpan, Task, WorktreeDiff } from '@harnessboard/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -69,6 +69,14 @@ export async function pruneWorktrees(repo: string): Promise<void> {
   await git(repo, ['worktree', 'prune']);
 }
 
+/**
+ * What a task's diff and commits count from: the commit a `base` task's current stretch of
+ * work started at (only set for those), or else the base its branch left.
+ */
+export function diffBase(task: Pick<Task, 'baseRef' | 'startCommit'>): string {
+  return task.startCommit ?? task.baseRef;
+}
+
 /** Everything the task changed relative to its base. Read-only: never touches the index. */
 export async function worktreeDiff(dir: string, baseRef: string): Promise<WorktreeDiff> {
   const mergeBase = (await git(dir, ['merge-base', baseRef, 'HEAD'])).trim();
@@ -79,17 +87,26 @@ export async function worktreeDiff(dir: string, baseRef: string): Promise<Worktr
   return { diff, untracked: untracked.split('\n').filter(Boolean) };
 }
 
+/** Changes from `span.from` to `span.to`, as one patch. */
+export async function rangeDiff(dir: string, span: CommitSpan): Promise<string> {
+  return git(dir, ['diff', span.from, span.to]);
+}
+
 // Unit and record separators cannot appear in a one-line subject or an author name.
 const FIELD = '\x1f';
 const RECORD = '\x1e';
 
 /** Commits on HEAD since it branched off `baseRef`, newest first. */
 export async function commitLog(dir: string, baseRef: string): Promise<CommitInfo[]> {
-  const base = await mergeBase(dir, baseRef);
+  return commitRange(dir, { from: await mergeBase(dir, baseRef), to: 'HEAD' });
+}
+
+/** Commits of `git log from..to`, newest first. */
+export async function commitRange(dir: string, span: CommitSpan): Promise<CommitInfo[]> {
   const out = await git(dir, [
     'log',
     `--format=%H${FIELD}%an${FIELD}%at${FIELD}%s${RECORD}`,
-    `${base}..HEAD`,
+    `${span.from}..${span.to}`,
   ]);
   return out
     .split(RECORD)
@@ -126,6 +143,12 @@ export async function changedPaths(dir: string, head: string): Promise<string[]>
     git(dir, ['ls-files', '--others', '--exclude-standard']),
   ]);
   return [...tracked.split('\n'), ...untracked.split('\n')].filter((p) => p !== '');
+}
+
+/** Files the commits of `span` changed, as in `git diff --name-only from to`. */
+export async function spanPaths(dir: string, span: CommitSpan): Promise<string[]> {
+  const out = await git(dir, ['diff', '--name-only', '--no-renames', span.from, span.to]);
+  return out.split('\n').filter((p) => p !== '');
 }
 
 /** Whether `file` is part of the commit at HEAD. */

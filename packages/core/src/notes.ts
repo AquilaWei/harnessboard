@@ -15,6 +15,7 @@ export const NOTES_HEADING = '## Notes';
 
 const ROLE_NAMES: Record<AgentRole, string> = {
   spec: 'Spec author',
+  designer: 'Designer',
   implementer: 'Implementer',
   tester: 'Tester',
   reviewer: 'Reviewer',
@@ -102,4 +103,19 @@ export async function writeNotes(worktree: string, content: string): Promise<voi
   const file = path.join(worktree, NOTES_FILE);
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, content);
+}
+
+/**
+ * Writes `content` to `notes.md` in `dir` and returns the prompt section pointing at it, for
+ * a reviewer that cannot run shell commands: its read tools skip files git ignores, which
+ * hides the notes file in the worktree. Throws when `dir` cannot be written.
+ */
+export function copyNotes(dir: string, content: string): string {
+  const file = path.join(dir, 'notes.md');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(file, content);
+  return [
+    `Your read tools skip \`${NOTES_FILE}\` because git ignores it. The harness saved the same`,
+    `notes to \`${file}\`: read that file instead.`,
+  ].join('\n');
 }

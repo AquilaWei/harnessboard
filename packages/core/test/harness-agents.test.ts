@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Finding agent CLIs on this machine and adding profiles for them.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AgentProvider } from '@harnessboard/shared';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import { tempDir } from './helpers.js';
@@ -14,7 +15,7 @@ const MISSING = 'hb-no-such-agent-cli';
 let settingsFile: string;
 let harness: Harness;
 
-function open(detectCommands: { 'claude-code': string; codex: string }, claude = 'claude'): void {
+function open(detectCommands: Record<AgentProvider, string>, claude = 'claude'): void {
   const dir = tempDir('agents');
   settingsFile = path.join(dir, 'config.json');
   const config = {
@@ -25,29 +26,50 @@ function open(detectCommands: { 'claude-code': string; codex: string }, claude =
   harness = Harness.open(config, { settingsFile, detectCommands });
 }
 
-afterEach(() => harness.store.close());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  harness.store.close();
+});
 
 describe('detectAgents', () => {
   it('reports a CLI that runs and has no profile yet', async () => {
-    open({ 'claude-code': MISSING, codex: INSTALLED });
+    open({ 'claude-code': MISSING, codex: INSTALLED, gemini: MISSING });
     expect(await harness.detectAgents()).toEqual([
       { provider: 'codex', command: INSTALLED, version: process.version, profileId: null },
     ]);
   });
 
   it('names the profile that already runs the CLI', async () => {
-    open({ 'claude-code': INSTALLED, codex: MISSING }, INSTALLED);
+    open({ 'claude-code': INSTALLED, codex: MISSING, gemini: MISSING }, INSTALLED);
     expect((await harness.detectAgents())[0]?.profileId).toBe('claude');
   });
 
+  it('finds an installed gemini CLI on PATH and offers a profile for it', async () => {
+    const bin = tempDir('bin');
+    // A stand-in `gemini` that only prints a version; the PATH holds nothing else.
+    if (process.platform === 'win32') {
+      writeFileSync(path.join(bin, 'gemini.cmd'), '@echo 0.99.0\r\n');
+    } else {
+      writeFileSync(path.join(bin, 'gemini'), '#!/bin/sh\necho 0.99.0\n');
+      chmodSync(path.join(bin, 'gemini'), 0o755);
+    }
+    vi.stubEnv('PATH', bin);
+    const dir = tempDir('agents');
+    const config = { ...defaultConfig({}), dataDir: path.join(dir, 'data') };
+    harness = Harness.open(config, { settingsFile: path.join(dir, 'config.json') });
+    expect(await harness.detectAgents()).toEqual([
+      { provider: 'gemini', command: 'gemini', version: '0.99.0', profileId: null },
+    ]);
+  });
+
   it('leaves out CLIs that are not installed', async () => {
-    open({ 'claude-code': MISSING, codex: MISSING });
+    open({ 'claude-code': MISSING, codex: MISSING, gemini: MISSING });
     expect(await harness.detectAgents()).toEqual([]);
   });
 });
 
 describe('addAgent', () => {
-  beforeEach(() => open({ 'claude-code': MISSING, codex: MISSING }));
+  beforeEach(() => open({ 'claude-code': MISSING, codex: MISSING, gemini: MISSING }));
 
   it('makes the profile available to tasks at once', () => {
     harness.addAgent({ id: 'codex', provider: 'codex', command: 'codex', model: null });

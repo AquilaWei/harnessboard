@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { existsSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   FEATURE_LIST_FILE,
@@ -10,17 +11,24 @@ import {
 } from '@harnessboard/shared';
 import type {
   AgentRole,
+  CommitSpan,
   CriteriaProposal,
   FeatureSnapshot,
   MergeConflict,
   PlanProposal,
   ReviewRecord,
   RoleNote,
+  SpecChangeDecision,
+  SpecChangeProposal,
+  SpecDelivery,
   SpecRecord,
+  SpecRevisionRecord,
+  SpecRevisionRequest,
   ReviewRequest,
   TestReport,
   TestRequest,
   Session,
+  StoredEvent,
   Task,
   TaskActivity,
   TaskStatus,
@@ -32,17 +40,25 @@ import { missingFeatures, readPlan, runVerify } from './loop.js';
 import { notesPrompt, parseNotes, renderNotes, writeNotes } from './notes.js';
 import {
   QUOTA_RESUME_PROMPT,
+  SCOPE_CHANGED_PROMPT,
+  SPEC_CHANGE_DUTY,
+  SPEC_CHANGE_REJECTED_PROMPT,
   continuationPrompt,
   criteriaApprovedPrompt,
   criteriaPrompt,
   criteriaRevisionPrompt,
+  designPrompt,
+  hasDesignSection,
   initializerPrompt,
   loopSessionPrompt,
   mergeConflictPrompt,
   parseCriteria,
   parseQuestions,
+  parseSpecChange,
   planRevisionPrompt,
+  specChangeApprovedPrompt,
   specFilePrompt,
+  specRevisionPrompt,
   taskGoal,
 } from './prompts.js';
 import {
@@ -55,14 +71,19 @@ import {
   testPrompt,
 } from './review.js';
 import type { SessionOutcome } from './runner.js';
+import { reviseSpec } from './spec.js';
 import type { Store } from './store.js';
 import {
   changedPaths,
   commitFile,
+  diffBase,
+  git,
   headCommit,
   isCommitted,
+  isMergedInto,
   mergeBase,
   porcelainStatus,
+  spanPaths,
 } from './worktree.js';
 
 /** Who runs the next session of a task, what it is asked, and whether it resumes one. */
@@ -74,7 +95,31 @@ export interface SessionPlan {
   /** Session to continue; `null` starts a new one. */
   resume: Session | null;
   prompt: string;
+  /**
+   * The `spec_revision` or `spec_change_decision` events the prompt carries; recorded with
+   * {@link Workflow.started} so they count as delivered only to the session that heard them.
+   */
+  delivers?: number[];
+  /**
+   * Set when the prompt asks for a review of this request, so the harness can add the git
+   * output for a reviewer that cannot run git itself; not set when a reviewer is resumed
+   * with only a request to go on.
+   */
+  review?: ReviewRequest;
+  /** Directories outside the worktree the session reads; set by the harness, see `SessionSpec`. */
+  readableDirs?: string[];
 }
+
+/** What a task's next session is for, in the order {@link Workflow} picks it. */
+type NextStep =
+  | { kind: 'specRevision'; request: StoredEvent }
+  | { kind: 'specDecision'; decisions: StoredEvent[] }
+  | { kind: 'review'; request: ReviewRequest }
+  | { kind: 'test'; request: TestRequest }
+  | { kind: 'conflict'; conflict: MergeConflict }
+  | { kind: 'specFile' }
+  | { kind: 'design' }
+  | { kind: 'work' };
 
 /** What the workflow needs from the harness: persistence and status changes that notify. */
 export interface WorkflowHost {
@@ -104,43 +149,167 @@ export class Workflow {
     // A resumed session was already told; the discussion is with the user, not other roles.
     if (plan.prompt === QUOTA_RESUME_PROMPT || !this.keepsNotes(plan)) return plan;
     const hasNotes = this.notes(task.id).length > 0;
-    return { ...plan, prompt: `${plan.prompt}\n\n${notesPrompt(hasNotes)}` };
+    const duty = plan.role === 'implementer' && this.specFile(task.id) ? [SPEC_CHANGE_DUTY] : [];
+    return { ...plan, prompt: [plan.prompt, ...duty, notesPrompt(hasNotes)].join('\n\n') };
+  }
+
+  /**
+   * What the task's next session is for. Both {@link nextSession} and {@link nextAgentId}
+   * choose by it, so the quota checked is always that of the session that runs.
+   */
+  private nextStep(task: Task): NextStep {
+    const conflict = this.pendingMergeConflict(task.id);
+    // A merge the harness started leaves conflict markers, which come before anything else.
+    if (!conflict) {
+      const revision = this.pendingRevisionEvent(task.id);
+      if (revision) return { kind: 'specRevision', request: revision };
+      // Before the implementer starts, it hears the decided spec in its first prompt instead.
+      const decisions = this.untoldDecisions(task.id);
+      if (decisions.length > 0 && this.implementationStarted(task.id)) {
+        return { kind: 'specDecision', decisions };
+      }
+    }
+    const review = this.pendingReview(task.id);
+    if (review) return { kind: 'review', request: review };
+    const test = this.pendingTest(task.id);
+    if (test) return { kind: 'test', request: test };
+    if (conflict) return { kind: 'conflict', conflict };
+    if (this.needsSpecFile(task)) return { kind: 'specFile' };
+    if (this.needsDesign(task)) return { kind: 'design' };
+    return { kind: 'work' };
   }
 
   private nextSession(task: Task): SessionPlan {
-    const last = this.host.store.listSessions(task.id).at(-1);
-    const request = this.pendingReview(task.id);
-    if (request) return this.reviewPlan(task, request, last);
-    const testing = this.pendingTest(task.id);
-    if (testing) return this.testPlan(task, testing, last);
-    const conflict = this.pendingMergeConflict(task.id);
-    if (conflict) {
-      const prompt = mergeConflictPrompt(this.goal(task), conflict.base, conflict.files);
-      return this.implement(task, prompt);
+    const sessions = this.host.store.listSessions(task.id);
+    const last = sessions.at(-1);
+    // The spec author's answers to the user and the designer's session are not the
+    // implementer's work to continue.
+    const work = this.withoutRevisions(task.id, sessions)
+      .filter((s) => s.role !== 'designer')
+      .at(-1);
+    const step = this.nextStep(task);
+    switch (step.kind) {
+      case 'specRevision':
+        return this.specRevisionPlan(task, step.request, last);
+      case 'specDecision':
+        return this.afterSpecDecision(task, step.decisions, work);
+      case 'review':
+        return this.reviewPlan(task, step.request, last);
+      case 'test':
+        return this.testPlan(task, step.request, last);
+      case 'conflict': {
+        const { base, files } = step.conflict;
+        return this.implement(task, mergeConflictPrompt(this.goal(task), base, files));
+      }
+      case 'specFile':
+        return this.specFilePlan(task, last);
+      case 'design':
+        return this.designPlan(task, last);
+      case 'work':
+        return this.workPlan(task, work);
     }
-    if (this.needsSpecFile(task)) return this.specFilePlan(task, last);
-    if (!last) return this.implement(task, this.firstPrompt(task));
+  }
+
+  /** The implementer's (or, while criteria are discussed, the spec author's) own work. */
+  private workPlan(task: Task, work: Session | undefined): SessionPlan {
+    if (!work) return this.implement(task, this.firstPrompt(task));
     const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
-    if (feedback !== null) return this.revisePlan(task, feedback, last);
-    if (this.justSpecced(task)) return this.startAfterDiscussion(task, last);
-    if (last.endReason === 'handoff' || last.endReason === 'context_hard_limit') {
+    if (feedback !== null) return this.revisePlan(task, feedback, work);
+    if (this.justSpecced(task)) return this.startAfterDiscussion(task, work);
+    if (work.endReason === 'handoff' || work.endReason === 'context_hard_limit') {
       return this.continuation(task, this.handoffNote(task));
     }
     // Each loop feature starts from a clean context; its state lives in the worktree files.
-    const loopStepDone = task.mode === 'loop' && last.endReason === 'completed';
+    const loopStepDone = task.mode === 'loop' && work.endReason === 'completed';
     // A session that never reached the model was never saved by the CLI, so it can't be resumed.
-    const resumable = !loopStepDone && this.canResume(task, last, this.activeAgent(task));
-    if (resumable) return this.implement(task, QUOTA_RESUME_PROMPT, last);
+    const resumable = !loopStepDone && this.canResume(task, work, this.activeAgent(task));
+    if (resumable) return this.implement(task, QUOTA_RESUME_PROMPT, work);
     return this.continuation(task, task.mode === 'single' ? this.handoffNote(task) : null);
   }
 
-  /** Agent profile of the task's next session, for per-provider quota checks. */
+  /**
+   * `sessions` without the spec author's read-only answers to requests for a spec change.
+   * They are told by the request each was given as it started, so one cut off before it
+   * proposed anything, and then left for a newer request, is still left out.
+   */
+  private withoutRevisions(taskId: number, sessions: Session[]): Session[] {
+    const store = this.host.store;
+    const requests = new Set(store.eventsOfKind(taskId, 'spec_revision').map((e) => e.id));
+    const revisions = new Set(
+      store
+        .eventsOfKind(taskId, 'spec_delivered')
+        .filter((e) => requests.has((e.data as SpecDelivery).eventId))
+        .map((e) => e.sessionId),
+    );
+    return sessions.filter((s) => !revisions.has(s.id));
+  }
+
+  /**
+   * Agent profile of the task's next session, for per-provider quota checks. Chosen by the
+   * same rules as the session itself, so a quota blocks exactly the session it would pause.
+   */
   nextAgentId(task: Task): string {
-    const reviewer = task.agents.reviewer;
-    if (reviewer && this.pendingReview(task.id)) return reviewer;
-    if (task.agents.tester && this.pendingTest(task.id)) return task.agents.tester;
-    if (this.needsSpecFile(task)) return roleAgent(task.agents, 'spec')!;
-    return this.activeAgent(task);
+    switch (this.nextStep(task).kind) {
+      case 'specRevision':
+      case 'specFile':
+        return roleAgent(task.agents, 'spec')!;
+      case 'review':
+        return task.agents.reviewer!;
+      case 'test':
+        return task.agents.tester!;
+      case 'design':
+        return task.agents.designer!;
+      default:
+        return this.activeAgent(task);
+    }
+  }
+
+  /**
+   * Records that the session `sessionId` was given the request or decisions its plan
+   * carries. Runs as the session starts, before the agent sees the prompt.
+   */
+  started(taskId: number, sessionId: string, plan: SessionPlan): void {
+    for (const eventId of plan.delivers ?? []) {
+      const delivery: SpecDelivery = { eventId };
+      this.host.store.appendEvent(taskId, sessionId, 'spec_delivered', delivery);
+    }
+    // Marks where building from the spec began; the session's role row can be the spec
+    // author's when the implementer continues the discussion.
+    if (
+      plan.role === 'implementer' &&
+      this.specFile(taskId) &&
+      !this.implementationStarted(taskId)
+    ) {
+      this.host.store.appendEvent(taskId, sessionId, 'implementation_started', {});
+    }
+  }
+
+  /**
+   * The implementer began building from the committed spec: a session it was started in
+   * reached the agent. A designer's, a chat's or the spec author's answer to a request for
+   * a spec change does not count, nor does a launch that failed. Implementer sessions from
+   * before this was recorded count when their agent reported anything after the spec.
+   */
+  private implementationStarted(taskId: number): boolean {
+    const store = this.host.store;
+    const written = store.lastEvent(taskId, 'spec_written');
+    if (!written) return false;
+    const marked = store
+      .eventsOfKind(taskId, 'implementation_started')
+      .some((e) => e.id > written.id && store.sessionHasAgentEventsAfter(e.sessionId!, e.id));
+    return (
+      marked ||
+      store
+        .listSessions(taskId)
+        .some((s) => s.role === 'implementer' && store.sessionHasAgentEventsAfter(s.id, written.id))
+    );
+  }
+
+  /** The `spec_delivered` events for `eventId`, oldest first. */
+  private deliveries(taskId: number, eventId: number): StoredEvent[] {
+    return this.host.store
+      .eventsOfKind(taskId, 'spec_delivered')
+      .filter((e) => (e.data as SpecDelivery).eventId === eventId);
   }
 
   private reviewPlan(task: Task, request: ReviewRequest, last: Session | undefined): SessionPlan {
@@ -152,19 +321,26 @@ export class Workflow {
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
     const base = { role: 'reviewer', agentId: reviewer, access: 'readOnly' } as const;
-    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    if (resumable && this.requestSeen(task.id, 'review_request', last))
+      return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
     const snapshot = task.mode === 'loop' ? this.snapshots(task.id).at(-1) : undefined;
-    return {
-      ...base,
-      resume: null,
-      prompt: reviewPrompt(this.goal(task), request, {
-        verify: snapshot?.verify ?? null,
-        hasCriteria: task.acceptance !== null,
-        features: snapshot?.features ?? null,
-        // Read for every review, so an edited rules file applies from the next one.
-        guidelines: readGuidelines(this.host.config.reviewGuidelines),
-      }),
-    };
+    const prompt = reviewPrompt(this.goal(task), request, {
+      verify: snapshot?.verify ?? null,
+      hasCriteria: task.acceptance !== null,
+      features: snapshot?.features ?? null,
+      // Read for every review, so an edited rules file applies from the next one.
+      guidelines: readGuidelines(this.host.config.reviewGuidelines),
+    });
+    // The request was rebuilt after the session stopped; it goes on with the new scope.
+    if (resumable) {
+      return {
+        ...base,
+        resume: last,
+        prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}`,
+        review: request,
+      };
+    }
+    return { ...base, resume: null, prompt, review: request };
   }
 
   /** The phase a planned session works in. */
@@ -174,8 +350,11 @@ export class Workflow {
       return { phase: 'writingSpec', agentId: plan.agentId };
     }
     if (plan.role === 'tester') return { phase: 'testing', agentId: plan.agentId };
-    // Planning lasts until the plan is approved, including revisions after feedback.
+    if (plan.role === 'designer') return { phase: 'designing', agentId: plan.agentId };
+    // Planning lasts until the plan is approved, including revisions after feedback, and
+    // covers the spec author answering a request to change the spec.
     const planning =
+      plan.role === 'spec' ||
       this.inPlanning(task) ||
       (task.mode === 'loop' && !existsSync(path.join(task.worktreePath!, FEATURE_LIST_FILE)));
     return { phase: planning ? 'planning' : 'implementing', agentId: plan.agentId };
@@ -213,13 +392,16 @@ export class Workflow {
       last.contextTokens > 0 &&
       this.hasBudget(task, last);
     const base = { role: 'tester', agentId: tester, access: 'edit' } as const;
-    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    if (resumable && this.requestSeen(task.id, 'test_request', last))
+      return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
     const prompt = testPrompt(
       this.goal(task),
       request,
       task.verifyCommand,
       task.acceptance !== null,
     );
+    // The request was rebuilt after the session stopped; it goes on with the new scope.
+    if (resumable) return { ...base, resume: last, prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}` };
     return { ...base, resume: null, prompt };
   }
 
@@ -285,7 +467,7 @@ export class Workflow {
 
   /** The task as the agents are given it: the request plus any agreed criteria and spec file. */
   private goal(task: Task): string {
-    return taskGoal(task.prompt, task.acceptance, this.specFile(task.id));
+    return taskGoal(task.prompt, task.acceptance, this.specFile(task.id), this.designed(task.id));
   }
 
   private firstPrompt(task: Task): string {
@@ -312,17 +494,23 @@ export class Workflow {
   }
 
   /**
-   * The criteria were approved and no session has run since, so `last` was the discussion.
-   * A resumed session keeps its record, so this is told by events rather than sessions.
+   * The spec is committed and the implementer has not started on it, so the last work
+   * session was the discussion. The designer's session and the spec author's answers to
+   * requests for a spec change in between do not count.
    */
   private justSpecced(task: Task): boolean {
-    if (task.mode !== 'single') return false;
-    const written = this.host.store.lastEvent(task.id, 'spec_written');
-    return !!written && !this.host.store.hasSessionEventsAfter(task.id, written.id);
+    return (
+      task.mode === 'single' && !!this.specFile(task.id) && !this.implementationStarted(task.id)
+    );
+  }
+
+  /** The designer added its UI design section to the task's spec file. */
+  private designed(taskId: number): boolean {
+    return !!this.host.store.lastEvent(taskId, 'design_written');
   }
 
   /** Repository-relative path of the committed spec, once the spec author has written it. */
-  private specFile(taskId: number): string | null {
+  specFile(taskId: number): string | null {
     const written = this.host.store.lastEvent(taskId, 'spec_written')?.data as
       SpecRecord | undefined;
     return written?.path ?? null;
@@ -346,6 +534,94 @@ export class Workflow {
       !!this.host.store.lastEvent(task.id, 'criteria_approved') &&
       !this.host.store.lastEvent(task.id, 'spec_written')
     );
+  }
+
+  /**
+   * A designer is set, the spec is committed, and neither the designer nor the implementer
+   * has finished with it yet. A designer chosen after the implementer started is not run,
+   * because the UI would already be built without its design. Requests for a spec change
+   * answered while the design is unwritten leave it to run before the implementer.
+   */
+  private needsDesign(task: Task): boolean {
+    if (!task.agents.designer || !this.specFile(task.id) || this.designed(task.id)) return false;
+    return !this.implementationStarted(task.id);
+  }
+
+  /** The designer's session; one cut off by a quota, stop or error goes on where it was. */
+  private designPlan(task: Task, last: Session | undefined): SessionPlan {
+    const designer = task.agents.designer!;
+    const resumable =
+      last?.role === 'designer' &&
+      last.agentId === designer &&
+      last.endReason !== 'completed' &&
+      last.agentSessionId !== null &&
+      last.contextTokens > 0 &&
+      this.hasBudget(task, last);
+    const base = { role: 'designer', agentId: designer, access: 'edit' } as const;
+    if (resumable) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    const prompt = designPrompt(this.specFile(task.id)!, this.goal(task));
+    return { ...base, resume: null, prompt };
+  }
+
+  /**
+   * Checks the designer added a UI design section to the spec file and changed nothing
+   * else, commits the file itself if the designer left it uncommitted, and records it for
+   * the implementer and reviewer.
+   */
+  private async finishDesign(task: Task, outcome: SessionOutcome): Promise<void> {
+    if (outcome.reason === 'handoff' || outcome.reason === 'context_hard_limit') {
+      this.host.notice(task.id, 'the designer ran out of context before writing the UI design');
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    if (outcome.reason !== 'completed') {
+      this.interrupted(task, outcome); // the design is still unwritten, so it is asked again
+      return;
+    }
+    const dir = task.worktreePath!;
+    const spec = this.host.store.lastEvent(task.id, 'spec_written')!.data as SpecRecord;
+    const stray = (await this.changedSince(task, spec.head)).filter((p) => p !== spec.path);
+    if (stray.length > 0) {
+      this.host.notice(
+        task.id,
+        `the designer changed files other than the spec: ${stray.join(', ')}; stopping for a human`,
+      );
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    const file = path.join(dir, spec.path);
+    if (!existsSync(file) || !hasDesignSection(await readFile(file, 'utf8'))) {
+      this.host.notice(task.id, `the designer did not add a UI design section to ${spec.path}`);
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    if ((await git(dir, ['status', '--porcelain', '--', spec.path])) !== '') {
+      await commitFile(dir, spec.path, `docs: add UI design to ${spec.path}`);
+      this.host.notice(task.id, `the designer left ${spec.path} uncommitted; committed it`);
+    }
+    const record: SpecRecord = { path: spec.path, head: await headCommit(dir) };
+    this.host.store.appendEvent(task.id, null, 'design_written', record);
+    this.host.notice(task.id, `UI design committed in ${spec.path}`);
+    this.host.setStatus(task.id, 'queued');
+  }
+
+  /**
+   * Files the task changed after its own commit `since`, up to the working tree. A `base`
+   * task counts only its own stretches of work in the folder, so commits another task or
+   * the user made there while it let go are not blamed on it.
+   */
+  private async changedSince(task: Task, since: string): Promise<string[]> {
+    const dir = task.worktreePath!;
+    const live = task.startCommit;
+    if (task.workspace !== 'base' || !live || (await isMergedInto(dir, live, since))) {
+      return changedPaths(dir, since);
+    }
+    const closed = await this.spansAfter(dir, task, since);
+    const paths = await Promise.all([
+      ...closed.map((s) => spanPaths(dir, s)),
+      changedPaths(dir, live),
+    ]);
+    return [...new Set(paths.flat())];
   }
 
   /**
@@ -386,7 +662,7 @@ export class Workflow {
     }
     const dir = task.worktreePath!;
     const file = this.specPath(task);
-    const stray = (await changedPaths(dir, await mergeBase(dir, task.baseRef))).filter(
+    const stray = (await changedPaths(dir, await mergeBase(dir, diffBase(task)))).filter(
       (p) => p !== file,
     );
     if (stray.length > 0) {
@@ -414,17 +690,20 @@ export class Workflow {
 
   /**
    * Continues the discussion's conversation, which already knows the repository, now
-   * allowed to edit; starts afresh with the agreed goal when that is not possible.
+   * allowed to edit; starts afresh with the agreed goal when that is not possible. Spec
+   * changes approved before it starts are in those criteria, so they count as delivered.
    */
   private startAfterDiscussion(task: Task, last: Session): SessionPlan {
     const resumable = this.canResume(task, last, task.agents.implementer);
-    if (resumable)
-      return this.implement(
-        task,
-        criteriaApprovedPrompt(task.acceptance!, this.specFile(task.id)),
-        last,
-      );
-    return this.implement(task, this.goal(task));
+    const plan = resumable
+      ? this.implement(
+          task,
+          criteriaApprovedPrompt(task.acceptance!, this.specFile(task.id), this.designed(task.id)),
+          last,
+        )
+      : this.implement(task, this.goal(task));
+    const decisions = this.untoldDecisions(task.id).map((e) => e.id);
+    return decisions.length > 0 ? { ...plan, delivers: decisions } : plan;
   }
 
   /** The user's reply to the latest proposal, if the planner has not seen it yet. */
@@ -512,6 +791,16 @@ export class Workflow {
     outcome: SessionOutcome,
     signal: AbortSignal,
   ): Promise<void> {
+    await this.finishSession(task, plan, outcome, signal);
+    this.reviseAfterStep(task.id);
+  }
+
+  private async finishSession(
+    task: Task,
+    plan: SessionPlan,
+    outcome: SessionOutcome,
+    signal: AbortSignal,
+  ): Promise<void> {
     this.host.notice(
       task.id,
       `session ended: ${outcome.reason}${outcome.detail ? ` (${outcome.detail})` : ''}`,
@@ -527,15 +816,23 @@ export class Workflow {
       await this.finishSpecFile(task, outcome);
       return;
     }
+    if (plan.role === 'spec' && !this.discussing(task)) {
+      this.finishSpecRevision(task, outcome);
+      return;
+    }
     if (plan.role === 'tester') {
       await this.finishTest(task, plan, outcome);
+      return;
+    }
+    if (plan.role === 'designer') {
+      await this.finishDesign(task, outcome);
       return;
     }
     switch (outcome.reason) {
       case 'completed':
         if (this.discussing(task)) this.proposeCriteria(task, outcome.finalText);
         else if (task.mode === 'loop') await this.finishLoopStep(task, signal, outcome.finalText);
-        else await this.stepDone(task);
+        else if (!this.proposeSpecChange(task, outcome.finalText)) await this.stepDone(task);
         return;
       case 'handoff':
       case 'context_hard_limit':
@@ -607,6 +904,271 @@ export class Workflow {
     this.host.setStatus(task.id, 'awaiting_approval');
   }
 
+  /**
+   * The user's request for a spec change waiting for the spec author: the latest one, unless
+   * the spec author already answered that very request. An implementer's own proposal, or
+   * an answer to an earlier request, does not answer it.
+   */
+  pendingSpecRevision(taskId: number): SpecRevisionRequest | null {
+    return (this.pendingRevisionEvent(taskId)?.data as SpecRevisionRequest | undefined) ?? null;
+  }
+
+  private pendingRevisionEvent(taskId: number): StoredEvent | undefined {
+    const store = this.host.store;
+    const request = store.lastEvent(taskId, 'spec_revision');
+    if (!request) return undefined;
+    const answered = store
+      .eventsOfKind(taskId, 'spec_change')
+      .some((e) => (e.data as SpecChangeProposal).requestId === request.id);
+    return answered ? undefined : request;
+  }
+
+  /**
+   * The proposed spec change waiting for the user, until it is approved or rejected, or
+   * while a request (a reply to it, or one that came in as it was written) waits for the
+   * spec author, whose answer supersedes it.
+   */
+  specChange(taskId: number): SpecChangeProposal | null {
+    const store = this.host.store;
+    const proposal = store.lastEvent(taskId, 'spec_change');
+    if (!proposal || this.pendingRevisionEvent(taskId)) return null;
+    const decision = store.lastEvent(taskId, 'spec_change_decision');
+    if (decision && decision.id > proposal.id) return null;
+    return proposal.data as SpecChangeProposal;
+  }
+
+  /**
+   * Records the user's request to change the spec, or their reply to a waiting change. The
+   * spec author answers it in the task's next session. A request that comes in while an
+   * earlier one from review still waits keeps review as the place a rejection returns to.
+   * Throws when the message is empty.
+   */
+  requestSpecRevision(taskId: number, message: string, status: TaskStatus): void {
+    const text = message.trim();
+    if (!text) throw new Error('write what should change in the spec');
+    const earlier = this.pendingSpecRevision(taskId)?.status;
+    const request: SpecRevisionRequest = {
+      message: text,
+      status: earlier === 'review' ? 'review' : status,
+    };
+    this.host.store.appendEvent(taskId, null, 'spec_revision', request);
+    this.host.notice(taskId, 'spec change requested; the spec author will propose one');
+  }
+
+  /**
+   * A request made while a session or a chat ran is answered once it ends: a task that is
+   * back in review goes back to work for it, the reviewer's and tester's rounds count
+   * afresh, and a rejected change returns the task to review.
+   */
+  reviseAfterStep(taskId: number): void {
+    const request = this.pendingSpecRevision(taskId);
+    if (!request || this.host.store.getTask(taskId)?.status !== 'review') return;
+    const moved: SpecRevisionRequest = { ...request, status: 'review' };
+    this.host.store.appendEvent(taskId, null, 'spec_revision', moved);
+    this.sendBack(taskId);
+    this.host.setStatus(taskId, 'queued');
+  }
+
+  /**
+   * The spec author's read-only answer to the user's request. It goes on in its own session
+   * when that was cut off after receiving the request; otherwise it starts afresh from the
+   * spec file, which holds every decision.
+   */
+  private specRevisionPlan(
+    task: Task,
+    request: StoredEvent,
+    last: Session | undefined,
+  ): SessionPlan {
+    const agentId = roleAgent(task.agents, 'spec')!;
+    const base = { role: 'spec', agentId, access: 'readOnly' } as const;
+    const cutOff =
+      last?.role === 'spec' &&
+      last.endReason !== 'completed' &&
+      this.canResume(task, last, agentId) &&
+      this.deliveries(task.id, request.id).some((e) => e.sessionId === last.id);
+    if (cutOff) return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    const { message } = request.data as SpecRevisionRequest;
+    const pending = this.undecidedProposal(task.id);
+    const prompt = specRevisionPrompt(this.goal(task), message, pending);
+    return { ...base, resume: null, prompt, delivers: [request.id] };
+  }
+
+  /**
+   * The criteria of the latest change the user has not decided on, which a waiting request
+   * replies to or came in while it was written.
+   */
+  private undecidedProposal(taskId: number): string | null {
+    const store = this.host.store;
+    const proposal = store.lastEvent(taskId, 'spec_change');
+    if (!proposal) return null;
+    const decision = store.lastEvent(taskId, 'spec_change_decision');
+    if (decision && decision.id > proposal.id) return null;
+    const { criteria, reply } = proposal.data as SpecChangeProposal;
+    return criteria ?? reply;
+  }
+
+  private finishSpecRevision(task: Task, outcome: SessionOutcome): void {
+    if (outcome.reason === 'handoff' || outcome.reason === 'context_hard_limit') {
+      this.host.notice(task.id, 'the spec author ran out of context before proposing a change');
+      this.host.setStatus(task.id, 'failed');
+      return;
+    }
+    if (outcome.reason !== 'completed') {
+      this.interrupted(task, outcome); // the request stays pending and is answered again
+      return;
+    }
+    // The request this session was given, not one that came in while it ran.
+    const sessionId = this.host.store.listSessions(task.id).at(-1)!.id;
+    const delivery = this.host.store.lastSessionEvent(sessionId, 'spec_delivered')!;
+    const requestId = (delivery.data as SpecDelivery).eventId;
+    const request = this.host.store
+      .eventsOfKind(task.id, 'spec_revision')
+      .find((e) => e.id === requestId)!.data as SpecRevisionRequest;
+    const reply = outcome.finalText;
+    this.propose(task, {
+      from: 'user',
+      reason: request.message,
+      previous: task.acceptance ?? '',
+      criteria: parseCriteria(reply),
+      reply,
+      onReject: request.status === 'review' ? 'review' : 'queued',
+      sessionId,
+      requestId,
+    });
+  }
+
+  /** Stops for the user when the implementer of a task with a spec ends with a spec change. */
+  private proposeSpecChange(task: Task, reply: string): boolean {
+    if (task.mode !== 'single' || !this.specFile(task.id)) return false;
+    const change = parseSpecChange(reply);
+    if (!change) return false;
+    this.propose(task, {
+      from: 'implementer',
+      reason: change.reason,
+      previous: task.acceptance ?? '',
+      criteria: change.criteria,
+      reply,
+      onReject: 'queued',
+      sessionId: null,
+      requestId: null,
+    });
+    return true;
+  }
+
+  /**
+   * Stops for the user's decision, unless a request came in while the proposal was written:
+   * the spec author answers that first, starting from this proposal.
+   */
+  private propose(task: Task, proposal: SpecChangeProposal): void {
+    this.host.store.appendEvent(task.id, null, 'spec_change', proposal);
+    if (this.pendingRevisionEvent(task.id)) {
+      this.host.notice(
+        task.id,
+        'a newer spec change request is waiting; the spec author answers it next',
+      );
+      this.host.setStatus(task.id, 'queued');
+      return;
+    }
+    this.host.notice(
+      task.id,
+      proposal.criteria
+        ? `${proposal.from === 'user' ? 'the spec author' : 'the implementer'} proposed a spec change; waiting for your approval`
+        : 'a spec change was proposed without revised criteria; reply or write them yourself',
+    );
+    this.host.setStatus(task.id, 'awaiting_approval');
+  }
+
+  /**
+   * Records the user's decision on the waiting spec change. An approval also changes the
+   * task's criteria; the spec file is rewritten before the next session
+   * ({@link reviseSpecFile}). Throws when an approval has no criteria to approve.
+   */
+  decideSpecChange(task: Task, approved: boolean, criteria?: string): SpecChangeDecision {
+    const proposal = this.specChange(task.id)!;
+    const agreed = approved ? criteria?.trim() || proposal.criteria : proposal.previous;
+    if (!agreed) throw new Error('write the revised acceptance criteria to approve');
+    const decision: SpecChangeDecision = {
+      approved,
+      from: proposal.from,
+      reason: proposal.reason,
+      previous: proposal.previous,
+      criteria: agreed,
+    };
+    this.host.store.appendEvent(task.id, null, 'spec_change_decision', decision);
+    return decision;
+  }
+
+  /**
+   * Every decision on a spec change the implementer has to hear and has not heard yet,
+   * oldest first: each approval, and each rejection of its own proposal. A decision is
+   * heard once the agent of a session given it reported anything, so a launch that failed
+   * leaves it unheard though the harness logged usage for it; a chat in between tells
+   * the implementer nothing, and neither does a later decision it need not hear (the
+   * rejection of the user's own request), so an approval before that one stays untold.
+   */
+  private untoldDecisions(taskId: number): StoredEvent[] {
+    const store = this.host.store;
+    return store.eventsOfKind(taskId, 'spec_change_decision').filter((event) => {
+      const decision = event.data as SpecChangeDecision;
+      if (!decision.approved && decision.from !== 'implementer') return false;
+      const heard = this.deliveries(taskId, event.id).some((e) =>
+        store.sessionHasAgentEventsAfter(e.sessionId!, e.id),
+      );
+      return !heard;
+    });
+  }
+
+  /**
+   * The implementer goes on in its own conversation when it can, told what was decided:
+   * the latest approval, whose criteria replace every earlier one's, and each rejection of
+   * its own proposals, in the order they were made. All of `events` count as delivered.
+   */
+  private afterSpecDecision(
+    task: Task,
+    events: StoredEvent[],
+    work: Session | undefined,
+  ): SessionPlan {
+    const approval = events.findLast((e) => (e.data as SpecChangeDecision).approved);
+    const told = events
+      .filter((e) => e === approval || !(e.data as SpecChangeDecision).approved)
+      .map((e) => {
+        const decision = e.data as SpecChangeDecision;
+        return decision.approved
+          ? specChangeApprovedPrompt(decision.criteria, this.specFile(task.id)!)
+          : SPEC_CHANGE_REJECTED_PROMPT;
+      })
+      .join('\n\n');
+    const plan =
+      work && this.canResume(task, work, task.agents.implementer)
+        ? this.implement(task, told, work)
+        : this.implement(task, continuationPrompt(this.goal(task), null, told));
+    return { ...plan, delivers: events.map((e) => e.id) };
+  }
+
+  /**
+   * Writes the latest approved spec change into the spec file, with a dated Revisions entry,
+   * and commits only that file, unless that was done already. Runs before a session, while
+   * the task holds its folder. Throws when the file can not be read or git can not commit.
+   */
+  async reviseSpecFile(task: Task): Promise<void> {
+    const store = this.host.store;
+    const event = store.lastEvent(task.id, 'spec_change_decision');
+    const decision = event?.data as SpecChangeDecision | undefined;
+    if (!event || !decision?.approved) return;
+    const done = store.lastEvent(task.id, 'spec_revised');
+    if (done && done.id > event.id) return;
+    const dir = task.worktreePath!;
+    const file = this.specFile(task.id)!;
+    const date = new Date(event.ts).toISOString().slice(0, 10);
+    const full = path.join(dir, file);
+    const content = await readFile(full, 'utf8');
+    await writeFile(full, reviseSpec(content, decision.criteria, date, revisionSummary(decision)));
+    await commitFile(dir, file, `docs: revise spec for ${task.title.slice(0, 50)}`);
+    const record: SpecRevisionRecord = { path: file, head: await headCommit(dir), date };
+    store.appendEvent(task.id, null, 'spec_revised', record);
+    this.host.notice(task.id, `spec revised in ${file}`);
+  }
+
   /** Quota, stop and error end a session the same way for every role. */
   private interrupted(task: Task, outcome: SessionOutcome): void {
     switch (outcome.reason) {
@@ -636,10 +1198,41 @@ export class Workflow {
     else await this.requestReview(task);
   }
 
-  /** Commit the next review or test of a step is measured from. */
-  private async stepBase(task: Task): Promise<string> {
+  /**
+   * What the next review or test of a step covers: from `since` to HEAD, plus a `base`
+   * task's `earlier` stretches nobody approved yet. Those are listed one by one because
+   * the commits between them are other work in the folder.
+   */
+  private async stepBase(task: Task): Promise<{ since: string; earlier: CommitSpan[] }> {
+    const dir = task.worktreePath!;
     const approved = this.reviews(task.id).findLast((r) => r.verdict === 'approve');
-    return approved?.head ?? (await mergeBase(task.worktreePath!, task.baseRef));
+    const base = await mergeBase(dir, diffBase(task));
+    if (task.workspace !== 'base') return { since: approved?.head ?? base, earlier: [] };
+    if (approved && (await isMergedInto(dir, base, approved.head))) {
+      return { since: approved.head, earlier: [] };
+    }
+    return { since: base, earlier: await this.spansAfter(dir, task, approved?.head) };
+  }
+
+  /**
+   * A `base` task's earlier stretches after its own commit `since` (all of them without
+   * one), such as its last approval; the stretch `since` falls in counts from it on.
+   */
+  private async spansAfter(
+    dir: string,
+    task: Task,
+    since: string | undefined,
+  ): Promise<CommitSpan[]> {
+    const spans = task.priorSpans.filter((span) => span.from !== span.to);
+    if (!since) return spans;
+    for (let i = spans.length - 1; i >= 0; i--) {
+      const { from, to } = spans[i]!;
+      const within = (await isMergedInto(dir, from, since)) && (await isMergedInto(dir, since, to));
+      if (!within) continue;
+      const rest = spans.slice(i + 1);
+      return since === to ? rest : [{ from: since, to }, ...rest];
+    }
+    return spans;
   }
 
   /**
@@ -661,7 +1254,7 @@ export class Workflow {
       return;
     }
     const round = this.roundsSince(task.id, 'test_report', 'pass') + 1;
-    const request: TestRequest = { round, since: await this.stepBase(task), head, status };
+    const request: TestRequest = { round, ...(await this.stepBase(task)), head, status };
     this.host.store.appendEvent(task.id, null, 'test_request', request);
     this.host.notice(task.id, `sent to ${task.agents.tester} for testing (round ${round})`);
     this.host.setStatus(task.id, 'queued');
@@ -738,6 +1331,72 @@ export class Workflow {
     return changed.filter((file) => !before.has(file) && !allowed(file));
   }
 
+  /**
+   * Rebuilds a review or test request still waiting for a `base` task that has just opened
+   * a new stretch. The old one runs up to a HEAD that now includes other work in the
+   * folder, which the reviewer or tester would be shown, and its baseline would blame them
+   * for those commits. The round stays the same. Throws when git cannot read the folder.
+   */
+  async refreshPending(task: Task): Promise<void> {
+    await this.rebuildPending(
+      task,
+      () => true,
+      'other work landed in the folder; the waiting check now leaves it out',
+    );
+  }
+
+  /**
+   * Rebuilds a review or test request still waiting when a chat changed the folder after
+   * it was made. The chat's commits join what is checked, and its edits leave the baseline,
+   * so the reviewer or tester is not blamed for them. Throws when git cannot read the folder.
+   */
+  async refreshAfterChat(task: Task): Promise<void> {
+    await this.rebuildPending(
+      task,
+      (request, head, status) => request.head !== head || request.status !== status,
+      'a chat changed the folder; the waiting check now covers it',
+    );
+  }
+
+  /** Appends a new copy of each pending request that `stale` rejects, with the same round. */
+  private async rebuildPending(
+    task: Task,
+    stale: (request: ReviewRequest | TestRequest, head: string, status: string) => boolean,
+    notice: string,
+  ): Promise<void> {
+    const review = this.pendingReview(task.id);
+    const test = this.pendingTest(task.id);
+    if (!review && !test) return;
+    const dir = task.worktreePath!;
+    const [head, status] = await Promise.all([headCommit(dir), porcelainStatus(dir)]);
+    const staleReview = review && stale(review, head, status);
+    const staleTest = test && stale(test, head, status);
+    if (!staleReview && !staleTest) return;
+    const scope = { ...(await this.stepBase(task)), head, status };
+    const store = this.host.store;
+    if (staleReview) {
+      store.appendEvent(task.id, null, 'review_request', { ...scope, round: review.round });
+    }
+    if (staleTest) {
+      store.appendEvent(task.id, null, 'test_request', { ...scope, round: test.round });
+    }
+    this.host.notice(task.id, notice);
+  }
+
+  /**
+   * Whether `session` already received the latest request of `kind`. Other sessions' events
+   * (a chat with the implementer) say nothing about it, and one rebuilt by
+   * {@link refreshPending} or {@link refreshAfterChat} after it stopped is still news to it.
+   */
+  private requestSeen(
+    taskId: number,
+    kind: 'review_request' | 'test_request',
+    session: Session,
+  ): boolean {
+    const event = this.host.store.lastEvent(taskId, kind);
+    return event !== undefined && this.host.store.sessionHasEventsAfter(session.id, event.id);
+  }
+
   /** Sends new commits to the reviewer, or moves on when there is none. */
   private async requestReview(task: Task): Promise<void> {
     if (!task.agents.reviewer) {
@@ -758,8 +1417,7 @@ export class Workflow {
       return;
     }
     const round = this.roundsSince(task.id, 'review', 'approve') + 1;
-    const since = await this.stepBase(task);
-    const request: ReviewRequest = { round, since, head, status };
+    const request: ReviewRequest = { round, ...(await this.stepBase(task)), head, status };
     this.host.store.appendEvent(task.id, null, 'review_request', request);
     this.host.notice(task.id, `sent for review to ${task.agents.reviewer} (round ${round})`);
     this.host.setStatus(task.id, 'queued');
@@ -950,4 +1608,14 @@ export class Workflow {
     }
     this.host.setStatus(task.id, 'queued');
   }
+}
+
+/** The Revisions entry of an approved change: who asked and why, on one line. */
+function revisionSummary(decision: SpecChangeDecision): string {
+  const why = decision.reason.split('\n')[0]!.trim().slice(0, 200);
+  const who =
+    decision.from === 'user'
+      ? "acceptance criteria changed at the user's request"
+      : 'acceptance criteria changed as the implementer proposed, approved by the user';
+  return why ? `${who}: ${why}` : who;
 }

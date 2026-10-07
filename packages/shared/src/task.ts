@@ -17,11 +17,36 @@ export const TASK_STATUSES = [
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
 /**
+ * Statuses worth a notification: the task waits for your answer or your review. `stopped`
+ * is left out because only your own stop sets it. The board's notifications and the push to
+ * paired phones both use this list.
+ */
+export const NOTIFY_STATUSES: ReadonlySet<TaskStatus> = new Set([
+  'awaiting_permission',
+  'awaiting_approval',
+  'review',
+  'failed',
+]);
+
+/**
  * `single`: one prompt, handed off across sessions until the agent finishes.
  * `loop`: an initializer session writes a feature list, then each session implements one
  * feature and the harness runs the task's verify command itself before counting it.
  */
 export type TaskMode = 'single' | 'loop';
+
+/**
+ * Where a task works. `worktree`: on its own branch in a worktree of its own, merged into
+ * the base after review. `base`: directly on the base branch in the repository folder, with
+ * no worktree or branch, so its commits land on the base as it goes and nothing is merged.
+ */
+export type TaskWorkspace = 'worktree' | 'base';
+
+/** Commits after `from` up to and including `to`, as in `git log from..to`. */
+export interface CommitSpan {
+  from: string;
+  to: string;
+}
 
 /** Rough task size; selects the default soft context threshold. */
 export type TaskSize = 'small' | 'medium' | 'large';
@@ -59,10 +84,30 @@ export interface Task {
   prompt: string;
   /** Absolute path of the repository the task works on. */
   repoPath: string;
-  /** Git ref the task branch starts from. */
+  /** Git ref the task branch starts from, or the branch a `base` task works on. */
   baseRef: string;
+  /** Always `null` for a `base` task. */
   branch: string | null;
+  /** Where the task's sessions run; the repository folder itself for a `base` task. */
   worktreePath: string | null;
+  workspace: TaskWorkspace;
+  /**
+   * The base's commit where a `base` task's current stretch of work started; its diff and
+   * commits count from here. `null` for `worktree` tasks, which count from where their
+   * branch left the base.
+   */
+  startCommit: string | null;
+  /**
+   * HEAD of the repository folder when a `base` task's latest session there ended. Once the
+   * task lets go of the folder its history stops here, so later tasks' commits are not
+   * counted as its work. `null` for `worktree` tasks and before the first session.
+   */
+  endCommit: string | null;
+  /**
+   * Earlier stretches of a `base` task's work, oldest first. A stretch ends when the task
+   * comes back to a folder whose HEAD moved after its last session; empty otherwise.
+   */
+  priorSpans: CommitSpan[];
   status: TaskStatus;
   mode: TaskMode;
   /**
@@ -105,6 +150,68 @@ export interface CriteriaProposal {
 
 /** Stored as the `criteria_approved` event; the criteria are saved on the task too. */
 export interface CriteriaApproval {
+  criteria: string;
+}
+
+/** Who asked for a change to a spec that work has already started on. */
+export type SpecChangeOrigin = 'user' | 'implementer';
+
+/**
+ * Stored as the `spec_revision` event when the user asks to change a single task's spec
+ * after the spec file was written, and again for each reply to a proposed change. The spec
+ * author answers it in a read-only session with a {@link SpecChangeProposal}.
+ */
+export interface SpecRevisionRequest {
+  message: string;
+  /** The task's status when asked; a rejected change returns a task that was in review there. */
+  status: TaskStatus;
+}
+
+/**
+ * Stored as the `spec_change` event: revised acceptance criteria waiting for the user, from
+ * the spec author answering a {@link SpecRevisionRequest} or from the implementer's
+ * `SPEC CHANGE:` block. Nothing more is built until the user approves or rejects it.
+ */
+export interface SpecChangeProposal {
+  from: SpecChangeOrigin;
+  /** Why: the user's message, or the reason on the implementer's marker line. */
+  reason: string;
+  /** The criteria in force when the change was proposed. */
+  previous: string;
+  /** The complete revised criteria; `null` when the reply had none, so the user writes them. */
+  criteria: string | null;
+  /** The reply the proposal was read from. */
+  reply: string;
+  /** Status a rejection returns the task to. */
+  onReject: 'queued' | 'review';
+  /**
+   * The spec author's read-only session that wrote a proposal from the user's request;
+   * `null` for the implementer's. Later implementer sessions never continue it.
+   */
+  sessionId: string | null;
+  /**
+   * Id of the `spec_revision` event the spec author was given and answered; `null` for the
+   * implementer's. A request made while it answered stays waiting for its own answer.
+   */
+  requestId: number | null;
+}
+
+/**
+ * Stored as the `spec_delivered` event in the session whose prompt carries a request for a
+ * spec change or a decision on one, so it counts as told only once that session heard it.
+ */
+export interface SpecDelivery {
+  /** Id of the `spec_revision` or `spec_change_decision` event. */
+  eventId: number;
+}
+
+/** Stored as the `spec_change_decision` event when the user approves or rejects a change. */
+export interface SpecChangeDecision {
+  approved: boolean;
+  from: SpecChangeOrigin;
+  reason: string;
+  previous: string;
+  /** The criteria now in force: the approved ones, or the unchanged `previous`. */
   criteria: string;
 }
 

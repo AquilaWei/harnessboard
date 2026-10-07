@@ -13,7 +13,10 @@ export interface SessionSpec {
   sessionId: string | null;
   /** Continue `sessionId` instead of starting a new session. */
   resume: boolean;
-  /** First message; adapters without stdin input pass it as an argument. */
+  /**
+   * First message. Adapters without `midTurnInput` pass it as an argument unless they
+   * implement {@link AgentAdapter.encodePrompt}.
+   */
   prompt: string;
   model: string | null;
   access: SessionAccess;
@@ -29,6 +32,11 @@ export interface SessionSpec {
    * `edit` sessions of a CLI with `permissionPrompts`, and ignored with `skipPermissions`.
    */
   askPermission: boolean;
+  /**
+   * Directories outside `cwd` the session must be able to read, such as the review
+   * evidence of a reviewer without `readOnlyGit`. Absent or empty for none.
+   */
+  readableDirs?: string[];
 }
 
 /** Turns CLI output lines into events; see {@link AgentAdapter.createParser}. */
@@ -59,6 +67,12 @@ export interface AgentCapabilities {
    * for {@link AgentAdapter.encodePermissionReply}. Without it such tools are refused.
    */
   permissionPrompts: boolean;
+  /**
+   * A `readOnly` session can still run `git log`, `git diff` and `git status`. Without it a
+   * reviewer could not see the work it judges, so the harness runs those commands itself and
+   * puts their output in the reviewer's prompt.
+   */
+  readOnlyGit: boolean;
 }
 
 /**
@@ -73,6 +87,13 @@ export interface AgentAdapter {
   buildArgs(spec: SessionSpec): string[];
   /** Encodes one user message for stdin; only called when `midTurnInput` is true. */
   encodeMessage(text: string): string;
+  /**
+   * Encodes the whole prompt for stdin, which the runner closes right after it. Only for
+   * CLIs without `midTurnInput`. A CLI that reads its prompt there takes one of any
+   * length, while a prompt argument fails on Windows: a `.cmd` shim runs through cmd.exe,
+   * whose command line holds at most 8,191 characters. Absent: the prompt is an argument.
+   */
+  encodePrompt?(text: string): string;
   /** Encodes the answer to a permission request; only called with `permissionPrompts`. */
   encodePermissionReply(
     request: Extract<AgentEvent, { kind: 'permission_request' }>,
@@ -99,6 +120,26 @@ export interface AgentAdapter {
   readQuota?(): Promise<QuotaInfo | null>;
   /** Arguments that print the CLI version; used to check the CLI is installed. */
   readonly versionArgs: string[];
-  /** Arguments that reopen a session in the CLI's own interactive UI (`hb open`). */
-  interactiveResumeArgs(agentSessionId: string): string[];
+  /**
+   * Arguments that reopen a session in the CLI's own interactive UI (`hb open`), run in
+   * `cwd`, the task's folder.
+   */
+  interactiveResumeArgs(agentSessionId: string, cwd: string): string[];
+  /**
+   * Files and folders outside the task's folder that a session with `access` needs: the
+   * CLI's login and settings, and any file `buildArgs` writes for it. A Docker sandbox
+   * mounts the ones that exist. Absent: none.
+   */
+  configPaths?(access: SessionAccess): string[];
+  /**
+   * Folders a Docker sandbox replaces with an empty one that the agent can not write to,
+   * because whatever an image puts there would loosen a session with `access`. Absent: none.
+   */
+  containerEmptyDirs?(access: SessionAccess): string[];
+  /**
+   * Checked before a session is started, so a task fails with this error instead of
+   * running somewhere it should not; the Docker sandbox rejects when docker can not run.
+   * Absent: the spawn itself is the check.
+   */
+  ensureReady?(): Promise<void>;
 }

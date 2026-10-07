@@ -27,16 +27,19 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.0",
+    "@simplewebauthn/server": "^14.0.3",
     "commander": "^15.0.0",
     "cross-spawn": "^7.0.6",
     "env-paths": "^4.0.0",
     "hono": "^4.12.0",
-    "tree-kill": "^1.2.2"
+    "tree-kill": "^1.2.2",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@harnessboard/core": "workspace:*",
     "@harnessboard/shared": "workspace:*",
     "@harnessboard/web": "workspace:*",
-    "@types/cross-spawn": "^6.0.6"
+    "@types/cross-spawn": "^6.0.6",
+    "@types/web-push": "^3.6.4"
   }
 }

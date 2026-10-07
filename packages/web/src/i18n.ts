@@ -2,7 +2,7 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
-const en = {
+export const en = {
   summary: {
     running: '{{count}} running',
     attention_one: '{{count}} needs you',
@@ -25,7 +25,7 @@ const en = {
     notRepo: 'Not inside a git repository. Pick another folder, or run this in it:',
     noCommits: 'This repository has no commits yet. Make a first commit, then try again.',
   },
-  providers: { 'claude-code': 'Claude', codex: 'Codex' },
+  providers: { 'claude-code': 'Claude', codex: 'Codex', gemini: 'Gemini' },
   quota: {
     titleFor: '{{name}} subscription quota',
     fiveHour: '5-hour window',
@@ -44,12 +44,28 @@ const en = {
     blocked:
       'This browser blocks notifications from the board. Allow them in the site settings for this address, then switch this on again.',
     unsupported: 'This browser does not support notifications.',
+    pushHint:
+      'A push notification to this phone when a task waits for permission, approval or review, or fails, even while the board is closed.',
+    pushUnsupported:
+      'This browser cannot receive push notifications. On an iPhone, add the board to the Home Screen first (iOS 16.4 or later) and open it from there.',
   },
   stage: {
     draft: 'Draft',
     active: 'In progress',
     attention: 'Needs you',
     done: 'Done',
+  },
+  phoneTab: {
+    waiting: 'Waiting for you',
+    active: 'In progress',
+    review: 'Review',
+    done: 'Done',
+  },
+  phoneTabEmpty: {
+    waiting: 'Nothing is waiting for you.',
+    active: 'Nothing is running.',
+    review: 'Nothing to review.',
+    done: 'Finished tasks appear here.',
   },
   stageEmpty: {
     draft: 'Tasks you have not started yet.',
@@ -85,12 +101,19 @@ const en = {
       '{{agent}} has questions before it can propose acceptance criteria. Reply or write them yourself.',
     revisingCriteria: '{{agent}} is revising the acceptance criteria with your reply.',
     revisingCriteriaQueued: 'Your reply is waiting for the agent.',
+    specRevisionQueued: 'Your change to the spec is waiting for the spec author.',
+    revisingSpec: '{{agent}} is proposing a change to the spec.',
+    specChangeReady:
+      'A change to the spec is proposed. Compare the criteria, then approve or reject it.',
+    specChangeMissing:
+      'The spec author has questions about the change. Reply, write the criteria yourself, or reject it.',
     queuedForReview: 'Waiting for {{agent}} to review the latest step.',
     queuedForFixes: 'Waiting to address {{agent}}’s requested changes.',
     starting: 'Starting…',
     planning: '{{agent}} is planning the features.',
     testing: '{{agent}} is testing the latest step.',
     writingSpec: '{{agent}} is writing the agreed spec to a file.',
+    designing: '{{agent}} is adding the UI design to the spec.',
     implementing: '{{agent}} is working on it.',
     fixingReview: '{{agent}} is addressing the changes {{reviewer}} asked for.',
     buildingFeature: '{{agent}} is building feature {{n}} of {{total}}.',
@@ -119,6 +142,7 @@ const en = {
     retry: 'Retry',
     approvePlan: 'Review plan',
     approveCriteria: 'Review criteria',
+    changeSpec: 'Change the spec',
     answerPermission: 'View request',
     markDone: 'Mark done',
     markDoneOnly: 'Mark done without merging',
@@ -192,6 +216,8 @@ const en = {
   card: {
     features: '{{verified}}/{{total}} features',
     reviewer: 'reviewed by {{agent}}',
+    onBase: 'on {{base}}',
+    onBaseHint: 'Works directly on this branch, without a worktree or a branch of its own',
     sessions_one: '{{count}} session',
     sessions_other: '{{count}} sessions',
   },
@@ -279,6 +305,24 @@ const en = {
     agreed: 'Acceptance criteria',
     agreedHint: 'The implementer works towards these and the reviewer checks them.',
   },
+  specChange: {
+    request: 'Change the spec',
+    requestHint:
+      'Say what should change and why. The spec author proposes revised criteria, and nothing changes until you approve them.',
+    requestPlaceholder: 'e.g. Also accept a phone number as the login name…',
+    send: 'Ask for the change',
+    pending: 'Your request is with the spec author. Its proposal appears here.',
+    fromUser: 'Proposed change you asked for',
+    fromImplementer: 'The implementer proposes a change',
+    current: 'Current criteria',
+    proposed: 'Proposed criteria',
+    editHint: 'Edit freely: what you approve replaces the current criteria and the spec file.',
+    missingHint: 'The reply has no criteria. Write them here, reply, or reject the change.',
+    approve: 'Approve change',
+    reject: 'Reject change',
+    rejectHint: 'Rejecting keeps the spec and criteria as they are.',
+    reply: 'Full reply',
+  },
   plan: {
     reply: 'Latest reply from the planner',
     questions_one: '{{count}} open question',
@@ -310,6 +354,7 @@ const en = {
     mergeConflict: 'Conflicts with {{base}}, sent to the agent to resolve',
     merged: 'Merged into {{base}}',
     spec: '{{agent}} · spec',
+    designer: '{{agent}} · designer',
     tester: '{{agent}} · tester',
     specWritten: 'Spec committed in {{path}}',
     testsPassed: '{{agent}} passed the tests (round {{round}})',
@@ -350,8 +395,14 @@ const en = {
     base: 'Base',
     branch: 'Branch',
     worktree: 'Worktree',
+    workspace: 'Works on',
+    workspaces: {
+      worktree: 'Its own branch, merged after review',
+      base: 'Directly on {{base}}',
+    },
     mode: 'Mode',
     spec: 'Spec author',
+    designer: 'Designer',
     tester: 'Tester',
     implementer: 'Implementer',
     reviewer: 'Reviewer',
@@ -366,6 +417,7 @@ const en = {
   },
   noEvents: 'No output yet.',
   noDiff: 'No changes yet.',
+  filesOnly: 'Files only',
   untracked: 'Untracked files',
   loop: {
     badge: 'Loop',
@@ -398,6 +450,16 @@ const en = {
     discuss: 'Agree on acceptance criteria before work starts (recommended)',
     repo: 'Repository',
     repoHint: 'Path to any folder inside a git repository.',
+    workspace: 'Where the agent works',
+    workspaces: {
+      worktree: 'Work on a new branch (recommended)',
+      base: 'Work directly on {{base}}',
+    },
+    workspaceHints: {
+      worktree: 'Its own branch in a separate worktree. You merge it after review.',
+      base: 'Commits land on the branch in the repository folder as it goes, with nothing to merge. That branch must be checked out there, and only one such task works in a folder at a time.',
+    },
+    currentBranch: 'the current branch',
     mode: 'Kind of task',
     modes: {
       single: 'Single task',
@@ -421,6 +483,11 @@ const en = {
     specSame: 'Same as the implementer',
     specModel: 'Spec author model',
     specHint: 'Writes the acceptance criteria you approve before anything is built.',
+    designer: 'Designer',
+    designerNone: 'None',
+    designerModel: 'Designer model',
+    designerHint:
+      'Adds a UI design to the approved spec before anything is built (single tasks whose criteria you approve). Leave it at None for work without a UI.',
     tester: 'Tester',
     testerNone: 'No testing step',
     testerModel: 'Tester model',
@@ -460,6 +527,45 @@ const en = {
     createOnly: 'Create',
     cancel: 'Cancel',
   },
+  phone: {
+    title: 'Phone access',
+    intro:
+      'Use the board from a phone through Tailscale. The board stays on this computer; only devices you pair here can reach it, through the remote hosts below.',
+    detected: 'This computer’s Tailscale name:',
+    useDetected: 'Add as remote host',
+    notDetected: 'Tailscale was not found on this computer, or it is not running.',
+    hosts: 'Remote hosts',
+    hostsHint:
+      'One host name per line. Paired devices reach the board only through these names. Save before pairing.',
+    serveHint: 'Run this once on this computer so your tailnet can reach the board:',
+    copy: 'Copy',
+    copied: 'Copied',
+    pair: 'Pair a phone',
+    newCode: 'New code',
+    needHost: 'Save a remote host first.',
+    scan: 'Scan this with the phone’s camera, or open the address below on it. The code works once, until {{time}}.',
+    devices: 'Paired devices',
+    noDevices: 'No paired devices.',
+    device: 'Device',
+    lastSeen: 'Last seen',
+    revoke: 'Revoke',
+    pairTitle: 'Pair this device',
+    pairIntro: 'Give this device a name. The computer lists it under that name.',
+    deviceName: 'Device name',
+    pairSubmit: 'Pair',
+    notPairedTitle: 'This device is not paired',
+    notPairedBody:
+      'On the computer, open Settings → Phone access → Pair a phone, then scan the QR code with this device.',
+    passkeyIntro:
+      'One more step: create a passkey for the board. Your phone asks for your fingerprint, face or screen lock, and asks again whenever the board is locked.',
+    passkeySubmit: 'Create passkey',
+    lockedTitle: 'The board is locked',
+    lockedBody: 'Confirm with your passkey to go on.',
+    unlock: 'Unlock',
+    noPasskeys:
+      'This browser cannot use passkeys, which the board needs on a phone. Open this page in Chrome or Safari instead, for example from the menu’s “Open in browser”.',
+    reauthCancelled: 'Not done: a phone must confirm this with its passkey.',
+  },
   settingsForm: {
     maxConcurrent: 'Tasks running at once',
     quotaPause: 'Pause new sessions at 5-hour quota %',
@@ -487,7 +593,7 @@ const en = {
   },
 };
 
-const zhTW: typeof en = {
+export const zhTW: typeof en = {
   summary: {
     running: '{{count}} 個執行中',
     attention_one: '{{count}} 個需要你處理',
@@ -510,7 +616,7 @@ const zhTW: typeof en = {
     notRepo: '不在 git repository 裡。請換一個資料夾，或在這個資料夾執行：',
     noCommits: '這個 repository 還沒有任何 commit，請先 commit 一次再試。',
   },
-  providers: { 'claude-code': 'Claude', codex: 'Codex' },
+  providers: { 'claude-code': 'Claude', codex: 'Codex', gemini: 'Gemini' },
   quota: {
     titleFor: '{{name}} 訂閱額度',
     fiveHour: '5 小時區間',
@@ -528,12 +634,27 @@ const zhTW: typeof en = {
     hint: '看板開著但不在前景時，任務等你允許、核准、審查，或失敗，就由這個瀏覽器跳出桌面通知。',
     blocked: '這個瀏覽器封鎖了看板的通知。請在這個網址的網站設定中允許通知，再重新開啟這個選項。',
     unsupported: '這個瀏覽器不支援通知。',
+    pushHint: '任務等你允許、核准、審查，或失敗時，推播通知到這支手機，看板關著也會收到。',
+    pushUnsupported:
+      '這個瀏覽器收不到推播通知。iPhone 要先把看板加到主畫面（iOS 16.4 以上），再從主畫面打開。',
   },
   stage: {
     draft: '草稿',
     active: '進行中',
     attention: '需要你處理',
     done: '完成',
+  },
+  phoneTab: {
+    waiting: '等你處理',
+    active: '進行中',
+    review: '審核',
+    done: '完成',
+  },
+  phoneTabEmpty: {
+    waiting: '沒有等你處理的任務。',
+    active: '目前沒有在執行的任務。',
+    review: '沒有要審核的任務。',
+    done: '完成的任務會出現在這裡。',
   },
   stageEmpty: {
     draft: '還沒開始的任務放在這裡。',
@@ -567,12 +688,17 @@ const zhTW: typeof en = {
     criteriaMissing: '{{agent}} 有問題要先問你，才能提出驗收標準。請回覆，或自己寫下標準。',
     revisingCriteria: '{{agent}} 正在依照你的回覆修改驗收標準。',
     revisingCriteriaQueued: '你的回覆已送出，等待 agent 處理。',
+    specRevisionQueued: '你要求的規格修改已送出，等待規格撰寫者處理。',
+    revisingSpec: '{{agent}} 正在提出規格修改。',
+    specChangeReady: '有人提議修改規格。比較前後的驗收標準後，確認或拒絕。',
+    specChangeMissing: '規格撰寫者對這次修改有問題要問你。請回覆、自己寫下標準，或拒絕修改。',
     queuedForReview: '等待 {{agent}} 審查最新一步。',
     queuedForFixes: '等待依照 {{agent}} 的意見修改。',
     starting: '啟動中…',
     planning: '{{agent}} 正在規劃 feature。',
     testing: '{{agent}} 正在測試最新一步。',
     writingSpec: '{{agent}} 正在把確認的規格寫成檔案。',
+    designing: '{{agent}} 正在把介面設計加進規格。',
     implementing: '{{agent}} 正在處理。',
     fixingReview: '{{agent}} 正在依照 {{reviewer}} 的意見修改。',
     buildingFeature: '{{agent}} 正在做第 {{n}} 項 feature（共 {{total}} 項）。',
@@ -601,6 +727,7 @@ const zhTW: typeof en = {
     retry: '重試',
     approvePlan: '確認規格',
     approveCriteria: '確認驗收標準',
+    changeSpec: '修改規格',
     answerPermission: '查看請求',
     markDone: '標為完成',
     markDoneOnly: '只標為完成，不合併',
@@ -670,6 +797,8 @@ const zhTW: typeof en = {
   card: {
     features: '{{verified}}/{{total}} 項 feature',
     reviewer: '由 {{agent}} 審查',
+    onBase: '直接在 {{base}}',
+    onBaseHint: '直接在這個分支上工作，沒有自己的 worktree 或分支',
     sessions_one: '{{count}} 個 session',
     sessions_other: '{{count}} 個 session',
   },
@@ -754,6 +883,23 @@ const zhTW: typeof en = {
     agreed: '驗收標準',
     agreedHint: '實作者會以此為目標，審查者也會逐項檢查。',
   },
+  specChange: {
+    request: '修改規格',
+    requestHint: '說明要改什麼、為什麼。規格撰寫者會提出修改後的驗收標準，你確認之前什麼都不會變。',
+    requestPlaceholder: '例如：登入名稱也要接受手機號碼…',
+    send: '要求修改',
+    pending: '你的要求已交給規格撰寫者，它的提案會顯示在這裡。',
+    fromUser: '依照你的要求提出的修改',
+    fromImplementer: '實作者提議的修改',
+    current: '目前的驗收標準',
+    proposed: '提議的驗收標準',
+    editHint: '可以直接修改：你確認的內容會取代目前的驗收標準和規格檔。',
+    missingHint: '回覆裡沒有驗收標準。請在這裡寫下、回覆，或拒絕這次修改。',
+    approve: '確認修改',
+    reject: '拒絕修改',
+    rejectHint: '拒絕後規格和驗收標準維持原樣。',
+    reply: '完整回覆',
+  },
   plan: {
     reply: '規劃者最新的回覆',
     questions_one: '{{count}} 個待確認的問題',
@@ -784,6 +930,7 @@ const zhTW: typeof en = {
     mergeConflict: '與 {{base}} 有衝突，已交給 agent 解決',
     merged: '已合併到 {{base}}',
     spec: '{{agent}} · 規格作者',
+    designer: '{{agent}} · 設計者',
     tester: '{{agent}} · 測試者',
     specWritten: '規格已提交到 {{path}}',
     testsPassed: '{{agent}} 測試通過（第 {{round}} 輪）',
@@ -824,8 +971,14 @@ const zhTW: typeof en = {
     base: '基準',
     branch: '分支',
     worktree: 'Worktree',
+    workspace: '工作位置',
+    workspaces: {
+      worktree: '自己的分支，審查後合併',
+      base: '直接在 {{base}} 上',
+    },
     mode: '模式',
     spec: '規格作者',
+    designer: '設計者',
     tester: '測試者',
     implementer: '實作者',
     reviewer: '審查者',
@@ -840,6 +993,7 @@ const zhTW: typeof en = {
   },
   noEvents: '還沒有輸出。',
   noDiff: '目前沒有變更。',
+  filesOnly: '只看檔案',
   untracked: '未追蹤的檔案',
   loop: {
     badge: 'Loop',
@@ -870,6 +1024,16 @@ const zhTW: typeof en = {
     discuss: '開工前先討論驗收標準（建議）',
     repo: 'Repository',
     repoHint: 'git repository 內任一資料夾的路徑。',
+    workspace: 'Agent 在哪裡工作',
+    workspaces: {
+      worktree: '在新分支上工作（建議）',
+      base: '直接在 {{base}} 上工作',
+    },
+    workspaceHints: {
+      worktree: '在獨立的 worktree 裡用自己的分支工作，審查後由你合併。',
+      base: '直接在 repository 資料夾裡提交到這個分支，不需要合併。資料夾裡必須已經切到這個分支，而且同一個資料夾一次只能有一個這種任務在工作。',
+    },
+    currentBranch: '目前的分支',
     mode: '任務類型',
     modes: {
       single: '單次任務',
@@ -891,6 +1055,11 @@ const zhTW: typeof en = {
     specSame: '與執行者相同',
     specModel: '規格作者模型',
     specHint: '先寫出驗收條件，經你核准後才開始動工。',
+    designer: '設計者',
+    designerNone: '無',
+    designerModel: '設計者模型',
+    designerHint:
+      '規格核准後、動工之前，把介面設計加進規格（需要你核准驗收條件的單一任務）。沒有介面的工作維持「無」。',
     tester: '測試者',
     testerNone: '不做測試',
     testerModel: '測試者模型',
@@ -927,6 +1096,43 @@ const zhTW: typeof en = {
     create: '建立並開始',
     createOnly: '建立',
     cancel: '取消',
+  },
+  phone: {
+    title: '手機存取',
+    intro:
+      '透過 Tailscale 從手機使用看板。看板留在這台電腦上，只有在這裡配對過的裝置，才能經由下面的遠端主機名稱連進來。',
+    detected: '這台電腦的 Tailscale 名稱：',
+    useDetected: '加為遠端主機',
+    notDetected: '這台電腦上找不到 Tailscale，或 Tailscale 沒有在執行。',
+    hosts: '遠端主機',
+    hostsHint: '一行一個主機名稱。配對過的裝置只能經由這些名稱連到看板。配對前請先儲存。',
+    serveHint: '在這台電腦上執行一次這個指令，讓你的 tailnet 連得到看板：',
+    copy: '複製',
+    copied: '已複製',
+    pair: '配對手機',
+    newCode: '換一個配對碼',
+    needHost: '請先儲存一個遠端主機。',
+    scan: '用手機相機掃描，或在手機上打開下面的網址。配對碼只能用一次，{{time}} 前有效。',
+    devices: '已配對的裝置',
+    noDevices: '沒有已配對的裝置。',
+    device: '裝置',
+    lastSeen: '最後使用',
+    revoke: '撤銷',
+    pairTitle: '配對這個裝置',
+    pairIntro: '幫這個裝置取個名字，電腦上的裝置清單會用這個名字顯示。',
+    deviceName: '裝置名稱',
+    pairSubmit: '配對',
+    notPairedTitle: '這個裝置還沒有配對',
+    notPairedBody: '請在電腦上打開「設定 → 手機存取 → 配對手機」，再用這個裝置掃描 QR code。',
+    passkeyIntro:
+      '還差一步：替看板建立通行金鑰。手機會要求指紋、臉部或螢幕鎖，之後看板鎖定時也會再問一次。',
+    passkeySubmit: '建立通行金鑰',
+    lockedTitle: '看板已鎖定',
+    lockedBody: '請用通行金鑰確認後繼續。',
+    unlock: '解鎖',
+    noPasskeys:
+      '這個瀏覽器無法使用通行金鑰，而手機上的看板需要它。請改用 Chrome 或 Safari 開啟這個頁面，例如從選單選「用瀏覽器開啟」。',
+    reauthCancelled: '沒有執行：在手機上做這件事需要先用通行金鑰確認。',
   },
   settingsForm: {
     maxConcurrent: '同時執行的任務數',

@@ -10,6 +10,7 @@ import { Markdown } from './Markdown';
  */
 const ROLE_ICONS = {
   spec: '📝',
+  designer: '🎨',
   implementer: '🛠',
   tester: '🧪',
   reviewer: '🔍',

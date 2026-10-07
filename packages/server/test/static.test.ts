@@ -13,6 +13,7 @@ function app(): Hono {
   mkdirSync(path.join(root, 'assets'), { recursive: true });
   writeFileSync(path.join(root, 'index.html'), '<html>board</html>');
   writeFileSync(path.join(root, 'assets', 'app.js'), 'console.log(1)');
+  writeFileSync(path.join(root, 'manifest.webmanifest'), '{}');
   const hono = new Hono();
   hono.get('*', serveWeb(root));
   return hono;
@@ -22,6 +23,11 @@ describe('serveWeb', () => {
   it('serves a built asset with its content type', async () => {
     const res = await app().request('/assets/app.js');
     expect(res.headers.get('content-type')).toBe('text/javascript; charset=utf-8');
+  });
+
+  it('serves the web app manifest as application/manifest+json', async () => {
+    const res = await app().request('/manifest.webmanifest');
+    expect(res.headers.get('content-type')).toBe('application/manifest+json');
   });
 
   it('falls back to index.html for client-side routes', async () => {

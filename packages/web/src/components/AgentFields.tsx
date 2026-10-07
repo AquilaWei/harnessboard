@@ -15,6 +15,9 @@ export interface AgentChoice {
   /** Tests each finished step before review; `null` skips testing. */
   tester: string | null;
   testerModel: string | null;
+  /** Adds a UI design to the spec before implementation; `null` skips it. */
+  designer: string | null;
+  designerModel: string | null;
 }
 
 interface Props {
@@ -25,7 +28,10 @@ interface Props {
   lockAgents?: boolean;
 }
 
-/** Profile and model for the spec author, the implementer, then the optional reviewer. */
+/**
+ * Profile and model for the spec author, the optional designer, the implementer, then the
+ * optional tester and reviewer.
+ */
 export function AgentFields({ agents, value, onChange, lockAgents = false }: Props) {
   const { t } = useTranslation();
   const set = (patch: Partial<AgentChoice>) => onChange({ ...value, ...patch });
@@ -62,6 +68,29 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
         )}
       </div>
       <small className="hint">{t('form.specHint')}</small>
+      <div className="row">
+        <label className="field">
+          <span>{t('form.designer')}</span>
+          <select
+            value={value.designer ?? ''}
+            disabled={lockAgents}
+            onChange={(e) => set({ designer: e.target.value || null, designerModel: null })}
+          >
+            <option value="">{t('form.designerNone')}</option>
+            {options}
+          </select>
+        </label>
+        {value.designer && (
+          <ModelPicker
+            key={`designer-${value.designer}`}
+            label={t('form.designerModel')}
+            agent={byId(value.designer)}
+            value={value.designerModel}
+            onChange={(designerModel) => set({ designerModel })}
+          />
+        )}
+      </div>
+      <small className="hint">{t('form.designerHint')}</small>
       <div className="row">
         <label className="field">
           <span>{t('form.implementer')}</span>

@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+import { NOTIFY_STATUSES } from '@harnessboard/shared';
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
 import type { DrawerTab } from './components/TaskDrawer';
-
-/**
- * Statuses worth a notification: the task waits for your answer or your review. `stopped`
- * is left out because only your own stop sets it.
- */
-const NOTIFY_STATUSES: ReadonlySet<TaskStatus> = new Set([
-  'awaiting_permission',
-  'awaiting_approval',
-  'review',
-  'failed',
-]);
+import { currentNotifyMode, disablePush, enablePush } from './push';
+import type { NotifyMode } from './push';
 
 const STORAGE_KEY = 'harnessboard.notify';
 
@@ -56,14 +48,35 @@ export function notificationsEnabled(): boolean {
 
 /**
  * Switches notifications on or off for this browser. Switching on asks the browser for
- * permission, so it must run from a click; it returns the permission the browser gave.
+ * permission, so it must run from a click; it returns the permission the browser gave. In
+ * `push` mode (a board opened remotely) it also subscribes this device to push, or ends its
+ * subscription, and fails when that does; the choice is then left as it was.
  */
-export async function setNotifications(on: boolean): Promise<NotificationPermission | null> {
+export async function setNotifications(
+  on: boolean,
+  mode: NotifyMode = currentNotifyMode(),
+): Promise<NotificationPermission | null> {
+  let permission = notificationPermission();
+  if (on && permission !== null) permission = await Notification.requestPermission();
+  if (mode === 'push') await (on && permission === 'granted' ? enablePush() : disablePush());
   try {
     localStorage.setItem(STORAGE_KEY, on ? 'on' : 'off');
   } catch {
     // not persisted; the choice is lost on reload
   }
-  if (!on || notificationPermission() === null) return notificationPermission();
-  return Notification.requestPermission();
+  return permission;
+}
+
+/**
+ * Switches notifications off in this browser after it pairs as a new device. The board keeps
+ * a push subscription per device, so one saved by an earlier pairing of this browser, since
+ * revoked, is gone; leaving the choice "on" would show notifications enabled while no push can
+ * arrive. Switching them on again from Settings hands the board the subscription.
+ */
+export function resetNotifications(): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, 'off');
+  } catch {
+    // storage unavailable (private mode); nothing was saved to reset
+  }
 }

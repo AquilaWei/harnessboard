@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import type { TaskView } from '@harnessboard/shared';
-import { describeTask, openReview, sendBackKey } from '../src/describe';
+import { canChangeSpec, describeTask, openReview, sendBackKey } from '../src/describe';
 
 const base = {
   status: 'backlog',
@@ -45,6 +45,19 @@ describe('describeTask', () => {
       key: 'fixingReview',
       tone: 'working',
       vars: { agent: 'claude', reviewer: 'checker' },
+    });
+  });
+
+  it('names the designer adding the UI design', () => {
+    const task = {
+      ...base,
+      status: 'running',
+      activity: { phase: 'designing', agentId: 'artist' },
+    } as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'designing',
+      tone: 'working',
+      vars: { agent: 'artist' },
     });
   });
 
@@ -192,6 +205,81 @@ describe('describeTask for acceptance criteria', () => {
       planFeedbackPending: true,
     } as unknown as TaskView;
     expect(describeTask(task).key).toBe('revisingCriteriaQueued');
+  });
+});
+
+describe('describeTask for spec changes', () => {
+  it('asks the user to compare a proposed spec change', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'awaiting_approval',
+      specChange: { criteria: '- prints hello' },
+    } as unknown as TaskView;
+    expect(describeTask(task)).toEqual({ key: 'specChangeReady', tone: 'attention', vars: {} });
+  });
+
+  it('asks the user to answer a spec change without criteria', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'awaiting_approval',
+      specChange: { criteria: null },
+    } as unknown as TaskView;
+    expect(describeTask(task).key).toBe('specChangeMissing');
+  });
+
+  it('says a queued spec change request waits for the spec author', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'queued',
+      specRevisionPending: true,
+    } as unknown as TaskView;
+    expect(describeTask(task).key).toBe('specRevisionQueued');
+  });
+
+  it('says the spec author is proposing a change', () => {
+    const task = {
+      ...base,
+      mode: 'single',
+      status: 'running',
+      activity: { phase: 'planning', agentId: 'writer' },
+      specRevisionPending: true,
+    } as unknown as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'revisingSpec',
+      tone: 'working',
+      vars: { agent: 'writer' },
+    });
+  });
+});
+
+describe('canChangeSpec', () => {
+  const spec = { ...base, mode: 'single', specFile: 'docs/specs/1-x.md' } as unknown as TaskView;
+
+  it('allows a change while the task is in review', () => {
+    expect(canChangeSpec({ ...spec, status: 'review' })).toBe(true);
+  });
+
+  it('allows a change while the task is running', () => {
+    expect(canChangeSpec({ ...spec, status: 'running' })).toBe(true);
+  });
+
+  it('refuses a change before the spec file is written', () => {
+    expect(canChangeSpec({ ...spec, status: 'review', specFile: null })).toBe(false);
+  });
+
+  it('refuses a change while an approval waits', () => {
+    expect(canChangeSpec({ ...spec, status: 'awaiting_approval' })).toBe(false);
+  });
+
+  it('refuses a change once the task is done', () => {
+    expect(canChangeSpec({ ...spec, status: 'done' })).toBe(false);
+  });
+
+  it('refuses a change for a loop task', () => {
+    expect(canChangeSpec({ ...spec, mode: 'loop', status: 'review' })).toBe(false);
   });
 });
 

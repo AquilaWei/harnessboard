@@ -30,6 +30,8 @@ export function describeTask(task: TaskView): Description {
     case 'queued':
       // Only an answered tool use waiting for quota is queued with its agent still open.
       if (task.activity) return d('answerHeld', 'working');
+      // The spec author answers a request to change the spec before anything else runs.
+      if (task.specRevisionPending) return d('specRevisionQueued', 'working');
       if (task.planFeedbackPending) {
         return d(
           task.mode === 'single' ? 'revisingCriteriaQueued' : 'revisingPlanQueued',
@@ -54,6 +56,9 @@ export function describeTask(task: TaskView): Description {
       });
     }
     case 'awaiting_approval':
+      if (task.specChange) {
+        return d(task.specChange.criteria ? 'specChangeReady' : 'specChangeMissing', 'attention');
+      }
       if (task.mode === 'single') {
         return d(task.criteria?.criteria ? 'criteriaReady' : 'criteriaMissing', 'attention', {
           agent: task.agents.implementer,
@@ -81,12 +86,15 @@ function describeRunning(task: TaskView): Description {
   switch (activity.phase) {
     case 'planning':
       // An earlier proposal exists: this session is revising it with the user's feedback.
+      if (task.specRevisionPending) return d('revisingSpec', 'working', { agent });
       if (task.mode === 'single') {
         return d(task.criteria ? 'revisingCriteria' : 'discussing', 'working', { agent });
       }
       return d(task.plan ? 'revisingPlan' : 'planning', 'working', { agent });
     case 'writingSpec':
       return d('writingSpec', 'working', { agent });
+    case 'designing':
+      return d('designing', 'working', { agent });
     case 'testing':
       return d('testing', 'working', { agent });
     case 'implementing':
@@ -136,4 +144,14 @@ export function openReview(task: TaskView): ReviewRecord | null {
 /** Translation key under `actions.` for sending a task in Review back to work. */
 export function sendBackKey(task: TaskView): 'continueWithReview' | 'sendBack' {
   return task.lastReview?.verdict === 'changes' ? 'continueWithReview' : 'sendBack';
+}
+
+/**
+ * Whether the user can ask for a change to a task's spec: once the spec file is written and
+ * while work is under way. The server refuses it before, while an approval waits, and once
+ * the task is done.
+ */
+export function canChangeSpec(task: TaskView): boolean {
+  if (task.mode !== 'single' || !task.specFile) return false;
+  return task.status !== 'backlog' && task.status !== 'awaiting_approval' && task.status !== 'done';
 }

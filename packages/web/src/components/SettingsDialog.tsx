@@ -5,10 +5,12 @@ import { useTranslation } from 'react-i18next';
 import type { AgentInfo, Settings, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
 import { DetectedAgents } from './DetectedAgents';
+import { PhoneAccess } from './PhoneAccess';
 import { LANGUAGES, setLanguage } from '../i18n';
 import { parseRules } from '../rules';
 import type { Language } from '../i18n';
 import { notificationPermission, notificationsEnabled, setNotifications } from '../notify';
+import { currentNotifyMode } from '../push';
 import { THEMES, applyTheme, savedTheme } from '../theme';
 import type { Theme } from '../theme';
 
@@ -29,9 +31,11 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [globalRules, setGlobalRules] = useState(settings.allowedTools.join('\n'));
   const parsedRules = parseRules(globalRules);
   const [guidelines, setGuidelines] = useState(settings.reviewGuidelines.join('\n'));
+  const [remoteHosts, setRemoteHosts] = useState(settings.remoteHosts.join('\n'));
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [notify, setNotify] = useState(notificationsEnabled);
   const [permission, setPermission] = useState(notificationPermission);
+  const notifyMode = currentNotifyMode();
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +53,10 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           defaultReviewer: reviewer === '' ? null : reviewer,
           allowedTools: parsedRules.rules,
           reviewGuidelines: guidelines
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line !== ''),
+          remoteHosts: remoteHosts
             .split('\n')
             .map((line) => line.trim())
             .filter((line) => line !== ''),
@@ -182,6 +190,13 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           </p>
         </section>
 
+        <PhoneAccess
+          savedHosts={settings.remoteHosts}
+          hosts={remoteHosts}
+          onHostsChange={setRemoteHosts}
+          onError={setError}
+        />
+
         <div className="row">
           <label className="field">
             <span>{t('language')}</span>
@@ -215,23 +230,30 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           <input
             type="checkbox"
             checked={notify}
-            disabled={permission === null}
+            disabled={permission === null || notifyMode === 'unsupported'}
             onChange={(e) => {
               const on = e.target.checked;
-              void setNotifications(on).then((granted) => {
-                setPermission(granted);
-                setNotify(on && granted === 'granted');
-              });
+              setNotifications(on, notifyMode).then(
+                (granted) => {
+                  setPermission(granted);
+                  setNotify(on && granted === 'granted');
+                },
+                (err: Error) => setError(err.message),
+              );
             }}
           />
           <span>
             {t('notify.label')}
             <small className="hint">
-              {permission === null
-                ? t('notify.unsupported')
-                : permission === 'denied'
-                  ? t('notify.blocked')
-                  : t('notify.hint')}
+              {notifyMode === 'unsupported'
+                ? t('notify.pushUnsupported')
+                : permission === null
+                  ? t('notify.unsupported')
+                  : permission === 'denied'
+                    ? t('notify.blocked')
+                    : notifyMode === 'push'
+                      ? t('notify.pushHint')
+                      : t('notify.hint')}
             </small>
           </span>
         </label>

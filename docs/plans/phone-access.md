@@ -1,6 +1,8 @@
 # Phone access
 
-Status: M0 done, M1 not started. Decisions dated 2026-10-04.
+Status: M0 done. M1, M2, M3 (phone layout and PWA) and M4 (Web Push) are built and waiting
+for the [real-phone acceptance](#real-phone-acceptance-m1-to-m4); 0.1.0 is released after
+M1 and M2 pass. Decisions dated 2026-10-04.
 
 ## Goal
 
@@ -146,6 +148,9 @@ version rules.
    - A device without a passkey is not paired.
 3. **Lock state is kept on the server, per device:** `verified_at`, `last_active_at`.
    - **Locked** (new session, or idle > 30 min): only `/api/auth/*` is allowed.
+     - A session starts only with a passed passkey check or registration, which answers a token.
+       The web keeps it in page memory and sends it as `X-Harnessboard-Session` (`?session=` on
+       `GET /api/events`). Opening the board again, or a server restart, starts a new session.
      - `POST /api/auth/challenge` then `POST /api/auth/verify`.
      - The web shows an unlock screen.
    - **Sensitive routes** answer 401 `{reauth: true}` when `verified_at` is older than 5 min. The
@@ -154,6 +159,7 @@ version rules.
        - `POST /tasks`;
        - `POST /tasks/:id/permission`;
        - plan feedback and approve, criteria approve;
+       - a spec change: `POST /tasks/:id/spec-revision` and `POST /tasks/:id/spec-change/reject`;
        - `POST /tasks/:id/chat`;
        - `POST /tasks/:id/merge`;
        - `POST /tasks/:id/complete`;
@@ -231,6 +237,108 @@ and no logic.
   - pair, unlock, approve, create a task, receive a push;
   - finish with `tailscale serve reset`.
   - Ask the user before each real-phone session.
+
+### Real-phone acceptance (M1 to M4)
+
+Run by the user before 0.1.0. Tick each step; a step that fails stops the release and goes into
+this file with what the phone showed. The phone is on mobile data, not the home Wi-Fi.
+
+**Setup (on the computer)**
+
+1. Check that no other `tailscale serve` is running: `tailscale serve status`.
+2. Build and start a scratch server on port 4399, never the everyday server on 4317:
+
+   ```bash
+   pnpm build
+   export HARNESSBOARD_HOME=$(mktemp -d /tmp/hb-accept-XXXX)
+   node packages/server/dist/cli.js serve --port 4399
+   ```
+
+3. In another terminal: `tailscale serve --bg 4399`. Open `https://<machine>.<tailnet>.ts.net`
+   once on the computer and wait for the certificate (up to about 30 s).
+4. Open `http://127.0.0.1:4399` on the computer. No pairing or passkey is asked for.
+
+**M1: remote access and pairing**
+
+5. Before pairing, open `https://<machine>.<tailnet>.ts.net` on the phone. Expected: 403, because
+   the host is not saved yet.
+6. On the computer: **Settings → Phone access** shows the Tailscale name. **Add as remote host**,
+   **Save**. The section shows `tailscale serve --bg 4399`.
+7. Reload the page on the phone. Expected: "This device is not paired".
+8. On the computer: **Pair a phone**. Scan the QR code with the phone's camera and open it in Chrome.
+9. Enter a device name and tap **Pair**, then **Create passkey**, and confirm with fingerprint or
+   screen lock. Expected: the board appears; the computer's device list shows the name with a
+   recent "Last seen".
+10. Scan the same QR code again from another browser profile or after clearing site data.
+    Expected: the code is refused (used once).
+11. On the computer: **New code**, and send the address under the QR code to yourself in LINE.
+    Open it inside LINE. Expected: the "cannot use passkeys" message instead of a Pair button.
+    Use LINE's **Open in browser**. Expected: Chrome shows the pairing screen, because the code
+    stayed in the address. Pairing there is optional; revoke that device afterwards.
+
+**M2: lock, unlock and sensitive actions**
+
+12. Reload the board on the phone. Expected: "The board is locked"; **Unlock** asks for the
+    passkey and the board comes back.
+13. Leave the board open for 31 minutes without touching it, then tap anything. Expected: the
+    unlock screen.
+14. Unlock, wait 6 minutes, then create a task (or approve a permission request, or **Start** a
+    draft). Expected: the passkey prompt comes up after the tap, without a second tap, and the
+    action completes once confirmed. On Safari especially, note whether the browser refused the
+    prompt because it did not follow the tap directly.
+15. Cancel that prompt instead. Expected: the toast "Not done: a phone must confirm this with its
+    passkey", and the action did not happen.
+16. With the board open and unlocked on the phone, stop the server (Ctrl+C) and start it again
+    with the same command. Expected: the phone shows the unlock screen; after unlocking, card
+    changes made on the computer appear on the phone without a reload.
+17. Within 5 minutes of a passkey check, open **Settings** on the phone and change a setting.
+    Expected: it saves without a prompt. After 6 minutes, it asks first.
+18. On the computer: **Revoke** the phone. Expected: the next tap on the phone shows "This device
+    is not paired".
+
+**M3: phone layout and Home Screen** (pair again first if step 18 revoked the phone)
+
+19. On the computer, create a draft, a task in Review and one waiting for an answer. On the
+    phone, the board shows four tabs (Waiting for you, In progress, Review, Done) with counts,
+    one tab's tasks at a time. The header's "N need you" chip opens the tab with that task.
+20. Open a task. Expected: the panel fills the screen. With several permission requests or long
+    review findings, the top part scrolls on its own, and the tabs and the body below it stay
+    on screen. The answer buttons are easy to hit with a thumb (at least 44 px tall).
+21. On a task with changes, open **Changes** and tap **Files only**. Expected: just the file
+    names, Chinese names shown as characters, not `\346...` escapes.
+22. Tap **New task**. Expected: the form fills the screen and the keyboard does not hide the
+    field being typed in. Open the folder browser. Expected: it fills the screen, and **Close**
+    at the bottom returns to the form, also while the list is still loading.
+23. Turn the phone sideways and back. Expected: nothing is cut off or needs sideways scrolling.
+24. In Chrome's menu, **Add to Home Screen** (or **Install app**). Expected: the Harnessboard icon
+    (white H on blue) on the Home Screen. Open it. Expected: the board opens without the address
+    bar, the status bar is blue, and the board asks to unlock as on any new visit.
+
+**M4: push notifications** (from the Home Screen icon of step 24, unlocked)
+
+25. Open **Settings** on the phone. Expected: the hint under **Notify me when a task needs me**
+    says pushes arrive even while the board is closed. Switch it on and allow notifications.
+    Expected: no error; the switch stays on after closing and reopening Settings.
+26. Close the board on the phone (swipe the app away) and lock the screen. On the computer,
+    start a task that will ask for permission, or move one to Review. Expected: within a few
+    seconds the phone shows "#<id> <title>" with "Needs permission" or "Ready for review" (in
+    Chinese if the phone's language is Chinese).
+27. Tap the notification. Expected: the board opens, asks to unlock, and then opens that task
+    on the right tab (Changes for Review, Timeline for a permission request).
+28. With the board open on the phone but another app in front, make another task wait. Tap the
+    push. Expected: the board comes to the front and opens the task without asking to unlock
+    again (no reload).
+29. Switch the setting off, then make a task wait. Expected: no push. Switch it on again, then
+    **Revoke** the phone on the computer and make a task wait. Expected: no push.
+30. Optional, on an iPhone (iOS 16.4+): in Safari the switch is greyed out and says to add the
+    board to the Home Screen; from the Home Screen icon, steps 25–27 work the same.
+
+**Teardown**
+
+31. Stop the scratch server, then run `tailscale serve reset` and check `tailscale serve status`
+    is empty.
+32. Remove the scratch data: `rm -rf "$HARNESSBOARD_HOME"`. Delete the test passkey on the phone
+    (Google Password Manager → passkeys) so it does not pile up.
 
 ## Limits (for the README)
 

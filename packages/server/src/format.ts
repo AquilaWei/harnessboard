@@ -4,8 +4,10 @@ import type {
   Feature,
   PermissionDecisionRecord,
   PermissionRequest,
+  SpecChangeProposal,
   TaskView,
 } from '@harnessboard/shared';
+import { t } from './i18n.js';
 
 const STATUS_WIDTH = 13;
 
@@ -18,6 +20,30 @@ export function formatTaskRow(task: TaskView): string {
 /** One line per feature: a checkmark only when the agent marked it passing. */
 export function formatFeature(feature: Feature): string {
   return `  ${feature.passes ? '✓' : '·'} ${feature.id}  ${feature.description}`;
+}
+
+/**
+ * A spec change waiting for the user: who asked and why, the reply it was read from, the
+ * criteria in force and the proposed ones, one under the other, then the commands that
+ * decide it. For the user's own request the reason is their message, so the reply is the
+ * only place the spec author's explanation and questions show.
+ */
+export function formatSpecChange(taskId: number, change: SpecChangeProposal): string {
+  const indent = (text: string) => text.replace(/^/gm, '    ');
+  const proposed = change.criteria
+    ? `  ${t('specChangeProposed')}\n${indent(change.criteria)}`
+    : `  ${t('specChangeNoCriteria', { id: taskId })}`;
+  const reply = change.reply ? [`  ${t('specChangeReply')}`, indent(change.reply)] : [];
+  return [
+    t(change.from === 'user' ? 'specChangeFromUser' : 'specChangeFromImplementer', {
+      reason: change.reason,
+    }),
+    ...reply,
+    `  ${t('specChangeCurrent')}`,
+    indent(change.previous),
+    proposed,
+    t('specChangeNext', { id: taskId }),
+  ].join('\n');
 }
 
 export function formatTokens(tokens: number): string {

@@ -77,6 +77,39 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow(/agents.bad.provider/);
   });
 
+  it('rejects a sandbox other than docker', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const boxed = { provider: 'codex', command: 'codex', model: null, sandbox: 'podman' };
+    writeFileSync(file, JSON.stringify({ agents: { boxed } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      'config agents.boxed.sandbox must be "docker" or absent',
+    );
+  });
+
+  it('rejects a docker sandbox without an image', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const boxed = { provider: 'codex', command: 'codex', model: null, sandbox: 'docker' };
+    writeFileSync(file, JSON.stringify({ agents: { boxed } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      'config agents.boxed.sandboxImage must name an image for the sandbox',
+    );
+  });
+
+  it('accepts a docker sandbox with an image', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const boxed = {
+      provider: 'codex',
+      command: 'codex',
+      model: null,
+      sandbox: 'docker',
+      sandboxImage: 'agents:latest',
+    };
+    writeFileSync(file, JSON.stringify({ agents: { boxed } }));
+    expect(loadConfig({ env: {}, configFile: file }).agents.boxed!.sandboxImage).toBe(
+      'agents:latest',
+    );
+  });
+
   it('rejects a default reviewer that is not a profile', () => {
     const file = path.join(tempDir('cfg'), 'config.json');
     writeFileSync(file, JSON.stringify({ defaultReviewer: 'ghost' }));
@@ -88,6 +121,18 @@ describe('loadConfig', () => {
     writeFileSync(file, JSON.stringify({ reviewGuidelines: '~/rules.md' }));
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
       'config reviewGuidelines must be a list of file paths',
+    );
+  });
+
+  it('allows no remote hosts by default', () => {
+    expect(loadConfig({ env: {}, configFile: missing }).remoteHosts).toEqual([]);
+  });
+
+  it('rejects remote hosts that are not a list of host names', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ remoteHosts: 'box.tail1234.ts.net' }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      'config remoteHosts must be a list of host names',
     );
   });
 

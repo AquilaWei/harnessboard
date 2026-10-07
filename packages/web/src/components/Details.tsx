@@ -31,6 +31,8 @@ export function Details({ task, onSaved, onError }: Props) {
             <dd className="mono">{task.verifyCommand}</dd>
           </>
         )}
+        <dt>{t('fields.workspace')}</dt>
+        <dd>{t(`fields.workspaces.${task.workspace}`, { base: task.baseRef })}</dd>
         <dt>{t('fields.repo')}</dt>
         <dd className="mono">{task.repoPath}</dd>
         <dt>{t('fields.base')}</dt>

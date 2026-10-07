@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import os from 'node:os';
+import path from 'node:path';
 import type { AgentEvent, ModelInfo, QuotaInfo, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, LineParser, SessionSpec } from './agent.js';
 import { readCodexQuota } from './codex-quota.js';
@@ -20,6 +22,7 @@ export class CodexAdapter implements AgentAdapter {
     midTurnInput: false,
     sessionIds: 'agent',
     permissionPrompts: false,
+    readOnlyGit: true,
   };
 
   constructor(readonly command: string) {}
@@ -58,6 +61,11 @@ export class CodexAdapter implements AgentAdapter {
 
   interactiveResumeArgs(agentSessionId: string): string[] {
     return ['resume', agentSessionId];
+  }
+
+  /** The login, settings and session logs; `CODEX_HOME` is not followed. */
+  configPaths(): string[] {
+    return [path.join(os.homedir(), '.codex')];
   }
 
   encodeMessage(): string {

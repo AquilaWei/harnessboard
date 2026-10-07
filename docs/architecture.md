@@ -1,7 +1,7 @@
 # Architecture
 
 This page is for contributors. It covers how Harnessboard is put together, how agents and
-roles fit in, and what adding another agent CLI (such as Gemini) involves.
+roles fit in, and what adding another agent CLI involves.
 
 ## Packages
 
@@ -56,9 +56,24 @@ The installers come from `electron-builder`. They take their version from
     harness stops the task if anything else changed, and commits the file itself when the
     author left it uncommitted. `Workflow.goal()` tells later agents to read the file.
     The proposal also carries a short design (files, interfaces, risks), which goes into the
-    file, so there is no separate designer. `task.agents.spec` is optional; without it the
+    file; the user interface is left to the optional `designer`. `task.agents.spec` is optional; without it the
     implementer plays this role. When the same agent plays both roles the spec-writing session is also what the implementer
     resumes; otherwise the implementer starts a new session from the approved criteria.
+  - `designer`: optional, off by default (`task.agents.designer` absent or `null`), for
+    tasks with a user interface. Once `spec_written` is recorded, one session with edit access
+    adds a `## UI design` section to the spec file and commits it (`designPrompt`;
+    `design_written` event). The harness stops the task if any other file changed since the
+    spec was committed (for a `base` task, only within its own commit spans, so others'
+    commits in the folder are not counted), or the file has no such heading, and commits the
+    file itself when the designer left it uncommitted. From then on `taskGoal` and
+    `criteriaApprovedPrompt` tell the implementer and the reviewer to follow that section.
+    The designer runs only for a task with a spec file (a single task whose criteria were
+    approved), and not when it is chosen after the implementer has started. The start is the
+    `implementation_started` event the first implementer session after the spec logs, once
+    its agent reports anything; the designer's, a chat's and the spec author's revision
+    sessions do not count. Spec change decisions made before that are not sent as a separate
+    session: the implementer's first prompt already carries the decided criteria. Its
+    session is never one the implementer resumes.
   - `implementer`: edits files and commits. For a task with a spec file it is also told to
     keep the README, changelog and docs in step (`DOCS_DUTY`), and the reviewer checks that.
   - `tester`: optional, single tasks only. After an implementer step, one session with edit
@@ -98,10 +113,10 @@ implementer step done ──► review_request ──► reviewer session (read-
 For a single task the roles run in this order:
 
 ```
-spec ─► spec file ─► implementer ─► tester ─► reviewer
+spec ─► spec file ─► designer ─► implementer ─► tester ─► reviewer
 ```
 
-The tester is off unless the task names an agent for it; the spec author defaults to the
+The designer and the tester are off unless the task names an agent for them; the spec author defaults to the
 implementer, and the reviewer to `defaultReviewer`. A
 failing test report or a `CHANGES` verdict returns to the implementer, and the step then
 passes through the later roles again.
@@ -118,6 +133,47 @@ restart picks up exactly where the task was. A loop step's reviewer gets the lat
 snapshot: the features marked done are what it judges, and the features still to come are
 listed as out of scope, so an unfinished list is never a reason to ask for changes.
 
+**Spec changes.** Once a single task's spec file is written (`spec_written`), its criteria
+can change through the same approval as the first spec. Two ways in:
+
+- The user asks (`Harness.requestSpecRevision`, `POST /api/tasks/:id/spec-revision`; on the
+  board **Change the spec**, which shows while `canChangeSpec` holds for the view's
+  `specFile` and status, and `hb spec`), stored as
+  a `spec_revision` event. The next session is the spec author's, read-only and in a new
+  conversation (`specRevisionPrompt`), and it comes before a pending review or test. A
+  request made while a session or a chat runs waits for it to end; a task that then lands
+  in review goes back in line for it (`reviseAfterStep`). The proposal records the id of
+  the request it answers (`requestId`), so a request that came in meanwhile stays waiting:
+  the spec author answers it next, starting from that proposal, and the user decides only
+  on the answer to the latest request.
+- The implementer ends its reply with a `SPEC CHANGE: <why>` line and the complete revised
+  list (`parseSpecChange`). Implementers of a task with a spec file are told how
+  (`SPEC_CHANGE_DUTY`). The step is then not sent for review or test.
+
+Either way a `spec_change` proposal (`SpecChangeProposal`: old and new criteria, who, why)
+puts the task in `awaiting_approval`, and nothing is built until the user decides. A reply
+(`planFeedback`) becomes a new `spec_revision`. `approveCriteria` approves a waiting change
+too (`approveSpecChange`), and `rejectSpecChange` rejects it; both store a
+`spec_change_decision`. On approval the criteria are saved on the task, so every later
+goal, review and test uses them. Before the next session, `Workflow.reviseSpecFile`
+rewrites the criteria section of the spec file and adds a dated line under "Revisions"
+(`core/src/spec.ts`), then commits only that file (`spec_revised`). The harness writes the
+file itself so it holds exactly the approved criteria. The implementer is then resumed with
+the new criteria (`specChangeApprovedPrompt`). A rejection leaves the file and criteria as
+they were. The implementer's own proposal is answered with `SPEC_CHANGE_REJECTED_PROMPT`;
+a user's request returns the task to review if it was there, and to the queue otherwise.
+A session whose prompt carries a request or decisions logs a `spec_delivered` event for
+each as it starts (`Workflow.started`). The spec author's revision sessions, told by the
+request delivered to them, are never what the implementer resumes (`withoutRevisions`),
+even one cut off before it proposed anything. A decision counts as heard only once the agent of
+such a session reported anything after it (`Store.sessionHasAgentEventsAfter`): a chat in
+between does not use it up, and neither does a launch that failed, for which the harness
+still logs usage, stderr and the deliveries themselves. Every unheard
+approval and rejection of the implementer's own proposal is told together, so rejecting a
+later request of the user does not hide an approval the implementer has not heard yet.
+`Workflow.nextStep` picks what the next session is for, and both `nextSession` and the
+quota check (`nextAgentId`) go by it.
+
 Rounds count from the step's last pass (`APPROVE`, `TESTS: PASS`) or from the last
 `sent_back` event, which `Harness.queueTask` records when a human sends a task in review back
 to work. The implementer then gets the last review's feedback, and the reviewer and tester
@@ -127,7 +183,8 @@ get `maxReviewRounds` again.
 
 1. Add the provider id to `AGENT_PROVIDERS` in `shared/src/agents.ts`.
 2. Implement `AgentAdapter` (`core/src/agent.ts`) in a new file, and register it in
-   `core/src/providers.ts`.
+   `core/src/providers.ts`. List the CLI's login and settings in `configPaths`, so the
+   Docker sandbox can mount them.
 3. Parse the CLI's output into `AgentEvent`s. The harness depends on these:
    - `init` with the CLI's session id
    - `context`: tokens currently in the context window, after each model call
@@ -136,16 +193,18 @@ get `maxReviewRounds` again.
    - `quota`, if the CLI reports usage limits
 4. Declare `capabilities` honestly. The runner adapts to them:
 
-   | Capability          | `true` / `harness`                                                                             | `false` / `agent`                                                                             |
-   | ------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-   | `midTurnInput`      | Prompt and wrap-up request are written to stdin during the turn                                | Prompt goes in the arguments; the wrap-up is sent by resuming the session after the turn ends |
-   | `sessionIds`        | The harness picks the id and passes it                                                         | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it     |
-   | `permissionPrompts` | A tool outside the rules emits `permission_request`; the CLI waits for `encodePermissionReply` | Such tools are refused; the user widens the rules with `hb tools` and runs the task again     |
+   | Capability          | `true` / `harness`                                                                             | `false` / `agent`                                                                                                      |
+   | ------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+   | `midTurnInput`      | Prompt and wrap-up request are written to stdin during the turn                                | Prompt goes in the arguments, or on stdin with `encodePrompt`; the wrap-up is sent by resuming the session             |
+   | `sessionIds`        | The harness picks the id and passes it                                                         | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it                              |
+   | `permissionPrompts` | A tool outside the rules emits `permission_request`; the CLI waits for `encodePermissionReply` | Such tools are refused; the user widens the rules with `hb tools` and runs the task again                              |
+   | `readOnlyGit`       | A read-only reviewer runs `git log`, `git diff` and `git status` itself                        | The harness runs them, saves the output to files the reviewer may read, and quotes it in the prompt (`reviewEvidence`) |
 
 5. Map `SessionSpec.access: 'readOnly'` to the CLI's most restrictive mode. Reviewers rely
    on it. The harness also compares HEAD and `git status` before and after every review,
    and stops the task if anything changed.
-6. Add tests that drive a scripted fake CLI (see `core/test/fixtures/fake-claude.mjs` and
+6. Add tests that drive a scripted fake CLI (see `core/test/fixtures/fake-claude.mjs`,
+   `core/test/fixtures/fake-gemini.mjs` and
    `PromptArgAdapter` in `core/test/helpers.ts`, which already acts like a prompt-as-argument
    CLI).
 
@@ -153,7 +212,8 @@ get `maxReviewRounds` again.
 
 `core/src/codex.ts` drives `codex exec --json`, checked against Codex CLI 0.160:
 
-- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
+- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`,
+  `readOnlyGit: true` (the read-only sandbox still runs commands that do not write).
 - The result's text is the turn's last `agent_message`. Adapters are shared by all sessions
   of a profile, so this needs state per process: an adapter may provide `createParser()`,
   which the runner calls once for each CLI process.
@@ -167,21 +227,145 @@ get `maxReviewRounds` again.
 - Not seen in real output yet, so read defensively: `file_change` items and usage-limit
   errors (a message containing "usage limit" or "rate limit" counts as 429).
 
-## Notes for the planned providers
+## The Gemini adapter
 
-These come from the vendors' documentation and have not been checked against real output
-yet. Check them against the real CLIs before relying on them.
+`core/src/gemini.ts` drives `gemini --output-format stream-json` with the prompt on stdin. Its event
+names and fields follow the stream-json types in the Gemini CLI source
+(`packages/core/src/output/types.ts`) and the CLI reference; it has not been checked against
+a real run yet.
 
-- **Google Gemini CLI:**
-  - `gemini -p "<prompt>" --output-format stream-json` prints JSONL events: `init` (with the
-    session id), `message`, `tool_use`, `tool_result`, `error` and `result` (with stats).
-  - It resumes with `--resume <id>`.
-  - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`.
-  - Read-only mode: check which approval mode or sandbox flag refuses edits.
+- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`,
+  `readOnlyGit: false`.
+- Output is JSONL: `init` (with `session_id` and `model`), `message` (`role`, `content`, and
+  `delta: true` for chunks), `tool_use`, `tool_result`, `error` (`severity`, `message`) and
+  `result` (`status`, `error`, `stats`). The parser joins assistant chunks into one message,
+  which ends at the next `tool_use` or at the `result`; the result's text is the last
+  message, so the adapter provides `createParser()` like Codex.
+- The prompt goes to stdin (`encodePrompt`), which the runner closes after it: Gemini runs
+  headless when stdin is not a terminal and takes all of it (up to 8 MB) as the prompt. An
+  argument would fail on Windows, where `gemini` is a `gemini.cmd` shim run through cmd.exe,
+  whose whole command line holds at most 8,191 characters; a review prompt with its evidence
+  is often longer. On stdin a prompt starting with `-` is not read as an option either. It
+  resumes with `--resume <session id>`, and `hb open` runs `gemini --resume <session id>`.
+- Access maps to `--approval-mode`: `plan` (read-only) for reviewers, `yolo` for edit sessions
+  that skip permissions, and `auto_edit` for the others. Without a terminal nothing can answer
+  an approval, so under `auto_edit` shell commands are refused and the session can not
+  commit. Plan mode alone is not read-only: headless, Gemini approves `exit_plan_mode` by
+  itself and then switches to `yolo`, and the user's own allowances (`tools.allowed`,
+  `--allowed-tools`, rules in `~/.gemini/policies`, all user tier 4.x) outrank plan mode's
+  refusals (default tier 1.x). Every read-only session, new or resumed, therefore also gets
+  `--admin-policy` with a policy file the adapter writes once per process into a private
+  temporary directory (`read-only.toml`, rewritten if it was cleaned away). Admin rules rank
+  5 + priority / 1000: a catch-all deny (5.900) refuses every tool in every mode, MCP tools,
+  subagents and `exit_plan_mode` included, and an allowlist above it (5.950) lets through
+  only `read_file`, `read_many_files`, `glob`, `grep_search`, `list_directory` and
+  `google_web_search`, so the evidence directory can still be read. Gemini ignores
+  `--admin-policy` once its system policy directory (`/etc/gemini-cli/policies`,
+  `/Library/Application Support/GeminiCli/policies` or `C:\ProgramData\gemini-cli\policies`)
+  holds a `.toml` file, so `buildArgs` then throws and the runner reports the session as
+  failed to start instead of running a reviewer that could write. `gemini-policy.test.ts`
+  runs the generated file through the policy engine of `@google/gemini-cli-core` 0.62.0
+  (installed by CI outside the workspace, `HARNESSBOARD_TEST_GEMINI_CORE`; skipped without
+  it) next to user allowances for writes and shell and next to a system policy; a real CLI
+  run is still unchecked. The harness's git check
+  after a review still runs, but only finds changes once they are made. Plan mode allows no
+  shell, so a Gemini reviewer can not run the verify
+  command or git itself. Instead the harness runs the git commands the review prompt names
+  (`reviewEvidence` in `review.ts`): log, `--stat` and patch of the current stretch and of a
+  `base` task's earlier stretches, `git status --porcelain`, and `git diff HEAD` when there
+  are uncommitted edits. Each output is written whole to its own file in
+  `<dataDir>/evidence/<task id>/` (`current-diff.txt`, `earlier-1-diff.txt`, `status.txt`,
+  ...), emptied before each review and removed with the task. The directory is passed as
+  `SessionSpec.readableDirs`, which Gemini gets as `--include-directories`, so plan mode may
+  read it; it is passed again when the reviewer is resumed. The prompt quotes outputs whole
+  while they fit a shared 12,000 characters (`EVIDENCE_INLINE_LIMIT`) and names the file of
+  every output, so deleted files, removed lines and earlier stretches stay reachable however
+  large the change is. The limit keeps the prompt short enough to read; it is not needed for
+  delivery, since the prompt goes on stdin. Gemini's read tools skip files git ignores, which
+  includes `.harnessboard/notes.md`, so the rendered notes are also written to `notes.md` in
+  that directory (`copyNotes` in `notes.ts`) and the prompt points the reviewer at the copy. `allowedTools` are Claude-style rules that Gemini
+  does not understand, so they are not passed on.
+- `stats` comes once, in the `result`, so no `context` events are emitted and Gemini manages
+  its own context. Its per-model `input` (tokens not read from the cache) and `cached` become
+  `input` and `cacheRead`.
+- Gemini reports no subscription quota the way Claude Code's `rate_limit_event` does. A failed
+  `result` whose message mentions quota, rate limits, `RESOURCE_EXHAUSTED` or 429 is reported
+  with `apiErrorStatus: 429`; the task then waits `quotaRetryMinutes` and retries. Without an
+  error in the `result`, the last `error` event with severity `error` supplies the message.
+- Gemini CLI can not list its models, so the adapter has no `listModels` and model ids are
+  typed.
+- Tests drive `core/test/fixtures/fake-gemini.mjs`, which prints scripted stream-json lines.
 
-Gemini does not report a subscription quota the way Claude Code's `rate_limit_event` does.
-Its adapter should report a usage-limit error as an error `result` with
-`apiErrorStatus: 429`. The task then waits `quotaRetryMinutes` and retries.
+## The Docker sandbox
+
+A profile with `sandbox: 'docker'` and a `sandboxImage` gets its adapter wrapped in
+`DockerSandbox` (`core/src/sandbox.ts`) by `createAdapter`. The wrapper is itself an
+`AgentAdapter`: its `command` is `docker`, and its `buildArgs` is `docker run --rm -i`, the
+mounts, the image, then the inner adapter's command and arguments. Parsing, stdin
+encoding, capabilities, model lists and quota readings are the inner adapter's, so the
+runner and the workflow do not know a session is sandboxed.
+
+- **Mounts** are bind mounts at the same path as on the host, so every path in the CLI's
+  arguments still works: the session's `cwd` (read-write; a reviewer's verify command may
+  write build output), the git common directory when it lies outside `cwd`, as a
+  worktree's does (`git rev-parse --git-common-dir`; read-only for `readOnly` sessions),
+  the existing paths from the inner adapter's `configPaths(access)`, and `readableDirs`
+  (read-only). Missing config paths are skipped, because docker would create them as
+  root-owned folders. Gemini's `configPaths` includes the folder of its admin policy file
+  for read-only sessions.
+- **Emptied folders:** each path from the inner adapter's `containerEmptyDirs(access)` gets
+  a root-owned tmpfs with mode 0555 over it. Gemini returns `/etc/gemini-cli/policies` for
+  read-only sessions: a `.toml` file there in the image would make Gemini ignore
+  `--admin-policy`, and the agent, not being root, can not add one. The host check in
+  `buildArgs` still runs, so a host with system policies refuses Gemini reviewers in a
+  container too.
+- **User:** `--user <uid>:<gid>` and `HOME` from the host, so the mounted login works and
+  files stay the user's. `HOME` is an empty tmpfs owned by that uid
+  (`--tmpfs <home>:uid=…,gid=…,mode=0700,exec`), so tools can write caches such as `~/.npm`;
+  the config mounts land inside it, and it is gone with the container. Without it docker
+  would create the home path, absent from most images, as root. It is left out when a bind
+  mount already covers the home (a task folder that is the home itself). `~/.gitconfig` is not mounted; the `user.name` and `user.email`
+  that `git config --get` returns in `cwd` on the host go in as `GIT_AUTHOR_*` and
+  `GIT_COMMITTER_*`, so commits in the container carry the user's identity. `--init` forwards the stop signal the runner sends to the docker
+  client (which proxies it) on to the agent. `--security-opt label=disable` makes the
+  mounts usable on SELinux hosts without relabelling them.
+- **Refusal:** `ensureReady()` (an optional adapter method) runs before a task's or chat's
+  session is recorded. The sandbox rejects on Windows and when `docker version` can not
+  reach a daemon, so the task fails with that reason and the agent never starts outside the
+  container. `hb open` checks the same before it opens the session with `docker run -it`.
+- `versionArgs` run the CLI's version command inside the image, so `hb agents` reports an
+  image without the CLI.
+- **Not covered:** other environment variables (API keys, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+  `GEMINI_CLI_HOME`) are not passed in; the network is not restricted; the git directory
+  holds every branch; the rest of the user's git config (signing, hooks) stays outside.
+- Tests: `core/test/sandbox.test.ts` checks the exact command line and the refusal with an
+  empty PATH, and runs containers when a docker daemon answers on Linux: a few on
+  `alpine:3`, and some on an image it builds (git, an allow-all Gemini system policy, a
+  `gemini` that runs its stdin) to check that a read-only Gemini session sees and can add no
+  system policy and that a worktree commits with an identity set only in the host's global
+  config, and that a uid whose home the image lacks can create `~/.npm` there.
+  `core/test/harness-sandbox.test.ts` checks that a task fails without docker.
+
+## Workspaces
+
+A task's `workspace` says where its agents work. It is chosen when the task is created
+(`CreateTaskInput.workspace`, `hb add --on-base`, the New task dialog) and never changes.
+
+- **`worktree` (default):** the first start adds a worktree under the data directory, on a
+  new branch from `baseRef`. The diff and commits are measured from `baseRef`. The branch is
+  merged after review (`hb merge`), or left for the user with Mark done.
+- **`base`:** `worktreePath` is set to the repository folder, `branch` stays null, and its
+  commits land on `baseRef`, which must be checked out there. Everything that runs in
+  `worktreePath` (sessions, the verify command, notes) needs no special case. Delete, merge
+  and `hb open` do: they check `workspace` first, because that path is not theirs to remove.
+- **One `base` task per folder:** a `base` task holds its folder while it is in one of
+  `HOLDS_FOLDER` (`core/src/harness.ts`), review included, and while its session is still
+  winding up. Queueing or chatting with another `base` task there, or merging into that
+  branch, is refused while it does.
+- **History of a `base` task:** with no branch of its own, its work is the stretches between
+  the commit at the start of a session and the one at its end (`startCommit`, `endCommit`,
+  `priorSpans`). Commits made by others while it let go of the folder fall between stretches
+  and are left out of its diff, commits and review requests.
 
 ## Data and state
 

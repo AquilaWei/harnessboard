@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import spawn from 'cross-spawn';
-import { Argument, Command, InvalidArgumentError, Option } from 'commander';
+import { Argument, Command, Option } from 'commander';
 import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import {
   AGENT_PROVIDERS,
   APP_NAME,
   DEFAULT_COMMANDS,
-  DEFAULT_PRESET,
-  PERMISSION_PRESETS,
   definedOnly,
   formatCost,
   formatDuration,
@@ -18,14 +16,22 @@ import type {
   AgentProvider,
   PermissionRequest,
   PlanQuestion,
-  TaskSize,
   TaskUsage,
   TaskView,
 } from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
-import { createEventFormatter, formatFeature, formatTaskRow, formatTokens } from './format.js';
+import {
+  createEventFormatter,
+  formatFeature,
+  formatSpecChange,
+  formatTaskRow,
+  formatTokens,
+} from './format.js';
 import { t } from './i18n.js';
+import { openTarget } from './open.js';
 import { printUnconfigured, runServer } from './run.js';
+import { parseInteger, parsePresets, taskInput, withTaskOptions } from './task-options.js';
+import type { AddOptions, LoopInput } from './task-options.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const FOLLOW_INTERVAL_MS = 500;
@@ -49,77 +55,8 @@ program
   .description('start the scheduler and the local API')
   .action(() => runServer(config()));
 
-/** Options shared by `add` and `loop`. */
-function withTaskOptions(command: Command): Command {
-  return command
-    .option('-C, --repo <dir>', 'repository to work in', process.cwd())
-    .option('--title <title>', 'short title (defaults to the first line of the prompt)')
-    .option('--criteria <text>', 'acceptance criteria: what must hold for the work to be done')
-    .option('--base <ref>', 'git ref to branch from (defaults to the current branch)')
-    .addOption(
-      new Option('--size <size>', 'task size; sets the soft context threshold').choices([
-        'small',
-        'medium',
-        'large',
-      ]),
-    )
-    .option(
-      '--compact <pct>',
-      'compact the conversation at this context % (0: never)',
-      parseInteger,
-    )
-    .option('--soft <pct>', 'soft context threshold in percent', parseInteger)
-    .option('--hard <pct>', 'hard context threshold in percent', parseInteger)
-    .option(
-      '--preset <ids>',
-      `permission presets, comma-separated: ${PERMISSION_PRESETS.map((p) => p.id).join(', ')} or none (default ${DEFAULT_PRESET})`,
-      parsePresets,
-    )
-    .option('--allow <rules...>', 'more tool rules the agent may use without asking')
-    .option('--skip-permissions', 'let the agent run anything (only in a sandbox)')
-    .option(
-      '--no-auto-approve',
-      'ask before every tool the rules do not allow, instead of only dangerous ones',
-    )
-    .option('--model <model>', 'model for the implementer, e.g. opus, sonnet, haiku')
-    .option(
-      '--spec <agent>',
-      'agent profile that writes the acceptance criteria (default: implementer)',
-    )
-    .option('--spec-model <model>', 'model for the spec author')
-    .option('--tester <agent>', 'agent profile that writes and runs tests for each finished step')
-    .option('--tester-model <model>', 'model for the tester')
-    .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
-    .option('--reviewer-model <model>', 'model for the reviewer')
-    .option('--no-queue', 'leave the task in the backlog');
-}
-
 async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): Promise<void> {
-  const task = await client().createTask(
-    definedOnly({
-      prompt,
-      ...loop,
-      acceptance: o.criteria,
-      repo: o.repo,
-      title: o.title,
-      baseRef: o.base,
-      size: o.size,
-      compactPct: o.compact,
-      softPct: o.soft,
-      hardPct: o.hard,
-      allowedTools: allowedTools(o.preset, o.allow),
-      skipPermissions: o.skipPermissions,
-      autoApprove: o.autoApprove,
-      spec: o.spec,
-      specModel: o.specModel,
-      tester: o.tester,
-      testerModel: o.testerModel,
-      reviewer: o.reviewer === 'none' ? null : o.reviewer,
-      implementerModel: o.model,
-      reviewerModel: o.reviewerModel,
-      queue: o.queue,
-    }),
-  );
+  const task = await client().createTask(taskInput(prompt, o, loop));
   console.log(t('taskCreated', { id: task.id, status: task.status }));
 }
 
@@ -160,7 +97,8 @@ program
   .action(async (id: number) => {
     const task = await client().getTask(id);
     if (task.mode === 'single') {
-      if (task.criteria) console.log(`${task.criteria.reply}\n\n${t('criteriaNext', { id })}`);
+      if (task.specChange) console.log(formatSpecChange(id, task.specChange));
+      else if (task.criteria) console.log(`${task.criteria.reply}\n\n${t('criteriaNext', { id })}`);
       else if (task.acceptance) console.log(task.acceptance);
       else console.log(t('noCriteria', { id }));
       return;
@@ -179,7 +117,7 @@ program
 
 program
   .command('feedback')
-  .description('reply to a proposed plan or acceptance criteria; the agent revises them')
+  .description('reply to a proposed plan, acceptance criteria or spec change; the agent revises it')
   .argument('<id>', 'task id', parseInteger)
   .argument('<message...>', 'your feedback')
   .action(async (id: number, words: string[]) => {
@@ -189,7 +127,7 @@ program
 
 program
   .command('approve')
-  .description('approve a proposed plan or acceptance criteria and start building')
+  .description('approve a proposed plan, acceptance criteria or spec change and start building')
   .argument('<id>', 'task id', parseInteger)
   .option('--verify <command>', 'loop tasks: verify command (required unless the task has one)')
   .option('--criteria <text>', 'single tasks: approve these criteria instead of the proposed ones')
@@ -200,6 +138,27 @@ program
       mode === 'single'
         ? await api.approveCriteria(id, o.criteria)
         : await api.approvePlan(id, o.verify);
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
+  .command('spec')
+  .description(
+    "ask the spec author to change a single task's spec after work started; you approve the change",
+  )
+  .argument('<id>', 'task id', parseInteger)
+  .argument('<message...>', 'what should change in the spec, and why')
+  .action(async (id: number, words: string[]) => {
+    const task = await client().requestSpecRevision(id, words.join(' '));
+    console.log(t('specRevisionRequested', { id, status: task.status }));
+  });
+
+program
+  .command('reject')
+  .description('reject a proposed spec change; the spec and criteria stay as they are')
+  .argument('<id>', 'task id', parseInteger)
+  .action(async (id: number) => {
+    const task = await client().rejectSpecChange(id);
     console.log(t('taskStatus', { id, status: task.status }));
   });
 
@@ -272,12 +231,15 @@ program
     const task = await client().getTask(id);
     console.log(formatTaskRow(task));
     console.log(`  repo:     ${task.repoPath} (${task.baseRef})`);
-    console.log(`  worktree: ${task.worktreePath ?? '-'} ${task.branch ?? ''}`);
+    if (task.workspace === 'base') console.log(`  ${t('onBase', { base: task.baseRef })}`);
+    else console.log(`  worktree: ${task.worktreePath ?? '-'} ${task.branch ?? ''}`);
     if (task.acceptance) {
       console.log(`  ${t('criteriaHeading')}`);
       for (const line of task.acceptance.split('\n')) console.log(`    ${line}`);
     }
     if (task.criteria) console.log(`  ${t('criteriaNext', { id })}`);
+    if (task.specChange) console.log(`  ${t('specChangeNext', { id })}`);
+    if (task.specRevisionPending) console.log(`  ${t('specRevisionWaiting')}`);
     if (task.context) {
       const c = task.context;
       const line = t('contextLine', {
@@ -414,6 +376,8 @@ program
   .option('--model <model>', 'implementer model, or "default" for the profile model')
   .option('--spec <agent>', 'spec author profile, or "implementer" to let the implementer write it')
   .option('--spec-model <model>', 'spec author model, or "default" for the profile model')
+  .option('--designer <agent>', 'designer profile, or "none" to skip the UI design')
+  .option('--designer-model <model>', 'designer model, or "default" for the profile model')
   .option('--tester <agent>', 'tester profile, or "none" to skip testing')
   .option('--tester-model <model>', 'tester model, or "default" for the profile model')
   .option('--reviewer <agent>', 'reviewer profile, or "none"')
@@ -425,6 +389,8 @@ program
       implementerModel: model(o.model),
       spec: o.spec === undefined ? undefined : o.spec === 'implementer' ? null : o.spec,
       specModel: model(o.specModel),
+      designer: o.designer === undefined ? undefined : o.designer === 'none' ? null : o.designer,
+      designerModel: model(o.designerModel),
       tester: o.tester === undefined ? undefined : o.tester === 'none' ? null : o.tester,
       testerModel: model(o.testerModel),
       reviewer: o.reviewer === undefined ? undefined : o.reviewer === 'none' ? null : o.reviewer,
@@ -439,6 +405,7 @@ program
         ? `spec         ${a.spec}  ${shown(a.specModel)}`
         : `spec         ${t('sameAsImplementer')}`,
     );
+    console.log(`designer     ${a.designer ?? '-'}  ${a.designer ? shown(a.designerModel) : ''}`);
     console.log(`implementer  ${a.implementer}  ${shown(a.implementerModel)}`);
     console.log(`tester       ${a.tester ?? '-'}  ${a.tester ? shown(a.testerModel) : ''}`);
     console.log(`reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel) : ''}`);
@@ -610,55 +577,25 @@ program
   .description("continue a task's latest session interactively in Claude Code")
   .argument('<id>', 'task id', parseInteger)
   .action(async (id: number) => {
-    const task = await client().getTask(id);
-    if (task.status === 'running') throw new Error(t('openWhileRunning', { id }));
-    // Reviewer sessions are read-only; taking over means continuing the implementer's work.
-    const session = task.sessions.findLast((s) => s.role === 'implementer' && s.agentSessionId);
-    if (!session?.agentSessionId || !task.worktreePath) throw new Error(t('noSession', { id }));
+    const { session, agentSessionId, dir } = openTarget(await client().getTask(id));
     const profile = config().agents[session.agentId];
     if (!profile) throw new Error(t('unknownAgent', { agent: session.agentId }));
     const adapter = createAdapter(profile);
-    console.log(t('opening', { session: session.agentSessionId, dir: task.worktreePath }));
-    const child = spawn(adapter.command, adapter.interactiveResumeArgs(session.agentSessionId), {
-      cwd: task.worktreePath,
+    await adapter.ensureReady?.(); // a sandboxed profile is never opened outside docker
+    console.log(t('opening', { session: agentSessionId, dir }));
+    const child = spawn(adapter.command, adapter.interactiveResumeArgs(agentSessionId, dir), {
+      cwd: dir,
       stdio: 'inherit',
     });
     await new Promise<void>((resolve) => child.once('close', () => resolve()));
   });
 
-interface LoopInput {
-  mode?: 'loop';
-  verifyCommand?: string;
-  confirmPlan?: boolean;
-}
-
-interface AddOptions {
-  repo: string;
-  criteria?: string;
-  title?: string;
-  base?: string;
-  size?: TaskSize;
-  compact?: number;
-  soft?: number;
-  hard?: number;
-  preset?: string[];
-  allow?: string[];
-  skipPermissions?: boolean;
-  autoApprove?: boolean;
-  reviewer?: string;
-  model?: string;
-  reviewerModel?: string;
-  spec?: string;
-  specModel?: string;
-  tester?: string;
-  testerModel?: string;
-  queue: boolean;
-}
-
 interface ModelsOptions {
   model?: string;
   spec?: string;
   specModel?: string;
+  designer?: string;
+  designerModel?: string;
   tester?: string;
   testerModel?: string;
   reviewer?: string;
@@ -684,34 +621,6 @@ function pickRequest(task: TaskView, requestId?: string): PermissionRequest {
 }
 
 /** Comma-separated preset ids; `none` for no preset. Unknown ids are rejected here. */
-function parsePresets(value: string): string[] {
-  const ids = value
-    .split(',')
-    .map((id) => id.trim())
-    .filter((id) => id && id !== 'none');
-  try {
-    presetRules(ids);
-  } catch (err) {
-    throw new InvalidArgumentError((err as Error).message);
-  }
-  return ids;
-}
-
-/**
- * Rules to send, or `undefined` to let the server choose. `--allow` alone adds to the
- * default preset, so extra rules never silently take away the git commands.
- */
-function allowedTools(presets?: string[], allow?: string[]): string[] | undefined {
-  if (!presets && !allow) return undefined;
-  return [...new Set([...presetRules(presets ?? [DEFAULT_PRESET]), ...(allow ?? [])])];
-}
-
-function parseInteger(value: string): number {
-  const n = Number(value);
-  if (!Number.isInteger(n)) throw new InvalidArgumentError('not an integer');
-  return n;
-}
-
 program.parseAsync().catch((err: unknown) => {
   const message =
     err instanceof ServerUnavailableError

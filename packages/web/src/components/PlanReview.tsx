@@ -146,7 +146,9 @@ export function PlanReview({ task, version, onDone, onError }: Props) {
               >
                 {t('plan.send')}
               </button>
-              <span className="hint">{t('plan.terminal', { id: task.id })}</span>
+              {task.workspace !== 'base' && (
+                <span className="hint">{t('plan.terminal', { id: task.id })}</span>
+              )}
             </div>
           </section>
         </>

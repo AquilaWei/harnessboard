@@ -15,6 +15,8 @@ interface Props {
   version: string | null;
   onNewTask: () => void;
   onSettings: () => void;
+  /** Brings the tasks that need you into view. */
+  onAttention: () => void;
 }
 
 /** Brand with the server's version, a one-line summary of the board, the quota, and the two global actions. */
@@ -26,14 +28,12 @@ export function Header({
   version,
   onNewTask,
   onSettings,
+  onAttention,
 }: Props) {
   const { t } = useTranslation();
   // One reading per platform that has reported its usage, in a fixed order.
   const providers = AGENT_PROVIDERS.filter((p) => status?.quotas[p]);
   const pauseAt = settings?.quotaPauseUtilization ?? 0.95;
-
-  const jumpToAttention = () =>
-    document.getElementById('stage-attention')?.scrollIntoView({ behavior: 'smooth' });
 
   return (
     <header className="header">
@@ -48,7 +48,7 @@ export function Header({
           {t('summary.running', { count: running })}
         </span>
         {attention > 0 && (
-          <button type="button" className="chip chip-attention" onClick={jumpToAttention}>
+          <button type="button" className="chip chip-attention" onClick={onAttention}>
             ! {t('summary.attention', { count: attention })}
           </button>
         )}

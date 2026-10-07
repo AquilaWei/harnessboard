@@ -6,11 +6,13 @@
 // the i-th user message on stdin emits turns[i]. A line {"__hang": true} waits until killed;
 // {"__exit": code} writes {"__stderr"}'s text (if any) to stderr and exits with that code.
 // {"__write": {"path", "content"}} writes a file relative to the working directory.
+// {"__commit": message} commits every change in the working directory, as an agent would.
 // A {"type": "control_request"} line is printed, then the fake waits for the matching
 // control_response on stdin and records its answer in `received` as { answer }.
 // With `--prompt <text>` it acts like a CLI without stdin input: it answers that one prompt
 // with turns[0] and exits (`--resume <id>` is only logged).
 // FAKE_CLAUDE_LOG: file that receives one JSON line per run with the args and messages.
+import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -69,6 +71,11 @@ async function emit(lines) {
     if (line.__write) {
       mkdirSync(dirname(line.__write.path), { recursive: true });
       writeFileSync(line.__write.path, line.__write.content);
+      continue;
+    }
+    if (line.__commit !== undefined) {
+      execFileSync('git', ['add', '-A'], { stdio: 'pipe' });
+      execFileSync('git', ['commit', '-q', '-m', line.__commit], { stdio: 'pipe' });
       continue;
     }
     if (line.__hang) {

@@ -5,6 +5,85 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **Run an agent in a Docker container.** An agent profile with `"sandbox": "docker"` and a
+  `"sandboxImage"` runs every session in that image, which sees only the task's folder, its
+  git directory and the agent's own login and settings. If docker is missing, the task fails
+  and says so instead of running the agent on your computer. Commits made there carry your git
+  name and email, the agent gets a writable home of its own for caches, and Gemini reviewers stay read-only whatever Gemini policies the image
+  holds. Linux and macOS only; you build the image, environment variables such as API keys
+  are not passed in, and the network stays open. Not yet tried with a real agent CLI in a
+  container.
+- **Gemini as a third agent.** Harnessboard finds the `gemini` command on your PATH and
+  offers a profile for it (`hb agents --add gemini`), so Gemini can implement, review, test,
+  write the spec or design the UI, next to Claude and Codex. It runs through the signed-in
+  Gemini CLI. Reviewers use its `plan` mode with a policy that lets them only read and
+  search, even when your Gemini settings allow more; on a machine with Gemini system
+  policies, which would override it, a Gemini reviewer is refused. They can not run git, so the harness
+  gives a Gemini reviewer the commits and diff it is judging, including a base task's
+  earlier stretches of work. Large diffs are saved whole to files the reviewer reads, so
+  nothing is cut, and the handoff notes from earlier roles are saved there too. Gemini does not report usage, so the
+  header shows no quota for it; a usage-limit error pauses the task and retries it later.
+  Not yet tried with the real Gemini CLI.
+- **Pair a phone with the board.** Settings has a new "Phone access" section. It finds this
+  computer's Tailscale name, saves it as a remote host, and shows the
+  `tailscale serve --bg <port>` command to run once. "Pair a phone" shows a QR code; scanning
+  it on the phone asks for a device name, then creates a passkey with your fingerprint, face
+  or screen lock. The phone is paired only once the passkey is made. The section lists
+  paired devices with when each was last used, and Revoke ends a device's access at once.
+- **A device that is not paired** sees "This device is not paired" instead of an empty
+  board.
+- **A paired phone locks itself** each time the board is opened, and after 30 minutes
+  without use, and shows an Unlock button that asks for its passkey. This includes a phone
+  with the board open while the server restarts; once unlocked, the board updates live again.
+  Starting, approving, merging or deleting tasks, and changing settings, agents, tool rules
+  or paired devices from a phone need a passkey check within the last 5 minutes; the phone
+  asks for it and then carries on with the action. Nothing changes on this computer.
+- **Browsers without passkeys**, such as the one inside LINE, say to open the page in Chrome
+  or Safari instead of offering to pair or unlock.
+- **The board fits a phone screen.** On a narrow screen it shows one list at a time, with
+  tabs for Waiting for you, In progress, Review and Done; drafts are under Waiting for you.
+  The task panel, New task, Settings and the folder browser fill the screen, and the buttons
+  for answering a permission request, a plan or acceptance criteria are big enough to tap.
+- **"Files only" on the Changes tab** lists the changed files without the line-by-line
+  changes, which is easier to read on a phone.
+- **Add the board to a phone's Home Screen.** It gets the Harnessboard icon and opens full
+  screen, without the browser's address bar.
+- **Push notifications to a paired phone.** Switching on "Notify me when a task needs me" in
+  the phone's Settings sends a push whenever a task waits for permission, approval or review,
+  or fails, even while the board is closed. Tapping it opens the task on the tab that needs
+  you. A push holds only the task's number, title and status. On an iPhone this needs iOS
+  16.4 or later and the board added to the Home Screen.
+- **Work directly on the base branch.** New task has a choice between "Work on a new branch
+  (recommended)" and "Work directly on main" (or whichever branch), and `hb add` / `hb loop`
+  have `--on-base`. Such a task works in the repository folder itself, with no worktree or
+  branch: its commits land on the branch as it goes and there is nothing to merge after
+  review. Only one of them works in a folder at a time. The card shows "on main" and the
+  task panel shows where a task works; `hb show` says so too.
+- **Change the spec after work has started.** A task with a spec file can have its
+  acceptance criteria changed while it is being built or is in review: ask for a change
+  (see below), and the spec author proposes revised criteria for you to approve, as for the
+  first spec. The implementer can also stop and propose a change itself when it finds the
+  spec wrong. Nothing more is built until you decide. Approving
+  rewrites the criteria in `docs/specs/<id>-<title>.md`, adds a dated entry under
+  "Revisions", commits the file, and the implementer and later reviews work to the new
+  criteria. Rejecting leaves the spec as it was and the work carries on.
+- **Change the spec from the board or `hb`.** The task panel of a task with a spec has a
+  **Change the spec** button, and `hb spec <id> "..."` does the same. A proposed change shows
+  the current criteria next to the proposed ones on the Criteria tab, with Approve change,
+  Reject change and a reply box; `hb plan <id>` shows both lists with
+  the spec author's reply, and `hb reject <id>`
+  rejects the change. Cards say when a change waits for you or for the spec author.
+- **Optional UI designer.** New task and the task panel's agents have a **Designer** menu
+  (None by default), and `hb add` / `hb models` have `--designer`. With a designer, once the
+  approved spec is committed it adds a "UI design" section to the spec file before anything
+  is built; the implementer follows it and the reviewer checks against it. A designer that
+  changes any other file, or adds no such section, stops the task for you. A spec change
+  approved or rejected before the design is written still has the designer run before the
+  implementer, and on the base branch, commits you or another task made while the designer
+  was stopped are not blamed on it. Tasks without a designer work as before.
+
 ## 0.0.21 - 2026-10-04
 
 ### Added

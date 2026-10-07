@@ -12,7 +12,7 @@ import type {
 import { api } from '../api';
 import type { TaskAction } from '../board';
 import { useLiveEvents, useThrottled } from '../live';
-import { openReview, sendBackKey } from '../describe';
+import { canChangeSpec, openReview, sendBackKey } from '../describe';
 import { Description } from './Description';
 import { Markdown } from './Markdown';
 import { ChatPanel } from './ChatPanel';
@@ -66,11 +66,17 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
 
   // Fetches only events after the last one seen, so the log grows in order without gaps.
   const loadEvents = useCallback(async () => {
-    const fresh = await api.events(taskId, lastId.current);
+    let fresh: StoredEvent[];
+    try {
+      fresh = await api.events(taskId, lastId.current);
+    } catch (e) {
+      onError((e as Error).message);
+      return;
+    }
     if (fresh.length === 0) return;
     lastId.current = fresh[fresh.length - 1]!.id;
     setEvents((prev) => [...prev, ...fresh]);
-  }, [taskId]);
+  }, [taskId, onError]);
 
   useEffect(() => {
     void loadTask();
@@ -229,6 +235,11 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                   s === 'waiting_quota') && (
                   <button type="button" className="btn danger" onClick={() => act('stop')}>
                     {t('actions.stop')}
+                  </button>
+                )}
+                {canChangeSpec(task) && tab !== 'criteria' && (
+                  <button type="button" className="btn ghost" onClick={() => setTab('criteria')}>
+                    {t('actions.changeSpec')}
                   </button>
                 )}
                 {task.latestSessionId && tab !== 'chat' && (
