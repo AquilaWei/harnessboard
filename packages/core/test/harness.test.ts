@@ -197,6 +197,7 @@ describe('a session that crosses the hard threshold', () => {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
+      compactPct: 0,
       softPct: 30,
       hardPct: 60,
       queue: true,

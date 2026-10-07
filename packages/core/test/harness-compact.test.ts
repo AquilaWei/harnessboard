@@ -10,6 +10,7 @@ import {
   FAKE_CLAUDE,
   assistantText,
   compactBoundary,
+  hang,
   init,
   makeRepo,
   result,
@@ -116,6 +117,53 @@ describe('a turn that crosses the compact threshold mid-work', () => {
   it('is not interrupted: /compact only follows the end of the turn', async () => {
     await create();
     expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`, '/compact']);
+  });
+});
+
+describe('a turn that crosses the soft and hard thresholds while compaction is on', () => {
+  beforeEach(() =>
+    scenario([
+      [init(), assistantText('step 1', 45_000), assistantText('step 2', 70_000), result('done')],
+      [compactBoundary(70_000, 4_000), result('')],
+    ]),
+  );
+
+  const createWithLimits = () =>
+    harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      softPct: 30,
+      hardPct: 60,
+      queue: true,
+    });
+
+  it('is not asked to wrap up or ended: only /compact follows the end of the turn', async () => {
+    await createWithLimits();
+    await harness.waitForIdle();
+    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`, '/compact']);
+  });
+
+  it('ends as completed, not as a handoff or a hard limit', async () => {
+    const task = await createWithLimits();
+    await harness.waitForIdle();
+    expect(harness.store.listSessions(task.id)[0]!.endReason).toBe('completed');
+  });
+});
+
+describe('a turn that reaches the safety limit while compaction is on', () => {
+  it('is ended with context_hard_limit', async () => {
+    scenario([[init(), assistantText('huge', 95_000), hang]]);
+    const task = await harness.createTask({
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      softPct: 30,
+      hardPct: 60,
+      queue: true,
+    });
+    await harness.waitForIdle();
+    expect(harness.store.listSessions(task.id)[0]!.endReason).toBe('context_hard_limit');
   });
 });
 

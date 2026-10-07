@@ -56,6 +56,12 @@ export interface RunSessionOptions {
 }
 
 /**
+ * Context use at which even a session that is compacted after its turn is ended mid-turn,
+ * so a runaway turn does not overflow the window before it gets to compact.
+ */
+const COMPACT_SAFETY_PCT = 90;
+
+/**
  * Runs one agent session for a single prompt and reports why it ended.
  *
  * Compaction: the agent is never interrupted for it. When a turn ends at or past the
@@ -63,6 +69,9 @@ export interface RunSessionOptions {
  * conversation is small when it is resumed later (a chat, a quota pause, the start of work
  * after a criteria discussion). The outcome is the agent's own reply; the compaction's
  * empty result is not reported, and a failed compaction only adds a notice.
+ *
+ * A session that is compacted this way is never asked to wrap up, nor killed at the hard
+ * threshold, while its turn runs; only {@link COMPACT_SAFETY_PCT} still ends it mid-turn.
  *
  * Context budget: crossing the soft threshold asks the agent to wrap up. A CLI that reads
  * stdin mid-turn gets the request right away (at its next tool boundary); for any other CLI
@@ -226,7 +235,15 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
     function checkBudget(tokens: number): void {
       const pct = contextPct(tokens, window);
       lastPct = pct;
-      if (options.wrapUp !== false && wrapPct === null && pct >= thresholds.softPct) {
+      // A session that is compacted after its turn is never asked to wrap up or cut off
+      // mid-turn: the compaction keeps its context, so the work in progress is not lost.
+      const waitForCompaction = compactPct !== null;
+      if (
+        options.wrapUp !== false &&
+        !waitForCompaction &&
+        wrapPct === null &&
+        pct >= thresholds.softPct
+      ) {
         wrapPct = pct;
         const when = streaming
           ? 'asking agent to wrap up'
@@ -237,9 +254,12 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
           child.write(adapter.encodeMessage(wrapUpPrompt(pct)));
         }
       }
-      if (!hardHit && pct >= thresholds.hardPct) {
+      const hardPct = waitForCompaction
+        ? Math.max(thresholds.hardPct, COMPACT_SAFETY_PCT)
+        : thresholds.hardPct;
+      if (!hardHit && pct >= hardPct) {
         hardHit = true;
-        options.onNotice(`context ${pct}% ≥ hard ${thresholds.hardPct}%: ending session`);
+        options.onNotice(`context ${pct}% ≥ hard ${hardPct}%: ending session`);
         child.kill();
       }
     }
