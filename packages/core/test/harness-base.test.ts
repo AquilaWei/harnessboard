@@ -582,6 +582,48 @@ describe('a base task whose spec author left the spec uncommitted', () => {
   });
 });
 
+describe('a base task whose agent could not start after the harness revised its spec', () => {
+  it('counts the revision commit as its own work once it runs again', async () => {
+    const proposal = 'I read main.js.\n## Acceptance criteria\n- prints hi';
+    const revised = '## Changes\n- Hello, not hi.\n## Acceptance criteria\n- prints hello';
+    scenario(
+      [[init(), assistantText(proposal, 10_000), result(proposal)]],
+      [[init(), writeFile('docs/specs/001-add-a-greeting.md', '# Spec'), result('written')]],
+      [ADD_HELLO],
+      [[init(), assistantText(revised, 10_000), result(revised)]],
+      [TALK],
+    );
+    const task = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      workspace: 'base',
+      reviewer: null,
+      queue: true,
+    });
+    await harness.waitForIdle();
+    harness.approveCriteria(task.id);
+    await harness.waitForIdle();
+    harness.tick(); // the implementer's session
+    await harness.waitForIdle();
+    harness.requestSpecRevision(task.id, 'Say hello instead');
+    await harness.waitForIdle();
+    // The way a Docker sandbox fails when docker is missing, after the spec was revised.
+    const adapter = harness.adapterFor('claude');
+    adapter.ensureReady = () => Promise.reject(new Error('docker was not found'));
+    harness.approveCriteria(task.id); // starts the implementer's next session
+    await harness.waitForIdle();
+    delete adapter.ensureReady;
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    const commits = await harness.commits(task.id);
+    expect(commits.map((c) => c.subject)).toEqual([
+      'docs: revise spec for Add a greeting',
+      'add hello.txt',
+      'docs: add spec for Add a greeting',
+    ]);
+  });
+});
+
 /** A worktree task with a committed file waiting for review, then a base task (not started). */
 async function reviewedWorktreeTaskAndBaseTask() {
   scenario(

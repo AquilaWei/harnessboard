@@ -1331,42 +1331,43 @@ export class Harness {
     this.running.set(task.id, controller);
     try {
       const ready = await this.ensureWorktree(task);
-      await this.workflow.reviseSpecFile(ready);
-      let plan = this.workflow.plan(ready);
-      await this.workflow.syncNotes(ready);
-      const adapter = this.adapterFor(plan.agentId);
-      // Before any session is recorded, so a sandbox that can not run fails the task cleanly.
-      await adapter.ensureReady?.();
-      if (plan.role === 'reviewer' && !adapter.capabilities.readOnlyGit) {
-        // The files stay until the next review, so a resumed reviewer can still read them.
-        const evidenceDir = this.evidenceDir(task.id);
-        if (plan.review) {
-          const evidence = await reviewEvidence(ready.worktreePath!, plan.review, evidenceDir);
-          plan = { ...plan, prompt: `${plan.prompt}\n\n${evidence}` };
-        }
-        const notes = this.workflow.renderedNotes(ready);
-        if (notes !== null) {
-          const copy = copyNotes(evidenceDir, notes);
-          plan = { ...plan, prompt: `${plan.prompt}\n\n${copy}` };
-        }
-        if (existsSync(evidenceDir)) plan = { ...plan, readableDirs: [evidenceDir] };
-      }
-      const sessionId = plan.resume?.id ?? randomUUID();
-      if (!plan.resume) {
-        // CLIs that assign their own ids report them in `init`; see runOne.
-        const agentSessionId = adapter.capabilities.sessionIds === 'harness' ? sessionId : null;
-        this.store.startSession(sessionId, task.id, plan.role, plan.agentId, agentSessionId);
-      }
-      this.workflow.started(task.id, sessionId, plan);
-      this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
-      this.setStatus(task.id, 'running');
       try {
+        await this.workflow.reviseSpecFile(ready);
+        let plan = this.workflow.plan(ready);
+        await this.workflow.syncNotes(ready);
+        const adapter = this.adapterFor(plan.agentId);
+        // Before any session is recorded, so a sandbox that can not run fails the task cleanly.
+        await adapter.ensureReady?.();
+        if (plan.role === 'reviewer' && !adapter.capabilities.readOnlyGit) {
+          // The files stay until the next review, so a resumed reviewer can still read them.
+          const evidenceDir = this.evidenceDir(task.id);
+          if (plan.review) {
+            const evidence = await reviewEvidence(ready.worktreePath!, plan.review, evidenceDir);
+            plan = { ...plan, prompt: `${plan.prompt}\n\n${evidence}` };
+          }
+          const notes = this.workflow.renderedNotes(ready);
+          if (notes !== null) {
+            const copy = copyNotes(evidenceDir, notes);
+            plan = { ...plan, prompt: `${plan.prompt}\n\n${copy}` };
+          }
+          if (existsSync(evidenceDir)) plan = { ...plan, readableDirs: [evidenceDir] };
+        }
+        const sessionId = plan.resume?.id ?? randomUUID();
+        if (!plan.resume) {
+          // CLIs that assign their own ids report them in `init`; see runOne.
+          const agentSessionId = adapter.capabilities.sessionIds === 'harness' ? sessionId : null;
+          this.store.startSession(sessionId, task.id, plan.role, plan.agentId, agentSessionId);
+        }
+        this.workflow.started(task.id, sessionId, plan);
+        this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
+        this.setStatus(task.id, 'running');
         const outcome = await this.runOne(ready, sessionId, plan, adapter, controller.signal);
         this.store.endSession(sessionId, outcome.reason);
         await this.workflow.finish(ready, plan, outcome, controller.signal);
       } finally {
-        // After the workflow's own commits (a spec it committed), and while `running` still
-        // holds the folder, so no other task's commits can come first.
+        // Also when a step before the session failed after the harness committed (a revised
+        // spec): those commits are the task's work. After the workflow's own commits, and
+        // while `running` still holds the folder, so no other task's commits can come first.
         await this.endOnBase(ready);
       }
     } catch (err) {
