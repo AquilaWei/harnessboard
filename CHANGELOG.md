@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.22 - 2026-10-07
+
 ### Added
 
 - **Run an agent in a Docker container.** An agent profile with `"sandbox": "docker"` and a
