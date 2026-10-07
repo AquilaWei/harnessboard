@@ -8,6 +8,7 @@ import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
   featureList,
+  assistantText,
   init,
   makeRepo,
   result,
@@ -61,6 +62,11 @@ function fakeRuns(): FakeRun[] {
 
 /** An agent session that optionally writes files, then replies with `text`. */
 const session = (text: string, ...writes: unknown[]) => [[init(), ...writes, result(text)]];
+
+/** Like {@link session}, but the CLI reports the context it used, so the session can be resumed. */
+const sessionWithContext = (text: string, ...writes: unknown[]) => [
+  [init(), assistantText(text, 1000), ...writes, result(text)],
+];
 
 async function createReviewed(mode: 'single' | 'loop' = 'single') {
   const task = await harness.createTask({
@@ -144,6 +150,30 @@ describe('a reviewer that requests changes', () => {
     await runQueued();
     await runQueued();
     expect(fakeRuns()[2]!.received[0]).toContain('- greet by name in hello.txt');
+  });
+
+  it('resumes the implementer conversation instead of starting a new one', async () => {
+    scenario(
+      sessionWithContext('done', writeFile('hello.txt', 'hi')),
+      session('VERDICT: CHANGES\n- greet by name in hello.txt'),
+      session('fixed', writeFile('hello.txt', 'hi Ada')),
+    );
+    await createReviewed();
+    await runQueued();
+    await runQueued();
+    expect(fakeRuns()[2]!.args).toContain('--resume');
+  });
+
+  it('gives a resumed implementer the findings without the whole task again', async () => {
+    scenario(
+      sessionWithContext('done', writeFile('hello.txt', 'hi')),
+      session('VERDICT: CHANGES\n- greet by name in hello.txt'),
+      session('fixed', writeFile('hello.txt', 'hi Ada')),
+    );
+    await createReviewed();
+    await runQueued();
+    await runQueued();
+    expect(fakeRuns()[2]!.received[0]).not.toContain('Original task:');
   });
 
   it('hands the task to a human after the last allowed round', async () => {

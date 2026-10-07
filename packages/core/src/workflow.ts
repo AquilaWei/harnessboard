@@ -187,6 +187,10 @@ export class Workflow {
     const work = this.withoutRevisions(task.id, sessions)
       .filter((s) => s.role !== 'designer')
       .at(-1);
+    // The implementer's own conversation, which a reviewer's or tester's session did not replace.
+    const own = this.withoutRevisions(task.id, sessions)
+      .filter((s) => s.role === 'implementer' || s.role === 'spec')
+      .at(-1);
     const step = this.nextStep(task);
     switch (step.kind) {
       case 'specRevision':
@@ -206,18 +210,28 @@ export class Workflow {
       case 'design':
         return this.designPlan(task, last);
       case 'work':
-        return this.workPlan(task, work);
+        return this.workPlan(task, work, own);
     }
   }
 
   /** The implementer's (or, while criteria are discussed, the spec author's) own work. */
-  private workPlan(task: Task, work: Session | undefined): SessionPlan {
+  private workPlan(task: Task, work: Session | undefined, own: Session | undefined): SessionPlan {
     if (!work) return this.implement(task, this.firstPrompt(task));
     const feedback = this.inPlanning(task) ? this.pendingPlanFeedback(task.id) : null;
     if (feedback !== null) return this.revisePlan(task, feedback, work);
     if (this.justSpecced(task)) return this.startAfterDiscussion(task, work);
     if (work.endReason === 'handoff' || work.endReason === 'context_hard_limit') {
       return this.continuation(task, this.handoffNote(task));
+    }
+    // After a review or test round, the implementer goes on in its own conversation with only
+    // the findings, which keeps what it already read instead of starting over.
+    const findings = task.mode === 'single' && work !== own ? this.openFeedback(task.id) : null;
+    if (
+      findings !== null &&
+      own?.endReason === 'completed' &&
+      this.canResume(task, own, this.activeAgent(task))
+    ) {
+      return this.implement(task, findings, own);
     }
     // Each loop feature starts from a clean context; its state lives in the worktree files.
     const loopStepDone = task.mode === 'loop' && work.endReason === 'completed';
