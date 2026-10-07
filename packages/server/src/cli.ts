@@ -581,8 +581,9 @@ program
     const profile = config().agents[session.agentId];
     if (!profile) throw new Error(t('unknownAgent', { agent: session.agentId }));
     const adapter = createAdapter(profile);
+    await adapter.ensureReady?.(); // a sandboxed profile is never opened outside docker
     console.log(t('opening', { session: agentSessionId, dir }));
-    const child = spawn(adapter.command, adapter.interactiveResumeArgs(agentSessionId), {
+    const child = spawn(adapter.command, adapter.interactiveResumeArgs(agentSessionId, dir), {
       cwd: dir,
       stdio: 'inherit',
     });

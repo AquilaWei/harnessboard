@@ -603,6 +603,40 @@ rules such as `Bash(npm *)`:
   runs. Tasks created before 0.0.10 keep their old setting.
 - `--skip-permissions` removes all checks; use it only in a sandbox.
 
+**Docker sandbox** (off by default): add `"sandbox": "docker"` and an image to a profile, and
+every session of that profile runs in a container with `docker run`:
+
+```json
+{
+  "agents": {
+    "boxed": {
+      "provider": "claude-code",
+      "command": "claude",
+      "model": null,
+      "sandbox": "docker",
+      "sandboxImage": "my-agents:latest"
+    }
+  }
+}
+```
+
+- **Mounted, each at the same path as on your computer:** the task's folder, the git
+  directory a worktree commits to (read-only for reviewers), the CLI's login and settings
+  (`~/.claude` and `~/.claude.json`, `~/.codex` or `~/.gemini`) and a Gemini reviewer's
+  evidence folder (read-only). Nothing else of your computer is visible to the agent.
+- **You build the image:** it needs the profile's `command` on its PATH, plus whatever the
+  task runs (git, node, your build tools). Harnessboard does not pull or build it.
+- **When docker is missing** or its daemon does not answer, the task fails with that reason;
+  the agent is never run outside the container instead.
+- **Limits:** Linux and macOS only (Windows paths can not be mounted at the same path). The
+  agent runs with your user id and `HOME`, but no environment variables are passed in, so
+  sign in through the CLI rather than with an API key variable; `CLAUDE_CONFIG_DIR`,
+  `CODEX_HOME` and `GEMINI_CLI_HOME` are not followed. The network stays open, so the agent
+  can still reach its API and anything else online. On SELinux hosts the container runs
+  without SELinux labels instead of relabelling your folders. The git directory is the whole
+  repository's, so the agent can still change other branches. Not yet tried with a real
+  agent CLI in a container.
+
 ## Development
 
 ```bash

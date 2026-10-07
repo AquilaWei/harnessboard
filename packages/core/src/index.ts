@@ -16,6 +16,7 @@ export * from './providers.js';
 export * from './review.js';
 export * from './prompts.js';
 export * from './runner.js';
+export * from './sandbox.js';
 export * from './scheduler.js';
 export * from './store.js';
 export * from './tailscale.js';

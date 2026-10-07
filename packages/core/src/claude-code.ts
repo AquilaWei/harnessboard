@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import os from 'node:os';
+import path from 'node:path';
 import type { AgentEvent, ModelInfo, QuotaInfo, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, PermissionReply, SessionSpec } from './agent.js';
 import { readClaudeModels } from './models.js';
@@ -67,6 +69,11 @@ export class ClaudeCodeAdapter implements AgentAdapter {
 
   interactiveResumeArgs(agentSessionId: string): string[] {
     return ['--resume', agentSessionId];
+  }
+
+  /** The login and settings in the home folder; `CLAUDE_CONFIG_DIR` is not followed. */
+  configPaths(): string[] {
+    return [path.join(os.homedir(), '.claude'), path.join(os.homedir(), '.claude.json')];
   }
 
   encodeMessage(text: string): string {

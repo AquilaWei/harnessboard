@@ -512,6 +512,36 @@ Gemini 的轉接層還沒有用真的 CLI 測過。要再加入其他 CLI 的做
   它只是安全網，不等於沙盒。任務執行中也可以切換。0.0.10 之前建立的任務維持原本的設定。
 - `--skip-permissions` 會關閉所有檢查，只能在沙盒環境使用。
 
+**Docker 沙盒**（預設關閉）：在 profile 加上 `"sandbox": "docker"` 和一個映像檔，這個
+profile 的每個 session 都會用 `docker run` 在容器裡執行：
+
+```json
+{
+  "agents": {
+    "boxed": {
+      "provider": "claude-code",
+      "command": "claude",
+      "model": null,
+      "sandbox": "docker",
+      "sandboxImage": "my-agents:latest"
+    }
+  }
+}
+```
+
+- **掛載的內容（路徑和你電腦上相同）：** 任務的資料夾、worktree commit 用的 git 目錄
+  （審查者唯讀）、CLI 的登入和設定（`~/.claude` 和 `~/.claude.json`、`~/.codex` 或
+  `~/.gemini`），以及 Gemini 審查者的 evidence 資料夾（唯讀）。電腦上其他東西 agent 都看不到。
+- **映像檔要自己建：** 裡面的 PATH 要有 profile 的 `command`，以及任務會用到的工具
+  （git、node、建置工具）。Harnessboard 不會幫你 pull 或 build。
+- **沒有 docker** 或 daemon 沒回應時，任務會失敗並寫出原因，不會改在容器外執行 agent。
+- **限制：** 只支援 Linux 和 macOS（Windows 路徑無法掛到容器裡的相同路徑）。agent 以你的
+  使用者 id 和 `HOME` 執行，但環境變數不會傳進去，所以請用 CLI 登入，不要靠 API key 環境變數；
+  也不會套用 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 和 `GEMINI_CLI_HOME`。網路沒有限制，agent
+  仍能連到它的 API 和其他網站。SELinux 主機上容器會關閉 SELinux 標籤，而不是重新標記你的
+  資料夾。掛載的是整個 repo 的 git 目錄，所以 agent 仍可以改動其他分支。還沒在容器裡用真的
+  agent CLI 試過。
+
 ## 開發
 
 ```bash

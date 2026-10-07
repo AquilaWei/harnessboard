@@ -178,6 +178,19 @@ describe('GeminiAdapter.interactiveResumeArgs', () => {
   });
 });
 
+describe('GeminiAdapter.configPaths', () => {
+  // A sandboxed reviewer has to see the policy file its arguments name.
+  it("includes the read-only policy's folder for a read-only session", () => {
+    const args = adapter.buildArgs({ ...spec, access: 'readOnly' });
+    const policy = args[args.indexOf('--admin-policy') + 1]!;
+    expect(adapter.configPaths('readOnly')).toContain(path.dirname(policy));
+  });
+
+  it('has only the config folder for an edit session', () => {
+    expect(adapter.configPaths('edit')).toHaveLength(1);
+  });
+});
+
 describe('GeminiAdapter.createParser', () => {
   it('reads the session id and model from init', () => {
     expect(run([{ type: 'init', session_id: 'g-1', model: 'gemini-3-pro' }])).toEqual([

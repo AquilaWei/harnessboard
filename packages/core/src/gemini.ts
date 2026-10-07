@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import os from 'node:os';
 import path from 'node:path';
 import type { AgentEvent, RunUsage } from '@harnessboard/shared';
-import type { AgentAdapter, AgentCapabilities, LineParser, SessionSpec } from './agent.js';
+import type {
+  AgentAdapter,
+  AgentCapabilities,
+  LineParser,
+  SessionAccess,
+  SessionSpec,
+} from './agent.js';
 
 /**
  * Drives `gemini --output-format stream-json` with the prompt on stdin. Event names and fields follow
@@ -76,6 +82,15 @@ export class GeminiAdapter implements AgentAdapter {
 
   interactiveResumeArgs(agentSessionId: string): string[] {
     return ['--resume', agentSessionId];
+  }
+
+  /**
+   * The login and settings (`GEMINI_CLI_HOME` is not followed) and, for a read-only
+   * session, the folder of the policy file `buildArgs` passes.
+   */
+  configPaths(access: SessionAccess): string[] {
+    const home = path.join(os.homedir(), '.gemini');
+    return access === 'readOnly' ? [home, path.dirname(readOnlyPolicyFile())] : [home];
   }
 
   encodeMessage(): string {
@@ -208,7 +223,7 @@ let policyDir: string | null = null;
  * Synchronous because `buildArgs` is; the file is tiny.
  */
 function readOnlyPolicyFile(): string {
-  policyDir ??= mkdtempSync(path.join(tmpdir(), 'harnessboard-gemini-'));
+  policyDir ??= mkdtempSync(path.join(os.tmpdir(), 'harnessboard-gemini-'));
   const file = path.join(policyDir, 'read-only.toml');
   if (!existsSync(file)) {
     mkdirSync(policyDir, { recursive: true, mode: 0o700 });

@@ -13,6 +13,13 @@ export interface AgentProfile {
   model: string | null;
   /** Used when the CLI does not report its context window. */
   contextWindow?: number;
+  /**
+   * `docker` runs every session of this profile in a container that only mounts the
+   * task's folder, its git directory and the CLI's own config. Absent: on this machine.
+   */
+  sandbox?: 'docker';
+  /** The image for `sandbox: 'docker'`; it must have `command` on its PATH. */
+  sandboxImage?: string;
 }
 
 /** The command each provider's CLI installs as; detection looks for these on PATH. */

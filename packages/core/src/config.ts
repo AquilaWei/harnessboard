@@ -235,6 +235,15 @@ export function validate(config: HarnessConfig): void {
     if (typeof profile.command !== 'string' || profile.command === '') {
       throw new Error(`config agents.${id}.command must be a non-empty string`);
     }
+    if (profile.sandbox !== undefined && profile.sandbox !== 'docker') {
+      throw new Error(`config agents.${id}.sandbox must be "docker" or absent`);
+    }
+    if (
+      profile.sandbox === 'docker' &&
+      (typeof profile.sandboxImage !== 'string' || profile.sandboxImage.trim() === '')
+    ) {
+      throw new Error(`config agents.${id}.sandboxImage must name an image for the sandbox`);
+    }
   }
   if (config.defaultReviewer !== null && !config.agents[config.defaultReviewer]) {
     throw new Error(`config defaultReviewer "${config.defaultReviewer}" is not an agent profile`);

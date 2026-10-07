@@ -183,7 +183,8 @@ get `maxReviewRounds` again.
 
 1. Add the provider id to `AGENT_PROVIDERS` in `shared/src/agents.ts`.
 2. Implement `AgentAdapter` (`core/src/agent.ts`) in a new file, and register it in
-   `core/src/providers.ts`.
+   `core/src/providers.ts`. List the CLI's login and settings in `configPaths`, so the
+   Docker sandbox can mount them.
 3. Parse the CLI's output into `AgentEvent`s. The harness depends on these:
    - `init` with the CLI's session id
    - `context`: tokens currently in the context window, after each model call
@@ -294,6 +295,40 @@ a real run yet.
 - Gemini CLI can not list its models, so the adapter has no `listModels` and model ids are
   typed.
 - Tests drive `core/test/fixtures/fake-gemini.mjs`, which prints scripted stream-json lines.
+
+## The Docker sandbox
+
+A profile with `sandbox: 'docker'` and a `sandboxImage` gets its adapter wrapped in
+`DockerSandbox` (`core/src/sandbox.ts`) by `createAdapter`. The wrapper is itself an
+`AgentAdapter`: its `command` is `docker`, and its `buildArgs` is `docker run --rm -i`, the
+mounts, the image, then the inner adapter's command and arguments. Parsing, stdin
+encoding, capabilities, model lists and quota readings are the inner adapter's, so the
+runner and the workflow do not know a session is sandboxed.
+
+- **Mounts** are bind mounts at the same path as on the host, so every path in the CLI's
+  arguments still works: the session's `cwd` (read-write; a reviewer's verify command may
+  write build output), the git common directory when it lies outside `cwd`, as a
+  worktree's does (`git rev-parse --git-common-dir`; read-only for `readOnly` sessions),
+  the existing paths from the inner adapter's `configPaths(access)`, and `readableDirs`
+  (read-only). Missing config paths are skipped, because docker would create them as
+  root-owned folders. Gemini's `configPaths` includes the folder of its admin policy file
+  for read-only sessions.
+- **User:** `--user <uid>:<gid>` and `HOME` from the host, so the mounted login works and
+  files stay the user's. `--init` forwards the stop signal the runner sends to the docker
+  client (which proxies it) on to the agent. `--security-opt label=disable` makes the
+  mounts usable on SELinux hosts without relabelling them.
+- **Refusal:** `ensureReady()` (an optional adapter method) runs before a task's or chat's
+  session is recorded. The sandbox rejects on Windows and when `docker version` can not
+  reach a daemon, so the task fails with that reason and the agent never starts outside the
+  container. `hb open` checks the same before it opens the session with `docker run -it`.
+- `versionArgs` run the CLI's version command inside the image, so `hb agents` reports an
+  image without the CLI.
+- **Not covered:** environment variables (API keys, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+  `GEMINI_CLI_HOME`) are not passed in; the network is not restricted; the git directory
+  holds every branch; Gemini's system-policy check looks at the host, not the image.
+- Tests: `core/test/sandbox.test.ts` checks the exact command line and the refusal with an
+  empty PATH, and runs a few containers (`alpine:3`) when a docker daemon answers on Linux;
+  `core/test/harness-sandbox.test.ts` checks that a task fails without docker.
 
 ## Workspaces
 

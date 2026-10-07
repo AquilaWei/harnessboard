@@ -1028,6 +1028,7 @@ export class Harness {
         prompt: text,
       };
       const adapter = this.adapterFor(session.agentId);
+      await adapter.ensureReady?.();
       const outcome = await this.runOne(ready, session.id, plan, adapter, controller.signal, true)
         // Before the task returns to its status and may let go of the folder.
         .finally(async () => {
@@ -1334,6 +1335,8 @@ export class Harness {
       let plan = this.workflow.plan(ready);
       await this.workflow.syncNotes(ready);
       const adapter = this.adapterFor(plan.agentId);
+      // Before any session is recorded, so a sandbox that can not run fails the task cleanly.
+      await adapter.ensureReady?.();
       if (plan.role === 'reviewer' && !adapter.capabilities.readOnlyGit) {
         // The files stay until the next review, so a resumed reviewer can still read them.
         const evidenceDir = this.evidenceDir(task.id);

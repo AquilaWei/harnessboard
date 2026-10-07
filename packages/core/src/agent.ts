@@ -120,6 +120,21 @@ export interface AgentAdapter {
   readQuota?(): Promise<QuotaInfo | null>;
   /** Arguments that print the CLI version; used to check the CLI is installed. */
   readonly versionArgs: string[];
-  /** Arguments that reopen a session in the CLI's own interactive UI (`hb open`). */
-  interactiveResumeArgs(agentSessionId: string): string[];
+  /**
+   * Arguments that reopen a session in the CLI's own interactive UI (`hb open`), run in
+   * `cwd`, the task's folder.
+   */
+  interactiveResumeArgs(agentSessionId: string, cwd: string): string[];
+  /**
+   * Files and folders outside the task's folder that a session with `access` needs: the
+   * CLI's login and settings, and any file `buildArgs` writes for it. A Docker sandbox
+   * mounts the ones that exist. Absent: none.
+   */
+  configPaths?(access: SessionAccess): string[];
+  /**
+   * Checked before a session is started, so a task fails with this error instead of
+   * running somewhere it should not; the Docker sandbox rejects when docker can not run.
+   * Absent: the spawn itself is the check.
+   */
+  ensureReady?(): Promise<void>;
 }

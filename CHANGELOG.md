@@ -7,6 +7,12 @@ are test versions that have not been accepted on real machines yet.
 
 ### Added
 
+- **Run an agent in a Docker container.** An agent profile with `"sandbox": "docker"` and a
+  `"sandboxImage"` runs every session in that image, which sees only the task's folder, its
+  git directory and the agent's own login and settings. If docker is missing, the task fails
+  and says so instead of running the agent on your computer. Linux and macOS only; you build
+  the image, environment variables such as API keys are not passed in, and the network stays
+  open. Not yet tried with a real agent CLI in a container.
 - **Gemini as a third agent.** Harnessboard finds the `gemini` command on your PATH and
   offers a profile for it (`hb agents --add gemini`), so Gemini can implement, review, test,
   write the spec or design the UI, next to Claude and Codex. It runs through the signed-in
