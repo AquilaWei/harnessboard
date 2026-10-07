@@ -320,7 +320,11 @@ runner and the workflow do not know a session is sandboxed.
   `buildArgs` still runs, so a host with system policies refuses Gemini reviewers in a
   container too.
 - **User:** `--user <uid>:<gid>` and `HOME` from the host, so the mounted login works and
-  files stay the user's. `~/.gitconfig` is not mounted; the `user.name` and `user.email`
+  files stay the user's. `HOME` is an empty tmpfs owned by that uid
+  (`--tmpfs <home>:uid=…,gid=…,mode=0700,exec`), so tools can write caches such as `~/.npm`;
+  the config mounts land inside it, and it is gone with the container. Without it docker
+  would create the home path, absent from most images, as root. It is left out when a bind
+  mount already covers the home (a task folder that is the home itself). `~/.gitconfig` is not mounted; the `user.name` and `user.email`
   that `git config --get` returns in `cwd` on the host go in as `GIT_AUTHOR_*` and
   `GIT_COMMITTER_*`, so commits in the container carry the user's identity. `--init` forwards the stop signal the runner sends to the docker
   client (which proxies it) on to the agent. `--security-opt label=disable` makes the
@@ -339,7 +343,8 @@ runner and the workflow do not know a session is sandboxed.
   `alpine:3`, and some on an image it builds (git, an allow-all Gemini system policy, a
   `gemini` that runs its stdin) to check that a read-only Gemini session sees and can add no
   system policy and that a worktree commits with an identity set only in the host's global
-  config. `core/test/harness-sandbox.test.ts` checks that a task fails without docker.
+  config, and that a uid whose home the image lacks can create `~/.npm` there.
+  `core/test/harness-sandbox.test.ts` checks that a task fails without docker.
 
 ## Workspaces
 

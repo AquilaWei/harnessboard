@@ -33,7 +33,7 @@ export interface SandboxUser {
  *
  * The image must have the profile's command on its PATH. The agent runs as the user (the
  * same uid, gid and `HOME`), so it can use the mounted login and its files stay the
- * user's. Environment variables are not passed in, apart from the git commit identity
+ * user's; that home is an empty one in memory, not the user's (see `emptyHome`). Environment variables are not passed in, apart from the git commit identity
  * resolved on this machine and `HOME`. The network is docker's default, so
  * the agent can reach its API. On SELinux hosts label confinement is turned off rather
  * than relabelling the user's folders, which `:z` mounts would do.
@@ -130,14 +130,16 @@ export class DockerSandbox implements AgentAdapter {
   private mounts(cwd: string, access: SessionAccess, readableDirs: string[]): string[] {
     const { uid, gid, home } = this.user;
     const args = ['--init', '--security-opt', 'label=disable', '--user', `${uid}:${gid}`];
-    args.push('--env', `HOME=${home}`, '--workdir', cwd, ...bind(cwd, false));
-    for (const variable of gitIdentity(cwd)) args.push('--env', variable);
+    args.push('--env', `HOME=${home}`, '--workdir', cwd);
     const gitDir = outsideGitDir(cwd);
+    // Docker would create a missing source as a root-owned folder, even for a file.
+    const config = (this.inner.configPaths?.(access) ?? []).filter((file) => existsSync(file));
+    const bound = [cwd, ...(gitDir ? [gitDir] : []), ...config, ...readableDirs];
+    if (!bound.some((dir) => isWithin(home, dir))) args.push(...emptyHome(this.user));
+    args.push(...bind(cwd, false));
+    for (const variable of gitIdentity(cwd)) args.push('--env', variable);
     if (gitDir) args.push(...bind(gitDir, access === 'readOnly'));
-    for (const file of this.inner.configPaths?.(access) ?? []) {
-      // Docker would create a missing source as a root-owned folder, even for a file.
-      if (existsSync(file)) args.push(...bind(file, false));
-    }
+    for (const file of config) args.push(...bind(file, false));
     for (const dir of readableDirs) args.push(...bind(dir, true));
     for (const dir of this.inner.containerEmptyDirs?.(access) ?? []) {
       // Mode 0555 on a root-owned tmpfs: the agent, which is not root, can not fill it.
@@ -149,6 +151,24 @@ export class DockerSandbox implements AgentAdapter {
 
 function bind(dir: string, readOnly: boolean): string[] {
   return ['--mount', `type=bind,source=${dir},target=${dir}${readOnly ? ',readonly' : ''}`];
+}
+
+/**
+ * An empty home owned by the agent, in memory and gone with the container, so tools can
+ * write caches such as `~/.npm` without the user's own home being mounted. Without it the
+ * image rarely has the user's home path, and docker would create it, and every folder
+ * above a config mount, as root. The config mounts land inside it, because docker mounts
+ * a parent path first. `--tmpfs` rather than `--mount type=tmpfs`, which can not set the
+ * owner; `exec` because by default it forbids running the tools a cache installs.
+ */
+function emptyHome({ uid, gid, home }: SandboxUser): string[] {
+  return ['--tmpfs', `${home}:uid=${uid},gid=${gid},mode=0700,exec`];
+}
+
+/** True when `dir` is `parent` or lies inside it. */
+function isWithin(dir: string, parent: string): boolean {
+  const inside = path.relative(parent, dir);
+  return !inside.startsWith('..') && !path.isAbsolute(inside);
 }
 
 /**

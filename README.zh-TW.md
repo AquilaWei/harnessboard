@@ -544,7 +544,8 @@ profile 的每個 session 都會用 `docker run` 在容器裡執行：
   不論在不在容器裡，Gemini 審查者一樣不會啟動。
 - **沒有 docker** 或 daemon 沒回應時，任務會失敗並寫出原因，不會改在容器外執行 agent。
 - **限制：** 只支援 Linux 和 macOS（Windows 路徑無法掛到容器裡的相同路徑）。agent 以你的
-  使用者 id 和 `HOME` 執行，但其他環境變數不會傳進去，所以請用 CLI 登入，不要靠 API key 環境變數；
+  使用者 id 和 `HOME` 執行；這個家目錄是空的、可以寫入，只放掛進去的東西（登入、設定和任務資料夾），容器結束就丟掉，
+  所以快取（例如 `~/.npm`）每次 session 都從空的開始。其他環境變數不會傳進去，所以請用 CLI 登入，不要靠 API key 環境變數；
   也不會套用 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 和 `GEMINI_CLI_HOME`。網路沒有限制，agent
   仍能連到它的 API 和其他網站。SELinux 主機上容器會關閉 SELinux 標籤，而不是重新標記你的
   資料夾。掛載的是整個 repo 的 git 目錄，所以 agent 仍可以改動其他分支。還沒在容器裡用真的

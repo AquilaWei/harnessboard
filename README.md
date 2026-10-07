@@ -638,7 +638,9 @@ every session of that profile runs in a container with `docker run`:
 - **When docker is missing** or its daemon does not answer, the task fails with that reason;
   the agent is never run outside the container instead.
 - **Limits:** Linux and macOS only (Windows paths can not be mounted at the same path). The
-  agent runs with your user id and `HOME`, but no other environment variables are passed in, so
+  agent runs with your user id and `HOME`; that home is an empty, writable folder that holds
+  only what is mounted (the login, settings and task folder) and is thrown away with the container, so caches
+  (`~/.npm` and the like) start empty on every session. No other environment variables are passed in, so
   sign in through the CLI rather than with an API key variable; `CLAUDE_CONFIG_DIR`,
   `CODEX_HOME` and `GEMINI_CLI_HOME` are not followed. The network stays open, so the agent
   can still reach its API and anything else online. On SELinux hosts the container runs

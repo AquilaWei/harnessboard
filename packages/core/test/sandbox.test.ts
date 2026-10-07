@@ -2,7 +2,7 @@
 // The Docker sandbox's command line, its refusal to run without docker, and (when docker
 // is installed) a real container.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentAdapter, AgentCapabilities, SessionSpec } from '../src/agent.js';
@@ -128,6 +128,8 @@ describe('DockerSandbox command line', () => {
       'HOME=/home/me',
       '--workdir',
       cwd,
+      '--tmpfs',
+      '/home/me:uid=1000,gid=1001,mode=0700,exec',
       '--mount',
       `type=bind,source=${cwd},target=${cwd}`,
       '--mount',
@@ -163,6 +165,21 @@ describe('DockerSandbox command line', () => {
     expect(sandbox.buildArgs(spec(repo)).filter((arg) => arg === '--mount')).toHaveLength(1);
   });
 
+  it('mounts no empty home over a home that is the task folder', () => {
+    const cwd = tempDir('sandbox-cwd');
+    const user = { uid: 1000, gid: 1001, home: cwd };
+    const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', user);
+    expect(sandbox.buildArgs(spec(cwd))).not.toContain('--tmpfs');
+  });
+
+  it('mounts no empty home over a home inside a readable dir', () => {
+    const cwd = tempDir('sandbox-cwd');
+    const evidence = tempDir('sandbox-evidence');
+    const user = { uid: 1000, gid: 1001, home: path.join(evidence, 'me') };
+    const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', user);
+    expect(sandbox.buildArgs(spec(cwd, { readableDirs: [evidence] }))).not.toContain('--tmpfs');
+  });
+
   it('passes the git identity configured outside the repository', () => {
     globalGitConfig(HOST_IDENTITY);
     const { repo, dir } = worktreeWithoutIdentity();
@@ -181,6 +198,8 @@ describe('DockerSandbox command line', () => {
       'HOME=/home/me',
       '--workdir',
       dir,
+      '--tmpfs',
+      '/home/me:uid=1000,gid=1001,mode=0700,exec',
       '--mount',
       `type=bind,source=${dir},target=${dir}`,
       '--env',
@@ -260,6 +279,8 @@ describe('DockerSandbox command line', () => {
       'HOME=/home/me',
       '--workdir',
       cwd,
+      '--tmpfs',
+      '/home/me:uid=1000,gid=1001,mode=0700,exec',
       '--mount',
       `type=bind,source=${cwd},target=${cwd}`,
       'agents:1',
@@ -392,6 +413,19 @@ describe.runIf(process.platform === 'linux' && dockerRuns())('DockerSandbox with
     const sandbox = new DockerSandbox(new ShellAdapter([config]), IMAGE);
     const args = sandbox.buildArgs(spec(cwd, { prompt: `cat ${config}/sub/login.json` }));
     expect(await output('docker', args, 60_000)).toBe('token\n');
+  });
+
+  it('gives a user whose home the image lacks a home it can write caches in', async () => {
+    const cwd = tempDir('sandbox-real');
+    chmodSync(cwd, 0o777); // the workdir, entered as a uid that does not own it
+    const home = path.join(tempDir('sandbox-home'), 'home'); // a path the image does not have
+    const config = path.join(home, '.agent');
+    mkdirSync(config, { recursive: true });
+    const user = { uid: 4321, gid: 4321, home };
+    const sandbox = new DockerSandbox(new ShellAdapter([config]), IMAGE, 'linux', user);
+    const script = 'mkdir -p ~/.npm/_cacache && test -d ~/.agent && echo written';
+    const out = await output('docker', sandbox.buildArgs(spec(cwd, { prompt: script })), 60_000);
+    expect(out).toBe('written\n');
   });
 });
 

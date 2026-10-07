@@ -11,7 +11,7 @@ are test versions that have not been accepted on real machines yet.
   `"sandboxImage"` runs every session in that image, which sees only the task's folder, its
   git directory and the agent's own login and settings. If docker is missing, the task fails
   and says so instead of running the agent on your computer. Commits made there carry your git
-  name and email, and Gemini reviewers stay read-only whatever Gemini policies the image
+  name and email, the agent gets a writable home of its own for caches, and Gemini reviewers stay read-only whatever Gemini policies the image
   holds. Linux and macOS only; you build the image, environment variables such as API keys
   are not passed in, and the network stays open. Not yet tried with a real agent CLI in a
   container.
