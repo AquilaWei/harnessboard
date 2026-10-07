@@ -1,0 +1,14 @@
+[versions]
+agp = "9.4.1"
+ktlint-gradle = "14.2.0"
+ktlint-cli = "1.8.0"
+browser = "1.10.0"
+junit = "4.13.2"
+
+[libraries]
+androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
+junit = { module = "junit:junit", version.ref = "junit" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-gradle" }

@@ -25,9 +25,30 @@ end-to-end runs.
 | `packages/core`   | Runner, scheduler, loop mode, worktrees and the SQLite store           |
 | `packages/server` | `hb` CLI, HTTP API and static file server; published as `harnessboard` |
 | `packages/web`    | React web board, bundled into the server package at build time         |
+| `android`         | Android app that opens the board (Kotlin, Gradle)                      |
 
 The format of Claude Code's headless output, which the runner depends on, is described in
 [docs/stream-json-notes.md](docs/stream-json-notes.md).
+
+## Android app
+
+The app in `android/` needs:
+
+- **JDK 17 or newer** to run Gradle (tested with JDK 25). The Kotlin code compiles with a JDK 21
+  toolchain, which Gradle downloads by itself when it is not installed.
+- **Android SDK** with platform 37 (`android-37.0`) and a recent build-tools, e.g. from
+  [Android Studio](https://developer.android.com/studio) or the command-line tools. Point
+  `ANDROID_HOME` at it, or install it in the default place (`~/Android/Sdk` on Linux,
+  `~/Library/Android/sdk` on macOS, `%LOCALAPPDATA%\Android\Sdk` on Windows).
+
+```bash
+pnpm android:check       # ktlint, unit tests, Android lint and a debug APK
+```
+
+The debug APK ends up in `android/app/build/outputs/apk/debug/app-debug.apk`. The first run
+downloads Gradle and the dependencies; later runs work offline. On a machine without the SDK,
+`HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check` skips it. The app's version is read from
+`packages/server/package.json`; do not set one in Gradle.
 
 ## Making a change
 

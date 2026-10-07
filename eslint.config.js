@@ -4,7 +4,17 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/coverage/**',
+      '**/node_modules/**',
+      'android/**/build/**',
+      'android/.gradle/**',
+      'android/.kotlin/**',
+      'android/local.properties',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
