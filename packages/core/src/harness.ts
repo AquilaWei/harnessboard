@@ -71,6 +71,7 @@ import type { EditableSettings, HarnessConfig } from './config.js';
 import { resolveRepository } from './folders.js';
 import { readGuidelines } from './guidelines.js';
 import { readPlan } from './loop.js';
+import { copyNotes } from './notes.js';
 import { probe } from './process.js';
 import { createAdapter } from './providers.js';
 import type { AdapterFactory } from './providers.js';
@@ -1339,6 +1340,11 @@ export class Harness {
         if (plan.review) {
           const evidence = await reviewEvidence(ready.worktreePath!, plan.review, evidenceDir);
           plan = { ...plan, prompt: `${plan.prompt}\n\n${evidence}` };
+        }
+        const notes = this.workflow.renderedNotes(ready);
+        if (notes !== null) {
+          const copy = copyNotes(evidenceDir, notes);
+          plan = { ...plan, prompt: `${plan.prompt}\n\n${copy}` };
         }
         if (existsSync(evidenceDir)) plan = { ...plan, readableDirs: [evidenceDir] };
       }

@@ -172,6 +172,44 @@ describe('a Gemini review of a base task with an earlier stretch', () => {
   });
 });
 
+describe('a Gemini review of a base task with notes from its implementer', () => {
+  /** Base task whose implementer leaves a note and that Gemini reviews; returns its id. */
+  async function reviewedWithNotes(): Promise<number> {
+    scenario([
+      [
+        init(),
+        writeFile('hello.txt', 'hi there\n'),
+        commitAll('add hello.txt'),
+        result('done\n\n## Notes\nThe greeting is hard-coded on purpose.'),
+      ],
+    ]);
+    const task = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      workspace: 'base',
+      confirmPlan: false,
+      reviewer: 'gemini',
+      queue: true,
+    });
+    await harness.waitForIdle();
+    harness.tick(); // the reviewer's session
+    await harness.waitForIdle();
+    return task.id;
+  }
+
+  it('finds the notes in the evidence directory', async () => {
+    const id = await reviewedWithNotes();
+    const notes = readFileSync(path.join(dir, 'data', 'evidence', String(id), 'notes.md'), 'utf8');
+    expect(notes).toContain('The greeting is hard-coded on purpose.');
+  });
+
+  it('is told to read the copy of the notes', async () => {
+    const id = await reviewedWithNotes();
+    const copy = path.join(dir, 'data', 'evidence', String(id), 'notes.md');
+    expect(geminiPrompt()).toContain(`notes to \`${copy}\`: read that file instead.`);
+  });
+});
+
 describe('a Gemini review', () => {
   /** Runs a task whose implementer commits hello.txt and that Gemini reviews; returns its id. */
   async function reviewedByGemini(): Promise<number> {

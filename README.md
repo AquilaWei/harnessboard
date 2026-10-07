@@ -564,7 +564,8 @@ ignores it on a machine with system policies (`/etc/gemini-cli/policies` and the
 there a Gemini reviewer is not started and its task fails; pick another reviewer. With no
 shell, the harness runs `git log`, `git diff` and `git status` for them. Each output is saved whole
 under `<data dir>/evidence/<task id>/`, which the reviewer may read (`--include-directories`);
-the prompt quotes what fits in 12,000 characters and names the files for the rest. Tasks that
+the prompt quotes what fits in 12,000 characters and names the files for the rest. Gemini's read
+tools skip the git-ignored `.harnessboard/notes.md`, so a copy of the notes goes there too. Tasks that
 skip permissions (the default) run in `yolo` mode, and other tasks in `auto_edit` mode, where
 shell commands are refused. Gemini does not report usage, so it has no quota reading on the
 board; a usage-limit error pauses the task and retries it later. The Gemini adapter has not

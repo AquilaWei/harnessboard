@@ -280,7 +280,9 @@ a real run yet.
   while they fit a shared 12,000 characters (`EVIDENCE_INLINE_LIMIT`) and names the file of
   every output, so deleted files, removed lines and earlier stretches stay reachable however
   large the change is. The limit keeps the prompt short enough to read; it is not needed for
-  delivery, since the prompt goes on stdin. `allowedTools` are Claude-style rules that Gemini
+  delivery, since the prompt goes on stdin. Gemini's read tools skip files git ignores, which
+  includes `.harnessboard/notes.md`, so the rendered notes are also written to `notes.md` in
+  that directory (`copyNotes` in `notes.ts`) and the prompt points the reviewer at the copy. `allowedTools` are Claude-style rules that Gemini
   does not understand, so they are not passed on.
 - `stats` comes once, in the `result`, so no `context` events are emitted and Gemini manages
   its own context. Its per-model `input` (tokens not read from the cache) and `cached` become

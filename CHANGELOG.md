@@ -15,7 +15,7 @@ are test versions that have not been accepted on real machines yet.
   policies, which would override it, a Gemini reviewer is refused. They can not run git, so the harness
   gives a Gemini reviewer the commits and diff it is judging, including a base task's
   earlier stretches of work. Large diffs are saved whole to files the reviewer reads, so
-  nothing is cut. Gemini does not report usage, so the
+  nothing is cut, and the handoff notes from earlier roles are saved there too. Gemini does not report usage, so the
   header shows no quota for it; a usage-limit error pauses the task and retries it later.
   Not yet tried with the real Gemini CLI.
 - **Pair a phone with the board.** Settings has a new "Phone access" section. It finds this
