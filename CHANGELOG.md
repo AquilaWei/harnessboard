@@ -5,6 +5,8 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+## 0.0.23 - 2026-10-07
+
 ### Changed
 
 - **Less repeated work between roles.** After a review or test round that asks for changes,
