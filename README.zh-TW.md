@@ -563,6 +563,15 @@ pnpm lint && pnpm typecheck
 pnpm --filter @harnessboard/web dev   # 可熱重載的介面；/api 會轉到執行中的 `hb serve`
 ```
 
+**Android App**（在 `android/`，開發中）：需要 JDK 和裝了 platform 37 的 Android SDK，
+透過 `ANDROID_HOME` 或預設安裝位置找到 SDK。環境準備請看
+[CONTRIBUTING.md 的 Android app 一節](CONTRIBUTING.md#android-app)。
+
+```bash
+pnpm android:check                              # ktlint、單元測試、Android lint、debug APK
+HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check  # 沒有 SDK 的機器上略過
+```
+
 參與開發請看 [CONTRIBUTING.md](CONTRIBUTING.md)，各版本的變更請看 [CHANGELOG.md](CHANGELOG.md)。
 Harnessboard 依賴的 Claude Code 輸出格式記錄在
 [docs/stream-json-notes.md](docs/stream-json-notes.md)。

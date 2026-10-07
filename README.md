@@ -664,6 +664,15 @@ pnpm lint && pnpm typecheck
 pnpm --filter @harnessboard/web dev   # UI with hot reload; proxies /api to a running `hb serve`
 ```
 
+**Android app** (in `android/`, still in progress): it needs a JDK and the Android SDK with
+platform 37, found through `ANDROID_HOME` or the default install folder. See
+[Android app in CONTRIBUTING.md](CONTRIBUTING.md#android-app) for the setup.
+
+```bash
+pnpm android:check                              # ktlint, unit tests, Android lint, debug APK
+HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check  # skip it on a machine without the SDK
+```
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes and
 [CHANGELOG.md](CHANGELOG.md) for what changed in each version. Notes on the Claude Code
 output format that Harnessboard relies on are in

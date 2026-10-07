@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { posix, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const GRADLE_TASKS = ['ktlintCheck', 'test', 'lintDebug', 'assembleDebug'];
+const GRADLE_TASKS = [':buildSrc:test', 'ktlintCheck', 'test', 'lintDebug', 'assembleDebug'];
 
 /**
  * Where the Android SDK is: `ANDROID_HOME`, then `ANDROID_SDK_ROOT`, then the folder Android

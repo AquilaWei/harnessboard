@@ -12,6 +12,8 @@ export default tseslint.config(
       'android/**/build/**',
       'android/.gradle/**',
       'android/.kotlin/**',
+      'android/buildSrc/.gradle/**',
+      'android/buildSrc/.kotlin/**',
       'android/local.properties',
     ],
   },

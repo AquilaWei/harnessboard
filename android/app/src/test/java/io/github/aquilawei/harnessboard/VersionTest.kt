@@ -13,11 +13,4 @@ class VersionTest {
 
         assertEquals(serverVersion, BuildConfig.VERSION_NAME)
     }
-
-    @Test
-    fun `versionCode is MAJOR times 10000 plus MINOR times 100 plus PATCH`() {
-        val (major, minor, patch) = BuildConfig.VERSION_NAME.split('.').map(String::toInt)
-
-        assertEquals(major * 10000 + minor * 100 + patch, BuildConfig.VERSION_CODE)
-    }
 }

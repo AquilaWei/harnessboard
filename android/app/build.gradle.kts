@@ -1,4 +1,5 @@
 import groovy.json.JsonSlurper
+import io.github.aquilawei.harnessboard.buildlogic.VersionCode
 
 plugins {
     alias(libs.plugins.android.application)
@@ -10,24 +11,6 @@ val serverPackageJson = rootProject.file("../packages/server/package.json")
 val appVersionName: String =
     (JsonSlurper().parse(serverPackageJson) as Map<*, *>)["version"] as String
 
-/**
- * MAJOR*10000 + MINOR*100 + PATCH, so each release has a higher code than the one before.
- * Fails the build for a pre-release suffix or a MINOR/PATCH of 100 or more, which this
- * formula can not order.
- */
-fun versionCodeOf(name: String): Int {
-    val parts =
-        Regex("""(\d+)\.(\d+)\.(\d+)""")
-            .matchEntire(name)
-            ?.destructured
-            ?.toList()
-            ?.map(String::toInt)
-            ?: error("$serverPackageJson: version '$name' is not MAJOR.MINOR.PATCH")
-    val (major, minor, patch) = parts
-    check(minor < 100 && patch < 100) { "version '$name': MINOR and PATCH must be below 100" }
-    return major * 10000 + minor * 100 + patch
-}
-
 android {
     namespace = "io.github.aquilawei.harnessboard"
     compileSdk = 37
@@ -37,7 +20,8 @@ android {
         minSdk = 26
         targetSdk = 37
         versionName = appVersionName
-        versionCode = versionCodeOf(appVersionName)
+        // buildSrc/.../VersionCode.java has the formula and its tests.
+        versionCode = VersionCode.of(appVersionName)
     }
 
     buildFeatures {

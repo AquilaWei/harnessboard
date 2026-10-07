@@ -42,13 +42,14 @@ The app in `android/` needs:
   `~/Library/Android/sdk` on macOS, `%LOCALAPPDATA%\Android\Sdk` on Windows).
 
 ```bash
-pnpm android:check       # ktlint, unit tests, Android lint and a debug APK
+pnpm android:check       # build-script tests, ktlint, unit tests, Android lint and a debug APK
 ```
 
 The debug APK ends up in `android/app/build/outputs/apk/debug/app-debug.apk`. The first run
 downloads Gradle and the dependencies; later runs work offline. On a machine without the SDK,
 `HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check` skips it. The app's version is read from
-`packages/server/package.json`; do not set one in Gradle.
+`packages/server/package.json`; do not set one in Gradle. `android/buildSrc` holds the
+build-script code that has tests, such as the version-code formula.
 
 ## Making a change
 
