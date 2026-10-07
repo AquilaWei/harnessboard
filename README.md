@@ -512,8 +512,11 @@ the reviewer giving its verdict, a chat reply), Harnessboard sends `/compact` be
 session closes. Work is never interrupted for it, and the agent's reply stays the result.
 The conversation is then small when it is continued later: in a chat, after a quota pause,
 or when work starts after the acceptance criteria were agreed. Change the level with
-`--compact <pct>` or `compactPct` in a context policy; `0` turns it off. The soft and hard
-thresholds still apply within a turn.
+`--compact <pct>` or `compactPct` in a context policy; `0` turns it off. While compaction is
+on, the soft and hard thresholds do not act within a turn: the agent is not asked to wrap up
+and is not cut off, and the turn finishes and is compacted. Only a context at 90 % or more
+ends a turn early, so a runaway turn can not overflow the window. With compaction off, or for
+an agent that can not be compacted, the soft and hard thresholds apply within the turn.
 
 ## Configuration
 

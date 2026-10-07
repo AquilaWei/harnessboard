@@ -5,6 +5,17 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Changed
+
+- **Less repeated work between roles.** After a review or test round that asks for changes,
+  the implementer goes on in its own conversation with only the findings, and a reviewer's
+  second round goes on in its own conversation with only what changed since its first,
+  instead of each starting over with the whole task. Each falls back to a fresh session when
+  the earlier conversation is gone or has no room left.
+- **Work in progress is never wrapped up or cut off for the context limit while the session
+  is compacted.** The turn finishes and is compacted at the compact level (30 % by default).
+  Only 90 % of the window still ends a turn early. With compaction off, nothing changes.
+
 ## 0.0.22 - 2026-10-07
 
 ### Added
