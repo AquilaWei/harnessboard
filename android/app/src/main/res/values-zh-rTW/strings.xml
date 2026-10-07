@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_title">連線到你的看板</string>
+    <string name="setup_intro">請在電腦上打開「設定 → 手機存取 → 配對手機」，再掃描 QR code。也可以直接輸入看板的網址。</string>
+    <string name="setup_scan">掃描配對 QR code</string>
+    <string name="setup_address_label">看板網址</string>
+    <string name="setup_connect">連線</string>
+
+    <string name="setup_error_not_a_url">這不是看板的網址，請檢查後再試一次。</string>
+    <string name="setup_error_insecure_http">看板需要 https:// 網址，請使用「手機存取」裡顯示的網址。</string>
+    <string name="setup_error_unsupported_scheme">只能使用 https:// 網址。</string>
+    <string name="setup_error_has_user_info">網址裡不要放使用者名稱和密碼。</string>
+    <string name="setup_error_not_board_root">只要輸入看板的網址，不要加路徑或 \?查詢字串。</string>
+    <string name="setup_error_empty_pairing_code">這個配對連結沒有配對碼。請在電腦上產生新的配對 QR code，再掃描一次。</string>
+</resources>

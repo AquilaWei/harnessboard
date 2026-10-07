@@ -155,4 +155,25 @@ class BoardLinkTest {
             BoardLink.parse("https://host.example:abc/"),
         )
     }
+
+    @Test
+    fun `a link with a pairing code opens the pairing URL`() {
+        assertEquals(
+            "https://host.example:8443/#pair=AB12-CD34",
+            BoardLink("https://host.example:8443", "AB12-CD34").openUrl(),
+        )
+    }
+
+    @Test
+    fun `a pairing code with reserved characters is URL-encoded in the open URL`() {
+        assertEquals(
+            "https://host.example/#pair=a%26b%3Dc",
+            BoardLink("https://host.example", "a&b=c").openUrl(),
+        )
+    }
+
+    @Test
+    fun `a link without a pairing code opens the origin`() {
+        assertEquals("https://host.example", BoardLink("https://host.example", null).openUrl())
+    }
 }

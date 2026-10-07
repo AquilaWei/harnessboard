@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Harnessboard" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorAccent">@color/board_blue</item>
+        <item name="android:colorPrimary">@color/board_blue</item>
+    </style>
+</resources>

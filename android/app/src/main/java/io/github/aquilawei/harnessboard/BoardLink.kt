@@ -3,6 +3,7 @@ package io.github.aquilawei.harnessboard
 import java.net.URI
 import java.net.URISyntaxException
 import java.net.URLDecoder
+import java.net.URLEncoder
 
 /**
  * A board to open: its HTTPS origin (`https://host` or `https://host:port`) and, when the text
@@ -12,6 +13,14 @@ data class BoardLink(
     val origin: String,
     val pairingCode: String?,
 ) {
+    /**
+     * The page to open for this link: `origin/#pair=CODE` when it carries a pairing code, so the
+     * board page pairs this phone, otherwise the origin itself.
+     */
+    fun openUrl(): String =
+        // URLEncoder's "+" for a space is what the page's URLSearchParams reads back as a space.
+        pairingCode?.let { "$origin/#$PAIR_KEY${URLEncoder.encode(it, "UTF-8")}" } ?: origin
+
     companion object {
         // "host:8443" also looks like a scheme followed by ":", so a scheme needs "://".
         private val SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")

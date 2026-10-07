@@ -57,6 +57,7 @@ ktlint {
 
 dependencies {
     implementation(libs.androidx.browser)
+    implementation(libs.code.scanner)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
