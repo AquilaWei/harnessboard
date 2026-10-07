@@ -29,7 +29,10 @@ android {
     }
 
     testOptions {
+        unitTests.isIncludeAndroidResources = true
         unitTests.all {
+            // Robolectric's SDK 36+ shadows reach into JDK internals for FileDescriptor.
+            it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
             // VersionTest compares the built version with this file.
             it.systemProperty("harnessboard.serverPackageJson", serverPackageJson.absolutePath)
         }
@@ -56,4 +59,5 @@ dependencies {
     implementation(libs.androidx.browser)
 
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
 }
