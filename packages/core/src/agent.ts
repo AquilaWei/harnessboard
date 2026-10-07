@@ -132,6 +132,11 @@ export interface AgentAdapter {
    */
   configPaths?(access: SessionAccess): string[];
   /**
+   * Folders a Docker sandbox replaces with an empty one that the agent can not write to,
+   * because whatever an image puts there would loosen a session with `access`. Absent: none.
+   */
+  containerEmptyDirs?(access: SessionAccess): string[];
+  /**
    * Checked before a session is started, so a task fails with this error instead of
    * running somewhere it should not; the Docker sandbox rejects when docker can not run.
    * Absent: the spawn itself is the check.

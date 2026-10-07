@@ -33,7 +33,8 @@ export interface SandboxUser {
  *
  * The image must have the profile's command on its PATH. The agent runs as the user (the
  * same uid, gid and `HOME`), so it can use the mounted login and its files stay the
- * user's. Environment variables are not passed in. The network is docker's default, so
+ * user's. Environment variables are not passed in, apart from the git commit identity
+ * resolved on this machine and `HOME`. The network is docker's default, so
  * the agent can reach its API. On SELinux hosts label confinement is turned off rather
  * than relabelling the user's folders, which `:z` mounts would do.
  */
@@ -123,12 +124,14 @@ export class DockerSandbox implements AgentAdapter {
   /**
    * The `docker run` options up to the image. A read-only session gets its git directory
    * read-only too; its folder stays writable, because a check it may run (the task's
-   * verify command) can write build output.
+   * verify command) can write build output. The commit identity git resolves for `cwd`
+   * here is passed in, because the user's `~/.gitconfig` is not mounted.
    */
   private mounts(cwd: string, access: SessionAccess, readableDirs: string[]): string[] {
     const { uid, gid, home } = this.user;
     const args = ['--init', '--security-opt', 'label=disable', '--user', `${uid}:${gid}`];
     args.push('--env', `HOME=${home}`, '--workdir', cwd, ...bind(cwd, false));
+    for (const variable of gitIdentity(cwd)) args.push('--env', variable);
     const gitDir = outsideGitDir(cwd);
     if (gitDir) args.push(...bind(gitDir, access === 'readOnly'));
     for (const file of this.inner.configPaths?.(access) ?? []) {
@@ -136,12 +139,47 @@ export class DockerSandbox implements AgentAdapter {
       if (existsSync(file)) args.push(...bind(file, false));
     }
     for (const dir of readableDirs) args.push(...bind(dir, true));
+    for (const dir of this.inner.containerEmptyDirs?.(access) ?? []) {
+      // Mode 0555 on a root-owned tmpfs: the agent, which is not root, can not fill it.
+      args.push('--mount', `type=tmpfs,target=${dir},tmpfs-mode=0555`);
+    }
     return args;
   }
 }
 
 function bind(dir: string, readOnly: boolean): string[] {
   return ['--mount', `type=bind,source=${dir},target=${dir}${readOnly ? ',readonly' : ''}`];
+}
+
+/**
+ * `GIT_AUTHOR_*` and `GIT_COMMITTER_*` set to the `user.name` and `user.email` git uses in
+ * `cwd`, wherever they are configured, so commits in the container carry the user's
+ * identity. Only those two settings are passed; signing and the rest of the user's git
+ * config stay outside. Unset ones are left out, and git in the container then refuses to
+ * commit as it would here. Blocks on `git` like {@link outsideGitDir}.
+ */
+function gitIdentity(cwd: string): string[] {
+  const vars: string[] = [];
+  for (const [key, suffix] of [
+    ['user.name', 'NAME'],
+    ['user.email', 'EMAIL'],
+  ] as const) {
+    const value = gitConfig(cwd, key);
+    if (value) vars.push(`GIT_AUTHOR_${suffix}=${value}`, `GIT_COMMITTER_${suffix}=${value}`);
+  }
+  return vars;
+}
+
+function gitConfig(cwd: string, key: string): string | null {
+  try {
+    return execFileSync('git', ['config', '--get', key], {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return null; // unset (exit 1), or no git here
+  }
 }
 
 /**

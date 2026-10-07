@@ -52,7 +52,8 @@ export class GeminiAdapter implements AgentAdapter {
    * then switches to `yolo`, and the user's own allowances (settings, `~/.gemini/policies`)
    * outrank plan mode's refusals. A read-only session, new or resumed, therefore also gets
    * {@link READ_ONLY_POLICY} with `--admin-policy`, which outranks both. Gemini ignores that
-   * flag when the machine has system policies, so then the session is refused instead.
+   * flag when the machine has system policies, so then the session is refused instead; in
+   * a Docker sandbox the image's are hidden ({@link containerEmptyDirs}).
    * Throws if there are system policies or the policy file can not be written.
    */
   buildArgs(spec: SessionSpec): string[] {
@@ -91,6 +92,17 @@ export class GeminiAdapter implements AgentAdapter {
   configPaths(access: SessionAccess): string[] {
     const home = path.join(os.homedir(), '.gemini');
     return access === 'readOnly' ? [home, path.dirname(readOnlyPolicyFile())] : [home];
+  }
+
+  /**
+   * In a Docker sandbox the image's system policy folder would make Gemini ignore
+   * `--admin-policy` just as this machine's would, so a read-only session gets it emptied.
+   * Its path is the Linux one whatever this machine runs, because the container is Linux.
+   * {@link buildArgs} still refuses when this machine has system policies, so the sandbox
+   * is no way around them.
+   */
+  containerEmptyDirs(access: SessionAccess): string[] {
+    return access === 'readOnly' ? [LINUX_SYSTEM_POLICIES_DIR] : [];
   }
 
   encodeMessage(): string {
@@ -187,13 +199,15 @@ decision = "allow"
 priority = 950
 `;
 
+const LINUX_SYSTEM_POLICIES_DIR = '/etc/gemini-cli/policies';
+
 /** Where Gemini looks for system policies (`Storage.getSystemPoliciesDir` in its source). */
 const SYSTEM_POLICIES_DIR =
   process.platform === 'darwin'
     ? '/Library/Application Support/GeminiCli/policies'
     : process.platform === 'win32'
       ? 'C:\\ProgramData\\gemini-cli\\policies'
-      : '/etc/gemini-cli/policies';
+      : LINUX_SYSTEM_POLICIES_DIR;
 
 /**
  * Gemini ignores `--admin-policy` once its system policy directory holds a `.toml` file, so

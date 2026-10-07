@@ -534,9 +534,17 @@ profile 的每個 session 都會用 `docker run` 在容器裡執行：
   `~/.gemini`），以及 Gemini 審查者的 evidence 資料夾（唯讀）。電腦上其他東西 agent 都看不到。
 - **映像檔要自己建：** 裡面的 PATH 要有 profile 的 `command`，以及任務會用到的工具
   （git、node、建置工具）。Harnessboard 不會幫你 pull 或 build。
+- **commit 用你的 git 身分：** 你的 `~/.gitconfig` 不會掛進去，所以會把 git 在任務資料夾裡
+  用的 `user.name` 和 `user.email` 以 `GIT_AUTHOR_*`、`GIT_COMMITTER_*` 傳進容器。git 設定的
+  其他部分（commit 簽章、alias、hooks 路徑）都不會傳。如果你的電腦上 git 沒有設定身分，容器裡
+  的 commit 也會失敗；請用 `git config --global user.name "你的名字"` 和
+  `git config --global user.email you@example.com` 設定。
+- **Gemini 審查者維持唯讀：** 映像檔裡 Gemini 的系統政策資料夾（`/etc/gemini-cli/policies`）
+  會換成一個審查者寫不進去的空資料夾，所以它無法讓唯讀政策失效。如果你的電腦本身有系統政策，
+  不論在不在容器裡，Gemini 審查者一樣不會啟動。
 - **沒有 docker** 或 daemon 沒回應時，任務會失敗並寫出原因，不會改在容器外執行 agent。
 - **限制：** 只支援 Linux 和 macOS（Windows 路徑無法掛到容器裡的相同路徑）。agent 以你的
-  使用者 id 和 `HOME` 執行，但環境變數不會傳進去，所以請用 CLI 登入，不要靠 API key 環境變數；
+  使用者 id 和 `HOME` 執行，但其他環境變數不會傳進去，所以請用 CLI 登入，不要靠 API key 環境變數；
   也不會套用 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 和 `GEMINI_CLI_HOME`。網路沒有限制，agent
   仍能連到它的 API 和其他網站。SELinux 主機上容器會關閉 SELinux 標籤，而不是重新標記你的
   資料夾。掛載的是整個 repo 的 git 目錄，所以 agent 仍可以改動其他分支。還沒在容器裡用真的

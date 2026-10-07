@@ -313,8 +313,16 @@ runner and the workflow do not know a session is sandboxed.
   (read-only). Missing config paths are skipped, because docker would create them as
   root-owned folders. Gemini's `configPaths` includes the folder of its admin policy file
   for read-only sessions.
+- **Emptied folders:** each path from the inner adapter's `containerEmptyDirs(access)` gets
+  a root-owned tmpfs with mode 0555 over it. Gemini returns `/etc/gemini-cli/policies` for
+  read-only sessions: a `.toml` file there in the image would make Gemini ignore
+  `--admin-policy`, and the agent, not being root, can not add one. The host check in
+  `buildArgs` still runs, so a host with system policies refuses Gemini reviewers in a
+  container too.
 - **User:** `--user <uid>:<gid>` and `HOME` from the host, so the mounted login works and
-  files stay the user's. `--init` forwards the stop signal the runner sends to the docker
+  files stay the user's. `~/.gitconfig` is not mounted; the `user.name` and `user.email`
+  that `git config --get` returns in `cwd` on the host go in as `GIT_AUTHOR_*` and
+  `GIT_COMMITTER_*`, so commits in the container carry the user's identity. `--init` forwards the stop signal the runner sends to the docker
   client (which proxies it) on to the agent. `--security-opt label=disable` makes the
   mounts usable on SELinux hosts without relabelling them.
 - **Refusal:** `ensureReady()` (an optional adapter method) runs before a task's or chat's
@@ -323,12 +331,15 @@ runner and the workflow do not know a session is sandboxed.
   container. `hb open` checks the same before it opens the session with `docker run -it`.
 - `versionArgs` run the CLI's version command inside the image, so `hb agents` reports an
   image without the CLI.
-- **Not covered:** environment variables (API keys, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+- **Not covered:** other environment variables (API keys, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
   `GEMINI_CLI_HOME`) are not passed in; the network is not restricted; the git directory
-  holds every branch; Gemini's system-policy check looks at the host, not the image.
+  holds every branch; the rest of the user's git config (signing, hooks) stays outside.
 - Tests: `core/test/sandbox.test.ts` checks the exact command line and the refusal with an
-  empty PATH, and runs a few containers (`alpine:3`) when a docker daemon answers on Linux;
-  `core/test/harness-sandbox.test.ts` checks that a task fails without docker.
+  empty PATH, and runs containers when a docker daemon answers on Linux: a few on
+  `alpine:3`, and some on an image it builds (git, an allow-all Gemini system policy, a
+  `gemini` that runs its stdin) to check that a read-only Gemini session sees and can add no
+  system policy and that a worktree commits with an identity set only in the host's global
+  config. `core/test/harness-sandbox.test.ts` checks that a task fails without docker.
 
 ## Workspaces
 

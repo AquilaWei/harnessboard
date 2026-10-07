@@ -626,10 +626,19 @@ every session of that profile runs in a container with `docker run`:
   evidence folder (read-only). Nothing else of your computer is visible to the agent.
 - **You build the image:** it needs the profile's `command` on its PATH, plus whatever the
   task runs (git, node, your build tools). Harnessboard does not pull or build it.
+- **Commits carry your git identity:** your `~/.gitconfig` is not mounted, so the `user.name`
+  and `user.email` git uses in the task's folder are passed in as `GIT_AUTHOR_*` and
+  `GIT_COMMITTER_*`. Nothing else from your git config is (commit signing, aliases, hooks
+  paths). If git has no identity on your computer, commits fail in the container too; set one
+  with `git config --global user.name "Your Name"` and `git config --global user.email you@example.com`.
+- **Gemini reviewers stay read-only:** the image's Gemini system policy folder
+  (`/etc/gemini-cli/policies`) is replaced by an empty one they can not write to, so it can
+  not switch off their read-only policy. A computer with its own system policies still
+  refuses Gemini reviewers, in a container or not.
 - **When docker is missing** or its daemon does not answer, the task fails with that reason;
   the agent is never run outside the container instead.
 - **Limits:** Linux and macOS only (Windows paths can not be mounted at the same path). The
-  agent runs with your user id and `HOME`, but no environment variables are passed in, so
+  agent runs with your user id and `HOME`, but no other environment variables are passed in, so
   sign in through the CLI rather than with an API key variable; `CLAUDE_CONFIG_DIR`,
   `CODEX_HOME` and `GEMINI_CLI_HOME` are not followed. The network stays open, so the agent
   can still reach its API and anything else online. On SELinux hosts the container runs

@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentAdapter, AgentCapabilities, SessionSpec } from '../src/agent.js';
 import { ClaudeCodeAdapter } from '../src/claude-code.js';
 import { GeminiAdapter } from '../src/gemini.js';
@@ -77,6 +77,28 @@ function worktree(): { repo: string; dir: string } {
   return { repo, dir };
 }
 
+/** Points git's global config at a file with `content`, so this machine's own is not read. */
+function globalGitConfig(content: string): void {
+  const file = path.join(tempDir('gitconfig'), 'gitconfig');
+  writeFileSync(file, content);
+  vi.stubEnv('GIT_CONFIG_GLOBAL', file);
+  vi.stubEnv('GIT_CONFIG_NOSYSTEM', '1');
+}
+
+const HOST_IDENTITY = '[user]\n  name = Host User\n  email = host@example.com\n';
+
+/** A worktree whose repository has no identity of its own, so git takes the global one. */
+function worktreeWithoutIdentity(): { repo: string; dir: string } {
+  const { repo, dir } = worktree();
+  execFileSync('git', ['config', '--unset', 'user.name'], { cwd: repo });
+  execFileSync('git', ['config', '--unset', 'user.email'], { cwd: repo });
+  return { repo, dir };
+}
+
+beforeEach(() => {
+  globalGitConfig('');
+});
+
 afterEach(() => {
   vi.unstubAllEnvs();
 });
@@ -139,6 +161,87 @@ describe('DockerSandbox command line', () => {
     const repo = makeRepo();
     const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', USER);
     expect(sandbox.buildArgs(spec(repo)).filter((arg) => arg === '--mount')).toHaveLength(1);
+  });
+
+  it('passes the git identity configured outside the repository', () => {
+    globalGitConfig(HOST_IDENTITY);
+    const { repo, dir } = worktreeWithoutIdentity();
+    const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', USER);
+    const gitDir = path.join(repo, '.git');
+    expect(sandbox.buildArgs(spec(dir))).toEqual([
+      'run',
+      '--rm',
+      '-i',
+      '--init',
+      '--security-opt',
+      'label=disable',
+      '--user',
+      '1000:1001',
+      '--env',
+      'HOME=/home/me',
+      '--workdir',
+      dir,
+      '--mount',
+      `type=bind,source=${dir},target=${dir}`,
+      '--env',
+      'GIT_AUTHOR_NAME=Host User',
+      '--env',
+      'GIT_COMMITTER_NAME=Host User',
+      '--env',
+      'GIT_AUTHOR_EMAIL=host@example.com',
+      '--env',
+      'GIT_COMMITTER_EMAIL=host@example.com',
+      '--mount',
+      `type=bind,source=${gitDir},target=${gitDir}`,
+      'agents:1',
+      'agent',
+      'exec',
+      'do it',
+    ]);
+  });
+
+  it("passes the repository's own git identity over the global one", () => {
+    globalGitConfig(HOST_IDENTITY);
+    const { dir } = worktree();
+    const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', USER);
+    expect(sandbox.buildArgs(spec(dir))).toContain('GIT_AUTHOR_EMAIL=test@example.com');
+  });
+
+  it('passes no git identity when none is configured', () => {
+    const { dir } = worktreeWithoutIdentity();
+    const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', USER);
+    expect(sandbox.buildArgs(spec(dir)).some((arg) => arg.startsWith('GIT_'))).toBe(false);
+  });
+
+  it("empties Gemini's system policy folder for a read-only session", () => {
+    const cwd = tempDir('sandbox-cwd');
+    const gemini = new GeminiAdapter('gemini', tempDir('host-policies'));
+    const sandbox = new DockerSandbox(gemini, 'agents:1', 'linux', USER);
+    expect(sandbox.buildArgs(spec(cwd, { access: 'readOnly' }))).toContain(
+      'type=tmpfs,target=/etc/gemini-cli/policies,tmpfs-mode=0555',
+    );
+  });
+
+  it("leaves Gemini's system policy folder alone for an editing session", () => {
+    const cwd = tempDir('sandbox-cwd');
+    const gemini = new GeminiAdapter('gemini', tempDir('host-policies'));
+    const sandbox = new DockerSandbox(gemini, 'agents:1', 'linux', USER);
+    expect(sandbox.buildArgs(spec(cwd)).some((arg) => arg.startsWith('type=tmpfs'))).toBe(false);
+  });
+
+  it('still refuses a read-only Gemini session when this machine has system policies', () => {
+    const cwd = tempDir('sandbox-cwd');
+    const hostPolicies = tempDir('host-policies');
+    writeFileSync(path.join(hostPolicies, 'company.toml'), '');
+    const sandbox = new DockerSandbox(
+      new GeminiAdapter('gemini', hostPolicies),
+      'agents:1',
+      'linux',
+      USER,
+    );
+    expect(() => sandbox.buildArgs(spec(cwd, { access: 'readOnly' }))).toThrow(
+      /ignores --admin-policy/,
+    );
   });
 
   it('opens a session interactively with a terminal', () => {
@@ -291,3 +394,85 @@ describe.runIf(process.platform === 'linux' && dockerRuns())('DockerSandbox with
     expect(await output('docker', args, 60_000)).toBe('token\n');
   });
 });
+
+// An image with git, a Gemini system policy that allows everything, and a `gemini` that runs
+// its stdin (where Gemini's prompt goes) as a shell script. Building it needs the network.
+const AGENT_IMAGE = 'harnessboard-test-sandbox:1';
+const AGENT_DOCKERFILE = `FROM ${IMAGE}
+RUN apk add --no-cache git \\
+ && mkdir -p /etc/gemini-cli/policies \\
+ && printf '[[rule]]\\ntoolName = "*"\\ndecision = "allow"\\npriority = 999\\n' > /etc/gemini-cli/policies/company.toml \\
+ && printf '#!/bin/sh\\nexec sh -s\\n' > /usr/local/bin/gemini \\
+ && chmod +x /usr/local/bin/gemini
+`;
+
+/** Runs a session's `docker run` with `stdin`, returning what it printed. */
+function run(args: string[], stdin = ''): string {
+  return execFileSync('docker', args, { input: stdin, encoding: 'utf8', timeout: 60_000 });
+}
+
+describe.runIf(process.platform === 'linux' && dockerRuns())(
+  'DockerSandbox with docker and an agent image',
+  () => {
+    beforeAll(() => {
+      execFileSync('docker', ['build', '-q', '-t', AGENT_IMAGE, '-'], {
+        input: AGENT_DOCKERFILE,
+        stdio: ['pipe', 'ignore', 'pipe'],
+      });
+    }, 300_000);
+
+    afterAll(() => {
+      execFileSync('docker', ['image', 'rm', AGENT_IMAGE], { stdio: 'ignore' });
+    });
+
+    it("shows a read-only Gemini session none of the image's system policies", () => {
+      const cwd = tempDir('sandbox-real');
+      const gemini = new GeminiAdapter('gemini', tempDir('host-policies'));
+      const sandbox = new DockerSandbox(gemini, AGENT_IMAGE);
+      const args = sandbox.buildArgs(spec(cwd, { access: 'readOnly' }));
+      expect(run(args, 'ls -A /etc/gemini-cli/policies; echo end')).toBe('end\n');
+    });
+
+    it('lets a read-only Gemini session read its admin policy', () => {
+      const cwd = tempDir('sandbox-real');
+      const gemini = new GeminiAdapter('gemini', tempDir('host-policies'));
+      const sandbox = new DockerSandbox(gemini, AGENT_IMAGE);
+      const args = sandbox.buildArgs(spec(cwd, { access: 'readOnly' }));
+      const policy = args[args.indexOf('--admin-policy') + 1]!;
+      expect(run(args, `head -n 1 ${policy}`)).toBe(
+        '# Written by Harnessboard for read-only (reviewer) sessions.\n',
+      );
+    });
+
+    it('keeps a read-only Gemini session from adding a system policy', () => {
+      const cwd = tempDir('sandbox-real');
+      const gemini = new GeminiAdapter('gemini', tempDir('host-policies'));
+      const sandbox = new DockerSandbox(gemini, AGENT_IMAGE);
+      const args = sandbox.buildArgs(spec(cwd, { access: 'readOnly' }));
+      const script =
+        'touch /etc/gemini-cli/policies/mine.toml 2>/dev/null; ls -A /etc/gemini-cli/policies; echo end';
+      expect(run(args, script)).toBe('end\n');
+    });
+
+    it("leaves an editing Gemini session the image's system policies", () => {
+      const cwd = tempDir('sandbox-real');
+      const gemini = new GeminiAdapter('gemini', tempDir('host-policies'));
+      const sandbox = new DockerSandbox(gemini, AGENT_IMAGE);
+      const args = sandbox.buildArgs(spec(cwd));
+      expect(run(args, 'ls -A /etc/gemini-cli/policies')).toBe('company.toml\n');
+    });
+
+    it('commits from a worktree with the identity configured only on this machine', () => {
+      globalGitConfig(HOST_IDENTITY);
+      const { dir } = worktreeWithoutIdentity();
+      const script = 'echo x > new.txt && git add new.txt && git commit -qm sandboxed';
+      const sandbox = new DockerSandbox(new ShellAdapter([]), AGENT_IMAGE);
+      run(sandbox.buildArgs(spec(dir, { prompt: script })));
+      const author = execFileSync('git', ['log', '-1', '--format=%an <%ae> / %cn <%ce>'], {
+        cwd: dir,
+        encoding: 'utf8',
+      });
+      expect(author).toBe('Host User <host@example.com> / Host User <host@example.com>\n');
+    });
+  },
+);
