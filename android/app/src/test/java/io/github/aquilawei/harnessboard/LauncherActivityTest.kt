@@ -5,10 +5,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.ServiceConnection
+import android.content.pm.PackageInfo
+import android.content.pm.Signature
+import android.content.pm.SigningInfo
 import android.net.Uri
 import android.os.Bundle
 import androidx.browser.customtabs.CustomTabsService
 import androidx.browser.customtabs.CustomTabsSessionToken
+import androidx.browser.trusted.Token
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -21,6 +26,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.Implementation
 import org.robolectric.annotation.Implements
+import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowContextImpl
 
 @RunWith(RobolectricTestRunner::class)
@@ -31,6 +37,15 @@ class LauncherActivityTest {
     @Before
     fun installTwaBrowserAndBoard() {
         val packageManager = shadowOf(context.packageManager)
+        // The launcher records the browser's signing certificate for DelegationService.
+        val signingInfo = Shadow.newInstanceOf(SigningInfo::class.java)
+        shadowOf(signingInfo).setSignatures(arrayOf(Signature("0123456789abcdef")))
+        packageManager.installPackage(
+            PackageInfo().apply {
+                packageName = BROWSER
+                this.signingInfo = signingInfo
+            },
+        )
         val browser = ComponentName(BROWSER, "$BROWSER.Browser")
         packageManager.addActivityIfNotPresent(browser)
         packageManager.addIntentFilterForActivity(
@@ -81,6 +96,43 @@ class LauncherActivityTest {
 
         assertNull(shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity)
     }
+
+    @Test
+    fun `a push's task link opens the task in the browser's Trusted Web Activity`() {
+        Robolectric.buildActivity(LauncherActivity::class.java, linkIntent(TASK_URL)).setup()
+
+        connectBrowser(ShadowHeldBindings.connections.single())
+
+        assertEquals(Uri.parse(TASK_URL), shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity?.data)
+    }
+
+    @Test
+    fun `opening the board remembers the browser for notification delegation`() {
+        Robolectric.buildActivity(LauncherActivity::class.java, Intent(context, LauncherActivity::class.java)).setup()
+
+        connectBrowser(ShadowHeldBindings.connections.single())
+
+        assertArrayEquals(
+            Token.create(BROWSER, context.packageManager)?.serialize(),
+            PreferencesTokenStore(context).load()?.serialize(),
+        )
+    }
+
+    @Test
+    fun `a link to another site goes to the browser, not back to the app`() {
+        Robolectric.buildActivity(LauncherActivity::class.java, linkIntent("https://other.example/page")).setup()
+
+        val started = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertEquals(
+            listOf(BROWSER, Uri.parse("https://other.example/page")),
+            listOf(started?.`package`, started?.data),
+        )
+    }
+
+    private fun linkIntent(url: String) =
+        Intent(Intent.ACTION_VIEW, Uri.parse(url))
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+            .setClass(context, LauncherActivity::class.java)
 
     private fun pairingIntent() = Intent(context, LauncherActivity::class.java).putExtra(LauncherActivity.EXTRA_PENDING_URL, PAIRING_URL)
 
@@ -166,5 +218,6 @@ class LauncherActivityTest {
         const val BROWSER = "com.example.browser"
         const val ORIGIN = "https://board.example"
         const val PAIRING_URL = "https://board.example/#pair=AB12"
+        const val TASK_URL = "https://board.example/#task=42"
     }
 }

@@ -31,5 +31,15 @@ sealed interface BrowserChoice {
                     ?: browsers.firstOrNull { it in twaProviders }
             return provider?.let(::TrustedWebActivity) ?: CustomTab
         }
+
+        /**
+         * The browser for a link that is not the board: the [defaultBrowser] when it is one of
+         * the [browsers], else the first of them, or null when there is none. The caller leaves
+         * this app out of [browsers], since it answers https links too.
+         */
+        fun forLink(
+            defaultBrowser: String?,
+            browsers: List<String>,
+        ): String? = defaultBrowser?.takeIf { it in browsers } ?: browsers.firstOrNull()
     }
 }

@@ -1,6 +1,7 @@
 package io.github.aquilawei.harnessboard
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class BrowserChoiceTest {
@@ -82,5 +83,26 @@ class BrowserChoiceTest {
                 twaProviders = setOf("com.android.chrome"),
             ),
         )
+    }
+
+    @Test
+    fun `a link goes to the default browser`() {
+        assertEquals(
+            "com.android.chrome",
+            BrowserChoice.forLink(defaultBrowser = "com.android.chrome", browsers = listOf("org.mozilla.firefox", "com.android.chrome")),
+        )
+    }
+
+    @Test
+    fun `a link goes to the first browser when no default browser is set`() {
+        assertEquals(
+            "org.mozilla.firefox",
+            BrowserChoice.forLink(defaultBrowser = "android", browsers = listOf("org.mozilla.firefox", "com.android.chrome")),
+        )
+    }
+
+    @Test
+    fun `a link has no browser to go to when none is installed`() {
+        assertNull(BrowserChoice.forLink(defaultBrowser = null, browsers = emptyList()))
     }
 }

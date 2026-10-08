@@ -521,10 +521,17 @@ like the browser does.
 **What stays the same**
 
 - **Passkey, lock and push rules:** the same passkey, the 30-minute lock, the check before
-  sensitive actions and the same push notifications. Taps on a push open the task in the app.
+  sensitive actions and the same push notifications.
 - **Chrome's storage:** the app uses Chrome's cookies and site data, so a phone already
   paired in Chrome stays paired; just type the address in step 2.
 - **Revoking** the phone on the computer locks out the app and Chrome together.
+
+**Push in the app:** when you turn on push, Android asks whether **Harnessboard** may send
+notifications. The pushes then come from the app, and tapping one opens the task in the app,
+even when the app was closed. This needs the board's asset links verified (no URL bar, see
+below); otherwise Chrome shows the pushes and a tap opens a Chrome tab. On Android 8–11 the app
+can appear in "Open with" lists for web links, because it takes the board's links; links to other
+sites are passed on to your browser.
 
 **Change board:** long-press the app icon and tap **Change board**. The app forgets the
 address and shows the setup screen again; the computer still lists the phone until you

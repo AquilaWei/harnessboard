@@ -13,11 +13,13 @@ import android.widget.Toast
 import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsService
 import androidx.browser.customtabs.CustomTabsServiceConnection
+import androidx.browser.trusted.Token
 
 /**
  * The app icon's activity. It shows nothing itself: it opens the saved board in the browser's
  * Trusted Web Activity (or a Custom Tab when no browser supports one), or the setup screen when
- * no board is saved, and then finishes.
+ * no board is saved, and then finishes. It also takes https links, which is how a tapped push
+ * notification reopens the closed app on its task: see [LaunchTarget.forLink].
  */
 class LauncherActivity : Activity() {
     private var connection: CustomTabsServiceConnection? = null
@@ -36,10 +38,7 @@ class LauncherActivity : Activity() {
             open(restoredUrl)
             return
         }
-        val pendingUrl = intent.getStringExtra(EXTRA_PENDING_URL)
-        // The pairing code is single-use, so its URL is not opened a second time from this intent.
-        intent.removeExtra(EXTRA_PENDING_URL)
-        when (val target = LaunchTarget.decide(PreferencesBoardStore(this).origin(), pendingUrl)) {
+        when (val target = launchTarget()) {
             LaunchTarget.Setup -> {
                 startActivity(Intent(this, SetupActivity::class.java))
                 finish()
@@ -49,7 +48,21 @@ class LauncherActivity : Activity() {
                 urlToOpen = target.url
                 open(target.url)
             }
+
+            is LaunchTarget.Browser -> {
+                openInBrowser(target.url)
+            }
         }
+    }
+
+    private fun launchTarget(): LaunchTarget {
+        val savedOrigin = PreferencesBoardStore(this).origin()
+        val link = intent.data?.takeIf { intent.action == Intent.ACTION_VIEW }
+        if (link != null) return LaunchTarget.forLink(savedOrigin, link.toString())
+        val pendingUrl = intent.getStringExtra(EXTRA_PENDING_URL)
+        // The pairing code is single-use, so its URL is not opened a second time from this intent.
+        intent.removeExtra(EXTRA_PENDING_URL)
+        return LaunchTarget.decide(savedOrigin, pendingUrl)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -90,6 +103,8 @@ class LauncherActivity : Activity() {
                         openInCustomTab(url)
                         return
                     }
+                    // DelegationService answers only the browser the board was opened in.
+                    PreferencesTokenStore(this@LauncherActivity).store(Token.create(browser, packageManager))
                     startOrShowNoBrowser {
                         BoardIntents
                             .trustedWebActivity(this@LauncherActivity, url, session)
@@ -106,8 +121,24 @@ class LauncherActivity : Activity() {
         }
     }
 
+    /** Hands a link that is not the board to a browser, never back to this app. */
+    private fun openInBrowser(url: String) {
+        val browser = BrowserChoice.forLink(defaultBrowser(), browsers())
+        if (browser == null) {
+            showNoBrowser()
+            return
+        }
+        startOrShowNoBrowser {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(browser))
+        }
+    }
+
     private fun openInCustomTab(url: String) {
-        startOrShowNoBrowser { BoardIntents.customTab(this).launchUrl(this, Uri.parse(url)) }
+        // Named, so the board's https URL cannot come back to this app's link filter.
+        val browser = BrowserChoice.forLink(defaultBrowser(), browsers())
+        startOrShowNoBrowser {
+            BoardIntents.customTab(this).apply { intent.setPackage(browser) }.launchUrl(this, Uri.parse(url))
+        }
     }
 
     /** Runs [start] and finishes; a browser uninstalled since the choice gets the message. */
@@ -129,11 +160,13 @@ class LauncherActivity : Activity() {
     }
 
     /** The package Android opens web links with, or "android" (the chooser) when none is set. */
-    private fun defaultBrowser(): String? = resolveWebActivity()?.activityInfo?.packageName
+    private fun defaultBrowser(): String? = resolveWebActivity()?.activityInfo?.packageName?.takeIf { it != packageName }
 
+    // This app answers https links too (for push taps), but it is not a browser.
     private fun browsers(): List<String> =
         queryActivities(WEB_INTENT, PackageManager.MATCH_ALL)
             .map { it.activityInfo.packageName }
+            .filter { it != packageName }
             .distinct()
 
     private fun twaProviders(): Set<String> =

@@ -10,6 +10,11 @@ sealed interface LaunchTarget {
         val url: String,
     ) : LaunchTarget
 
+    /** A web link that is not on the saved board: a browser opens [url], not the app. */
+    data class Browser(
+        val url: String,
+    ) : LaunchTarget
+
     companion object {
         /**
          * Picks the target from the [savedOrigin] and the [pendingUrl] the setup screen hands over
@@ -23,8 +28,26 @@ sealed interface LaunchTarget {
         ): LaunchTarget =
             when {
                 savedOrigin == null -> Setup
-                pendingUrl == savedOrigin || pendingUrl?.startsWith("$savedOrigin/") == true -> Board(pendingUrl)
+                pendingUrl != null && isOnBoard(savedOrigin, pendingUrl) -> Board(pendingUrl)
                 else -> Board(savedOrigin)
             }
+
+        /**
+         * Picks the target for a web link the app was opened with. Chrome sends one when a push
+         * notification is tapped while the app is closed (the service worker's
+         * `clients.openWindow()` with the task's `/#task=` URL), so a link on the saved board
+         * opens as it is. The app answers every https link (the board's host is only known at
+         * run time), so any other link, or any link before a board is saved, goes to a browser.
+         */
+        fun forLink(
+            savedOrigin: String?,
+            linkUrl: String,
+        ): LaunchTarget = if (savedOrigin != null && isOnBoard(savedOrigin, linkUrl)) Board(linkUrl) else Browser(linkUrl)
+
+        // The "/" after the origin keeps "https://host.example.evil.test" off "https://host.example".
+        private fun isOnBoard(
+            savedOrigin: String,
+            url: String,
+        ): Boolean = url == savedOrigin || url.startsWith("$savedOrigin/")
     }
 }

@@ -12,7 +12,8 @@ are test versions that have not been accepted on real machines yet.
   and the app opens the same phone board with its own icon, full screen without a URL bar
   once the board knows the app's signing fingerprint.
   Pairing, the passkey, the lock and push notifications work as in Chrome, and a phone
-  already paired in Chrome stays paired. Long-press the icon and pick **Change board** to
+  already paired in Chrome stays paired. Pushes come from the app, and tapping one opens the
+  task in the app, even when it was closed. Long-press the icon and pick **Change board** to
   connect it to another board. Needs Android 8.0 or later and Chrome. Not yet tried on a
   real phone.
 - **"Android app" in Settings → Phone access**, with the download link and a list of app

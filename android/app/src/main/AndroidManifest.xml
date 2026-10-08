@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Chrome posts the board's pushes through DelegationService, as this app. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- The board itself runs in the browser's Trusted Web Activity, so the app keeps no data
          worth backing up: the saved board address is set up again by scanning the QR. -->
@@ -30,6 +33,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Chrome opens a tapped push's task URL here when the app is closed, but only in an
+                 app that takes that URL. The board's host is only known at run time, so this
+                 takes every https link and passes the ones not on the board to a browser. There
+                 is no autoVerify, so Android 12+ never picks this app for other apps' links. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+            </intent-filter>
+
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
@@ -40,6 +54,28 @@
         <activity
             android:name=".SetupActivity"
             android:exported="false" />
+
+        <!-- Exported without a permission, since Chrome holds none it could require: the base
+             class checks every call against the browser the board was opened in. -->
+        <service
+            android:name=".DelegationService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="android.support.customtabs.trusted.TRUSTED_WEB_ACTIVITY_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.support.customtabs.trusted.SMALL_ICON"
+                android:resource="@drawable/ic_notification" />
+        </service>
+
+        <!-- Not exported: Chrome starts it through the service's pending intent. -->
+        <activity
+            android:name=".NotificationPermissionActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     </application>
 
     <!-- Android 11+ hides other apps unless declared: the launcher looks for browsers and for

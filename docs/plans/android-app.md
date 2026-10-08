@@ -22,6 +22,17 @@ from [phone-access.md](phone-access.md) stays the one UI.
 - **No android-browser-helper.** Only `androidx.browser`: the launcher binds the browser's Custom
   Tabs service, launches the TWA and finishes. Without a TWA-capable browser it falls back to a
   Custom Tab; without any browser it shows a toast.
+- **Push through the app (notification delegation).** Chrome only hands the board's pushes and
+  their taps to an app that both has a `TrustedWebActivityService` and takes the board's URLs.
+  - `DelegationService` serves only the browser the launcher last opened the board in (its token
+    is saved at launch). On Android 13+ it answers Chrome's `checkNotificationPermission` and
+    `getNotificationPermissionRequestPendingIntent`, so the app asks for POST_NOTIFICATIONS.
+  - A tap with the app closed: the service worker calls `clients.openWindow('/#task=<id>')` and
+    Chrome sends that URL to the app. The launcher opens it in the TWA as it is.
+  - The board's host is only known at run time, so the launcher takes every https link (no
+    `autoVerify`). Links not on the saved board go to the default browser by package name, never
+    back to the app. On Android 8–11 the app can show up in "Open with" lists; Android 12+ never
+    picks it for other apps' links.
 - **Setup:** scan the pairing QR with Google's code scanner (no camera permission) or type the
   address. Only the origin is saved; the pairing code is passed to the board once.
 - **Asset links from the board itself.** `/.well-known/assetlinks.json` lists the fingerprints in
@@ -115,13 +126,15 @@ phone is on mobile data, not the home Wi-Fi.
 
 **Push**
 
-16. In the app, open **Settings**, switch on **Notify me when a task needs me** and allow
-    notifications. Expected: no error.
+16. In the app, open **Settings** and switch on **Notify me when a task needs me**. Expected:
+    Android asks whether **Harnessboard** (not Chrome) may send notifications; allow it. The
+    switch stays on with no error.
 17. Swipe the app away and lock the screen. On the computer, make a task wait for permission or
-    move one to Review. Expected: within a few seconds a notification "#<id> <title>". Note
-    whether Android shows it as Harnessboard's or as Chrome's.
-18. Tap it. Expected: the task opens **in the app** (not in a Chrome tab), after unlocking, on
-    the tab that needs you.
+    move one to Review. Expected: within a few seconds a notification "#<id> <title>" with the
+    white H icon, listed under Harnessboard (long-press it to see the app), not Chrome.
+18. Tap it, with the app still closed. Expected: the task opens **in the app** (no URL bar, not
+    a Chrome tab), after unlocking, on the tab that needs you. In the task switcher it is the
+    Harnessboard entry.
 
 **Change board and revoke**
 
