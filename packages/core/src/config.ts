@@ -113,8 +113,8 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     allowedTools: [],
     reviewGuidelines: [],
     remoteHosts: [],
-    // TODO: F8 in feature_list.json - add the release key's public fingerprint once the user has
-    // created the key (README: Release signing key); CI prints it with each signed APK.
+    // TODO: docs/plans/android-app.md "After the release key exists" - add the release key's
+    // public fingerprint once the user has created the key; CI prints it with each signed APK.
     androidAppFingerprints: [],
   };
 }

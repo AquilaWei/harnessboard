@@ -5,6 +5,21 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Added
+
+- **An Android app for the board.** Install `harnessboard-<version>.apk` from the release,
+  scan the pairing QR code from **Settings → Phone access** (or type the board's address),
+  and the app opens the same phone board with its own icon, full screen without a URL bar
+  once the board knows the app's signing fingerprint.
+  Pairing, the passkey, the lock and push notifications work as in Chrome, and a phone
+  already paired in Chrome stays paired. Long-press the icon and pick **Change board** to
+  connect it to another board. Needs Android 8.0 or later and Chrome. Not yet tried on a
+  real phone.
+- **"Android app" in Settings → Phone access**, with the download link and a list of app
+  signing fingerprints. Add one when you build the app yourself, so it opens without a
+  URL bar too.
+- **The release includes the signed APK** and its SHA256, next to the desktop installers.
+
 ## 0.0.23 - 2026-10-07
 
 ### Changed

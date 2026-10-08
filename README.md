@@ -496,6 +496,47 @@ nothing is opened to the internet.
 - Tailscale Funnel (the public internet) is always refused. Another HTTPS reverse proxy
   works too: add its host name as a remote host.
 
+### Android app
+
+The Android app (Android 8.0 or later, with Chrome) opens the same phone board with its own
+icon. It runs the board in Chrome's engine, so it needs the Tailscale setup above (steps 1–3)
+like the browser does.
+
+1. **Install it:** download `harnessboard-<version>.apk` from the
+   [releases page](https://github.com/AquilaWei/harnessboard/releases) on the phone and open
+   it. Android asks once to allow installs from Chrome (or your file manager).
+2. **Connect:** open **Harnessboard** and tap **Scan pairing QR**, then scan the QR code from
+   **Settings → Phone access → Pair a phone** on the computer. Without a QR code, type the
+   board's address (`https://<machine>.<tailnet>.ts.net`) and tap **Connect**.
+3. **Pair:** the board opens inside the app with the pairing screen. Name the phone and tap
+   **Create passkey**, as in step 4 above. The app keeps the address; later the icon opens
+   the board directly.
+
+**What changes compared with the browser**
+
+- **No URL bar**, once the board's asset links are verified (see below); the board fills the
+  screen.
+- **Its own icon and its own entry in the task switcher**, separate from Chrome's tabs.
+
+**What stays the same**
+
+- **Passkey, lock and push rules:** the same passkey, the 30-minute lock, the check before
+  sensitive actions and the same push notifications. Taps on a push open the task in the app.
+- **Chrome's storage:** the app uses Chrome's cookies and site data, so a phone already
+  paired in Chrome stays paired; just type the address in step 2.
+- **Revoking** the phone on the computer locks out the app and Chrome together.
+
+**Change board:** long-press the app icon and tap **Change board**. The app forgets the
+address and shows the setup screen again; the computer still lists the phone until you
+revoke it.
+
+**URL bar still showing?** The board tells Android which apps it trusts through
+`/.well-known/assetlinks.json`, using the app's signing fingerprints. For a released APK,
+copy the fingerprint printed in the release's CI log; for an app you built yourself, its own
+(see [Development](#development)). Paste it under **Settings → Phone access → Android app →
+App signing fingerprints**, **Save**, then clear Chrome's data for the app or reinstall it
+so Android checks again.
+
 ## How the context budget works
 
 | Task size          | Soft threshold: ask the agent to commit and write a handoff note | Hard threshold: end the session |
@@ -693,6 +734,12 @@ The last line prints the key's **public** SHA-256 fingerprint (CI prints it too)
 the default of the `androidAppFingerprints` setting so the app opens without a URL bar.
 To build a release APK yourself, set the same four variables before
 `cd android && ./gradlew assembleRelease`; without them it builds `app-release-unsigned.apk`.
+The debug APK from `pnpm android:check` (`android/app/build/outputs/apk/debug/app-debug.apk`)
+is signed with this computer's debug key; print its fingerprint with:
+
+```bash
+keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep SHA256:
+```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes and
 [CHANGELOG.md](CHANGELOG.md) for what changed in each version. Notes on the Claude Code
