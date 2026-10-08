@@ -15,6 +15,9 @@ import { makeRepo, tempDir } from './helpers.js';
 
 const USER = { uid: 1000, gid: 1001, home: '/home/me' };
 
+/** The repository's `.git` as git prints it: with forward slashes, also on Windows. */
+const gitDirOf = (repo: string) => `${repo.replaceAll('\\', '/')}/.git`;
+
 /** An agent CLI that needs one config folder and one config file that is not there. */
 class ConfiguredAdapter implements AgentAdapter {
   readonly provider = 'codex';
@@ -147,7 +150,7 @@ describe('DockerSandbox command line', () => {
     const { repo, dir } = worktree();
     const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', USER);
     expect(sandbox.buildArgs(spec(dir))).toContain(
-      `type=bind,source=${path.join(repo, '.git')},target=${path.join(repo, '.git')}`,
+      `type=bind,source=${gitDirOf(repo)},target=${gitDirOf(repo)}`,
     );
   });
 
@@ -155,7 +158,7 @@ describe('DockerSandbox command line', () => {
     const { repo, dir } = worktree();
     const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', USER);
     expect(sandbox.buildArgs(spec(dir, { access: 'readOnly' }))).toContain(
-      `type=bind,source=${path.join(repo, '.git')},target=${path.join(repo, '.git')},readonly`,
+      `type=bind,source=${gitDirOf(repo)},target=${gitDirOf(repo)},readonly`,
     );
   });
 
@@ -184,7 +187,7 @@ describe('DockerSandbox command line', () => {
     globalGitConfig(HOST_IDENTITY);
     const { repo, dir } = worktreeWithoutIdentity();
     const sandbox = new DockerSandbox(new ConfiguredAdapter([]), 'agents:1', 'linux', USER);
-    const gitDir = path.join(repo, '.git');
+    const gitDir = gitDirOf(repo);
     expect(sandbox.buildArgs(spec(dir))).toEqual([
       'run',
       '--rm',

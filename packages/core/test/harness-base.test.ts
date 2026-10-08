@@ -134,7 +134,7 @@ describe('running a base task', () => {
     expect([
       git(repo, 'worktree', 'list').split('\n'),
       existsSync(path.join(dir, 'data', 'wt')),
-    ]).toEqual([[expect.stringContaining(repo)], false]);
+    ]).toEqual([[expect.stringContaining(repo.replaceAll('\\', '/'))], false]);
   });
 
   it('creates no branch', async () => {
