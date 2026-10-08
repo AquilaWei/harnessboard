@@ -3,6 +3,14 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.0.28 - 2026-10-08
+
+### Fixed
+
+- **The Fedora/openSUSE `.rpm` installs next to Slack, VS Code and other Electron apps.**
+  It used to stop with a file conflict on `/usr/lib/.build-id/...`, so `dnf install` did
+  nothing. 0.0.27 was never published; it has the same changes as this version.
+
 ## 0.0.27 - 2026-10-08
 
 ### Fixed
