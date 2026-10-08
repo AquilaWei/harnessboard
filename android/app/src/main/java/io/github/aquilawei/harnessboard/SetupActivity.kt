@@ -1,7 +1,7 @@
 package io.github.aquilawei.harnessboard
 
 import android.app.Activity
-import android.net.Uri
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -9,14 +9,14 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
-import androidx.browser.customtabs.CustomTabsIntent
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
 /**
  * Sets up which board the app opens: scan the computer's pairing QR or type the board address.
- * The scanner runs in Google Play services, so the app needs no camera permission.
+ * The scanner runs in Google Play services, so the app needs no camera permission. A saved board
+ * is handed to [LauncherActivity], which opens it.
  */
 class SetupActivity : Activity() {
     private lateinit var model: SetupModel
@@ -27,6 +27,7 @@ class SetupActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_setup)
         model = SetupModel(PreferencesBoardStore(this))
+        if (savedInstanceState == null) model.onOpened(intent.action)
         address = findViewById(R.id.address)
         error = findViewById(R.id.error)
 
@@ -63,9 +64,10 @@ class SetupActivity : Activity() {
         when (outcome) {
             is SetupOutcome.Open -> {
                 error.visibility = View.GONE
-                // TODO: F4 in feature_list.json - open the board in a Trusted Web Activity
-                // through the launcher activity instead of a plain Custom Tab.
-                CustomTabsIntent.Builder().build().launchUrl(this, Uri.parse(outcome.url))
+                startActivity(
+                    Intent(this, LauncherActivity::class.java)
+                        .putExtra(LauncherActivity.EXTRA_PENDING_URL, outcome.url),
+                )
                 finish()
             }
 

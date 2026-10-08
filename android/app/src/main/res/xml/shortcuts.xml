@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press on the app icon. The action is SetupModel.ACTION_CHANGE_BOARD; the package must
+     match the applicationId in app/build.gradle.kts. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="change_board"
+        android:shortcutShortLabel="@string/shortcut_change_board">
+        <intent
+            android:action="io.github.aquilawei.harnessboard.CHANGE_BOARD"
+            android:targetClass="io.github.aquilawei.harnessboard.SetupActivity"
+            android:targetPackage="io.github.aquilawei.harnessboard" />
+    </shortcut>
+</shortcuts>

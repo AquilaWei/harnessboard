@@ -150,4 +150,22 @@ class SetupModelTest {
 
         assertNull(store.origin())
     }
+
+    @Test
+    fun `the Change board shortcut forgets the saved board`() {
+        model.submitAddress("https://host.example")
+
+        model.onOpened(SetupModel.ACTION_CHANGE_BOARD)
+
+        assertNull(store.origin())
+    }
+
+    @Test
+    fun `opening setup without the Change board action keeps the saved board`() {
+        model.submitAddress("https://host.example")
+
+        model.onOpened(null)
+
+        assertEquals("https://host.example", store.origin())
+    }
 }

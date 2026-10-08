@@ -7,6 +7,15 @@ package io.github.aquilawei.harnessboard
 class SetupModel(
     private val store: BoardStore,
 ) {
+    /**
+     * The setup screen was opened with the intent [action]. The "Change board" shortcut sends
+     * [ACTION_CHANGE_BOARD], which forgets the saved board so the app icon opens setup until a
+     * new board is saved.
+     */
+    fun onOpened(action: String?) {
+        if (action == ACTION_CHANGE_BOARD) store.clear()
+    }
+
     /** The user typed [text] and pressed Connect. */
     fun submitAddress(text: String): SetupOutcome = accept(text)
 
@@ -33,6 +42,9 @@ class SetupModel(
         }
 
     companion object {
+        /** The intent action of the "Change board" app shortcut (`res/xml/shortcuts.xml`). */
+        const val ACTION_CHANGE_BOARD = "io.github.aquilawei.harnessboard.CHANGE_BOARD"
+
         /** The string resource the setup screen shows for [error]. */
         fun messageFor(error: BoardLinkError): Int =
             when (error) {

@@ -12,4 +12,7 @@
     <string name="setup_error_has_user_info">網址裡不要放使用者名稱和密碼。</string>
     <string name="setup_error_not_board_root">只要輸入看板的網址，不要加路徑或 \?查詢字串。</string>
     <string name="setup_error_empty_pairing_code">這個配對連結沒有配對碼。請在電腦上產生新的配對 QR code，再掃描一次。</string>
+
+    <string name="launch_no_browser">看板需要網頁瀏覽器。請安裝或啟用 Chrome，再重新打開 App。</string>
+    <string name="shortcut_change_board">更換看板</string>
 </resources>

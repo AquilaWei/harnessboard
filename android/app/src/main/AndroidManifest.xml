@@ -20,13 +20,38 @@
             android:name="com.google.mlkit.vision.DEPENDENCIES"
             android:value="barcode_ui" />
 
+        <!-- Translucent: it only hands over to the browser or the setup screen. -->
         <activity
-            android:name=".SetupActivity"
-            android:exported="true">
+            android:name=".LauncherActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- Not exported: the launcher starts the "Change board" shortcut as this app, so other
+             apps cannot make it forget the board. -->
+        <activity
+            android:name=".SetupActivity"
+            android:exported="false" />
     </application>
+
+    <!-- Android 11+ hides other apps unless declared: the launcher looks for browsers and for
+         the ones whose Custom Tabs service supports Trusted Web Activities. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.support.customtabs.action.CustomTabsService" />
+        </intent>
+    </queries>
 </manifest>
