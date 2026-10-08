@@ -315,8 +315,12 @@ describe('a designer of a task on the base branch', () => {
   const git = (...args: string[]) =>
     execFileSync('git', args, { cwd: repo, stdio: 'pipe' }).toString().trim();
 
-  /** Stops the designer as it works, then the user commits `other.txt` in the folder. */
-  async function interrupted() {
+  /**
+   * Stops the designer as it works, then the user commits `other.txt` in the folder.
+   * `committed` names a commit the designer makes first; stopping waits for it, since
+   * git is slow enough on Windows to be cut off by a fixed pause.
+   */
+  async function interrupted(committed?: string) {
     const task = await harness.createTask({
       prompt: 'Add a greeting',
       repo,
@@ -331,6 +335,9 @@ describe('a designer of a task on the base branch', () => {
     await harness.waitForIdle();
     harness.tick(); // the designer starts and hangs
     await new Promise((r) => setTimeout(r, 300));
+    while (committed !== undefined && git('log', '-1', '--format=%s') !== committed) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
     harness.stopTask(task.id);
     await harness.waitForIdle();
     writeFileSync(path.join(repo, 'other.txt'), 'theirs');
@@ -361,7 +368,7 @@ describe('a designer of a task on the base branch', () => {
       ],
     ];
     scenario(discussion, specFile, stray, design);
-    const task = await interrupted();
+    const task = await interrupted('notes');
     expect([status(task.id), notices(task.id).at(-1)]).toEqual([
       'failed',
       'the designer changed files other than the spec: notes.txt; stopping for a human',
