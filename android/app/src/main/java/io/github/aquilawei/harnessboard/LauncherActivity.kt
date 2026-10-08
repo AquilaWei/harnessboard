@@ -22,8 +22,20 @@ import androidx.browser.customtabs.CustomTabsServiceConnection
 class LauncherActivity : Activity() {
     private var connection: CustomTabsServiceConnection? = null
 
+    /**
+     * The URL this launch opens, kept until the browser has it: rotating while the browser's
+     * service connects recreates the activity, and the new one must still open the `#pair=` URL.
+     */
+    private var urlToOpen: String? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val restoredUrl = savedInstanceState?.getString(STATE_URL_TO_OPEN)
+        if (restoredUrl != null) {
+            urlToOpen = restoredUrl
+            open(restoredUrl)
+            return
+        }
         val pendingUrl = intent.getStringExtra(EXTRA_PENDING_URL)
         // The pairing code is single-use, so its URL is not opened a second time from this intent.
         intent.removeExtra(EXTRA_PENDING_URL)
@@ -34,9 +46,15 @@ class LauncherActivity : Activity() {
             }
 
             is LaunchTarget.Board -> {
+                urlToOpen = target.url
                 open(target.url)
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_URL_TO_OPEN, urlToOpen)
     }
 
     override fun onDestroy() {
@@ -64,7 +82,9 @@ class LauncherActivity : Activity() {
                     name: ComponentName,
                     client: CustomTabsClient,
                 ) {
-                    if (isFinishing) return
+                    // A connection that arrives after a rotation belongs to the old activity; the
+                    // recreated one binds again and opens the URL itself.
+                    if (isFinishing || isDestroyed) return
                     val session = client.newSession(null)
                     if (session == null) {
                         openInCustomTab(url)
@@ -98,6 +118,7 @@ class LauncherActivity : Activity() {
             showNoBrowser()
             return
         }
+        urlToOpen = null
         finish()
     }
 
@@ -157,6 +178,8 @@ class LauncherActivity : Activity() {
     companion object {
         /** The URL the setup screen hands over to open once, e.g. the pairing QR's `#pair=` URL. */
         const val EXTRA_PENDING_URL = "io.github.aquilawei.harnessboard.PENDING_URL"
+
+        private const val STATE_URL_TO_OPEN = "url_to_open"
 
         private val WEB_INTENT =
             Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")).addCategory(Intent.CATEGORY_BROWSABLE)
