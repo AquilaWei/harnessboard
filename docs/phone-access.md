@@ -4,6 +4,8 @@ Follow progress, approve, answer and create tasks from your phone, from anywhere
 stays on your computer; the phone reaches it through [Tailscale](https://tailscale.com), so
 nothing is opened to the internet.
 
+<img src="images/phone-board.png" alt="The board on a phone, with tabs for Waiting for you, In progress and Review" width="320">
+
 1. **Install Tailscale** on the computer and the phone, signed in to the same tailnet. Turn
    on MagicDNS and HTTPS certificates in the Tailscale admin console.
 2. **Add the remote host:** on the computer, open **Settings → Phone access**. It shows this
