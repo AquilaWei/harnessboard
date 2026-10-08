@@ -49,7 +49,9 @@ The debug APK ends up in `android/app/build/outputs/apk/debug/app-debug.apk`. Th
 downloads Gradle and the dependencies; later runs work offline. On a machine without the SDK,
 `HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check` skips it. The app's version is read from
 `packages/server/package.json`; do not set one in Gradle. `android/buildSrc` holds the
-build-script code that has tests, such as the version-code formula.
+build-script code that has tests, such as the version-code formula and the release signing
+(`ReleaseSigning`, read only from the `HB_ANDROID_*` variables; see the README's Development
+section).
 
 ## Making a change
 

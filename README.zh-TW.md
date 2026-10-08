@@ -572,6 +572,25 @@ pnpm android:check                              # ktlint、單元測試、Androi
 HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check  # 沒有 SDK 的機器上略過
 ```
 
+**APK 的發佈簽章金鑰。** 推送 `v*` tag 時，CI 會建置 `harnessboard-<版號>.apk`、簽章，
+連同 SHA256 一起放進草稿 release。金鑰只存在 repo 的 GitHub secrets；**沒有設定時 release
+會停下來**（未簽章的 APK 無法安裝）。金鑰只要建立一次，**放在 repo 以外**並做好備份：
+Android 只接受用同一把金鑰簽章的更新。
+
+```bash
+keytool -genkeypair -v -keystore ~/harnessboard-release.jks -storetype PKCS12 \
+  -alias harnessboard -keyalg RSA -keysize 4096 -validity 10000
+base64 < ~/harnessboard-release.jks | gh secret set HB_ANDROID_KEYSTORE
+gh secret set HB_ANDROID_KEYSTORE_PASSWORD   # 會提示輸入；填 keytool 設定的密碼
+gh secret set HB_ANDROID_KEY_ALIAS --body harnessboard
+gh secret set HB_ANDROID_KEY_PASSWORD        # 會提示輸入；同一個密碼（PKCS12 只有一個）
+keytool -list -v -keystore ~/harnessboard-release.jks -alias harnessboard | grep SHA256:
+```
+
+最後一行印出金鑰的**公開** SHA-256 指紋（CI 也會印出），它會成為 `androidAppFingerprints`
+設定的預設值，讓 App 開啟時沒有網址列。要自己建置 release APK，先設好同樣四個環境變數再執行
+`cd android && ./gradlew assembleRelease`；沒有設定時會建出 `app-release-unsigned.apk`。
+
 參與開發請看 [CONTRIBUTING.md](CONTRIBUTING.md)，各版本的變更請看 [CHANGELOG.md](CHANGELOG.md)。
 Harnessboard 依賴的 Claude Code 輸出格式記錄在
 [docs/stream-json-notes.md](docs/stream-json-notes.md)。

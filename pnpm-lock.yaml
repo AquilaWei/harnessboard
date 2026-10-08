@@ -178,6 +178,9 @@ importers:
       globals:
         specifier: ^17.12.0
         version: 17.12.0
+      js-yaml:
+        specifier: ^4.3.2
+        version: 4.3.2
       prettier:
         specifier: ^3.9.9
         version: 3.9.9
