@@ -8,6 +8,7 @@ import type { HarnessConfig } from '@harnessboard/core';
 import type { AgentInfo, DetectedAgent } from '@harnessboard/shared';
 import { access } from './access.js';
 import { createApi } from './api.js';
+import { createWellKnown } from './assetlinks.js';
 import { Sessions } from './session.js';
 import { serveWeb } from './static.js';
 
@@ -34,6 +35,7 @@ export async function startServer(config: HarnessConfig): Promise<RunningServer>
   const sessions = new Sessions();
   app.use('*', access(harness, sessions));
   app.route('/api', createApi(harness, sessions));
+  app.route('/.well-known', createWellKnown(harness));
   app.get('*', serveWeb(WEB_ROOT));
 
   const server = await new Promise<ReturnType<typeof serve>>((resolve, reject) => {

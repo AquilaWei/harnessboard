@@ -454,7 +454,7 @@ nothing is opened to the internet.
    `tailscale serve reset` turns it off again.
 
 4. **Pair the phone:** click **Pair a phone** and scan the QR code with the phone's camera.
-   The code works once, for 5 minutes. Give the phone a name, then tap **Create passkey**:
+   The code works once, for 5 minutes. Give the phone a name, tap **Pair**, then **Create passkey**:
    the phone asks for your fingerprint, face or screen lock. The phone is paired only once
    the passkey is made.
 5. **Add to Home Screen** (optional on Android, needed for push on an iPhone): in Chrome's
@@ -495,6 +495,54 @@ nothing is opened to the internet.
   Home Screen; in Safari itself the switch says push is not available.
 - Tailscale Funnel (the public internet) is always refused. Another HTTPS reverse proxy
   works too: add its host name as a remote host.
+
+### Android app
+
+The Android app (Android 8.0 or later, with Chrome) opens the same phone board with its own
+icon. It runs the board in Chrome's engine, so it needs the Tailscale setup above (steps 1–3)
+like the browser does.
+
+1. **Install it:** download `harnessboard-<version>.apk` from the
+   [releases page](https://github.com/AquilaWei/harnessboard/releases) on the phone and open
+   it. Android asks once to allow installs from Chrome (or your file manager).
+2. **Connect:** open **Harnessboard** and tap **Scan pairing QR**, then scan the QR code from
+   **Settings → Phone access → Pair a phone** on the computer. Without a QR code, type the
+   board's address (`https://<machine>.<tailnet>.ts.net`) and tap **Connect**.
+3. **Pair:** the board opens inside the app with the pairing screen. Name the phone, tap
+   **Pair**, then **Create passkey**, as in step 4 above. The app keeps the address; later the icon opens
+   the board directly.
+
+**What changes compared with the browser**
+
+- **No URL bar**, once the board's asset links are verified (see below); the board fills the
+  screen.
+- **Its own icon and its own entry in the task switcher**, separate from Chrome's tabs.
+
+**What stays the same**
+
+- **Passkey, lock and push rules:** the same passkey, the 30-minute lock, the check before
+  sensitive actions and the same push notifications.
+- **Chrome's storage:** the app uses Chrome's cookies and site data, so a phone already
+  paired in Chrome stays paired; just type the address in step 2.
+- **Revoking** the phone on the computer locks out the app and Chrome together.
+
+**Push in the app:** when you turn on push, Android asks whether **Harnessboard** may send
+notifications. The pushes then come from the app, and tapping one opens the task in the app,
+even when the app was closed. This needs the board's asset links verified (no URL bar, see
+below); otherwise Chrome shows the pushes and a tap opens a Chrome tab. On Android 8–11 the app
+can appear in "Open with" lists for web links, because it takes the board's links; links to other
+sites are passed on to your browser.
+
+**Change board:** long-press the app icon and tap **Change board**. The app forgets the
+address and shows the setup screen again; the computer still lists the phone until you
+revoke it.
+
+**URL bar still showing?** The board tells Android which apps it trusts through
+`/.well-known/assetlinks.json`, using the app's signing fingerprints. For a released APK,
+copy the fingerprint printed in the release's CI log; for an app you built yourself, its own
+(see [Development](#development)). Paste it under **Settings → Phone access → Android app →
+App signing fingerprints**, **Save**, then clear Chrome's data for the app or reinstall it
+so Android checks again.
 
 ## How the context budget works
 
@@ -662,6 +710,42 @@ npm install --no-save --prefix /tmp/gemini-core @google/gemini-cli-core@0.62.0
 HARNESSBOARD_TEST_GEMINI_CORE=/tmp/gemini-core/node_modules/@google/gemini-cli-core pnpm test
 pnpm lint && pnpm typecheck
 pnpm --filter @harnessboard/web dev   # UI with hot reload; proxies /api to a running `hb serve`
+```
+
+**Android app** (in `android/`, still in progress): it needs a JDK and the Android SDK with
+platform 37, found through `ANDROID_HOME` or the default install folder. See
+[Android app in CONTRIBUTING.md](CONTRIBUTING.md#android-app) for the setup.
+
+```bash
+pnpm android:check                              # ktlint, unit tests, Android lint, debug APK
+HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check  # skip it on a machine without the SDK
+```
+
+**Release signing key for the APK.** On a `v*` tag, CI builds `harnessboard-<version>.apk`,
+signs it and adds it, with its SHA256, to the draft release. The key lives only in the repo's
+GitHub secrets; **without them the release job stops** (an unsigned APK will not install).
+Create the key once, **outside the repo**, and keep a backup: Android only installs an update
+signed with the same key.
+
+```bash
+keytool -genkeypair -v -keystore ~/harnessboard-release.jks -storetype PKCS12 \
+  -alias harnessboard -keyalg RSA -keysize 4096 -validity 10000
+base64 < ~/harnessboard-release.jks | gh secret set HB_ANDROID_KEYSTORE
+gh secret set HB_ANDROID_KEYSTORE_PASSWORD   # prompts; the password you gave keytool
+gh secret set HB_ANDROID_KEY_ALIAS --body harnessboard
+gh secret set HB_ANDROID_KEY_PASSWORD        # prompts; the same password (PKCS12 has one)
+keytool -list -v -keystore ~/harnessboard-release.jks -alias harnessboard | grep SHA256:
+```
+
+The last line prints the key's **public** SHA-256 fingerprint (CI prints it too); it becomes
+the default of the `androidAppFingerprints` setting so the app opens without a URL bar.
+To build a release APK yourself, set the same four variables before
+`cd android && ./gradlew assembleRelease`; without them it builds `app-release-unsigned.apk`.
+The debug APK from `pnpm android:check` (`android/app/build/outputs/apk/debug/app-debug.apk`)
+is signed with this computer's debug key; print its fingerprint with:
+
+```bash
+keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep SHA256:
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose changes and

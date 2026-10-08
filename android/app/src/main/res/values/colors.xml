@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The board's theme colour (packages/web/public/manifest.webmanifest). -->
+    <color name="board_blue">#2a78d6</color>
+</resources>

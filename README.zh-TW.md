@@ -390,7 +390,7 @@ API 只接受 loopback 的 `Host` 標頭，以及你為[手機存取](#手機存
    `tailscale serve reset`。
 
 4. **配對手機**：按 **配對手機**，用手機相機掃描 QR code。配對碼只能用一次，5 分鐘內有效。
-   幫手機取個名字，再按 **建立通行金鑰**，手機會要求指紋、臉部或螢幕鎖。通行金鑰建立後才算配對完成。
+   幫手機取個名字，按 **配對**，再按 **建立通行金鑰**，手機會要求指紋、臉部或螢幕鎖。通行金鑰建立後才算配對完成。
 5. **加到主畫面**（Android 可選；iPhone 要收推播就必須加）：在 Chrome 選單選 **加到主畫面**
    （Safari 在分享選單裡）。之後從主畫面的 Harnessboard 圖示打開，看板會以全螢幕開啟，沒有網址列。
 6. **開啟推播通知**（可選）：在手機上打開 **設定**，打開 **任務需要我時通知我**，再允許通知。
@@ -421,6 +421,44 @@ API 只接受 loopback 的 `Host` 標頭，以及你為[手機存取](#手機存
 - **電腦必須開著**，而且 Harnessboard 在執行（桌面程式或 `hb serve`）。電腦睡眠時連不到。
 - **iPhone 的推播通知**需要 iOS 16.4 以上，並從主畫面打開看板；直接在 Safari 裡，開關會顯示收不到推播。
 - Tailscale Funnel（公開網際網路）一律拒絕。其他 HTTPS 反向代理也可以用，把它的主機名稱加為遠端主機即可。
+
+### Android App
+
+Android App（需要 Android 8.0 以上和 Chrome）用自己的圖示打開同一個手機看板。它在 Chrome 的
+引擎裡執行看板，所以跟瀏覽器一樣需要上面的 Tailscale 設定（步驟 1–3）。
+
+1. **安裝**：在手機上從 [Releases 頁面](https://github.com/AquilaWei/harnessboard/releases)
+   下載 `harnessboard-<版號>.apk` 並打開。Android 會先問一次是否允許 Chrome（或檔案管理員）安裝 App。
+2. **連線**：打開 **Harnessboard**，按 **掃描配對 QR code**，掃描電腦上 **設定 → 手機存取 →
+   配對手機** 顯示的 QR code。沒有 QR code 時，輸入看板網址（`https://<machine>.<tailnet>.ts.net`）
+   再按 **連線**。
+3. **配對**：看板會在 App 裡打開配對畫面。幫手機取名字，按 **配對**，再按 **建立通行金鑰**，跟上面的步驟 4 一樣。
+   App 會記住網址，之後點圖示就直接打開看板。
+
+**跟瀏覽器比，有什麼不同**
+
+- **沒有網址列**（看板的 asset links 驗證通過後，見下面），看板佔滿整個螢幕。
+- **有自己的圖示**，在最近使用的 App 清單裡也自成一項，不跟 Chrome 的分頁混在一起。
+
+**什麼不變**
+
+- **通行金鑰、鎖定和推播規則**：同一把通行金鑰、30 分鐘自動鎖定、敏感操作前的確認、同樣的推播通知。
+- **Chrome 的儲存資料**：App 使用 Chrome 的 cookie 和網站資料，所以已經在 Chrome 配對過的手機
+  不用重新配對，步驟 2 輸入網址即可。
+- **撤銷**：在電腦上撤銷這支手機，App 和 Chrome 會一起失去存取權。
+
+**App 裡的推播**：打開推播時，Android 會問是否允許 **Harnessboard** 傳送通知。之後推播由 App 發出，
+點一下就在 App 裡打開那個任務，App 關著也一樣。前提是看板的 asset links 已驗證（沒有網址列，見下面）；
+否則推播由 Chrome 顯示，點了會打開 Chrome 分頁。Android 8–11 上，App 可能出現在網址的「開啟方式」清單裡，
+因為它要接看板的連結；其他網站的連結會轉給你的瀏覽器。
+
+**更換看板**：長按 App 圖示，選 **更換看板**。App 會忘記網址並回到設定畫面；電腦上的裝置清單
+仍會列出這支手機，直到你撤銷它。
+
+**還是看到網址列？** 看板透過 `/.well-known/assetlinks.json` 告訴 Android 信任哪些 App，依據的是
+App 的簽章指紋。發佈的 APK 請複製該版 CI 紀錄裡印出的指紋；自己建置的 App 用它自己的指紋（見
+[開發](#開發)）。貼到 **設定 → 手機存取 → Android App → App 簽章指紋**，按 **儲存**，再清除
+Chrome 為這個 App 存的資料或重新安裝，讓 Android 重新檢查。
 
 ## 上下文預算怎麼運作
 
@@ -561,6 +599,40 @@ pnpm install
 pnpm test              # 使用假的 claude CLI，不需要帳號
 pnpm lint && pnpm typecheck
 pnpm --filter @harnessboard/web dev   # 可熱重載的介面；/api 會轉到執行中的 `hb serve`
+```
+
+**Android App**（在 `android/`，開發中）：需要 JDK 和裝了 platform 37 的 Android SDK，
+透過 `ANDROID_HOME` 或預設安裝位置找到 SDK。環境準備請看
+[CONTRIBUTING.md 的 Android app 一節](CONTRIBUTING.md#android-app)。
+
+```bash
+pnpm android:check                              # ktlint、單元測試、Android lint、debug APK
+HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check  # 沒有 SDK 的機器上略過
+```
+
+**APK 的發佈簽章金鑰。** 推送 `v*` tag 時，CI 會建置 `harnessboard-<版號>.apk`、簽章，
+連同 SHA256 一起放進草稿 release。金鑰只存在 repo 的 GitHub secrets；**沒有設定時 release
+會停下來**（未簽章的 APK 無法安裝）。金鑰只要建立一次，**放在 repo 以外**並做好備份：
+Android 只接受用同一把金鑰簽章的更新。
+
+```bash
+keytool -genkeypair -v -keystore ~/harnessboard-release.jks -storetype PKCS12 \
+  -alias harnessboard -keyalg RSA -keysize 4096 -validity 10000
+base64 < ~/harnessboard-release.jks | gh secret set HB_ANDROID_KEYSTORE
+gh secret set HB_ANDROID_KEYSTORE_PASSWORD   # 會提示輸入；填 keytool 設定的密碼
+gh secret set HB_ANDROID_KEY_ALIAS --body harnessboard
+gh secret set HB_ANDROID_KEY_PASSWORD        # 會提示輸入；同一個密碼（PKCS12 只有一個）
+keytool -list -v -keystore ~/harnessboard-release.jks -alias harnessboard | grep SHA256:
+```
+
+最後一行印出金鑰的**公開** SHA-256 指紋（CI 也會印出），它會成為 `androidAppFingerprints`
+設定的預設值，讓 App 開啟時沒有網址列。要自己建置 release APK，先設好同樣四個環境變數再執行
+`cd android && ./gradlew assembleRelease`；沒有設定時會建出 `app-release-unsigned.apk`。
+`pnpm android:check` 建出的 debug APK（`android/app/build/outputs/apk/debug/app-debug.apk`）
+是用這台電腦的 debug 金鑰簽章，它的指紋用下面的指令印出：
+
+```bash
+keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android | grep SHA256:
 ```
 
 參與開發請看 [CONTRIBUTING.md](CONTRIBUTING.md)，各版本的變更請看 [CHANGELOG.md](CHANGELOG.md)。

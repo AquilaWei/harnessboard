@@ -10,5 +10,12 @@ coverage/
 CLAUDE.md
 .claude/
 notes/
+# Android build output and machine-specific SDK path
+android/**/build/
+android/.gradle/
+android/.kotlin/
+android/buildSrc/.gradle/
+android/buildSrc/.kotlin/
+android/local.properties
 # Desktop installers built by electron-builder
 packages/desktop/release/

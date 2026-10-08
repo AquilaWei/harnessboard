@@ -380,6 +380,7 @@ export class Harness {
     const allowedTools = [...this.config.allowedTools];
     const reviewGuidelines = [...this.config.reviewGuidelines];
     const remoteHosts = [...this.config.remoteHosts];
+    const androidAppFingerprints = [...this.config.androidAppFingerprints];
     return {
       maxConcurrent,
       quotaPauseUtilization,
@@ -388,6 +389,7 @@ export class Harness {
       allowedTools,
       reviewGuidelines,
       remoteHosts,
+      androidAppFingerprints,
     };
   }
 

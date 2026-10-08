@@ -544,6 +544,15 @@ export const en = {
     newCode: 'New code',
     needHost: 'Save a remote host first.',
     scan: 'Scan this with the phone’s camera, or open the address below on it. The code works once, until {{time}}.',
+    app: {
+      title: 'Android app',
+      intro:
+        'The Android app opens this same board in its own window, without a URL bar. Pair it with the QR code above, as you would the browser.',
+      download: 'Download it from the GitHub releases page.',
+      fingerprints: 'App signing fingerprints',
+      fingerprintsHint:
+        'Only for an app you built yourself: its SHA-256 signing certificate fingerprint (AB:CD:… as keytool prints it), one per line. Without one, the app shows a URL bar.',
+    },
     devices: 'Paired devices',
     noDevices: 'No paired devices.',
     device: 'Device',
@@ -1113,6 +1122,15 @@ export const zhTW: typeof en = {
     newCode: '換一個配對碼',
     needHost: '請先儲存一個遠端主機。',
     scan: '用手機相機掃描，或在手機上打開下面的網址。配對碼只能用一次，{{time}} 前有效。',
+    app: {
+      title: 'Android App',
+      intro:
+        'Android App 會在自己的視窗裡打開同一個看板，沒有網址列。配對方式和瀏覽器一樣，掃描上面的 QR code。',
+      download: '到 GitHub 的 Releases 頁面下載。',
+      fingerprints: 'App 簽章指紋',
+      fingerprintsHint:
+        '只有自己建置 App 時才需要：填入它的 SHA-256 簽章憑證指紋（keytool 印出的 AB:CD:… 格式），一行一個。沒有填的話，App 會顯示網址列。',
+    },
     devices: '已配對的裝置',
     noDevices: '沒有已配對的裝置。',
     device: '裝置',

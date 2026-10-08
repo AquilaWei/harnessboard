@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Harnessboard</string>
+
+    <string name="setup_title">Connect to your board</string>
+    <string name="setup_intro">On the computer, open Settings → Phone access → Pair a phone, then scan the QR code. You can also type the board\'s address.</string>
+    <string name="setup_scan">Scan pairing QR</string>
+    <string name="setup_address_label">Board address</string>
+    <string name="setup_connect">Connect</string>
+
+    <string name="setup_error_not_a_url">This is not a board address. Check it and try again.</string>
+    <string name="setup_error_insecure_http">The board needs an https:// address. Use the address shown under Phone access.</string>
+    <string name="setup_error_unsupported_scheme">Only https:// addresses work.</string>
+    <string name="setup_error_has_user_info">Leave the user name and password out of the address.</string>
+    <string name="setup_error_not_board_root">Use the board\'s address alone, without a path or a \?query.</string>
+    <string name="setup_error_empty_pairing_code">This pairing link has no code. Show a new pairing QR on the computer and scan it again.</string>
+
+    <string name="launch_no_browser">The board needs a web browser. Install or turn on Chrome, then open the app again.</string>
+    <string name="shortcut_change_board">Change board</string>
+</resources>

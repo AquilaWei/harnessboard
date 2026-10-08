@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "H" from packages/web/public/favicon.svg (32x32), scaled 2.4x into the centre of the
+     108dp adaptive icon so it stays inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="2.4"
+        android:scaleY="2.4"
+        android:translateX="15.6"
+        android:translateY="15.6">
+        <path
+            android:pathData="M8,9v14M24,9v14M8,16h16M13,9v5M19,18v5"
+            android:strokeWidth="2.6"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round" />
+    </group>
+</vector>

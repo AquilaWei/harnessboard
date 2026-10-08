@@ -77,10 +77,58 @@ jobs:
             packages/desktop/release/*.exe
           if-no-files-found: error
 
-  # A draft release with the installers, their SHA256 sums and the CHANGELOG section of the
-  # tag. Publishing the draft is left to a person.
+  # The Android app, checked like `pnpm android:check` locally and signed with the release key
+  # from the repo's secrets (README: Android app > Signing key).
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm install --global --force corepack@latest && corepack enable
+      - run: pnpm install --frozen-lockfile
+      # The Gradle toolchain the app and buildSrc compile with (android/app/build.gradle.kts).
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      # Accepts the SDK licences and sets ANDROID_HOME; AGP needs platform 37.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-37.0 build-tools;36.0.0
+      - run: pnpm android:check
+      - name: Signed release APK
+        working-directory: android
+        env:
+          HB_ANDROID_KEYSTORE: ${{ secrets.HB_ANDROID_KEYSTORE }}
+          HB_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.HB_ANDROID_KEYSTORE_PASSWORD }}
+          HB_ANDROID_KEY_ALIAS: ${{ secrets.HB_ANDROID_KEY_ALIAS }}
+          HB_ANDROID_KEY_PASSWORD: ${{ secrets.HB_ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --console=plain assembleRelease
+      # Without the secrets Gradle names the APK app-release-unsigned.apk, which phones refuse
+      # to install, so the release stops here instead of shipping it.
+      - name: Name the APK after the version
+        run: |
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$apk" || { echo "No signed APK: set the HB_ANDROID_* secrets (README)"; exit 1; }
+          version="$(node -p "require('./packages/server/package.json').version")"
+          mkdir apk && cp "$apk" "apk/harnessboard-$version.apk"
+          # Verifies the signature and prints the public certificate fingerprint, for the
+          # androidAppFingerprints default. Uses apksigner, as the APK has only a v2 signature.
+          node scripts/apk-fingerprint.mjs "apk/harnessboard-$version.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apk/*.apk
+          if-no-files-found: error
+
+  # A draft release with the installers, the APK, their SHA256 sums and the CHANGELOG section
+  # of the tag. Publishing the draft is left to a person.
   release:
-    needs: desktop
+    needs: [desktop, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write

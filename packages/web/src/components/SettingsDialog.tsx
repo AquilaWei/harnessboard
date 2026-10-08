@@ -21,6 +21,13 @@ interface Props {
   onSaved: (settings: Settings) => void;
 }
 
+/** A textarea's non-blank lines, trimmed: the server rejects surrounding spaces. */
+const lines = (text: string) =>
+  text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+
 /** Scheduler settings (saved on the server), agent profiles, and display (this browser). */
 export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props) {
   const { t, i18n } = useTranslation();
@@ -32,6 +39,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const parsedRules = parseRules(globalRules);
   const [guidelines, setGuidelines] = useState(settings.reviewGuidelines.join('\n'));
   const [remoteHosts, setRemoteHosts] = useState(settings.remoteHosts.join('\n'));
+  const [fingerprints, setFingerprints] = useState(settings.androidAppFingerprints.join('\n'));
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [notify, setNotify] = useState(notificationsEnabled);
   const [permission, setPermission] = useState(notificationPermission);
@@ -52,14 +60,9 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           defaultContextPolicy: { ...settings.defaultContextPolicy, size },
           defaultReviewer: reviewer === '' ? null : reviewer,
           allowedTools: parsedRules.rules,
-          reviewGuidelines: guidelines
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line !== ''),
-          remoteHosts: remoteHosts
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line !== ''),
+          reviewGuidelines: lines(guidelines),
+          remoteHosts: lines(remoteHosts),
+          androidAppFingerprints: lines(fingerprints),
         }),
       );
     } catch (err) {
@@ -194,6 +197,8 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           savedHosts={settings.remoteHosts}
           hosts={remoteHosts}
           onHostsChange={setRemoteHosts}
+          fingerprints={fingerprints}
+          onFingerprintsChange={setFingerprints}
           onError={setError}
         />
 

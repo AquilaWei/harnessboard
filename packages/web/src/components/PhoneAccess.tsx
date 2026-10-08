@@ -8,21 +8,34 @@ import { pairHost, pairUrl, serveCommand } from '../phone';
 /** How often the device list is read again while a pairing code is shown. */
 const DEVICE_POLL_MS = 3000;
 
+/** Where the signed Android app (APK) is published. */
+const RELEASES_URL = 'https://github.com/AquilaWei/harnessboard/releases';
+
 interface Props {
   /** Remote hosts as saved on the server; pairing points the phone at one of these. */
   savedHosts: string[];
   /** Remote hosts in the form, one per line; saved with the rest of the settings. */
   hosts: string;
   onHostsChange: (hosts: string) => void;
+  /** Android app signing fingerprints in the form, one per line; saved with the rest. */
+  fingerprints: string;
+  onFingerprintsChange: (fingerprints: string) => void;
   onError: (message: string) => void;
 }
 
 /**
  * The "Phone access" settings section: the Tailscale name, the remote hosts, the
- * `tailscale serve` command to copy, pairing by QR code, and the paired devices.
- * It never runs `tailscale serve`; the user does, once.
+ * `tailscale serve` command to copy, pairing by QR code, the Android app, and the paired
+ * devices. It never runs `tailscale serve`; the user does, once.
  */
-export function PhoneAccess({ savedHosts, hosts, onHostsChange, onError }: Props) {
+export function PhoneAccess({
+  savedHosts,
+  hosts,
+  onHostsChange,
+  fingerprints,
+  onFingerprintsChange,
+  onError,
+}: Props) {
   const { t, i18n } = useTranslation();
   const [setup, setSetup] = useState<PairingSetup | null>(null);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -137,6 +150,27 @@ export function PhoneAccess({ savedHosts, hosts, onHostsChange, onError }: Props
           <p className="mono">{pairing.url}</p>
         </div>
       )}
+
+      <div className="android-app">
+        <h4>{t('phone.app.title')}</h4>
+        <p className="hint">
+          {t('phone.app.intro')}{' '}
+          <a href={RELEASES_URL} target="_blank" rel="noreferrer">
+            {t('phone.app.download')}
+          </a>
+        </p>
+        <label className="field">
+          <span>{t('phone.app.fingerprints')}</span>
+          <textarea
+            rows={2}
+            className="mono"
+            value={fingerprints}
+            placeholder="AB:CD:…"
+            onChange={(e) => onFingerprintsChange(e.target.value)}
+          />
+          <small className="hint">{t('phone.app.fingerprintsHint')}</small>
+        </label>
+      </div>
 
       <h4>{t('phone.devices')}</h4>
       {devices.length === 0 ? (

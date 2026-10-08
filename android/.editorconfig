@@ -1,0 +1,3 @@
+# Kotlin code uses 4-space indents (Kotlin coding conventions; ktlint reads this).
+[*.{kt,kts}]
+indent_size = 4

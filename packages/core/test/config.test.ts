@@ -2,7 +2,14 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { loadConfig, loadProjectConfig, saveUserConfig, userConfigFile } from '../src/config.js';
+import {
+  defaultConfig,
+  loadConfig,
+  loadProjectConfig,
+  saveUserConfig,
+  userConfigFile,
+  validate,
+} from '../src/config.js';
 import { tempDir } from './helpers.js';
 
 const missing = path.join(tempDir('cfg'), 'none.json');
@@ -140,6 +147,93 @@ describe('loadConfig', () => {
     const file = path.join(tempDir('cfg'), 'config.json');
     writeFileSync(file, '{ nope');
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow(file);
+  });
+});
+
+describe('androidAppFingerprints', () => {
+  const FINGERPRINT_ERROR =
+    'config androidAppFingerprints must be a list of SHA-256 fingerprints (32 hex bytes separated by colons)';
+  const check = (androidAppFingerprints: unknown) => () =>
+    validate({ ...defaultConfig({}), androidAppFingerprints } as never);
+
+  it('is empty by default', () => {
+    expect(loadConfig({ env: {}, configFile: missing }).androidAppFingerprints).toEqual([]);
+  });
+
+  it('accepts a fingerprint as keytool prints it', () => {
+    expect(
+      check([
+        '14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5',
+      ]),
+    ).not.toThrow();
+  });
+
+  it('accepts a fingerprint in lower case', () => {
+    expect(
+      check([
+        '14:6d:e9:83:c5:73:06:50:d8:ee:b9:95:2f:34:fc:64:16:a0:83:42:e6:1d:be:a8:8a:04:96:b2:3f:cf:44:e5',
+      ]),
+    ).not.toThrow();
+  });
+
+  it('rejects a value that is not a list', () => {
+    expect(
+      check(
+        '14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5',
+      ),
+    ).toThrow(FINGERPRINT_ERROR);
+  });
+
+  it('rejects an entry that is not a string', () => {
+    expect(check([42])).toThrow(FINGERPRINT_ERROR);
+  });
+
+  it('rejects an empty entry', () => {
+    expect(check([''])).toThrow(FINGERPRINT_ERROR);
+  });
+
+  it('rejects a SHA-1 fingerprint (20 bytes)', () => {
+    expect(check(['14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42'])).toThrow(
+      FINGERPRINT_ERROR,
+    );
+  });
+
+  it('rejects 33 bytes', () => {
+    expect(
+      check([
+        '14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5:00',
+      ]),
+    ).toThrow(FINGERPRINT_ERROR);
+  });
+
+  it('rejects bytes without colons', () => {
+    expect(check(['146DE983C5730650D8EEB9952F34FC6416A08342E61DBEA88A0496B23FCF44E5'])).toThrow(
+      FINGERPRINT_ERROR,
+    );
+  });
+
+  it('rejects bytes separated by dashes', () => {
+    expect(
+      check([
+        '14-6D-E9-83-C5-73-06-50-D8-EE-B9-95-2F-34-FC-64-16-A0-83-42-E6-1D-BE-A8-8A-04-96-B2-3F-CF-44-E5',
+      ]),
+    ).toThrow(FINGERPRINT_ERROR);
+  });
+
+  it('rejects a byte that is not hex', () => {
+    expect(
+      check([
+        'ZZ:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5',
+      ]),
+    ).toThrow(FINGERPRINT_ERROR);
+  });
+
+  it('rejects surrounding spaces', () => {
+    expect(
+      check([
+        ' 14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5',
+      ]),
+    ).toThrow(FINGERPRINT_ERROR);
   });
 });
 

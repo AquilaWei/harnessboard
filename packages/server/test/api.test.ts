@@ -107,6 +107,17 @@ describe('settings API', () => {
   });
 });
 
+describe('settings API for the Android app', () => {
+  it('answers 400 to an invalid fingerprint and keeps the saved ones', async () => {
+    const put = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: '1' },
+      body: JSON.stringify({ androidAppFingerprints: ['AB:CD'] }),
+    });
+    expect([put.status, harness.settings().androidAppFingerprints]).toEqual([400, []]);
+  });
+});
+
 describe('version API', () => {
   it('returns the server version as MAJOR.MINOR.PATCH', async () => {
     const res = await app.request('/api/version', { headers: local });
