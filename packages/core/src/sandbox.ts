@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { AgentEvent, ModelInfo, QuotaInfo } from '@harnessboard/shared';
 import type {
   AgentAdapter,
+  AgentConnection,
   LineParser,
   PermissionReply,
   SessionAccess,
@@ -44,6 +45,7 @@ export class DockerSandbox implements AgentAdapter {
   // the harness check for their presence.
   readonly encodePrompt?: (text: string) => string;
   readonly createParser?: () => LineParser;
+  readonly createConnection?: (spec: SessionSpec, write: (data: string) => void) => AgentConnection;
   // Both run on this machine, not in the image: they read the CLI's records, which are
   // the mounted ones, and Codex's model list asks a codex installed here, if there is one.
   readonly listModels?: () => Promise<ModelInfo[]>;
@@ -61,6 +63,7 @@ export class DockerSandbox implements AgentAdapter {
   ) {
     if (inner.encodePrompt) this.encodePrompt = inner.encodePrompt.bind(inner);
     if (inner.createParser) this.createParser = inner.createParser.bind(inner);
+    if (inner.createConnection) this.createConnection = inner.createConnection.bind(inner);
     if (inner.listModels) this.listModels = inner.listModels.bind(inner);
     if (inner.readQuota) this.readQuota = inner.readQuota.bind(inner);
   }

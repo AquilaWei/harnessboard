@@ -42,6 +42,12 @@ export interface SessionSpec {
 /** Turns CLI output lines into events; see {@link AgentAdapter.createParser}. */
 export type LineParser = (line: string) => AgentEvent[];
 
+/** One process's RPC handshake and events; write is scoped to that process's stdin. */
+export interface AgentConnection {
+  start(): void;
+  parseLine: LineParser;
+}
+
 /** The answer to a `permission_request` event. */
 export interface PermissionReply {
   behavior: 'allow' | 'deny';
@@ -108,6 +114,8 @@ export interface AgentAdapter {
    * state themselves.
    */
   createParser?(): LineParser;
+  /** Bidirectional RPC transport. The runner keeps stdin open until the turn completes. */
+  createConnection?(spec: SessionSpec, write: (data: string) => void): AgentConnection;
   /**
    * The models this CLI offers, as its platform lists them. Absent when the CLI can not
    * list them; then any model id can still be typed. Rejects when listing fails.

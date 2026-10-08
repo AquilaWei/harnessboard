@@ -59,6 +59,7 @@ import type {
   WorktreeDiff,
 } from '@harnessboard/shared';
 import type { AgentAdapter, PermissionReply } from './agent.js';
+import { matchingCodexRules } from './codex-app-server.js';
 import {
   DEFAULT_AGENT,
   EDITABLE_SETTINGS,
@@ -1549,7 +1550,11 @@ export class Harness {
     const { requestId, toolName, summary, suggestedRules } = event;
     const task = this.requireTask(taskId);
     const auto = task.permission.autoApprove === true;
-    const risk = auto ? riskOf(toolName, event.input, task.worktreePath!) : null;
+    const risk = auto
+      ? typeof event.input.approvalRisk === 'string'
+        ? event.input.approvalRisk
+        : riskOf(toolName, event.input, task.worktreePath!)
+      : null;
     const request: PermissionRequest = {
       requestId,
       sessionId,
@@ -1562,7 +1567,10 @@ export class Harness {
     };
     const allowed = [...task.permission.allowedTools, ...this.config.allowedTools];
     const covered =
-      suggestedRules.length > 0 && suggestedRules.every((rule) => allowed.includes(rule));
+      provider === 'codex' && event.input.rpcMethod === 'item/commandExecution/requestApproval'
+        ? typeof event.input.approvalRisk !== 'string' &&
+          matchingCodexRules(String(event.input.command ?? ''), allowed).length > 0
+        : suggestedRules.length > 0 && suggestedRules.every((rule) => allowed.includes(rule));
     if (covered || (auto && risk === null)) {
       this.recordDecision(taskId, request, {
         behavior: 'allow',

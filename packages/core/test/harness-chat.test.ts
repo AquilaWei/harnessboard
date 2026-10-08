@@ -131,6 +131,8 @@ describe('a stopped Codex task without context telemetry', () => {
     await harness.shutdown();
     harness.store.close();
     const adapter = new CodexAdapter(FAKE_CLAUDE);
+    // This regression fixture exercises stored exec events; app-server resume has its own test.
+    Object.defineProperty(adapter, 'createConnection', { value: undefined });
     const promptAdapter = new PromptArgAdapter(FAKE_CLAUDE);
     // Reuse the fixture's prompt transport while parsing real Codex JSON events.
     adapter.buildArgs = (spec) => promptAdapter.buildArgs(spec);

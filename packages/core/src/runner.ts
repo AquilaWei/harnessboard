@@ -149,7 +149,11 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
 
   /** Runs one CLI process until it exits; rejects only when it cannot be started. */
   function runTurn(turnSpec: SessionSpec): Promise<number | null> {
-    const parse = adapter.createParser?.() ?? ((line: string) => adapter.parseLine(line));
+    const connection = adapter.createConnection?.(turnSpec, (data) => child.write(data));
+    const parse =
+      connection?.parseLine ??
+      adapter.createParser?.() ??
+      ((line: string) => adapter.parseLine(line));
     const child = spawnLines(
       adapter.command,
       adapter.buildArgs(turnSpec),
@@ -164,7 +168,8 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
       },
     );
     kill = child.kill;
-    if (streaming) child.write(adapter.encodeMessage(turnSpec.prompt));
+    if (connection) connection.start();
+    else if (streaming) child.write(adapter.encodeMessage(turnSpec.prompt));
     else {
       if (adapter.encodePrompt) child.write(adapter.encodePrompt(turnSpec.prompt));
       child.closeInput(); // otherwise the prompt went in as an argument

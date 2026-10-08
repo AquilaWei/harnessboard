@@ -210,22 +210,36 @@ get `maxReviewRounds` again.
 
 ## The Codex adapter
 
-`core/src/codex.ts` drives `codex exec --json`, checked against Codex CLI 0.160:
+`core/src/codex.ts` drives `codex app-server --listen stdio://`, checked against CLI 0.162.0:
 
-- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`,
+- Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: true`,
   `readOnlyGit: true` (the read-only sandbox still runs commands that do not write).
-- The result's text is the turn's last `agent_message`. Adapters are shared by all sessions
-  of a profile, so this needs state per process: an adapter may provide `createParser()`,
-  which the runner calls once for each CLI process.
-- `exec resume` accepts `-c` but not `--sandbox`, so the sandbox is set with
-  `-c sandbox_mode=...` in both cases. Reviewers get `read-only`.
-- The workspace sandbox protects a worktree's git directory, which lies outside the
-  worktree, so an implementer there can not commit. Edit sessions that skip permissions
-  (the default for tasks) therefore run with `--dangerously-bypass-approvals-and-sandbox`.
-- `turn.completed` sums tokens over every model call of the turn, which is not the size of
-  the context, so no `context` events are emitted and Codex manages its own context.
-- Not seen in real output yet, so read defensively: `file_change` items and usage-limit
-  errors (a message containing "usage limit" or "rate limit" counts as 429).
+- The optional `createConnection(spec, write)` adapter hook creates a process-scoped RPC
+  handshake and parser. It keeps stdin open for requests and replies; adapters without
+  the hook retain their existing transport, including Claude's stream-json interface.
+  Docker forwards the hook to its inner adapter. There is no global RPC/session state.
+- Initialize, acknowledge initialization, start/resume a thread, then start a turn. Both
+  thread and turn calls override the working directory, model and permission policy, so
+  resuming an old exec thread does not preserve its `never` approval policy. Turn completion
+  closes stdin and the server exits. Stopping a task kills its process tree as before.
+- Editing uses `workspace-write` with `on-request` approvals routed to `user`, which is
+  Harnessboard. Shell, file-change, extra-permission and confirmation-only MCP requests
+  become existing permission events. Replies preserve the original RPC id and grant only
+  the current request (extra permission profiles are scoped to the current turn).
+- The git preset can approve a plain `git add`/`git commit` sandbox escalation, including
+  a shell-wrapped command, so commits land in the managed task branch. Compound shell
+  syntax cannot match a prefix allowance. Broad grants and MCP confirmations require a
+  manual answer. Unsupported interactive forms are declined rather than left waiting.
+- Reviewers use `read-only`/`never` and refuse incoming approval requests. Explicit
+  `skipPermissions` edit tasks use `danger-full-access`/`never`; no automatic fallback
+  removes the sandbox. Unknown RPC requests receive an error response.
+- The final completed agent message is the result. Token-usage notifications provide
+  cumulative usage and the model window, but not a reliable current context size; no
+  `context` events are emitted. Failed turns and startup RPC errors produce error outcomes;
+  usage-limit failures become 429 for the quota retry flow.
+- Legacy exec parsing remains for stored-output fixtures. App-server transport and
+  approvals are tested with a protocol fixture and real Git worktrees; a live model turn
+  still needs an acceptance run against the user's installed CLI.
 
 ## The Gemini adapter
 

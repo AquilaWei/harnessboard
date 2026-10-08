@@ -56,6 +56,10 @@ side, and none of them touches your files until you say so.
 You need a Claude subscription that Claude Code can use. **No API key is involved.**
 Linux, macOS and Windows are supported.
 
+Codex profiles use `codex app-server` (checked with CLI 0.162.0). Sandbox approval
+requests appear on the board, and the Git preset lets approved commits stay in the task's
+worktree. See [agent permissions](docs/configuration.md#config-files-agents-and-permissions).
+
 ## Install
 
 No prebuilt installers are published at the moment, so you build it once from the source:

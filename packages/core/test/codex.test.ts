@@ -104,16 +104,17 @@ describe('CodexAdapter.parseLine', () => {
 });
 
 describe('CodexAdapter.buildArgs', () => {
-  it('starts a sandboxed workspace-write session with the prompt last', () => {
+  it('starts a sandboxed app-server with approvals routed to the harness', () => {
     expect(adapter.buildArgs(spec)).toEqual([
-      'exec',
-      '--json',
+      'app-server',
+      '--listen',
+      'stdio://',
       '-c',
-      'approval_policy="never"',
+      'approval_policy="on-request"',
       '-c',
       'sandbox_mode="workspace-write"',
-      '--',
-      'do it',
+      '-c',
+      'approvals_reviewer="user"',
     ]);
   });
 
@@ -125,7 +126,8 @@ describe('CodexAdapter.buildArgs', () => {
 
   it('turns the sandbox off only for an edit session that skips permissions', () => {
     const args = adapter.buildArgs({ ...spec, skipPermissions: true });
-    expect(args).toContain('--dangerously-bypass-approvals-and-sandbox');
+    expect(args).toContain('sandbox_mode="danger-full-access"');
+    expect(args).toContain('approval_policy="never"');
     expect(args).not.toContain('sandbox_mode="workspace-write"');
   });
 
@@ -133,9 +135,11 @@ describe('CodexAdapter.buildArgs', () => {
     expect(() => adapter.buildArgs({ ...spec, resume: true })).toThrow(/thread id/);
   });
 
-  it('resumes by thread id before the prompt and passes the model', () => {
+  it('keeps prompts, thread ids and models in RPC messages rather than process arguments', () => {
     const args = adapter.buildArgs({ ...spec, resume: true, sessionId: 't1', model: 'gpt-x' });
-    expect(args.slice(0, 3)).toEqual(['exec', 'resume', '--json']);
-    expect(args.slice(-5)).toEqual(['-m', 'gpt-x', 't1', '--', 'do it']);
+    expect(args.slice(0, 3)).toEqual(['app-server', '--listen', 'stdio://']);
+    expect(args).not.toContain('gpt-x');
+    expect(args).not.toContain('t1');
+    expect(args).not.toContain('do it');
   });
 });

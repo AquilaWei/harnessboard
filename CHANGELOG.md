@@ -3,6 +3,17 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Fixed
+
+- **Codex approval requests reach the board.** Codex now uses app-server instead of
+  headless exec, so the Git preset and manual permission answers can approve worktree
+  commits without moving the work to a temporary clone. Reviewers remain read-only;
+  normal edit tasks keep the sandbox and existing threads resume with the current policy.
+  Claude's transport is unchanged. Protocol and Git integration tests pass; a live
+  model run still needs acceptance testing.
+
 ## 0.0.29 - 2026-10-08
 
 ### Fixed

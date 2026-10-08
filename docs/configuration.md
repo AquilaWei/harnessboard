@@ -62,9 +62,23 @@ second Claude with another model:
 ```
 
 Supported providers: `claude-code`, `codex` and `gemini`. A Codex profile uses the signed-in
-[Codex CLI](https://github.com/openai/codex) (`codex exec`), so a ChatGPT plan works without
-an API key. Codex can not ask about a tool: its sandbox decides, so permission rules and
-prompts do not apply to it. A Gemini profile uses the signed-in
+[Codex CLI](https://github.com/openai/codex) (`codex app-server`, checked with CLI 0.162.0),
+so a ChatGPT plan works without an API key. Codex runs in the task's folder with its
+workspace sandbox. Requests to run commands outside that sandbox, change protected files,
+or approve MCP confirmations go through the board's permission flow. Plain command requests
+covered by the task's tool rules are approved; auto-approve allows other requests unless
+they are dangerous. Compound commands do not inherit a simple command's prefix rule.
+Broad filesystem/network grants and MCP confirmations require an explicit answer.
+Commands that Codex can already run inside its sandbox do not produce a board approval
+request; the rules are applied to requests Codex sends, not to every command it executes.
+Reviewers remain read-only and cannot obtain extra permissions. Only an edit task that
+explicitly skips permissions runs without the Codex sandbox. Existing threads resume with
+the task's current policy, including threads created by the earlier `codex exec` adapter.
+Configured Codex writable roots and network access are preserved for editing sessions.
+An installed CLI without the required app-server protocol fails the task instead of falling
+back to an unsandboxed process. Interactive forms requiring entered values and MCP URL
+flows are declined with a notice in the activity log; the board currently supports binary
+approvals only. A Gemini profile uses the signed-in
 [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`, with the prompt on stdin). It can not ask
 about a tool either: reviewers run in its `plan` mode plus an admin policy that lets them
 only read and search files. The policy outranks your own Gemini allowances (settings,

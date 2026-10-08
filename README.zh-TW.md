@@ -50,6 +50,9 @@
 
 你需要 Claude Code 能使用的 Claude 訂閱，**不需要 API key**。支援 Linux、macOS 和 Windows。
 
+Codex 使用 `codex app-server`（以 CLI 0.162.0 驗證）。需要沙盒外權限的請求會顯示在看板上；
+Git 預設授權可讓提交留在任務的 worktree。詳見[代理程式與權限設定](docs/configuration.md#config-files-agents-and-permissions)。
+
 ## 安裝
 
 目前沒有發佈預先打包好的安裝檔，所以要從原始碼建置一次：

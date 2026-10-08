@@ -2,18 +2,21 @@
 import os from 'node:os';
 import path from 'node:path';
 import type { AgentEvent, ModelInfo, QuotaInfo, RunUsage } from '@harnessboard/shared';
-import type { AgentAdapter, AgentCapabilities, LineParser, SessionSpec } from './agent.js';
+import type {
+  AgentAdapter,
+  AgentCapabilities,
+  LineParser,
+  PermissionReply,
+  SessionSpec,
+} from './agent.js';
+import { codexConnection, codexPermissionReply } from './codex-app-server.js';
 import { readCodexQuota } from './codex-quota.js';
 import { parseCodexModels } from './models.js';
 import { output } from './process.js';
 
 /**
- * Drives `codex exec --json`. Event names follow the output of Codex CLI 0.160; re-check
- * them when Codex changes its output.
- *
- * Codex takes its prompt as an argument, assigns its own session ids, and cannot pause to
- * ask about a tool: the sandbox decides what it may do. It reports no context size per
- * model call, so no `context` events are emitted and Codex manages its own context.
+ * Drives Codex app-server over stdio RPC, including tool approvals. Legacy exec parsing
+ * is retained for stored output and fixtures; live sessions use a per-process connection.
  */
 export class CodexAdapter implements AgentAdapter {
   readonly provider = 'codex';
@@ -21,7 +24,7 @@ export class CodexAdapter implements AgentAdapter {
   readonly capabilities: AgentCapabilities = {
     midTurnInput: false,
     sessionIds: 'agent',
-    permissionPrompts: false,
+    permissionPrompts: true,
     readOnlyGit: true,
   };
 
@@ -37,26 +40,27 @@ export class CodexAdapter implements AgentAdapter {
     return parseCodexModels(JSON.parse(await output(this.command, ['debug', 'models'])));
   }
 
-  /**
-   * `-c sandbox_mode=...` is used instead of `--sandbox` because `exec resume` only
-   * accepts the former. An unsandboxed edit session is what `skipPermissions` asks for;
-   * with the sandbox on, Codex can edit the worktree but not commit, because a worktree's
-   * git directory lies outside it.
-   */
+  /** Enforce the same policy at process startup and when starting or resuming a thread. */
   buildArgs(spec: SessionSpec): string[] {
-    const args = spec.resume ? ['exec', 'resume', '--json'] : ['exec', '--json'];
-    // Nothing can answer an approval prompt in `exec`, so never raise one.
-    args.push('-c', 'approval_policy="never"');
-    if (spec.access === 'readOnly') args.push('-c', 'sandbox_mode="read-only"');
-    else if (spec.skipPermissions) args.push('--dangerously-bypass-approvals-and-sandbox');
-    else args.push('-c', 'sandbox_mode="workspace-write"');
-    if (spec.model) args.push('-m', spec.model);
-    if (spec.resume) {
-      if (!spec.sessionId) throw new Error('resuming a Codex session needs its thread id');
-      args.push(spec.sessionId);
-    }
-    args.push('--', spec.prompt);
-    return args;
+    if (spec.resume && !spec.sessionId)
+      throw new Error('resuming a Codex session needs its thread id');
+    const readOnly = spec.access === 'readOnly';
+    const skip = !readOnly && spec.skipPermissions;
+    return [
+      'app-server',
+      '--listen',
+      'stdio://',
+      '-c',
+      `approval_policy="${readOnly || skip ? 'never' : 'on-request'}"`,
+      '-c',
+      `sandbox_mode="${readOnly ? 'read-only' : skip ? 'danger-full-access' : 'workspace-write'}"`,
+      '-c',
+      'approvals_reviewer="user"',
+    ];
+  }
+
+  createConnection(spec: SessionSpec, write: (data: string) => void) {
+    return codexConnection(spec, write);
   }
 
   interactiveResumeArgs(agentSessionId: string): string[] {
@@ -72,8 +76,11 @@ export class CodexAdapter implements AgentAdapter {
     throw new Error('Codex takes its prompt as an argument, not on stdin');
   }
 
-  encodePermissionReply(): string {
-    throw new Error('Codex cannot ask for permission; its sandbox decides');
+  encodePermissionReply(
+    request: Extract<AgentEvent, { kind: 'permission_request' }>,
+    reply: PermissionReply,
+  ): string {
+    return codexPermissionReply(request, reply);
   }
 
   /** Stateless: a `result` from here has no final text. The runner uses {@link createParser}. */
