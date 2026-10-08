@@ -47,6 +47,12 @@ export interface HarnessConfig {
    * through. Empty means the board answers loopback requests only.
    */
   remoteHosts: string[];
+  /**
+   * SHA-256 signing certificate fingerprints (`AB:CD:…`, 32 bytes) of the Android app builds
+   * whose Trusted Web Activity may open the board without a URL bar; served in
+   * `/.well-known/assetlinks.json`. Empty means no app is verified.
+   */
+  androidAppFingerprints: string[];
 }
 
 /** Settings the web UI may change at runtime; they are saved to the user config file. */
@@ -59,6 +65,7 @@ export type EditableSettings = Pick<
   | 'allowedTools'
   | 'reviewGuidelines'
   | 'remoteHosts'
+  | 'androidAppFingerprints'
 >;
 export const EDITABLE_SETTINGS = [
   'maxConcurrent',
@@ -68,7 +75,11 @@ export const EDITABLE_SETTINGS = [
   'allowedTools',
   'reviewGuidelines',
   'remoteHosts',
+  'androidAppFingerprints',
 ] as const;
+
+/** A SHA-256 certificate fingerprint as `keytool` prints it: 32 hex bytes joined by colons. */
+const FINGERPRINT = /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/i;
 
 /** Profile every config has; tasks use it unless they name another implementer. */
 export const DEFAULT_AGENT = 'claude';
@@ -102,6 +113,8 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     allowedTools: [],
     reviewGuidelines: [],
     remoteHosts: [],
+    // TODO: F7 in feature_list.json - add the official release key's fingerprint once CI signs.
+    androidAppFingerprints: [],
   };
 }
 
@@ -222,6 +235,14 @@ export function validate(config: HarnessConfig): void {
     !config.remoteHosts.every((h) => typeof h === 'string' && h.trim() !== '')
   ) {
     throw new Error('config remoteHosts must be a list of host names');
+  }
+  if (
+    !Array.isArray(config.androidAppFingerprints) ||
+    !config.androidAppFingerprints.every((f) => typeof f === 'string' && FINGERPRINT.test(f))
+  ) {
+    throw new Error(
+      'config androidAppFingerprints must be a list of SHA-256 fingerprints (32 hex bytes separated by colons)',
+    );
   }
   if (!config.agents[DEFAULT_AGENT]) {
     throw new Error(`config agents must include "${DEFAULT_AGENT}"`);

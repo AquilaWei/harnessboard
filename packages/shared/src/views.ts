@@ -128,6 +128,8 @@ export interface Settings {
   reviewGuidelines: string[];
   /** Host names a paired device may reach the board through; empty for loopback only. */
   remoteHosts: string[];
+  /** SHA-256 fingerprints of the Android app builds verified through asset links. */
+  androidAppFingerprints: string[];
 }
 
 /** A phone or other remote device paired with the board. */

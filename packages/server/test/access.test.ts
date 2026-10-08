@@ -7,11 +7,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
+import { createWellKnown } from '../src/assetlinks.js';
 import { SESSION_HEADER, Sessions } from '../src/session.js';
 
 const PORT = 4999;
 const REMOTE = 'box.tail1234.ts.net';
 const TOKEN = 'device-token';
+const FINGERPRINT =
+  '14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5';
 let harness: Harness;
 let app: Hono;
 let clock: number;
@@ -26,6 +29,7 @@ beforeEach(() => {
     dataDir: path.join(dir, 'data'),
     port: PORT,
     remoteHosts: [REMOTE],
+    androidAppFingerprints: [FINGERPRINT],
   });
   deviceId = harness.store.addDevice('phone', TOKEN, 0).id;
   harness.store.setDevicePasskey(
@@ -46,6 +50,7 @@ beforeEach(() => {
     access(harness, sessions, () => clock),
   );
   app.route('/api', createApi(harness, sessions));
+  app.route('/.well-known', createWellKnown(harness));
   app.get('*', (c) => c.text('index.html'));
 });
 
@@ -125,6 +130,39 @@ describe('access from an unknown host', () => {
   it('answers 403 to static files on an unknown Host', async () => {
     const res = await app.request('/', { headers: { host: 'evil.example' } });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('access to the Android asset links', () => {
+  it('answers 200 to a remote host without a device cookie', async () => {
+    const res = await app.request('/.well-known/assetlinks.json', { headers: remote });
+    expect(res.status).toBe(200);
+  });
+
+  it('answers 200 to loopback', async () => {
+    const res = await app.request('/.well-known/assetlinks.json', {
+      headers: { host: `127.0.0.1:${PORT}` },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('answers 403 to an unknown Host', async () => {
+    const res = await app.request('/.well-known/assetlinks.json', {
+      headers: { host: 'evil.example' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('answers 403 to a Tailscale Funnel request', async () => {
+    const res = await app.request('/.well-known/assetlinks.json', {
+      headers: { ...remote, 'tailscale-funnel-request': '?1' },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('answers 404 to another /.well-known path from a remote host', async () => {
+    const res = await app.request('/.well-known/security.txt', { headers: remote });
+    expect(res.status).toBe(404);
   });
 });
 
@@ -315,6 +353,18 @@ describe('sensitive routes from a paired remote device', () => {
     clock = 5 * MINUTE + 1;
     const res = await write('PUT', '/api/settings', paired, { maxConcurrent: 5 });
     expect([res.status, harness.settings().maxConcurrent]).toEqual([401, 1]);
+  });
+
+  it('lets PUT /settings change the Android fingerprints within 5 minutes of a passkey check', async () => {
+    clock = 5 * MINUTE;
+    const res = await write('PUT', '/api/settings', paired, { androidAppFingerprints: [] });
+    expect([res.status, harness.settings().androidAppFingerprints]).toEqual([200, []]);
+  });
+
+  it('answers 401 reauth to changing the Android fingerprints after 5 minutes', async () => {
+    clock = 5 * MINUTE + 1;
+    const res = await write('PUT', '/api/settings', paired, { androidAppFingerprints: [] });
+    expect([res.status, harness.settings().androidAppFingerprints]).toEqual([401, [FINGERPRINT]]);
   });
 
   it('lets GET /devices through within 5 minutes of a passkey check', async () => {

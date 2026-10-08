@@ -79,7 +79,8 @@ const SENSITIVE_ROUTES: { method: string | null; path: RegExp }[] = [
  * - non-GET requests need {@link CLIENT_HEADER}. Browsers cannot add a custom header to a
  *   cross-origin request without a CORS preflight, which this server never approves;
  * - a remote request to `/api/*` needs the cookie of a paired device (401 otherwise), except
- *   pairing itself. Static files are served without one so the web can show the pairing screen;
+ *   pairing itself. Static files are served without one so the web can show the pairing screen,
+ *   and so is `/.well-known/assetlinks.json`, which Chrome fetches for the Android app;
  * - a device without a passkey is not paired yet: it may only register one or reach
  *   `/api/auth/*` (401 otherwise);
  * - a request without an open session of its device ({@link Sessions}: the board was opened
