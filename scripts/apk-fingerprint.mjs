@@ -10,7 +10,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findAndroidSdk } from './android-check.mjs';
 
-const DIGEST_LINE = /^Signer #\d+ certificate SHA-256 digest: ([0-9a-f]{64})$/i;
+// Build-tools before 37 print `Signer #1 certificate …`; 37 prints `V3.0 Signer: certificate …`.
+const DIGEST_LINE =
+  /^(?:Signer #\d+|V\d+(?:\.\d+)? Signer):? certificate SHA-256 digest: ([0-9a-f]{64})$/i;
 
 /**
  * The SHA-256 certificate digests in `apksigner verify --print-certs` output, upper case with
@@ -18,11 +20,12 @@ const DIGEST_LINE = /^Signer #\d+ certificate SHA-256 digest: ([0-9a-f]{64})$/i;
  * Digital Asset Links want the colon form. Returns an empty list when no signer line is found.
  */
 export function certificateFingerprints(output) {
-  return output
+  const digests = output
     .split(/\r?\n/)
     .map((line) => DIGEST_LINE.exec(line.trim()))
     .filter((match) => match !== null)
     .map((match) => match[1].toUpperCase().match(/../g).join(':'));
+  return [...new Set(digests)];
 }
 
 /**

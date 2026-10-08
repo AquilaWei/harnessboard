@@ -24,6 +24,25 @@ describe('certificateFingerprints', () => {
     ]);
   });
 
+  // Regression: build-tools 37 renamed the line, so CI's newest apksigner printed no certificate.
+  it('reads the digest from the V3.0 signer line that build-tools 37 prints', () => {
+    const output = [
+      'V3.0 Signer: certificate DN: CN=t',
+      'V3.0 Signer: certificate SHA-256 digest: 16f2b54cd62dfcd1985ad1efec040d29' +
+        'cd256f4a9e455b656e13ac809c8396d9',
+    ].join('\n');
+    expect(certificateFingerprints(output)).toEqual([
+      '16:F2:B5:4C:D6:2D:FC:D1:98:5A:D1:EF:EC:04:0D:29:' +
+        'CD:25:6F:4A:9E:45:5B:65:6E:13:AC:80:9C:83:96:D9',
+    ]);
+  });
+
+  it('returns a certificate once when several signature schemes list it', () => {
+    const digest = '16f2b54cd62dfcd1985ad1efec040d29cd256f4a9e455b656e13ac809c8396d9';
+    const output = `V2 Signer: certificate SHA-256 digest: ${digest}\nV3.0 Signer: certificate SHA-256 digest: ${digest}`;
+    expect(certificateFingerprints(output)).toHaveLength(1);
+  });
+
   it('returns nothing when the output has no signer digest', () => {
     expect(certificateFingerprints('DOES NOT VERIFY\nERROR: Missing META-INF/MANIFEST.MF')).toEqual(
       [],
