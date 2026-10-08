@@ -31,6 +31,10 @@ linux:
   syncDesktopName: true
   category: Development
   maintainer: AquilaWei <AquilaWei@users.noreply.github.com>
+rpm:
+  # Without this the .rpm owns /usr/lib/.build-id links that other Electron apps (Slack,
+  # VS Code...) own too, and dnf refuses to install it next to them.
+  fpm: ['--rpm-rpmbuild-define=_build_id_links none']
 mac:
   target:
     - target: dmg
