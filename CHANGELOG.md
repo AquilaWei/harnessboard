@@ -3,6 +3,15 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.0.27 - 2026-10-08
+
+### Fixed
+
+- **The release build runs through on Windows.** One designer test stopped the agent before
+  Windows' slower git had finished its commit, which stopped the release before the
+  installers and the Android app were built. It now waits for the commit. 0.0.24 to 0.0.26
+  were never released; they have the same changes as this version.
+
 ## 0.0.26 - 2026-10-08
 
 ### Fixed
