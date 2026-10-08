@@ -983,11 +983,13 @@ export class Harness {
 
   /** The conversation a chat continues, or why there is none to continue. */
   private chatTarget(task: Task): Session | string {
-    const session = this.store
-      .listSessions(task.id)
-      .findLast(
-        (s) => s.role === 'implementer' && s.agentSessionId !== null && s.contextTokens > 0,
-      );
+    const session = this.store.listSessions(task.id).findLast(
+      (s) =>
+        s.role === 'implementer' &&
+        s.agentSessionId !== null &&
+        // Codex reports its thread id but no context size; zero does not mean no conversation.
+        (s.contextTokens > 0 || this.config.agents[s.agentId]?.provider === 'codex'),
+    );
     if (!session) return `task ${task.id} has no conversation to continue yet`;
     if (!task.worktreePath) return `task ${task.id} was merged; its worktree is gone`;
     const window = session.contextWindow ?? this.workflow.contextWindow(session.agentId);

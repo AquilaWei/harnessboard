@@ -5,8 +5,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
+import { CodexAdapter } from '../src/codex.js';
 import {
   FAKE_CLAUDE,
+  PromptArgAdapter,
   assistantText,
   compactBoundary,
   hang,
@@ -121,6 +123,96 @@ describe('a chat message', () => {
     harness.chat(task.id, 'Rename it');
     await harness.waitForIdle();
     expect(harness.store.listSessions(task.id)).toHaveLength(1);
+  });
+});
+
+describe('a stopped Codex task without context telemetry', () => {
+  beforeEach(async () => {
+    await harness.shutdown();
+    harness.store.close();
+    const adapter = new CodexAdapter(FAKE_CLAUDE);
+    const promptAdapter = new PromptArgAdapter(FAKE_CLAUDE);
+    // Reuse the fixture's prompt transport while parsing real Codex JSON events.
+    adapter.buildArgs = (spec) => promptAdapter.buildArgs(spec);
+    harness = Harness.open(
+      {
+        ...harness.config,
+        agents: {
+          ...harness.config.agents,
+          codex: { provider: 'codex', command: FAKE_CLAUDE, model: null },
+        },
+      },
+      { adapterFactory: () => adapter },
+    );
+    scenario(
+      [[{ type: 'thread.started', thread_id: 'codex-thread' }, { type: 'turn.completed' }]],
+      [
+        [
+          { type: 'thread.started', thread_id: 'codex-thread' },
+          {
+            type: 'item.completed',
+            item: { type: 'agent_message', text: 'Here is the progress.' },
+          },
+          { type: 'turn.completed' },
+        ],
+      ],
+    );
+  });
+
+  async function stoppedTask() {
+    const task = await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      confirmPlan: false,
+      implementer: 'codex',
+      queue: true,
+    });
+    await harness.waitForIdle();
+    harness.store.updateTask(task.id, { status: 'stopped' });
+    return task;
+  }
+
+  it('resumes the existing thread when the user sends a message', async () => {
+    const task = await stoppedTask();
+    expect(harness.store.listSessions(task.id)[0]!.contextTokens).toBe(0);
+    harness.chat(task.id, 'What is the progress?');
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]).toEqual(
+      expect.objectContaining({
+        args: ['--resume', 'codex-thread', '--prompt', 'What is the progress?'],
+        received: ['What is the progress?'],
+      }),
+    );
+    expect(harness.store.lastEvent(task.id, 'chat_end')!.data).toEqual({ reason: 'completed' });
+    expect(status(task.id)).toBe('stopped');
+  });
+
+  it('refuses to chat when Codex did not provide a thread id', async () => {
+    scenario([[{ type: 'turn.completed' }]]);
+    const task = await stoppedTask();
+    expect(() => harness.chat(task.id, 'hi')).toThrow(/no conversation to continue/);
+  });
+
+  it('delivers a pending message after the task stops', async () => {
+    const task = await stoppedTask();
+    harness.store.updateTask(task.id, { status: 'queued' });
+    harness.chat(task.id, 'What is the progress?');
+    harness.stopTask(task.id);
+    await runQueued();
+    expect(fakeRuns()[1]!.args).toEqual([
+      '--resume',
+      'codex-thread',
+      '--prompt',
+      'What is the progress?',
+    ]);
+    expect(harness.pendingChat(task.id)).toEqual([]);
+  });
+
+  it('still refuses a conversation whose reported context is full', async () => {
+    const task = await stoppedTask();
+    const [first] = harness.store.listSessions(task.id);
+    harness.store.updateSessionContext(first!.id, 90_000, 100_000);
+    expect(() => harness.chat(task.id, 'hi')).toThrow(/is full/);
   });
 });
 

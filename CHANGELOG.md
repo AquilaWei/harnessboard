@@ -3,6 +3,14 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Fixed
+
+- **Stopped Codex tasks can continue their conversation.** A valid Codex thread was
+  previously rejected because Codex does not report its context size. Chat now resumes
+  that thread, including messages queued before the task stopped.
+
 ## 0.0.28 - 2026-10-08
 
 ### Fixed
