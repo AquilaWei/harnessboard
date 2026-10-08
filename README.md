@@ -454,7 +454,7 @@ nothing is opened to the internet.
    `tailscale serve reset` turns it off again.
 
 4. **Pair the phone:** click **Pair a phone** and scan the QR code with the phone's camera.
-   The code works once, for 5 minutes. Give the phone a name, then tap **Create passkey**:
+   The code works once, for 5 minutes. Give the phone a name, tap **Pair**, then **Create passkey**:
    the phone asks for your fingerprint, face or screen lock. The phone is paired only once
    the passkey is made.
 5. **Add to Home Screen** (optional on Android, needed for push on an iPhone): in Chrome's
@@ -508,8 +508,8 @@ like the browser does.
 2. **Connect:** open **Harnessboard** and tap **Scan pairing QR**, then scan the QR code from
    **Settings → Phone access → Pair a phone** on the computer. Without a QR code, type the
    board's address (`https://<machine>.<tailnet>.ts.net`) and tap **Connect**.
-3. **Pair:** the board opens inside the app with the pairing screen. Name the phone and tap
-   **Create passkey**, as in step 4 above. The app keeps the address; later the icon opens
+3. **Pair:** the board opens inside the app with the pairing screen. Name the phone, tap
+   **Pair**, then **Create passkey**, as in step 4 above. The app keeps the address; later the icon opens
    the board directly.
 
 **What changes compared with the browser**

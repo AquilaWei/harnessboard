@@ -95,8 +95,9 @@ phone is on mobile data, not the home Wi-Fi.
 9. On the computer: **Pair a phone**. In the app, tap **Scan pairing QR** and scan it. Expected:
    Google's scanner opens without asking for the camera permission, then the board opens with the
    pairing screen.
-10. Name the phone, tap **Create passkey** and confirm with fingerprint or screen lock. Expected:
-    the board appears inside the app; the computer's device list shows the name.
+10. Name the phone, tap **Pair**, then **Create passkey**, and confirm with fingerprint or
+    screen lock. Expected: the board appears inside the app; the computer's device list shows
+    the name.
 11. **No URL bar:** the board fills the screen with no address bar or Chrome toolbar at the top.
     If a bar shows the host name, asset links were not verified: note it and check step 6.
 12. Close the app (swipe it away) and open it from the icon. Expected: the board opens directly
