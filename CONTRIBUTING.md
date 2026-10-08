@@ -50,8 +50,7 @@ downloads Gradle and the dependencies; later runs work offline. On a machine wit
 `HARNESSBOARD_SKIP_ANDROID=1 pnpm android:check` skips it. The app's version is read from
 `packages/server/package.json`; do not set one in Gradle. `android/buildSrc` holds the
 build-script code that has tests, such as the version-code formula and the release signing
-(`ReleaseSigning`, read only from the `HB_ANDROID_*` variables; see the README's Development
-section).
+(`ReleaseSigning`, read only from the `HB_ANDROID_*` variables; see [docs/development.md](docs/development.md)).
 
 ## Making a change
 
@@ -68,7 +67,8 @@ section).
 - **Before you push:** `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`.
   CI runs the same checks on all three platforms.
 - **Docs:** if you change a command, option, environment variable or install step, update
-  `README.md` and `README.zh-TW.md` in the same commit. Add a line under _Unreleased_ in
+  the matching page under `docs/` (and `README.md` and `README.zh-TW.md` if the quick start
+  changes) in the same commit. Add a line under _Unreleased_ in
   `CHANGELOG.md` for anything users will notice.
 - **Web dependencies:** after adding or updating a package in `packages/web`, run
   `node scripts/third-party-notices.mjs` and commit the updated `THIRD-PARTY-NOTICES.md`.

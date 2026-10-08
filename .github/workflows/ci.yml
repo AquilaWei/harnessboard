@@ -78,7 +78,7 @@ jobs:
           if-no-files-found: error
 
   # The Android app, checked like `pnpm android:check` locally and signed with the release key
-  # from the repo's secrets (README: Android app > Signing key).
+  # from the repo's secrets (docs/development.md: Release signing key).
   android:
     needs: test
     runs-on: ubuntu-latest
@@ -113,7 +113,7 @@ jobs:
       - name: Name the APK after the version
         run: |
           apk=android/app/build/outputs/apk/release/app-release.apk
-          test -f "$apk" || { echo "No signed APK: set the HB_ANDROID_* secrets (README)"; exit 1; }
+          test -f "$apk" || { echo "No signed APK: set the HB_ANDROID_* secrets (docs/development.md)"; exit 1; }
           version="$(node -p "require('./packages/server/package.json').version")"
           mkdir apk && cp "$apk" "apk/harnessboard-$version.apk"
           # Verifies the signature and prints the public certificate fingerprint, for the
