@@ -3,6 +3,15 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.0.26 - 2026-10-08
+
+### Fixed
+
+- **The release build runs through on Windows.** Four tests expected Windows-style folder
+  separators where git prints forward slashes, which stopped the release before the
+  installers and the Android app were built. 0.0.24 and 0.0.25 were never released; they
+  have the same changes as this version.
+
 ## 0.0.25 - 2026-10-08
 
 ### Fixed
