@@ -3,6 +3,14 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.0.25 - 2026-10-08
+
+### Fixed
+
+- **The release build finds the Android app's signing fingerprint again.** Newer Android
+  build tools label the signer differently, which stopped the release before it was built.
+  0.0.24 was never released; it has the same changes as this version.
+
 ## 0.0.24 - 2026-10-08
 
 ### Added
