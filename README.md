@@ -1,6 +1,6 @@
 # Harnessboard
 
-![version](https://img.shields.io/badge/version-0.0.29-blue)
+![version](https://img.shields.io/badge/version-0.0.30-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -76,7 +76,7 @@ Then give the command a short name (put the line in your shell's startup file to
 
 ```bash
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # prints the version, for example 0.0.29
+hb --version             # prints the version, for example 0.0.30
 ```
 
 <details>
