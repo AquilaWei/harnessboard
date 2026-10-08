@@ -116,8 +116,9 @@ jobs:
           test -f "$apk" || { echo "No signed APK: set the HB_ANDROID_* secrets (README)"; exit 1; }
           version="$(node -p "require('./packages/server/package.json').version")"
           mkdir apk && cp "$apk" "apk/harnessboard-$version.apk"
-          # The public certificate fingerprint, for the androidAppFingerprints default.
-          keytool -printcert -jarfile "apk/harnessboard-$version.apk" | grep 'SHA256:'
+          # Verifies the signature and prints the public certificate fingerprint, for the
+          # androidAppFingerprints default. Uses apksigner, as the APK has only a v2 signature.
+          node scripts/apk-fingerprint.mjs "apk/harnessboard-$version.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk

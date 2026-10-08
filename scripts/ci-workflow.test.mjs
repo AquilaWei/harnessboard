@@ -47,6 +47,14 @@ describe('CI workflow', () => {
     expect(rename.run).toContain('cp "$apk" "apk/harnessboard-$version.apk"');
   });
 
+  it('prints the APK fingerprint with apk-fingerprint.mjs, which reads v2 signatures', () => {
+    const rename = android.steps.find((s) => s.name === 'Name the APK after the version');
+    expect(rename.run).toContain(
+      'node scripts/apk-fingerprint.mjs "apk/harnessboard-$version.apk"',
+    );
+    expect(rename.run).not.toContain('keytool');
+  });
+
   it('adds the APK to the draft release, whose checksums cover every file', () => {
     const release = workflow.jobs.release;
     expect(release.needs).toEqual(['desktop', 'android']);
