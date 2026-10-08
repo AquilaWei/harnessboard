@@ -83,6 +83,21 @@ class SetupModelTest {
     }
 
     @Test
+    fun `an address with an out-of-range port shows the not-a-URL message`() {
+        assertEquals(
+            "This is not a board address. Check it and try again.",
+            errorText(model.submitAddress("https://host.example:65536")),
+        )
+    }
+
+    @Test
+    fun `an address with an out-of-range port saves nothing`() {
+        model.submitAddress("https://host.example:65536")
+
+        assertNull(store.origin())
+    }
+
+    @Test
     fun `an http address shows the HTTPS message`() {
         assertEquals(
             "The board needs an https:// address. Use the address shown under Phone access.",

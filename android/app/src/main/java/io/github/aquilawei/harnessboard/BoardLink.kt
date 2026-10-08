@@ -25,13 +25,14 @@ data class BoardLink(
         // "host:8443" also looks like a scheme followed by ":", so a scheme needs "://".
         private val SCHEME = Regex("^[A-Za-z][A-Za-z0-9+.-]*://")
         private const val PAIR_KEY = "pair="
+        private val VALID_PORTS = 1..65535
 
         /**
          * Reads the pairing QR's `https://host/#pair=CODE` (as built by `pairUrl()` in
          * `packages/web/src/phone.ts`) or a typed board address. A host without a scheme is read
          * as HTTPS. Fails with a [BoardLinkError] for plain HTTP (passkeys and push need HTTPS, so
          * there is no LAN exception), other schemes, user info, a path or query, an empty pairing
-         * code, or text that is not a URL.
+         * code, or text that is not a URL (including a port outside 1–65535).
          */
         fun parse(text: String): BoardLinkResult {
             val trimmed = text.trim()
@@ -70,6 +71,9 @@ data class BoardLink(
                 // An authority with no usable host and port (for example "https://host:x") leaves
                 // host null.
                 uri.host == null -> BoardLinkError.NOT_A_URL
+
+                // java.net.URI accepts any digits as a port, so 0 and 65536 get here.
+                uri.port != -1 && uri.port !in VALID_PORTS -> BoardLinkError.NOT_A_URL
 
                 uri.rawPath.orEmpty() !in setOf("", "/") || uri.rawQuery != null -> BoardLinkError.NOT_BOARD_ROOT
 

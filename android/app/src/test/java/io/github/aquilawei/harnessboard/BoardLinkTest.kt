@@ -157,6 +157,46 @@ class BoardLinkTest {
     }
 
     @Test
+    fun `a port above 65535 is not a url`() {
+        assertEquals(
+            BoardLinkResult.Invalid(BoardLinkError.NOT_A_URL),
+            BoardLink.parse("https://host.example:65536/"),
+        )
+    }
+
+    @Test
+    fun `a port above 65535 without a scheme is not a url`() {
+        assertEquals(
+            BoardLinkResult.Invalid(BoardLinkError.NOT_A_URL),
+            BoardLink.parse("host.example:99999"),
+        )
+    }
+
+    @Test
+    fun `port 0 is not a url`() {
+        assertEquals(
+            BoardLinkResult.Invalid(BoardLinkError.NOT_A_URL),
+            BoardLink.parse("https://host.example:0/"),
+        )
+    }
+
+    @Test
+    fun `port 65535 is kept in the origin`() {
+        assertEquals(
+            BoardLinkResult.Valid(BoardLink("https://host.example:65535", null)),
+            BoardLink.parse("https://host.example:65535/"),
+        )
+    }
+
+    @Test
+    fun `port 1 is kept in the origin`() {
+        assertEquals(
+            BoardLinkResult.Valid(BoardLink("https://host.example:1", null)),
+            BoardLink.parse("https://host.example:1/"),
+        )
+    }
+
+    @Test
     fun `a link with a pairing code opens the pairing URL`() {
         assertEquals(
             "https://host.example:8443/#pair=AB12-CD34",
