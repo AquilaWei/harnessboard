@@ -3,7 +3,10 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
-## Unreleased
+## 0.1.2 - 2026-10-09
+
+Local test build for persistent role sessions, token savings and commit handoff checks;
+real-agent workflow acceptance testing is pending.
 
 ### Changed
 
@@ -13,7 +16,6 @@ are test versions that have not been accepted on real machines yet.
   testers and reviewers consult historical notes on demand.
 - Writing stages now require a clean worktree and valid single-line English commit messages
   before handoff. Failed checks preserve the work and session and explain what to fix.
-
 - Implementers, reviewers and testers keep their own conversations across features and
   fixes. Follow-up turns receive new handoff notes and changed scope instead of rereading
   the entire notes history. Changed requirements and review rules are still sent again.
