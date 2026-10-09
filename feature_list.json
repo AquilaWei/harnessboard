@@ -1,0 +1,125 @@
+{
+  "features": [
+    {
+      "id": "F1",
+      "description": "Shared types and model catalogs carry each model's reasoning-effort levels: ModelInfo gets `efforts` (id, name, description, note) and `defaultEffort`; parseClaudeCatalog reads `thinking.effort_options`, parseCodexModels reads `supported_reasoning_levels` / `default_reasoning_level`; shared gets `isEffortId` and `roleEffort`.",
+      "steps": [
+        "packages/shared/src/agents.ts exports an `EffortInfo` type and `ModelInfo` has `efforts: EffortInfo[]` (empty when the model offers no choice) and `defaultEffort: string | null`.",
+        "parseClaudeCatalog on a catalog entry with `thinking.effort_options` [low, medium(badge Recommended), high, xhigh(name Extra), max(badge warning)] returns those five efforts in order, with name 'Extra' for xhigh and the badge messages as `note`; an entry without `thinking` returns `efforts: []`.",
+        "parseCodexModels on a model with `supported_reasoning_levels` [low, medium, high] and `default_reasoning_level: 'medium'` returns three efforts with their descriptions and `defaultEffort: 'medium'`; a model without those fields returns `efforts: []` and `defaultEffort: null`.",
+        "CLAUDE_ALIASES entries have `efforts: []` and `defaultEffort: null` (the fallback offers no effort list).",
+        "`isEffortId('high')` and `isEffortId('xhigh')` are true; `isEffortId('-x')`, `isEffortId('')` and `isEffortId('a b')` are false.",
+        "`roleEffort` mirrors `roleModel`: returns `implementerEffort` / `reviewerEffort` / `testerEffort` / `designerEffort` / `specEffort`, `null` when unset, and a spec author left unset inherits the implementer's effort.",
+        "All existing tests that build ModelInfo objects are updated and the verify command passes."
+      ],
+      "passes": false
+    },
+    {
+      "id": "F2",
+      "description": "Adapters pass the chosen effort to the agent CLI: SessionSpec gets `effort: string | null`; AgentCapabilities gets `effort: boolean`; Claude Code adds `--effort <level>`, Codex app-server sends `effort` in `turn/start`; Gemini reports `effort: false` and ignores it; the Docker sandbox passes it through.",
+      "steps": [
+        "ClaudeCodeAdapter.buildArgs with `effort: 'high'` contains the adjacent pair `--effort`, `high`; with `effort: null` it contains no `--effort`.",
+        "codexConnection with `effort: 'xhigh'` writes a `turn/start` request whose params include `effort: 'xhigh'`; with `effort: null` the params have no `effort` key (on both new and resumed threads).",
+        "ClaudeCodeAdapter and CodexAdapter report `capabilities.effort === true`; GeminiAdapter reports `false` and its buildArgs is unchanged when `effort` is set.",
+        "DockerSandbox forwards `effort` to the wrapped adapter's args (test with a fake adapter or the Claude adapter inside the sandbox).",
+        "agent-capabilities test covers the new capability for every provider; the verify command passes."
+      ],
+      "passes": false
+    },
+    {
+      "id": "F3",
+      "description": "Tasks store an effort per role and the harness uses it: TaskAgents gets `implementerEffort`, `reviewerEffort`, `specEffort`, `testerEffort`, `designerEffort`; creating a task and `PUT /tasks/:id/agents` accept them (validated with isEffortId); each session's SessionSpec gets `roleEffort(...)`; changing a role's model clears that role's effort unless the update also sets it.",
+      "steps": [
+        "Creating a task through the API with `implementerEffort: 'high'` stores it, and the implementer session started by the harness (fake-claude) receives `--effort high`.",
+        "A reviewer session of the same task receives `reviewerEffort` when set and no `--effort` when it is unset.",
+        "`PUT /tasks/:id/agents` with `{ reviewerEffort: 'low' }` updates only that field; `{ reviewerEffort: null }` clears it; `{ reviewerEffort: '-rf' }` is rejected with a 400-style error and nothing changes.",
+        "`PUT /tasks/:id/agents` with `{ implementerModel: 'sonnet' }` on a task whose implementerEffort was 'max' leaves implementerEffort null; with `{ implementerModel: 'sonnet', implementerEffort: 'low' }` it is 'low'.",
+        "Like models, efforts can be changed while a session runs and apply from the next session.",
+        "A task saved before this change (no effort fields) loads and runs with no `--effort` argument.",
+        "The verify command passes."
+      ],
+      "passes": false
+    },
+    {
+      "id": "F4",
+      "description": "Web board: an effort selector next to every model picker (new-task dialog and the task's agents editor). Its options come from the selected model's `efforts`; the first option is 'Default' (the CLI's / model's default, showing `defaultEffort` when known); it is hidden when the model offers no efforts or the profile's CLI has no effort capability; switching model resets an effort the new model does not offer. English and zh-TW strings.",
+      "steps": [
+        "With a Claude profile and model 'Opus 5.5' selected (mocked `api.agentModels` returning five efforts), an effort <select> is shown with 'Default' plus Low / Medium / High / Extra / Max, notes shown like model notes (e.g. 'Max (3.5× or more usage)').",
+        "Choosing 'High' calls onChange with implementerEffort 'high'; choosing 'Default' sets it to null.",
+        "Selecting a model whose `efforts` is empty hides the effort selector and sets the role's effort to null.",
+        "With 'High' chosen, switching to a model that offers only [low, medium] resets the effort to null; switching to one that also offers 'high' keeps it.",
+        "The new-task dialog sends the chosen efforts in the create request; TaskAgentsEditor sends them in `PUT /tasks/:id/agents` and its summary line shows the effort next to the model (e.g. 'claude · Opus 5.5 · High').",
+        "Every new i18n key exists in both en and zh-TW (the i18n test enforces this).",
+        "The verify command passes."
+      ],
+      "passes": false
+    },
+    {
+      "id": "F5",
+      "description": "CLI: `hb add` / `hb loop` accept `--effort`, `--spec-effort`, `--designer-effort`, `--tester-effort`, `--reviewer-effort`; `hb models <id>` shows each role's effort and can change it ('default' clears it); `hb agents --models <id>` lists each model's effort levels.",
+      "steps": [
+        "Parsing `hb add 'x' --effort high --reviewer-effort low` produces task options with implementerEffort 'high' and reviewerEffort 'low' (task-options test).",
+        "`hb models 3 --effort default` sends `{ implementerEffort: null }`; `hb models 3 --reviewer-effort max` sends `{ reviewerEffort: 'max' }`.",
+        "`hb models 3` output shows the effort after each role's model, or the default-effort label when unset.",
+        "`hb agents --models claude` prints each model's efforts (e.g. 'efforts: low, medium, high, xhigh, max') and nothing extra for models without efforts.",
+        "CLI messages exist in both en and zh-TW; the verify command passes."
+      ],
+      "passes": false
+    },
+    {
+      "id": "F6",
+      "description": "Profile-level default effort: AgentProfile gets optional `effort`; config load validates it; Settings shows an effort selector under the profile's model; `hb agents --add --effort`; a session uses the task's role effort, else the profile's effort, else none.",
+      "steps": [
+        "Config with `\"effort\": \"high\"` on a profile loads; `\"effort\": \"-x\"` fails to load with an error naming the profile.",
+        "A task with no implementerEffort on that profile starts its session with `--effort high`; a task with implementerEffort 'low' uses 'low'.",
+        "Settings dialog shows an effort selector for a profile whose model offers efforts, and saving writes `effort` to the user config.",
+        "`hb agents --add codex --effort medium` sends `effort: 'medium'` in `POST /api/agents`.",
+        "The verify command passes."
+      ],
+      "passes": false
+    },
+    {
+      "id": "F7",
+      "description": "Documentation: docs/web-board.md, docs/cli.md, docs/configuration.md and docs/architecture.md (adapter capability table) describe reasoning effort; README.md and README.zh-TW.md mention it where model choice is described; CHANGELOG has an Unreleased entry.",
+      "steps": [
+        "docs/cli.md lists every new `--*-effort` option and the `hb models` behaviour.",
+        "docs/configuration.md shows a profile with `\"effort\"` and states which providers honour it (Claude Code, Codex; not Gemini).",
+        "docs/architecture.md documents the `effort` capability and how each adapter passes it (`--effort`, `turn/start.effort`).",
+        "CHANGELOG.md has a user-facing entry under Unreleased; both READMEs stay in sync.",
+        "`pnpm format:check` passes along with the verify command."
+      ],
+      "passes": false
+    }
+  ],
+  "verify": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm format:check && pnpm test",
+  "questions": [
+    {
+      "question": "Which agent CLIs should offer an effort choice?",
+      "options": [
+        "Claude Code and Codex only; Gemini hides it (Recommended)",
+        "Also add it to Gemini later, together with the move to agy"
+      ]
+    },
+    {
+      "question": "Should agent profiles also get a default effort (feature F6), or only per-task choices?",
+      "options": [
+        "Yes, a profile default plus per-task overrides (Recommended)",
+        "Per task only; drop F6"
+      ]
+    },
+    {
+      "question": "Codex lists an 'ultra' level ('maximum reasoning with automatic task delegation'). Show it?",
+      "options": [
+        "Show every level the CLI's catalog lists (Recommended)",
+        "Hide 'ultra', since it delegates work on its own"
+      ]
+    },
+    {
+      "question": "When the model is typed by hand (not in the CLI's list), what effort choice should appear?",
+      "options": [
+        "None; the CLI default is used (Recommended)",
+        "A fixed list low / medium / high / xhigh / max"
+      ]
+    }
+  ]
+}
