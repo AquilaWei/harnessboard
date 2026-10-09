@@ -24,7 +24,7 @@
         "DockerSandbox forwards `effort` to the wrapped adapter's args (test with a fake adapter or the Claude adapter inside the sandbox).",
         "agent-capabilities test covers the new capability for every provider; the verify command passes."
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "F3",

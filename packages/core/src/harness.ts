@@ -1489,6 +1489,8 @@ export class Harness {
         resume: plan.resume !== null,
         prompt: plan.prompt,
         model: roleModel(task.agents, plan.role) ?? this.config.agents[plan.agentId]!.model,
+        // TODO: F3 in feature_list.json - use the role's effort once tasks store it.
+        effort: null,
         access: plan.access,
         // A read-only session may run the task's own check, but nothing that edits.
         allowedTools:

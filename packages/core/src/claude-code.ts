@@ -30,6 +30,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     sessionIds: 'harness',
     permissionPrompts: true,
     readOnlyGit: true,
+    effort: true,
   };
 
   constructor(readonly command: string) {}
@@ -53,6 +54,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       spec.sessionId,
     ];
     if (spec.model) args.push('--model', spec.model);
+    if (spec.effort) args.push('--effort', spec.effort);
     if (spec.access === 'readOnly') {
       // Default permission mode: in print mode every tool not listed here is refused.
       args.push('--allowedTools', ...READ_ONLY_TOOLS, ...spec.allowedTools);

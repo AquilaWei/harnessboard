@@ -9,7 +9,7 @@ Build in order; each feature is one session. See `feature_list.json` for accepta
 | ID  | Feature                                                               | Status |
 | --- | --------------------------------------------------------------------- | ------ |
 | F1  | Shared types + catalogs list each model's effort levels               | done   |
-| F2  | Adapters pass `effort` to the CLI (`--effort`, Codex `turn/start`)    | todo   |
+| F2  | Adapters pass `effort` to the CLI (`--effort`, Codex `turn/start`)    | done   |
 | F3  | Tasks store effort per role; harness and API use it                   | todo   |
 | F4  | Web board: effort selector next to every model picker (en + zh-TW)    | todo   |
 | F5  | CLI: `--*-effort` options, `hb models`, `hb agents --models`          | todo   |
@@ -68,6 +68,16 @@ turn with `effort` is accepted by the app-server. Spend real runs sparingly.
   "Recommended" badge is still visible as the effort's note, but it is not proof of what the
   CLI uses without `--effort`, so F4's "Default" option should not claim a level for Claude.
   Verify: 1396 passed, 14 skipped.
+- **F2 (done):** `SessionSpec.effort: string | null` and `AgentCapabilities.effort` in
+  `packages/core/src/agent.ts`. Claude Code pushes `--effort <level>` right after `--model`;
+  Codex sends `effort` only on `turn/start` (new and resumed threads), never on
+  `thread/start` / `thread/resume`; Gemini reports `effort: false` and ignores it. The Docker
+  sandbox needed no code: it already hands the whole spec to the inner adapter's `buildArgs`
+  and `createConnection`, and its `capabilities` are the inner one's; tests now pin that.
+  The harness passes `effort: null` with a `TODO: F3` comment at the SessionSpec in
+  `harness.ts`; F3 replaces it with `roleEffort(...)` and removes the TODO.
+  `docs/architecture.md`'s capability table is left for F7.
+  Verify: 1409 passed, 14 skipped.
 
 ## Open questions
 

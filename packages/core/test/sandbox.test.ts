@@ -28,6 +28,7 @@ class ConfiguredAdapter implements AgentAdapter {
     sessionIds: 'agent',
     permissionPrompts: false,
     readOnlyGit: true,
+    effort: false,
   };
 
   constructor(private readonly config: string[]) {}
@@ -64,6 +65,7 @@ function spec(cwd: string, overrides: Partial<SessionSpec> = {}): SessionSpec {
     resume: false,
     prompt: 'do it',
     model: null,
+    effort: null,
     access: 'edit',
     allowedTools: [],
     skipPermissions: false,
@@ -311,6 +313,22 @@ describe('DockerSandbox command line', () => {
   it('keeps the capabilities of the CLI it runs', () => {
     const sandbox = new DockerSandbox(new ClaudeCodeAdapter('claude'), 'agents:1', 'linux', USER);
     expect(sandbox.capabilities.midTurnInput).toBe(true);
+  });
+
+  it('passes the effort on to the CLI it runs', () => {
+    const sandbox = new DockerSandbox(new ClaudeCodeAdapter('claude'), 'agents:1', 'linux', USER);
+    const args = sandbox.buildArgs(
+      spec(tempDir('sandbox-cwd'), { sessionId: 's-1', effort: 'high' }),
+    );
+    expect(args.slice(args.indexOf('--effort'), args.indexOf('--effort') + 2)).toEqual([
+      '--effort',
+      'high',
+    ]);
+  });
+
+  it('keeps the effort capability of the CLI it runs', () => {
+    const sandbox = new DockerSandbox(new GeminiAdapter('gemini'), 'agents:1', 'linux', USER);
+    expect(sandbox.capabilities.effort).toBe(false);
   });
 });
 

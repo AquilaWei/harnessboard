@@ -39,6 +39,7 @@ const spec: SessionSpec = {
   resume: false,
   prompt: 'do it',
   model: null,
+  effort: null,
   access: 'edit',
   allowedTools: [],
   skipPermissions: false,
@@ -149,6 +150,10 @@ describe('GeminiAdapter.buildArgs', () => {
       '--resume',
       'g-1',
     ]);
+  });
+
+  it('ignores an effort, which the gemini CLI does not take', () => {
+    expect(adapter.buildArgs({ ...spec, effort: 'high' })).toEqual(adapter.buildArgs(spec));
   });
 
   it('leaves a prompt that starts with a dash out of the arguments', () => {

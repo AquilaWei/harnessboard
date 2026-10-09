@@ -17,6 +17,7 @@ const spec: SessionSpec = {
   resume: false,
   prompt: 'do it',
   model: null,
+  effort: null,
   access: 'edit',
   allowedTools: [],
   skipPermissions: false,

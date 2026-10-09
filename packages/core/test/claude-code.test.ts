@@ -181,6 +181,7 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
     resume: false,
     prompt: 'do it',
     model: null,
+    effort: null,
     access: 'edit' as const,
     allowedTools: ['Bash(git add *)'],
     skipPermissions: false,
@@ -221,6 +222,18 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
       '--allowedTools',
       'Bash(git add *)',
     ]);
+  });
+
+  it('passes the effort with --effort', () => {
+    const args = adapter.buildArgs({ ...spec, effort: 'high' });
+    expect(args.slice(args.indexOf('--effort'), args.indexOf('--effort') + 2)).toEqual([
+      '--effort',
+      'high',
+    ]);
+  });
+
+  it('passes no --effort without an effort', () => {
+    expect(adapter.buildArgs(spec)).not.toContain('--effort');
   });
 
   it('resumes an existing session with --resume', () => {

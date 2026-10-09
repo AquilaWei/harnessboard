@@ -84,6 +84,7 @@ function readOnlyPolicy(): string {
     resume: false,
     prompt: 'review',
     model: null,
+    effort: null,
     access: 'readOnly',
     allowedTools: [],
     skipPermissions: false,
