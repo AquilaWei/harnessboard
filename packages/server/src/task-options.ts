@@ -1,8 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 import { InvalidArgumentError, Option } from 'commander';
 import type { Command } from 'commander';
-import { DEFAULT_PRESET, PERMISSION_PRESETS, definedOnly, presetRules } from '@harnessboard/shared';
-import type { AgentsUpdate, CreateTaskInput, TaskSize } from '@harnessboard/shared';
+import {
+  AGENT_PROVIDERS,
+  DEFAULT_PRESET,
+  PERMISSION_PRESETS,
+  definedOnly,
+  presetRules,
+} from '@harnessboard/shared';
+import type {
+  AgentProvider,
+  AgentsUpdate,
+  CreateTaskInput,
+  DetectedAgent,
+  NewAgentProfile,
+  TaskSize,
+} from '@harnessboard/shared';
 
 /** What `hb loop` adds to the task it creates; `hb add` only sets `confirmPlan`. */
 export interface LoopInput {
@@ -204,6 +217,40 @@ export function agentsUpdate(o: ModelsOptions): AgentsUpdate {
     reviewerModel: orDefault(o.reviewerModel),
     reviewerEffort: orDefault(o.reviewerEffort),
   });
+}
+
+/** The parsed options of {@link withProfileOptions}. */
+export interface AgentsOptions {
+  models?: string;
+  add?: AgentProvider;
+  id?: string;
+  model?: string;
+  effort?: string;
+}
+
+/** Options of `hb agents`, which lists profiles and adds one for a CLI found here. */
+export function withProfileOptions(command: Command): Command {
+  return command
+    .addOption(
+      new Option('--add <provider>', 'add a profile for a CLI found on this machine').choices(
+        AGENT_PROVIDERS,
+      ),
+    )
+    .option('--models <id>', "list the models a profile's CLI offers")
+    .option('--id <id>', 'profile id for --add (default: the command name)')
+    .option('--model <model>', 'model for --add (default: the CLI default)')
+    .option('--effort <level>', 'reasoning effort for --add (default: the CLI default)');
+}
+
+/** The `POST /agents` body `hb agents --add` sends for the CLI it found. */
+export function profileInput(found: DetectedAgent, o: AgentsOptions): NewAgentProfile {
+  return {
+    id: o.id ?? found.command,
+    provider: found.provider,
+    command: found.command,
+    model: o.model ?? null,
+    effort: o.effort ?? null,
+  };
 }
 
 /** Preset ids from a comma-separated list; throws on an unknown id. */

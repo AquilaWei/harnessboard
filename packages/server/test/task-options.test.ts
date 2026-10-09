@@ -1,8 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Command } from 'commander';
 import { describe, expect, it } from 'vitest';
-import { agentsUpdate, taskInput, withAgentOptions, withTaskOptions } from '../src/task-options.js';
-import type { AddOptions, ModelsOptions } from '../src/task-options.js';
+import {
+  agentsUpdate,
+  profileInput,
+  taskInput,
+  withAgentOptions,
+  withProfileOptions,
+  withTaskOptions,
+} from '../src/task-options.js';
+import type { AddOptions, AgentsOptions, ModelsOptions } from '../src/task-options.js';
 
 /** The request `hb add` would send for these arguments. */
 const parse = (...args: string[]) => {
@@ -89,6 +96,36 @@ describe('hb models options', () => {
     expect(parseModels('--model', 'default', '--tester', 'none')).toEqual({
       implementerModel: null,
       tester: null,
+    });
+  });
+});
+
+/** The `POST /agents` body `hb agents --add codex` would send for these arguments. */
+const parseAdd = (...args: string[]) => {
+  const command = withProfileOptions(new Command('agents')).exitOverride();
+  command.parse(['--add', 'codex', ...args], { from: 'user' });
+  const found = { provider: 'codex' as const, command: 'codex', version: '1', profileId: null };
+  return profileInput(found, command.opts<AgentsOptions>());
+};
+
+describe('agents --add options', () => {
+  it('send --effort as the profile effort', () => {
+    expect(parseAdd('--effort', 'medium')).toEqual({
+      id: 'codex',
+      provider: 'codex',
+      command: 'codex',
+      model: null,
+      effort: 'medium',
+    });
+  });
+
+  it('leave the effort to the CLI without --effort', () => {
+    expect(parseAdd('--id', 'cx', '--model', 'gpt-6-sol')).toEqual({
+      id: 'cx',
+      provider: 'codex',
+      command: 'codex',
+      model: 'gpt-6-sol',
+      effort: null,
     });
   });
 });

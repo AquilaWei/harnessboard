@@ -595,6 +595,9 @@ export const en = {
     provider: 'Provider',
     model: 'Model',
     defaultModel: 'CLI default',
+    effort: 'Reasoning effort',
+    effortHint:
+      "A profile's reasoning effort applies when a task leaves the role's effort at Default and runs the profile's own model.",
     state: 'Status',
     detected: 'Found on this machine',
     detectedHint: 'Agent CLIs with no profile yet. Adding one saves it to your config file.',
@@ -1176,6 +1179,8 @@ export const zhTW: typeof en = {
     provider: 'Provider',
     model: '模型',
     defaultModel: 'CLI 預設',
+    effort: '推理深度',
+    effortHint: '任務的角色推理深度維持「預設」且使用設定檔自己的模型時，就套用設定檔的推理深度。',
     state: '狀態',
     detected: '在這台電腦上找到',
     detectedHint: '這些 agent CLI 還沒有 profile。加入後會存進你的設定檔。',

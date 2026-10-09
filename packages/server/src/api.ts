@@ -11,6 +11,7 @@ import type {
   DeletedTask,
   HarnessEvent,
   NewAgentProfile,
+  AgentEffortUpdate,
   PairRequest,
   PairingSetup,
   PasskeySession,
@@ -100,6 +101,9 @@ export function createApi(
   app.get('/agents/:id/models', async (c) => c.json(await harness.models(c.req.param('id'))));
   app.post('/agents', async (c) =>
     c.json(harness.addAgent(await c.req.json<NewAgentProfile>()), 201),
+  );
+  app.put('/agents/:id/effort', async (c) =>
+    c.json(harness.setAgentEffort(c.req.param('id'), await c.req.json<AgentEffortUpdate>())),
   );
 
   app.get('/settings', (c) => c.json(harness.settings()));

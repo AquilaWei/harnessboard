@@ -8,6 +8,7 @@ import {
   ENV_PREFIX,
   PROJECT_CONFIG_FILE,
   assertToolRules,
+  isEffortId,
   resolveThresholds,
 } from '@harnessboard/shared';
 import type { AgentProfile, ContextPolicy } from '@harnessboard/shared';
@@ -183,6 +184,28 @@ export function saveUserAgent(id: string, profile: AgentProfile, file = userConf
   saveUserConfig({ agents: { ...current.agents, [id]: profile } }, file);
 }
 
+/**
+ * Sets or (with `null`) removes one profile's `effort` in the user config file, keeping the
+ * profile's other keys as the file has them. A profile the file does not hold yet (the
+ * default `claude`) is written as `profile`, the one in effect.
+ */
+export function saveUserAgentEffort(
+  id: string,
+  effort: string | null,
+  profile: AgentProfile,
+  file = userConfigFile(),
+): void {
+  const current = (readJsonIfExists(file) as Partial<HarnessConfig> | undefined) ?? {};
+  saveUserAgent(id, withEffort(current.agents?.[id] ?? profile, effort), file);
+}
+
+/** `profile` with `effort` as its default effort, or without one for `null`. */
+export function withEffort(profile: AgentProfile, effort: string | null): AgentProfile {
+  const copy = { ...profile };
+  delete copy.effort;
+  return effort ? { ...copy, effort } : copy;
+}
+
 /** Environment variables override the file; `CLAUDE_PATH` and `MODEL` apply to `claude`. */
 function applyEnv(config: HarnessConfig, env: Env): void {
   const get = (name: string) => env[`${ENV_PREFIX}${name}`];
@@ -265,6 +288,14 @@ export function validate(config: HarnessConfig): void {
       (typeof profile.sandboxImage !== 'string' || profile.sandboxImage.trim() === '')
     ) {
       throw new Error(`config agents.${id}.sandboxImage must name an image for the sandbox`);
+    }
+    if (
+      profile.effort !== undefined &&
+      (typeof profile.effort !== 'string' || !isEffortId(profile.effort))
+    ) {
+      throw new Error(
+        `config agents.${id}.effort must be a reasoning effort such as "high", got ${JSON.stringify(profile.effort)}`,
+      );
     }
   }
   if (config.defaultReviewer !== null && !config.agents[config.defaultReviewer]) {

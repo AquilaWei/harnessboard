@@ -119,4 +119,77 @@ describe('addAgent', () => {
     ).toThrow();
     expect(harness.config.agents.codex).toBeUndefined();
   });
+
+  it('saves the default effort given with the profile', () => {
+    harness.addAgent({
+      id: 'codex',
+      provider: 'codex',
+      command: 'codex',
+      model: null,
+      effort: 'medium',
+    });
+    expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({
+      agents: { codex: { provider: 'codex', command: 'codex', model: null, effort: 'medium' } },
+    });
+  });
+
+  it('rejects an effort that could be read as an option', () => {
+    expect(() =>
+      harness.addAgent({
+        id: 'codex',
+        provider: 'codex',
+        command: 'codex',
+        model: null,
+        effort: '-x',
+      }),
+    ).toThrow('"-x" is not a reasoning effort');
+  });
+});
+
+describe('setAgentEffort', () => {
+  beforeEach(() => open({ 'claude-code': MISSING, codex: MISSING, gemini: MISSING }));
+
+  it('uses the effort for the profile at once', () => {
+    harness.setAgentEffort('claude', { effort: 'high' });
+    expect(harness.config.agents.claude?.effort).toBe('high');
+  });
+
+  it('writes the profile in effect when the file does not hold it yet', () => {
+    harness.setAgentEffort('claude', { effort: 'high' });
+    expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({
+      agents: {
+        claude: { provider: 'claude-code', command: 'claude', model: null, effort: 'high' },
+      },
+    });
+  });
+
+  it("keeps the file's own keys of the profile", () => {
+    const saved = { provider: 'claude-code', command: '/opt/claude', model: 'opus' };
+    writeFileSync(settingsFile, JSON.stringify({ agents: { claude: saved } }));
+    harness.setAgentEffort('claude', { effort: 'max' });
+    expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({
+      agents: { claude: { ...saved, effort: 'max' } },
+    });
+  });
+
+  it('removes the effort with null', () => {
+    harness.setAgentEffort('claude', { effort: 'high' });
+    harness.setAgentEffort('claude', { effort: null });
+    expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({
+      agents: { claude: { provider: 'claude-code', command: 'claude', model: null } },
+    });
+  });
+
+  it('rejects an effort that could be read as an option and changes nothing', () => {
+    expect(() => harness.setAgentEffort('claude', { effort: '-x' })).toThrow(
+      '"-x" is not a reasoning effort',
+    );
+    expect(harness.config.agents.claude?.effort).toBeUndefined();
+  });
+
+  it('rejects a profile that is not configured', () => {
+    expect(() => harness.setAgentEffort('nope', { effort: 'high' })).toThrow(
+      'agent profile "nope" is not configured',
+    );
+  });
 });

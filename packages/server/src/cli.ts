@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import spawn from 'cross-spawn';
-import { Argument, Command, Option } from 'commander';
+import { Argument, Command } from 'commander';
 import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import {
-  AGENT_PROVIDERS,
   APP_NAME,
   DEFAULT_COMMANDS,
   definedOnly,
@@ -12,13 +11,7 @@ import {
   formatDuration,
   presetRules,
 } from '@harnessboard/shared';
-import type {
-  AgentProvider,
-  PermissionRequest,
-  PlanQuestion,
-  TaskUsage,
-  TaskView,
-} from '@harnessboard/shared';
+import type { PermissionRequest, PlanQuestion, TaskUsage, TaskView } from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
 import {
   createEventFormatter,
@@ -36,11 +29,13 @@ import {
   agentsUpdate,
   parseInteger,
   parsePresets,
+  profileInput,
   taskInput,
   withAgentOptions,
+  withProfileOptions,
   withTaskOptions,
 } from './task-options.js';
-import type { AddOptions, LoopInput, ModelsOptions } from './task-options.js';
+import type { AddOptions, AgentsOptions, LoopInput, ModelsOptions } from './task-options.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const FOLLOW_INTERVAL_MS = 500;
@@ -171,54 +166,38 @@ program
     console.log(t('taskStatus', { id, status: task.status }));
   });
 
-interface AgentsOptions {
-  models?: string;
-  add?: AgentProvider;
-  id?: string;
-  model?: string;
-}
-
-program
-  .command('agents')
-  .description('list agent profiles, and agent CLIs found on this machine without one')
-  .addOption(
-    new Option('--add <provider>', 'add a profile for a CLI found on this machine').choices(
-      AGENT_PROVIDERS,
-    ),
-  )
-  .option('--models <id>', "list the models a profile's CLI offers")
-  .option('--id <id>', 'profile id for --add (default: the command name)')
-  .option('--model <model>', 'model for --add (default: the CLI default)')
-  .action(async (o: AgentsOptions) => {
-    const api = client();
-    if (o.models) {
-      const models = await api.agentModels(o.models);
-      if (models.length === 0) console.log(t('noModelList', { id: o.models }));
-      for (const line of models.flatMap(formatModel)) console.log(line);
-      return;
+withProfileOptions(
+  program
+    .command('agents')
+    .description('list agent profiles, and agent CLIs found on this machine without one'),
+).action(async (o: AgentsOptions) => {
+  const api = client();
+  if (o.models) {
+    const models = await api.agentModels(o.models);
+    if (models.length === 0) console.log(t('noModelList', { id: o.models }));
+    for (const line of models.flatMap(formatModel)) console.log(line);
+    return;
+  }
+  if (o.add) {
+    const provider = o.add;
+    const found = (await api.detectAgents()).find((d) => d.provider === provider);
+    if (!found) {
+      throw new Error(t('agentNotDetected', { provider, command: DEFAULT_COMMANDS[provider] }));
     }
-    if (o.add) {
-      const provider = o.add;
-      const found = (await api.detectAgents()).find((d) => d.provider === provider);
-      if (!found) {
-        throw new Error(t('agentNotDetected', { provider, command: DEFAULT_COMMANDS[provider] }));
-      }
-      const id = o.id ?? found.command;
-      await api.addAgent({ id, provider, command: found.command, model: o.model ?? null });
-      console.log(
-        t('agentAdded', { id, provider, command: found.command, file: userConfigFile() }),
-      );
-      return;
-    }
-    for (const a of await api.agents()) {
-      const state = a.ok ? `✓ ${a.version ?? ''}` : `✗ ${a.error ?? ''}`;
-      const model = a.profile.model ?? t('defaultModel');
-      console.log(
-        `${a.id.padEnd(12)} ${a.profile.provider.padEnd(12)} ${model.padEnd(14)} ${state}`,
-      );
-    }
-    printUnconfigured(await api.detectAgents());
-  });
+    const input = profileInput(found, o);
+    await api.addAgent(input);
+    console.log(
+      t('agentAdded', { id: input.id, provider, command: found.command, file: userConfigFile() }),
+    );
+    return;
+  }
+  for (const a of await api.agents()) {
+    const state = a.ok ? `✓ ${a.version ?? ''}` : `✗ ${a.error ?? ''}`;
+    const model = a.profile.model ?? t('defaultModel');
+    console.log(`${a.id.padEnd(12)} ${a.profile.provider.padEnd(12)} ${model.padEnd(14)} ${state}`);
+  }
+  printUnconfigured(await api.detectAgents());
+});
 
 program
   .command('ls')

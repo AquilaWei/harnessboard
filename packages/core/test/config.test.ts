@@ -102,6 +102,22 @@ describe('loadConfig', () => {
     );
   });
 
+  it('loads a profile with a reasoning effort', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const deep = { provider: 'codex', command: 'codex', model: 'gpt-6-sol', effort: 'high' };
+    writeFileSync(file, JSON.stringify({ agents: { deep } }));
+    expect(loadConfig({ env: {}, configFile: file }).agents.deep?.effort).toBe('high');
+  });
+
+  it('rejects a profile effort that could be read as an option, naming the profile', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const deep = { provider: 'codex', command: 'codex', model: null, effort: '-x' };
+    writeFileSync(file, JSON.stringify({ agents: { deep } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      'config agents.deep.effort must be a reasoning effort such as "high", got "-x"',
+    );
+  });
+
   it('accepts a docker sandbox with an image', () => {
     const file = path.join(tempDir('cfg'), 'config.json');
     const boxed = {

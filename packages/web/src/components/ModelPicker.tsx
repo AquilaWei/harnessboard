@@ -73,7 +73,6 @@ export function ModelPicker({ agent, value, effort, onChange, label }: Props) {
     models?.find((m) => m.id === (id ?? agent?.profile.model));
   const efforts = custom ? [] : (effective(value)?.efforts ?? []);
   const defaultEffort = custom ? null : (effective(value)?.defaultEffort ?? null);
-  const defaultName = efforts.find((e) => e.id === defaultEffort)?.name ?? defaultEffort;
 
   /** Keeps the effort only when the newly chosen model offers it too. */
   const chooseModel = (next: string | null, typed: boolean) => {
@@ -129,20 +128,55 @@ export function ModelPicker({ agent, value, effort, onChange, label }: Props) {
       {efforts.length > 0 && (
         <label className="field">
           <span>{t('models.effort')}</span>
-          <select value={effort ?? ''} onChange={(e) => onChange(value, e.target.value || null)}>
-            <option value="">
-              {defaultName
-                ? t('models.effortDefaultKnown', { effort: effortName(defaultName) })
-                : t('models.effortDefault')}
-            </option>
-            {efforts.map((option) => (
-              <option key={option.id} value={option.id} title={option.description ?? undefined}>
-                {effortLabel(option)}
-              </option>
-            ))}
-          </select>
+          <EffortSelect
+            efforts={efforts}
+            defaultEffort={defaultEffort}
+            value={effort}
+            onChange={(next) => onChange(value, next)}
+          />
         </label>
       )}
     </>
+  );
+}
+
+interface EffortSelectProps {
+  /** What the model offers; the caller hides the select when it offers none. */
+  efforts: EffortInfo[];
+  /** The level the CLI uses without one, named in the "Default" option when known. */
+  defaultEffort: string | null;
+  /** `null` leaves the effort to the CLI. */
+  value: string | null;
+  onChange: (effort: string | null) => void;
+  label?: string;
+}
+
+/** "Default" and then each reasoning effort a model offers. */
+export function EffortSelect({
+  efforts,
+  defaultEffort,
+  value,
+  onChange,
+  label,
+}: EffortSelectProps) {
+  const { t } = useTranslation();
+  const defaultName = efforts.find((e) => e.id === defaultEffort)?.name ?? defaultEffort;
+  return (
+    <select
+      aria-label={label}
+      value={value ?? ''}
+      onChange={(e) => onChange(e.target.value || null)}
+    >
+      <option value="">
+        {defaultName
+          ? t('models.effortDefaultKnown', { effort: effortName(defaultName) })
+          : t('models.effortDefault')}
+      </option>
+      {efforts.map((option) => (
+        <option key={option.id} value={option.id} title={option.description ?? undefined}>
+          {effortLabel(option)}
+        </option>
+      ))}
+    </select>
   );
 }

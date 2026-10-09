@@ -11,6 +11,11 @@ export interface AgentProfile {
   command: string;
   /** Passed to the CLI's model option; `null` keeps the CLI default. */
   model: string | null;
+  /**
+   * Reasoning effort passed to the CLI when a task leaves the role's effort unset and the
+   * session runs this profile's own model. Absent: the CLI's default.
+   */
+  effort?: string;
   /** Used when the CLI does not report its context window. */
   contextWindow?: number;
   /**
@@ -157,6 +162,14 @@ export interface NewAgentProfile {
   provider: AgentProvider;
   command: string;
   model: string | null;
+  /** The profile's default reasoning effort; absent or `null` keeps the CLI default. */
+  effort?: string | null;
+}
+
+/** A change to a profile's default reasoning effort (`PUT /api/agents/:id/effort`). */
+export interface AgentEffortUpdate {
+  /** `null` removes it, so the CLI's default applies again. */
+  effort: string | null;
 }
 
 /**

@@ -76,7 +76,7 @@
         "`hb agents --add codex --effort medium` sends `effort: 'medium'` in `POST /api/agents`.",
         "The verify command passes."
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "F7",

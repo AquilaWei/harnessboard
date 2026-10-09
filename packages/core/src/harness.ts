@@ -19,10 +19,12 @@ import {
   roleModel,
 } from '@harnessboard/shared';
 import type {
+  AgentEffortUpdate,
   AgentEvent,
   AgentInfo,
   AgentProfile,
   AgentProvider,
+  AgentRole,
   DetectedAgent,
   ModelInfo,
   NewAgentProfile,
@@ -67,6 +69,8 @@ import {
   EDITABLE_SETTINGS,
   loadProjectConfig,
   saveUserAgent,
+  saveUserAgentEffort,
+  withEffort,
   saveUserConfig,
   validate,
 } from './config.js';
@@ -274,7 +278,7 @@ export class Harness {
   /**
    * Adds an agent profile and saves it to the user config file, so it can be picked for
    * tasks at once. Throws when the id is invalid or taken, the provider is unknown, the
-   * command is empty, or the model is not a model id; nothing changes then.
+   * command is empty, or the model or effort is not valid; nothing changes then.
    */
   addAgent(input: NewAgentProfile): AgentProfile {
     // Input comes from HTTP as well, so its field types are checked rather than trusted.
@@ -288,10 +292,26 @@ export class Harness {
     if (model !== null && !isModelId(model)) {
       throw new Error(`invalid model id: ${JSON.stringify(model)}`);
     }
-    const profile: AgentProfile = { provider, command, model };
+    const effort = effortOrNull(input.effort);
+    const profile: AgentProfile = { provider, command, model, ...(effort ? { effort } : {}) };
     validate({ ...this.config, agents: { ...this.config.agents, [id]: profile } });
     this.config.agents[id] = profile;
     if (this.settingsFile) saveUserAgent(id, profile, this.settingsFile);
+    return profile;
+  }
+
+  /**
+   * Sets or (with `null`) removes a profile's default reasoning effort and saves it to the
+   * user config file; sessions started from then on use it. Throws when the profile is not
+   * configured or the effort is not an effort id; nothing changes then.
+   */
+  setAgentEffort(agentId: string, update: AgentEffortUpdate): AgentProfile {
+    const current = this.config.agents[agentId];
+    if (!current) throw new Error(`agent profile "${agentId}" is not configured`);
+    const effort = effortOrNull(update.effort);
+    const profile = withEffort(current, effort);
+    this.config.agents[agentId] = profile;
+    if (this.settingsFile) saveUserAgentEffort(agentId, effort, profile, this.settingsFile);
     return profile;
   }
 
@@ -1510,7 +1530,7 @@ export class Harness {
         resume: plan.resume !== null,
         prompt: plan.prompt,
         model: roleModel(task.agents, plan.role) ?? this.config.agents[plan.agentId]!.model,
-        effort: roleEffort(task.agents, plan.role),
+        effort: sessionEffort(task.agents, plan.role, this.config.agents[plan.agentId]!),
         access: plan.access,
         // A read-only session may run the task's own check, but nothing that edits.
         allowedTools:
@@ -1745,6 +1765,18 @@ function effortOrNull(effort: string | null | undefined): string | null {
     throw new Error(`"${trimmed}" is not a reasoning effort; use e.g. low, medium or high`);
   }
   return trimmed;
+}
+
+/**
+ * The effort a session of `role` runs with: the task's choice for the role, else the
+ * profile's default effort while the session runs the profile's own model (another model
+ * may not offer that level), else `null` for the CLI's default.
+ */
+function sessionEffort(agents: TaskAgents, role: AgentRole, profile: AgentProfile): string | null {
+  const chosen = roleEffort(agents, role);
+  if (chosen) return chosen;
+  const model = roleModel(agents, role);
+  return model === null || model === profile.model ? (profile.effort ?? null) : null;
 }
 
 function withTool(tools: string[], rule: string): string[] {

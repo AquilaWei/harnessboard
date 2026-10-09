@@ -460,6 +460,24 @@ describe('agents API', () => {
     );
     expect(await res.json()).toEqual({ error: 'agent profile "checker" already exists' });
   });
+
+  it("sets a profile's default effort", async () => {
+    const res = await app.request('/api/agents/checker/effort', {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ effort: 'high' }),
+    });
+    expect(((await res.json()) as { effort?: string }).effort).toBe('high');
+  });
+
+  it('rejects an effort that is not one with 400', async () => {
+    const res = await app.request('/api/agents/checker/effort', {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ effort: '-x' }),
+    });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('reviewed tasks', () => {
