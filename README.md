@@ -62,6 +62,12 @@ Codex profiles use `codex app-server` (checked with CLI 0.162.0). Sandbox approv
 requests appear on the board, and the Git preset lets approved commits stay in the task's
 worktree. See [agent permissions](docs/configuration.md#config-files-agents-and-permissions).
 
+Task summaries include Codex cost estimates in USD at standard short-context API prices,
+with separate input, cache and output rates. These are comparisons, not subscription charges.
+Older records with a known model and token counts are estimated when read; records that
+only identify the model as `codex`, or have no verified price, stay unpriced. See
+[usage estimates](docs/configuration.md#usage-estimates) for the pricing basis and limitations.
+
 ## Install
 
 No prebuilt installers are published at the moment, so you build it once from the source:

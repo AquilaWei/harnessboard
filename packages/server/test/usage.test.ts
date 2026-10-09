@@ -85,4 +85,149 @@ describe('taskUsage', () => {
   it('has no tokens or cost for a task without usage records', () => {
     expect([usage().tokens, usage().costUsd]).toEqual([null, null]);
   });
+
+  it('estimates historical model usage without rewriting the stored record', () => {
+    const record = {
+      ...run(100, 0, 0, 0),
+      agentId: 'codex',
+      usage: {
+        costUsd: null,
+        models: {
+          'gpt-6.1-sol': {
+            input: 1000000,
+            output: 100000,
+            cacheRead: 200000,
+            cacheWrite: 0,
+            costUsd: null,
+          },
+        },
+      },
+    };
+    store.appendEvent(id, 's1', 'usage', record);
+    expect(usage().costUsd).toBeCloseTo(3.02);
+    expect(usage().byModel['gpt-6.1-sol']?.costUsd).toBeCloseTo(3.02);
+    expect(store.eventsOfKind(id, 'usage')[0]?.data).toEqual(record);
+  });
+
+  it('preserves a recorded model cost even when its current price differs', () => {
+    store.appendEvent(id, 's1', 'usage', {
+      ...run(100, 0, 0, 0),
+      usage: {
+        costUsd: 7,
+        models: {
+          'gpt-6.1-sol': {
+            input: 1000000,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            costUsd: 7,
+          },
+        },
+      },
+    });
+    expect(usage().costUsd).toBe(7);
+  });
+
+  it('leaves historical generic Codex usage unpriced', () => {
+    store.appendEvent(id, 's1', 'usage', {
+      ...run(100, 0, 0, 0),
+      usage: {
+        costUsd: null,
+        models: {
+          codex: {
+            input: 1000000,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            costUsd: null,
+          },
+        },
+      },
+    });
+    expect(usage().costUsd).toBeNull();
+  });
+
+  it('prices only the latest cumulative historical report', () => {
+    store.appendEvent(id, 's1', 'usage', {
+      ...run(100, 0, 0, 0),
+      usage: {
+        costUsd: null,
+        models: {
+          'gpt-6.1-sol': {
+            input: 1000000,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            costUsd: null,
+          },
+        },
+      },
+    });
+    store.appendEvent(id, 's1', 'usage', {
+      ...run(100, 0, 0, 0),
+      usage: {
+        costUsd: null,
+        models: {
+          'gpt-6.1-sol': {
+            input: 2000000,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            costUsd: null,
+          },
+        },
+      },
+    });
+    expect(usage().costUsd).toBe(4);
+  });
+
+  it('banks historical cost when cumulative tokens reset', () => {
+    store.appendEvent(id, 's1', 'usage', {
+      ...run(100, 0, 0, 0),
+      usage: {
+        costUsd: null,
+        models: {
+          'gpt-6.1-sol': {
+            input: 2000000,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            costUsd: null,
+          },
+        },
+      },
+    });
+    store.appendEvent(id, 's1', 'usage', {
+      ...run(100, 0, 0, 0),
+      usage: {
+        costUsd: null,
+        models: {
+          'gpt-6.1-sol': {
+            input: 1000000,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            costUsd: null,
+          },
+        },
+      },
+    });
+    expect(usage().costUsd).toBe(6);
+  });
+
+  it('combines recorded and estimated model costs while keeping unknown models unpriced', () => {
+    store.appendEvent(id, 's1', 'usage', run(100, 10, 40, 0.02));
+    store.appendEvent(id, 's2', 'usage', {
+      ...run(100, 0, 0, 0),
+      usage: {
+        costUsd: null,
+        models: {
+          'gpt-6.1-sol': { input: 1000000, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: null },
+          codex: { input: 1000000, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: null },
+        },
+      },
+    });
+    expect(usage().costUsd).toBeCloseTo(2.02);
+    expect(usage().byModel.codex?.costUsd).toBeNull();
+  });
 });

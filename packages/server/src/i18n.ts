@@ -30,7 +30,7 @@ const en = {
   contextLine: 'context {pct}% of {window} (compact {compact}%, soft {soft}%, hard {hard}%)',
   usageTokens:
     'usage: {total} tokens (in {input}, out {output}, cache read {cacheRead}, cache write {cacheWrite})',
-  usageCost: '~{cost} at API prices',
+  usageCost: '~{cost} at API prices (Codex: standard short-context rates)',
   usageTime: 'agent {agent}, elapsed {elapsed}, runs: {runs}',
   usageNone: 'usage: not recorded',
   loopLine: 'features {verified}/{total} verified',
@@ -114,7 +114,7 @@ const zhTW: Messages = {
   contextLine: '上下文 {pct}%／{window}（壓縮 {compact}%，收尾 {soft}%，強制 {hard}%）',
   usageTokens:
     '用量：{total} tokens（輸入 {input}、輸出 {output}、快取讀 {cacheRead}、快取寫 {cacheWrite}）',
-  usageCost: '約 {cost}（API 價格估算）',
+  usageCost: '約 {cost}（API 價格估算；Codex 採標準短上下文單價）',
   usageTime: 'agent {agent}，總歷時 {elapsed}，執行 {runs} 次',
   usageNone: '用量：未記錄',
   loopLine: 'feature 已驗證 {verified}/{total}',

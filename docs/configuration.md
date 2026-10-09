@@ -24,6 +24,27 @@ and is not cut off, and the turn finishes and is compacted. Only a context at 90
 ends a turn early, so a runaway turn can not overflow the window. With compaction off, or for
 an agent that can not be compacted, the soft and hard thresholds apply within the turn.
 
+## Usage estimates
+
+Codex task summaries estimate USD using a bundled price table checked on October 9, 2026
+against [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) and the
+linked model pages. The table covers GPT-6.1 Sol, GPT-6 Sol/Astra/Luna, GPT-5.6
+Sol/Terra/Luna, GPT-5.5, GPT-5/5.1/5.2/5.3 Codex and `codex-mini-latest`.
+Prices are standard short-context rates; estimates exclude long-context premiums,
+Fast/Ultrafast processing, regional surcharges and separate tool fees. The price table is
+updated with the application, without fetching prices during a task.
+
+Input, cached input, cache writes and output are counted separately. Output already
+includes reasoning tokens. Models before GPT-5.6 use the regular input rate for cache
+writes. Subscriptions are not charged per token.
+
+New runs store the resolved model and estimate. Historical records with a known model,
+token counts and no model cost are estimated when read, without rewriting the database;
+recorded model costs are preserved. Records named only `codex` and unknown models stay
+unpriced. A task containing unpriced models totals only its known costs; unpriced rows
+remain blank. Resumed conversations use the latest cumulative report rather than adding
+each report again.
+
 ## Config files, agents and permissions
 
 Settings are layered, and later layers win: built-in defaults < user config file <

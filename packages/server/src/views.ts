@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { contextPct, resolveThresholds, toQuestions } from '@harnessboard/shared';
+import {
+  contextPct,
+  estimateCodexCost,
+  resolveThresholds,
+  toQuestions,
+} from '@harnessboard/shared';
 import type {
   ChatEnd,
   ChatEntry,
@@ -109,10 +114,11 @@ export function taskUsage(
 function addModels(into: ModelTotals, models: ModelTotals): void {
   for (const [model, m] of Object.entries(models)) {
     const sum = into[model] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: null };
+    const costUsd = m.costUsd ?? estimateCodexCost(model, m);
     into[model] = {
       ...sumTokens([sum, m]),
       costUsd:
-        sum.costUsd === null && m.costUsd === null ? null : (sum.costUsd ?? 0) + (m.costUsd ?? 0),
+        sum.costUsd === null && costUsd === null ? null : (sum.costUsd ?? 0) + (costUsd ?? 0),
     };
   }
 }

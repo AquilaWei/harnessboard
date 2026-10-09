@@ -260,7 +260,8 @@ export const en = {
     tokenParts:
       '{{total}} (in {{input}}, out {{output}}, cache read {{cacheRead}}, cache write {{cacheWrite}})',
     cost: 'Estimated cost',
-    costHint: '(API prices; your subscription is not charged per token)',
+    costHint:
+      '(API prices; Codex uses standard short-context rates; your subscription is not charged per token)',
     agentTime: 'Agent time',
     runs_one: '{{time}} in {{count}} run',
     runs_other: '{{time}} over {{count}} runs',
@@ -857,7 +858,7 @@ export const zhTW: typeof en = {
     tokenParts:
       '{{total}}（輸入 {{input}}、輸出 {{output}}、快取讀 {{cacheRead}}、快取寫 {{cacheWrite}}）',
     cost: '估算金額',
-    costHint: '（以 API 價格估算；訂閱不會按 token 計費）',
+    costHint: '（以 API 價格估算；Codex 採標準短上下文單價；訂閱不會按 token 計費）',
     agentTime: 'Agent 執行時間',
     runs_one: '{{time}}，共 {{count}} 次執行',
     runs_other: '{{time}}，共 {{count}} 次執行',

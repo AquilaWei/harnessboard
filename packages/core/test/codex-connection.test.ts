@@ -24,7 +24,7 @@ describe('Codex approval transport', () => {
     expect(adapter.capabilities.permissionPrompts).toBe(true);
   });
 
-  function connect(overrides: Partial<SessionSpec> = {}) {
+  function connect(overrides: Partial<SessionSpec> = {}, resolvedModel = 'test-model') {
     const messages: Record<string, unknown>[] = [];
     const adapter = new CodexAdapter('codex');
     const connection = adapter.createConnection({ ...spec, ...overrides }, (line) =>
@@ -32,15 +32,15 @@ describe('Codex approval transport', () => {
     );
     connection.start();
     connection.parseLine(JSON.stringify({ id: 'hb:init', result: {} }));
-    connection.parseLine(
+    const init = connection.parseLine(
       JSON.stringify({
         id: 'hb:thread',
-        result: { thread: { id: 'thread' }, model: 'test-model' },
+        result: { thread: { id: 'thread' }, model: resolvedModel },
       }),
     );
     const emit = (method: string, params: unknown, id?: string | number) =>
       connection.parseLine(JSON.stringify({ method, params, ...(id !== undefined ? { id } : {}) }));
-    return { adapter, connection, messages, emit };
+    return { adapter, connection, messages, emit, init };
   }
 
   it('waits for initialization before starting the thread and turn', () => {
@@ -331,6 +331,46 @@ describe('Codex approval transport', () => {
         JSON.stringify({ id: 'hb:thread', error: { message: 'Thread not found' } }),
       ),
     ).toMatchObject([{ kind: 'result', isError: true, text: 'Thread not found' }]);
+  });
+
+  it('prices usage with the resolved default model, including cache writes', () => {
+    const { init, emit } = connect({ model: null }, 'gpt-6.1-sol');
+    expect(init).toMatchObject([{ kind: 'init', model: 'gpt-6.1-sol' }]);
+    emit('thread/tokenUsage/updated', {
+      tokenUsage: {
+        total: {
+          inputTokens: 1000000,
+          cachedInputTokens: 200000,
+          cacheWriteInputTokens: 100000,
+          outputTokens: 100000,
+          reasoningOutputTokens: 50000,
+        },
+      },
+    });
+    expect(emit('turn/completed', { turn: { status: 'completed' } })).toMatchObject([
+      {
+        usage: {
+          costUsd: 2.67,
+          models: {
+            'gpt-6.1-sol': {
+              input: 700000,
+              cacheRead: 200000,
+              cacheWrite: 100000,
+              output: 100000,
+              costUsd: 2.67,
+            },
+          },
+        },
+      },
+    ]);
+  });
+
+  it('uses the requested model when a resumed thread omits its model', () => {
+    const { emit } = connect({ model: 'gpt-6-sol', resume: true, sessionId: 'thread' }, '');
+    emit('thread/tokenUsage/updated', { tokenUsage: { total: { outputTokens: 100000 } } });
+    expect(emit('turn/completed', { turn: { status: 'completed' } })).toMatchObject([
+      { usage: { costUsd: 1, models: { 'gpt-6-sol': { costUsd: 1 } } } },
+    ]);
   });
 
   it('reports a usage-limit failure so the scheduler can retry it', () => {

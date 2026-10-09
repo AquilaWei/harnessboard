@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { AgentEvent, RunUsage } from '@harnessboard/shared';
+import { estimateCodexCost } from '@harnessboard/shared';
 import type { AgentConnection, PermissionReply, SessionSpec } from './agent.js';
 import { riskOf } from './risk.js';
 
@@ -14,6 +15,7 @@ const wire = (value: unknown): string => JSON.stringify(value) + '\n';
 /** App-server v2 stdio lifecycle, checked against the installed Codex CLI 0.162 schema. */
 export function codexConnection(spec: SessionSpec, write: (data: string) => void): AgentConnection {
   let threadId: string | null = null;
+  let model = spec.model || 'codex';
   let finalText = '';
   let usage: RunUsage | null = null;
   let window: number | null = null;
@@ -43,6 +45,7 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
       const result = fields(msg.result);
       threadId = string(fields(result.thread).id);
       if (!threadId) return [failed({ message: 'Codex app-server returned no thread id' })];
+      model = string(result.model) || spec.model || 'codex';
       // Keep user-configured writable roots, network and read restrictions from the
       // effective thread policy instead of replacing them with a hard-coded sandbox.
       const sandbox = fields(result.sandbox);
@@ -73,9 +76,7 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
           input: [{ type: 'text', text: spec.prompt }],
         },
       });
-      return [
-        { kind: 'init', sessionId: threadId, model: string(result.model) || spec.model || 'codex' },
-      ];
+      return [{ kind: 'init', sessionId: threadId, model }];
     }
     return [];
   }
@@ -122,7 +123,7 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
       error = fields(params.error);
     } else if (method === 'thread/tokenUsage/updated') {
       const tokens = fields(params.tokenUsage);
-      usage = tokenUsage(fields(tokens.total), spec.model || 'codex');
+      usage = tokenUsage(fields(tokens.total), model);
       window = typeof tokens.modelContextWindow === 'number' ? tokens.modelContextWindow : null;
     } else if (method === 'item/started' || method === 'item/completed') {
       const item = fields(params.item);
@@ -359,17 +360,19 @@ function toolEvents(item: Fields, completed: boolean): AgentEvent[] {
 
 function tokenUsage(total: Fields, model: string): RunUsage {
   const count = (key: string) => (typeof total[key] === 'number' ? total[key] : 0);
+  const tokens = {
+    input: Math.max(
+      0,
+      count('inputTokens') - count('cachedInputTokens') - count('cacheWriteInputTokens'),
+    ),
+    output: count('outputTokens'),
+    cacheRead: count('cachedInputTokens'),
+    cacheWrite: count('cacheWriteInputTokens'),
+  };
+  const costUsd = estimateCodexCost(model, tokens);
   return {
-    costUsd: null,
-    models: {
-      [model]: {
-        input: Math.max(0, count('inputTokens') - count('cachedInputTokens')),
-        output: count('outputTokens'),
-        cacheRead: count('cachedInputTokens'),
-        cacheWrite: count('cacheWriteInputTokens'),
-        costUsd: null,
-      },
-    },
+    costUsd,
+    models: { [model]: { ...tokens, costUsd } },
   };
 }
 

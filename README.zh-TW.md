@@ -55,6 +55,11 @@
 Codex 使用 `codex app-server`（以 CLI 0.162.0 驗證）。需要沙盒外權限的請求會顯示在看板上；
 Git 預設授權可讓提交留在任務的 worktree。詳見[代理程式與權限設定](docs/configuration.md#config-files-agents-and-permissions)。
 
+任務摘要會以標準短上下文 API 單價估算 Codex 金額（美元），分開計算輸入、快取與輸出。
+這是比較用的估算，訂閱不會按 token 計費。有明確模型與 token 數的舊紀錄會在讀取時補算；
+只記為 `codex` 或沒有已確認單價的模型維持未記錄。計價基準與限制詳見
+[用量估算](docs/configuration.md#usage-estimates)。
+
 ## 安裝
 
 目前沒有發佈預先打包好的安裝檔，所以要從原始碼建置一次：

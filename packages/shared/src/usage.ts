@@ -9,12 +9,12 @@ export interface TokenCounts {
 }
 
 /**
- * Tokens and estimated cost an agent CLI reports for one conversation. Claude Code's totals
+ * Tokens and reported or estimated cost for one conversation. Claude Code's totals
  * are cumulative for the conversation, also across resumes; a later snapshot replaces an
  * earlier one rather than adding to it.
  */
 export interface RunUsage {
-  /** USD at API list prices; a subscription is not charged per token. */
+  /** USD at API list prices; Codex uses standard short-context rates. Subscriptions are not charged per token. */
   costUsd: number | null;
   models: Record<string, TokenCounts & { costUsd: number | null }>;
 }
