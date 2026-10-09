@@ -11,7 +11,7 @@ Build in order; each feature is one session. See `feature_list.json` for accepta
 | F1  | Shared types + catalogs list each model's effort levels               | done   |
 | F2  | Adapters pass `effort` to the CLI (`--effort`, Codex `turn/start`)    | done   |
 | F3  | Tasks store effort per role; harness and API use it                   | done   |
-| F4  | Web board: effort selector next to every model picker (en + zh-TW)    | todo   |
+| F4  | Web board: effort selector next to every model picker (en + zh-TW)    | done   |
 | F5  | CLI: `--*-effort` options, `hb models`, `hb agents --models`          | todo   |
 | F6  | Profile default effort (config, Settings, `hb agents --add --effort`) | todo   |
 | F7  | Docs, READMEs, CHANGELOG                                              | todo   |
@@ -89,6 +89,22 @@ turn with `effort` is accepted by the app-server. Spend real runs sparingly.
   does not clear its effort; the web/CLI send the model with it anyway. Old tasks without
   effort keys run with no `--effort` (tested by overwriting the stored agents).
   Verify: 1424 passed, 14 skipped.
+- **F4 (done):** `ModelPicker` now renders a second field, "Reasoning effort", after the model
+  select, and its `onChange` takes `(model, effort)`. The options come from the _effective_
+  model: the chosen one, or the profile's own `model` when "Profile default" is kept (hidden
+  when the profile names no model or the id is typed by hand). Switching model keeps the
+  effort only when the new model offers it; picking "Other model id…" clears it. "Default"
+  shows `Default (<name>)` only when `defaultEffort` is known (so never for Claude). Effort
+  names get their first letter raised (Codex names are lowercase ids); the effort's
+  description goes in the option's `title`. `AgentFields`/`AgentChoice` carry the five
+  `*Effort` fields and a profile change resets them; `NewTaskDialog` sends them (null for an
+  unused role) and `TaskAgentsEditor` sends them and shows `· High` after the model in its
+  summary (the stored id with its first letter raised, since the summary has no model list:
+  `xhigh` shows as `Xhigh`, not `Extra`). Hiding for Gemini: `Harness.models` now drops
+  `efforts`/`defaultEffort` when the adapter's `capabilities.effort` is false, so the board
+  needs no capability field in the API. Tests: `packages/web/test/effort.test.tsx`, one new
+  case in `core/test/models.test.ts`.
+  Verify: 1440 passed, 14 skipped.
 
 ## Open questions
 

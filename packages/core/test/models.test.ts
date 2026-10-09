@@ -191,11 +191,16 @@ describe('Harness.models', () => {
   let calls = 0;
   let harness: Harness;
 
-  function open(listModels?: () => Promise<ModelInfo[]>): void {
+  function open(listModels?: () => Promise<ModelInfo[]>, effort = true): void {
     const dir = tempDir('models');
     const config = { ...defaultConfig({}), dataDir: path.join(dir, 'data') };
-    const adapterFactory = (profile: AgentProfile) =>
-      Object.assign(new ClaudeCodeAdapter(profile.command), { listModels });
+    const adapterFactory = (profile: AgentProfile) => {
+      const adapter = new ClaudeCodeAdapter(profile.command);
+      return Object.assign(adapter, {
+        listModels,
+        capabilities: { ...adapter.capabilities, effort },
+      });
+    };
     harness = Harness.open(config, { adapterFactory });
   }
 
@@ -203,6 +208,22 @@ describe('Harness.models', () => {
 
   it("returns the profile CLI's models", async () => {
     open(() => Promise.resolve(listed));
+    expect(await harness.models('claude')).toEqual(listed);
+  });
+
+  it("drops the models' efforts when the CLI can not take an effort", async () => {
+    const withEfforts: ModelInfo[] = [
+      {
+        id: 'm1',
+        name: 'Model 1',
+        description: null,
+        note: null,
+        more: false,
+        efforts: [{ id: 'high', name: 'High', description: null, note: null }],
+        defaultEffort: 'high',
+      },
+    ];
+    open(() => Promise.resolve(withEfforts), false);
     expect(await harness.models('claude')).toEqual(listed);
   });
 

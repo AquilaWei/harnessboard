@@ -52,7 +52,7 @@
         "Every new i18n key exists in both en and zh-TW (the i18n test enforces this).",
         "The verify command passes."
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "F5",

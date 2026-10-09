@@ -310,6 +310,10 @@ export class Harness {
     } catch {
       // An older CLI without a model catalog: the picker offers typing an id instead.
     }
+    // The board offers an effort only from this list, so a CLI that ignores it offers none.
+    if (!adapter.capabilities.effort) {
+      models = models.map((m) => ({ ...m, efforts: [], defaultEffort: null }));
+    }
     this.modelLists.set(agentId, { at: Date.now(), models });
     return models;
   }

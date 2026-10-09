@@ -157,10 +157,13 @@ export const en = {
     profile: 'Profile default ({{model}})',
     profileShort: 'profile default',
     liveHint:
-      'The agent is working: models apply from its next session, and agents can be changed once it stops.',
+      'The agent is working: models and efforts apply from its next session, and agents can be changed once it stops.',
     custom: 'Other model id…',
     invalid: 'Not a model id: use letters, digits and - . : / @ [ ], e.g. claude-opus-5-5.',
     more: 'More models',
+    effort: 'Reasoning effort',
+    effortDefault: 'Default',
+    effortDefaultKnown: 'Default ({{effort}})',
   },
   commits: {
     title_one: '{{count}} commit',
@@ -750,10 +753,14 @@ export const zhTW: typeof en = {
   models: {
     profile: '設定檔預設（{{model}}）',
     profileShort: '設定檔預設',
-    liveHint: '代理程式正在工作：模型從下一個 session 開始套用；要換 agent 請先停止任務。',
+    liveHint:
+      '代理程式正在工作：模型與推理深度從下一個 session 開始套用；要換 agent 請先停止任務。',
     custom: '其他模型 ID…',
     invalid: '不是模型 ID：只能用英數字和 - . : / @ [ ]，例如 claude-opus-5-5。',
     more: '更多模型',
+    effort: '推理深度',
+    effortDefault: '預設',
+    effortDefaultKnown: '預設（{{effort}}）',
   },
   commits: {
     title_one: '{{count}} 個 commit',
