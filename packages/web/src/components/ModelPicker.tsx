@@ -154,7 +154,10 @@ interface EffortSelectProps {
   label?: string;
 }
 
-/** "Default" and then each reasoning effort a model offers. */
+/**
+ * "Default" and then each reasoning effort a model offers. A stored effort the model does not
+ * offer is still sent, so it stays listed as chosen until "Default" or another level replaces it.
+ */
 export function EffortSelect({
   efforts,
   defaultEffort,
@@ -164,6 +167,7 @@ export function EffortSelect({
 }: EffortSelectProps) {
   const { t } = useTranslation();
   const defaultName = efforts.find((e) => e.id === defaultEffort)?.name ?? defaultEffort;
+  const unlisted = value !== null && !efforts.some((e) => e.id === value);
   return (
     <select
       aria-label={label}
@@ -175,6 +179,9 @@ export function EffortSelect({
           ? t('models.effortDefaultKnown', { effort: effortName(defaultName) })
           : t('models.effortDefault')}
       </option>
+      {unlisted && (
+        <option value={value}>{t('models.effortUnlisted', { effort: effortName(value) })}</option>
+      )}
       {efforts.map((option) => (
         <option key={option.id} value={option.id} title={option.description ?? undefined}>
           {effortLabel(option)}

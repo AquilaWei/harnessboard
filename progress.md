@@ -145,6 +145,11 @@ turn with `effort` is accepted by the app-server. Spend real runs sparingly.
   profiles) instead of the one in effect, so `HARNESSBOARD_MODEL` / `HARNESSBOARD_CLAUDE_PATH`
   are never saved. Regression tests for all three fail on the old code.
   Verify: 1481 passed, 14 skipped.
+  Second review fix: `EffortSelect` lists a stored effort the model does not offer as its
+  own option ("Max (not offered by this model)") and selects it, instead of showing
+  "Default" while that effort is still sent; choosing Default then clears it. Regression
+  tests in `settings-effort.test.tsx` fail on the old code.
+  Verify: 1483 passed, 14 skipped.
 
 ## Open questions
 

@@ -164,6 +164,7 @@ export const en = {
     effort: 'Reasoning effort',
     effortDefault: 'Default',
     effortDefaultKnown: 'Default ({{effort}})',
+    effortUnlisted: '{{effort}} (not offered by this model)',
   },
   commits: {
     title_one: '{{count}} commit',
@@ -764,6 +765,7 @@ export const zhTW: typeof en = {
     effort: '推理深度',
     effortDefault: '預設',
     effortDefaultKnown: '預設（{{effort}}）',
+    effortUnlisted: '{{effort}}（此模型未提供）',
   },
   commits: {
     title_one: '{{count}} 個 commit',

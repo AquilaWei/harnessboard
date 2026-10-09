@@ -144,6 +144,23 @@ describe('Settings: profile reasoning effort', () => {
     expect(api.setAgentEffort).not.toHaveBeenCalled();
   });
 
+  it('shows a stored effort the model does not offer as chosen', async () => {
+    api.agents.mockResolvedValue([agent('codex', 'gpt-6-sol', 'max')]);
+    await open();
+    const select = effortSelect()!;
+    expect(select.selectedOptions[0]!.textContent).toBe('Max (not offered by this model)');
+  });
+
+  it('removes a stored effort the model does not offer when Default is chosen', async () => {
+    api.agents.mockResolvedValue([agent('codex', 'gpt-6-sol', 'max')]);
+    await open();
+    // A browser fires no change when Default is already the selected option.
+    expect(effortSelect()!.value).toBe('max');
+    act(() => choose(effortSelect()!, ''));
+    await submit();
+    expect(api.setAgentEffort.mock.calls).toEqual([['codex', null]]);
+  });
+
   it('offers no choice for a profile without a model', async () => {
     api.agents.mockResolvedValue([agent('codex', null)]);
     await open();
