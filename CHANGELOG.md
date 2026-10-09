@@ -3,6 +3,22 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.1 - 2026-10-09
+
+Local debug/test build; live Codex cost display still needs acceptance testing.
+
+### Added
+
+- **Codex estimated costs appear in task summaries.** Input, cache and output tokens
+  use the resolved model's standard short-context API rates in USD. Older records with
+  a known model are estimated when read; recorded costs are preserved and unknown models
+  remain unpriced. Subscription plans are not charged per token.
+
+### Fixed
+
+- **Codex cache writes are counted once.** Cache-write tokens are separated from regular
+  input so they are not charged twice in the estimate.
+
 ## 0.1.0 - 2026-10-09
 
 ### Fixed
