@@ -648,6 +648,89 @@ describe('task models', () => {
     expect([updated.agents.implementerModel, updated.agents.reviewer]).toEqual(['opus', null]);
   });
 
+  it('runs the implementer with the effort chosen for the task', async () => {
+    scenario([[init(), result('done')]]);
+    await harness.createTask({
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      implementerEffort: 'high',
+      queue: true,
+    });
+    await harness.waitForIdle();
+    const args = fakeRuns()[0]!.args;
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it('passes no effort when the task does not choose one', async () => {
+    scenario([[init(), result('done')]]);
+    await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await harness.waitForIdle();
+    expect(fakeRuns()[0]!.args).not.toContain('--effort');
+  });
+
+  it('runs a task saved before efforts existed with no effort', async () => {
+    scenario([[init(), result('done')]]);
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    harness.store.updateTask(task.id, {
+      agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
+    });
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    expect(fakeRuns()[0]!.args).not.toContain('--effort');
+  });
+
+  it('rejects an effort that could be read as an option', async () => {
+    await expect(
+      harness.createTask({ prompt: 'x', repo, implementerEffort: '-rf' }),
+    ).rejects.toThrow(/is not a reasoning effort/);
+  });
+
+  it('clears the effort of a role whose model changes', async () => {
+    const task = await harness.createTask({
+      prompt: 'x',
+      repo,
+      implementerModel: 'opus',
+      implementerEffort: 'max',
+    });
+    const updated = harness.setAgents(task.id, { implementerModel: 'sonnet' });
+    expect(updated.agents.implementerEffort).toBeNull();
+  });
+
+  it('keeps the effort sent together with a new model', async () => {
+    const task = await harness.createTask({
+      prompt: 'x',
+      repo,
+      implementerModel: 'opus',
+      implementerEffort: 'max',
+    });
+    const updated = harness.setAgents(task.id, {
+      implementerModel: 'sonnet',
+      implementerEffort: 'low',
+    });
+    expect(updated.agents.implementerEffort).toBe('low');
+  });
+
+  it('keeps the effort when the same model is sent again', async () => {
+    const task = await harness.createTask({
+      prompt: 'x',
+      repo,
+      implementerModel: 'opus',
+      implementerEffort: 'max',
+    });
+    const updated = harness.setAgents(task.id, { implementerModel: 'opus' });
+    expect(updated.agents.implementerEffort).toBe('max');
+  });
+
+  it('leaves the task unchanged when an effort is invalid', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo, reviewerEffort: 'high' });
+    expect(() =>
+      harness.setAgents(task.id, { reviewerModel: 'opus', reviewerEffort: '-rf' }),
+    ).toThrow(/is not a reasoning effort/);
+    const stored = harness.store.getTask(task.id)!.agents;
+    expect([stored.reviewerModel, stored.reviewerEffort]).toEqual([null, 'high']);
+  });
+
   it('rejects an agent profile that is not configured', async () => {
     const task = await harness.createTask({ prompt: 'x', repo });
     expect(() => harness.setAgents(task.id, { reviewer: 'gemini' })).toThrow(
@@ -672,6 +755,19 @@ describe('task models while a session is open', () => {
     await waitForStatus(task.id, 'awaiting_permission');
     const updated = harness.setAgents(task.id, { implementerModel: 'sonnet' });
     expect(updated.agents.implementerModel).toBe('sonnet');
+  });
+
+  it('changes the effort for the next session', async () => {
+    const task = await harness.createTask({
+      autoApprove: false,
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
+    await waitForStatus(task.id, 'awaiting_permission');
+    const updated = harness.setAgents(task.id, { implementerEffort: 'low' });
+    expect(updated.agents.implementerEffort).toBe('low');
   });
 
   it('accepts the unchanged agent sent with a new model', async () => {

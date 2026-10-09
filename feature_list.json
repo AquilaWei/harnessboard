@@ -38,7 +38,7 @@
         "A task saved before this change (no effort fields) loads and runs with no `--effort` argument.",
         "The verify command passes."
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "F4",

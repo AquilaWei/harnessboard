@@ -10,7 +10,7 @@ Build in order; each feature is one session. See `feature_list.json` for accepta
 | --- | --------------------------------------------------------------------- | ------ |
 | F1  | Shared types + catalogs list each model's effort levels               | done   |
 | F2  | Adapters pass `effort` to the CLI (`--effort`, Codex `turn/start`)    | done   |
-| F3  | Tasks store effort per role; harness and API use it                   | todo   |
+| F3  | Tasks store effort per role; harness and API use it                   | done   |
 | F4  | Web board: effort selector next to every model picker (en + zh-TW)    | todo   |
 | F5  | CLI: `--*-effort` options, `hb models`, `hb agents --models`          | todo   |
 | F6  | Profile default effort (config, Settings, `hb agents --add --effort`) | todo   |
@@ -78,6 +78,17 @@ turn with `effort` is accepted by the app-server. Spend real runs sparingly.
   `harness.ts`; F3 replaces it with `roleEffort(...)` and removes the TODO.
   `docs/architecture.md`'s capability table is left for F7.
   Verify: 1409 passed, 14 skipped.
+- **F3 (done):** `CreateTaskInput` and `AgentsUpdate` (`packages/shared/src/views.ts`) take the
+  five `*Effort` fields; `createTask` and `setAgents` validate them with `effortOrNull`
+  (`isEffortId`, trimmed, empty → `null`) and the API's `PUT /tasks/:id/agents` passes them
+  through (an invalid one throws, so the API answers 400 and nothing is saved). The harness
+  now sets `SessionSpec.effort` to `roleEffort(task.agents, role)`; the F2 TODO is gone.
+  `setAgents` walks a `ROLE_MODEL_EFFORT` table: a role's effort is cleared only when its
+  model actually changes (sending the same model again keeps it, so F4's editor can send
+  every field), and an effort in the same update wins. Changing a role's _agent_ (profile)
+  does not clear its effort; the web/CLI send the model with it anyway. Old tasks without
+  effort keys run with no `--effort` (tested by overwriting the stored agents).
+  Verify: 1424 passed, 14 skipped.
 
 ## Open questions
 

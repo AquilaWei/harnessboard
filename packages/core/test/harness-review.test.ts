@@ -124,6 +124,38 @@ describe('a finished step with a reviewer', () => {
     ]);
   });
 
+  it('runs the reviewer with the effort chosen for it', async () => {
+    scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
+    await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      reviewer: 'checker',
+      implementerEffort: 'high',
+      reviewerEffort: 'low',
+      confirmPlan: false,
+      queue: true,
+    });
+    await harness.waitForIdle();
+    await runQueued();
+    const args = fakeRuns()[1]!.args;
+    expect(args[args.indexOf('--effort') + 1]).toBe('low');
+  });
+
+  it('runs the reviewer with no effort when only the implementer has one', async () => {
+    scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
+    await harness.createTask({
+      prompt: 'Add a greeting',
+      repo,
+      reviewer: 'checker',
+      implementerEffort: 'high',
+      confirmPlan: false,
+      queue: true,
+    });
+    await harness.waitForIdle();
+    await runQueued();
+    expect(fakeRuns()[1]!.args).not.toContain('--effort');
+  });
+
   it('never lets the reviewer ask for more tools', async () => {
     scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
     await createReviewed();

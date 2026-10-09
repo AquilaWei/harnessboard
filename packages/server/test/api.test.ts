@@ -59,6 +59,13 @@ const post = (url: string, body?: unknown, headers: Record<string, string> = {})
     body: body === undefined ? null : JSON.stringify(body),
   });
 
+const putAgents = (id: number, body: unknown) =>
+  app.request(`/api/tasks/${id}/agents`, {
+    method: 'PUT',
+    headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+    body: JSON.stringify(body),
+  });
+
 describe('localOnly', () => {
   it('rejects requests whose Host is not loopback', async () => {
     const res = await app.request('/api/tasks', { headers: { host: `evil.example:${PORT}` } });
@@ -476,6 +483,55 @@ describe('reviewed tasks', () => {
     });
     const { agents } = (await res.json()) as Task;
     expect([agents.designer, agents.designerModel]).toEqual(['checker', 'opus']);
+  });
+
+  it('creates a task with the chosen implementer effort', async () => {
+    const res = await post(
+      '/api/tasks',
+      { prompt: 'x', repo, implementerEffort: 'high' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const { agents } = (await res.json()) as Task;
+    expect(agents.implementerEffort).toBe('high');
+  });
+
+  it('changes only the reviewer effort', async () => {
+    const created = await post(
+      '/api/tasks',
+      { prompt: 'x', repo, reviewer: 'checker', implementerEffort: 'high' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const { id } = (await created.json()) as { id: number };
+    const res = await putAgents(id, { reviewerEffort: 'low' });
+    const { agents } = (await res.json()) as Task;
+    expect([agents.reviewer, agents.implementerEffort, agents.reviewerEffort]).toEqual([
+      'checker',
+      'high',
+      'low',
+    ]);
+  });
+
+  it('clears the reviewer effort when sent null', async () => {
+    const created = await post(
+      '/api/tasks',
+      { prompt: 'x', repo, reviewerEffort: 'low' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const { id } = (await created.json()) as { id: number };
+    const res = await putAgents(id, { reviewerEffort: null });
+    const { agents } = (await res.json()) as Task;
+    expect(agents.reviewerEffort).toBeNull();
+  });
+
+  it('rejects an effort that is not an effort id and keeps the task as it was', async () => {
+    const created = await post(
+      '/api/tasks',
+      { prompt: 'x', repo, reviewerEffort: 'low' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const { id } = (await created.json()) as { id: number };
+    const res = await putAgents(id, { reviewerEffort: '-rf' });
+    expect([res.status, harness.store.getTask(id)!.agents.reviewerEffort]).toEqual([400, 'low']);
   });
 
   it('rejects a reviewer that is not a profile', async () => {

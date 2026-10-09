@@ -187,15 +187,21 @@ export interface CreateTaskInput {
   /** Models for this task only; omitted or `null` uses the profile's model. */
   implementerModel?: string | null;
   reviewerModel?: string | null;
+  /** Reasoning efforts for this task only; omitted or `null` uses the CLI's default. */
+  implementerEffort?: string | null;
+  reviewerEffort?: string | null;
   /** Writes the acceptance criteria; omitted or `null` lets the implementer do it. */
   spec?: string | null;
   specModel?: string | null;
+  specEffort?: string | null;
   /** Tests each finished step before review; omitted or `null` skips testing. */
   tester?: string | null;
   testerModel?: string | null;
+  testerEffort?: string | null;
   /** Adds a UI design to the spec before implementation; omitted or `null` skips it. */
   designer?: string | null;
   designerModel?: string | null;
+  designerEffort?: string | null;
   /**
    * Loop tasks: optional while `confirmPlan` is on (the default), because it can be set
    * when the plan is approved; otherwise required unless `.harnessboard.json` sets one.
@@ -265,12 +271,17 @@ export type AgentsUpdate = Partial<
     | 'implementer'
     | 'reviewer'
     | 'implementerModel'
+    | 'implementerEffort'
     | 'reviewerModel'
+    | 'reviewerEffort'
     | 'spec'
     | 'specModel'
+    | 'specEffort'
     | 'tester'
     | 'testerModel'
+    | 'testerEffort'
     | 'designer'
     | 'designerModel'
+    | 'designerEffort'
   >
 >;

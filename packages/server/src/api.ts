@@ -258,6 +258,11 @@ export function createApi(
       'specModel',
       'testerModel',
       'designerModel',
+      'implementerEffort',
+      'reviewerEffort',
+      'specEffort',
+      'testerEffort',
+      'designerEffort',
     ] as const) {
       const value = body[key];
       if (typeof value === 'string' || value === null) update[key] = value;
