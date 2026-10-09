@@ -3,6 +3,18 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.3 - 2026-10-09
+
+Local test build for threshold-only automatic compaction; real-agent workflow acceptance
+is pending.
+
+### Changed
+
+- Completing a workflow stage no longer triggers automatic compaction by itself.
+  Successful turns compact only when current context reaches the configured warning.
+  Each role continues using its own session. Without current-context telemetry,
+  automatic compaction is not requested.
+
 ## 0.1.2 - 2026-10-09
 
 Local test build for persistent role sessions, token savings and commit handoff checks;
