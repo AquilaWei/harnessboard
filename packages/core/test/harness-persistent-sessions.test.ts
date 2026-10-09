@@ -131,10 +131,10 @@ describe('persistent loop conversations', () => {
     expect(runs()[3]!.received[0]).not.toContain('Before you start, read `.harnessboard/notes.md`');
   });
 
-  it('compacts a completed stage even below the context warning', async () => {
+  it('keeps a completed stage without compaction below the context warning', async () => {
     twoFeatures();
     await loop();
-    expect(runs()[0]!.received.at(-1)).toBe('/compact');
+    expect(runs()[0]!.received).not.toContain('/compact');
   });
 
   it('resumes the same implementer when a loop review requests changes', async () => {

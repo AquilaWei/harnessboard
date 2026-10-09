@@ -105,8 +105,8 @@ hb add "Add input validation to the signup form" --reviewer opus
   ones still to come are not held against it.
 - **Persistent conversations:** the implementer, tester and reviewer each keep a separate
   session across stages and fixes. Follow-up checks receive changed scope; implementers receive new feedback.
-  updated requirements or review rules are sent again when they change. Every successful
-  stage is compacted by adapters that support it; see [context budget](configuration.md#context-budget).
+  updated requirements or review rules are sent again when they change. Completed turns at the context warning
+  are compacted by adapters that support it; see [context budget](configuration.md#context-budget).
 - **Default reviewer:** `defaultReviewer` in the config (or the web settings) applies to
   new tasks. `--reviewer none` turns review off for one task.
 - **Your coding rules:** list files in `reviewGuidelines` (config or web settings), for

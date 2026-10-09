@@ -58,9 +58,8 @@ export type TaskSize = 'small' | 'medium' | 'large';
 export interface ContextPolicy {
   size?: TaskSize;
   /**
-   * Warning for compaction after non-workflow turns; successful workflow stages compact
-   * regardless of size. Defaults to 30; 0 disables automatic compaction. Adapters without
-   * compaction support still use the soft/hard limits.
+   * Warning for compaction after successful turns. Defaults to 30; 0 disables automatic
+   * compaction. Adapters without compaction support still use the soft/hard limits.
    */
   compactPct?: number;
   softPct?: number;

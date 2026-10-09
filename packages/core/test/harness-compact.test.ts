@@ -170,9 +170,9 @@ describe('a turn that reaches the safety limit while compaction is on', () => {
 describe('a turn that ends under the compact threshold', () => {
   beforeEach(() => scenario([[init(), assistantText('working', 20_000), result('done')]]));
 
-  it('is compacted at the workflow stage boundary', async () => {
+  it('does not compact at the workflow stage boundary below the warning', async () => {
     await create();
-    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`, '/compact']);
+    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`]);
   });
 });
 

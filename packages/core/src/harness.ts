@@ -1558,7 +1558,6 @@ export class Harness {
       wrapUp,
       // Every role: compacted only once its turn has ended, never in the middle of work.
       compact: true,
-      compactAfterTurn: !chat,
       contextWindow: window,
       signal,
       onEvent: (event) => {

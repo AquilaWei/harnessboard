@@ -23,7 +23,7 @@ hb loop "A CLI calculator with add, subtract, multiply and divide"
 3. **One feature per turn:** the implementer keeps the same conversation from planning
    through later features and review fixes. It checks the feature list, builds the next
    open feature to its acceptance criteria, runs development tests as needed, marks it as passing
-   and commits. Each completed stage is compacted without replacing the session.
+   and commits. Completed turns compact at the context warning without replacing the session.
 4. **Formal verification:** if a tester is configured, it runs the checks and reports a verdict before review; Harnessboard does not duplicate its run. Without a tester, Harnessboard runs the verify command itself. Only verified features count as progress; failures go back to the implementer in the same conversation.
 5. **Finish or stop for review:** the task moves to Review when every feature passes and
    verification succeeds. It stops as failed if features are removed from the list, or if

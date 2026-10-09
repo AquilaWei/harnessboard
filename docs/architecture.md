@@ -254,7 +254,8 @@ get `maxReviewRounds` again.
   cumulative usage and the model window, but not a reliable current context size; no
   `context` events are emitted. Failed turns and startup RPC errors produce error outcomes;
   usage-limit failures become 429 for the quota retry flow.
-- Successful workflow stages request `thread/compact/start` on the same loaded thread.
+- Successful turns at the configured context warning request `thread/compact/start` on the
+  same loaded thread when current-context telemetry is available.
   Its acknowledgement is not completion: the connection waits for the compaction item and
   completed turn, preserves the original reply and keeps the thread ID for the next stage.
 - Legacy exec parsing remains for stored-output fixtures. App-server transport and

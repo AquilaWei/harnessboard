@@ -27,7 +27,7 @@ side, and none of them touches your files until you say so.
 - **Safe by default:** every task works in its own git branch and folder, so a bad result
   costs you nothing.
 - **Small contexts:** each implementer, tester and reviewer keeps its own conversation.
-  Harnessboard compacts it after each stage, keeping useful context across features and fixes.
+  Harnessboard compacts it after completed turns that reach the context warning, keeping useful context across features and fixes.
 - **Clear handoffs:** testers run formal checks, reviewers inspect architecture and code rules.
   Writing stages require committed changes and valid commit messages.
 - **Quota-aware:** it watches your Claude subscription's usage, stops starting work near the
@@ -172,12 +172,14 @@ flowchart LR
 _Orange **Needs you** cards on the board are the steps where only you can move on: answering
 a question, approving the criteria, allowing a risky command, or reviewing._
 
-Each role continues in its own conversation, compacted at stage boundaries:
+Each role continues in its own conversation, compacted after completed turns at the context warning:
 
 ```mermaid
 flowchart LR
   S1[Role's session] --> H[Finish stage and commit changes]
-  H --> C[Compact conversation]
+  H --> W{Context warning reached?}
+  W -->|Yes| C[Compact conversation]
+  W -->|No| S2
   C --> S2[Next stage in the same session]
 ```
 

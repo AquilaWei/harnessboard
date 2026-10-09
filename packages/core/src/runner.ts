@@ -37,12 +37,10 @@ export interface RunSessionOptions {
   /** `false` never asks for a wrap-up (reviewers have nothing to commit); hard still applies. */
   wrapUp?: boolean;
   /**
-   * Compact at a successful turn boundary, either for every workflow stage or at the
-   * configured warning. Requires streaming input or native compaction. Defaults to false.
+   * Compact at a successful turn boundary when context reaches the configured warning.
+   * Requires streaming input or native compaction. Defaults to false.
    */
   compact?: boolean;
-  /** Compact every successful workflow stage, even below the warning; chat uses the threshold. */
-  compactAfterTurn?: boolean;
   /** Best known window for the model; replaced once the agent reports the real one. */
   contextWindow: number;
   /** Aborting stops the session and kills the agent's process tree. */
@@ -67,8 +65,7 @@ const COMPACT_SAFETY_PCT = 90;
  * Runs one agent session for a single prompt and reports why it ended.
  *
  * Compaction: the agent is never interrupted for it. When a turn ends at or past the
- * compact threshold, or completes a workflow stage, the runner compacts before closing, so the
- * conversation is small when it is resumed later (a chat, a quota pause, the start of work
+ * compact threshold, the runner compacts before closing, so the conversation is small when it is resumed later (a chat, a quota pause, the start of work
  * after a criteria discussion). The outcome is the agent's own reply; the compaction's
  * empty result is not reported, and a failed compaction only adds a notice.
  *
@@ -220,13 +217,9 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
      * the session is being handed off anyway; `true` when it did.
      */
     function startCompaction(event: ResultEvent): boolean {
-      const due = compactPct !== null && (options.compactAfterTurn || lastPct >= compactPct);
+      const due = compactPct !== null && lastPct >= compactPct;
       if (!due || event.isError || stopped || hardHit || wrapSent) return false;
-      options.onNotice(
-        options.compactAfterTurn
-          ? 'stage complete: compacting the conversation'
-          : `context ${lastPct}% ≥ compact ${compactPct}%: compacting after the turn`,
-      );
+      options.onNotice(`context ${lastPct}% ≥ compact ${compactPct}%: compacting after the turn`);
       compacting = true;
       reply = event;
       if (connection?.compact) connection.compact();

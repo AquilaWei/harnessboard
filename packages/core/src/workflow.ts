@@ -149,7 +149,7 @@ export class Workflow {
   /**
    * A reviewer session while a review is pending; otherwise an implementer session: fresh
    * for a new task or after an emergency handoff. Each role otherwise resumes its own
-   * conversation across features and feedback, with compaction at stage boundaries.
+   * conversation across features and feedback, with compaction after completed turns at the context warning.
    */
   plan(task: Task): SessionPlan {
     const plan = this.nextSession(task);

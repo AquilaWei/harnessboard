@@ -65,15 +65,13 @@ function create(autoApprove = false) {
 }
 
 describe('Codex app-server approvals in Harnessboard', () => {
-  it('compacts the same thread after a stage completes', async () => {
+  it('keeps the same thread without compaction when current context is unavailable', async () => {
     scenario('node report.js');
     const task = await create(true);
     await harness.waitForIdle();
-    expect(runs()[0].messages.at(-1)).toEqual({
-      id: 'hb:compact',
-      method: 'thread/compact/start',
-      params: { threadId: 'codex-thread' },
-    });
+    expect(runs()[0].messages.map((message: { method: string }) => message.method)).not.toContain(
+      'thread/compact/start',
+    );
     expect(harness.store.listSessions(task.id)[0]!.agentSessionId).toBe('codex-thread');
   });
   it('commits in the managed linked worktree with the git preset while auto-approve is off', async () => {
