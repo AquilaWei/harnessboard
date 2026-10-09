@@ -1769,14 +1769,10 @@ function effortOrNull(effort: string | null | undefined): string | null {
 
 /**
  * The effort a session of `role` runs with: the task's choice for the role, else the
- * profile's default effort while the session runs the profile's own model (another model
- * may not offer that level), else `null` for the CLI's default.
+ * profile's default effort, else `null` for the CLI's default.
  */
 function sessionEffort(agents: TaskAgents, role: AgentRole, profile: AgentProfile): string | null {
-  const chosen = roleEffort(agents, role);
-  if (chosen) return chosen;
-  const model = roleModel(agents, role);
-  return model === null || model === profile.model ? (profile.effort ?? null) : null;
+  return roleEffort(agents, role) ?? profile.effort ?? null;
 }
 
 function withTool(tools: string[], rule: string): string[] {

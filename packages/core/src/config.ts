@@ -96,11 +96,16 @@ export interface ProjectConfig {
 
 type Env = Record<string, string | undefined>;
 
+/** The built-in profiles, before the config file or the environment change them. */
+function defaultAgents(): Record<string, AgentProfile> {
+  return { [DEFAULT_AGENT]: { provider: 'claude-code', command: 'claude', model: null } };
+}
+
 export function defaultConfig(env: Env = process.env): HarnessConfig {
   const paths = envPaths(APP_NAME, { suffix: '' });
   return {
     dataDir: env[`${ENV_PREFIX}HOME`] ?? paths.data,
-    agents: { [DEFAULT_AGENT]: { provider: 'claude-code', command: 'claude', model: null } },
+    agents: defaultAgents(),
     defaultReviewer: null,
     port: 4317,
     maxConcurrent: 1,
@@ -186,8 +191,10 @@ export function saveUserAgent(id: string, profile: AgentProfile, file = userConf
 
 /**
  * Sets or (with `null`) removes one profile's `effort` in the user config file, keeping the
- * profile's other keys as the file has them. A profile the file does not hold yet (the
- * default `claude`) is written as `profile`, the one in effect.
+ * profile's other keys as the file has them. A profile the file does not hold yet is written
+ * from its built-in default (the default `claude`), so environment overrides such as
+ * `HARNESSBOARD_MODEL` never end up saved; `profile`, the one in effect, is the last resort
+ * for a profile that is neither in the file nor built in.
  */
 export function saveUserAgentEffort(
   id: string,
@@ -196,7 +203,8 @@ export function saveUserAgentEffort(
   file = userConfigFile(),
 ): void {
   const current = (readJsonIfExists(file) as Partial<HarnessConfig> | undefined) ?? {};
-  saveUserAgent(id, withEffort(current.agents?.[id] ?? profile, effort), file);
+  const base = current.agents?.[id] ?? defaultAgents()[id] ?? profile;
+  saveUserAgent(id, withEffort(base, effort), file);
 }
 
 /** `profile` with `effort` as its default effort, or without one for `null`. */

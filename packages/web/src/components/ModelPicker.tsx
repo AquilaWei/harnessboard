@@ -72,7 +72,10 @@ export function ModelPicker({ agent, value, effort, onChange, label }: Props) {
   const effective = (id: string | null) =>
     models?.find((m) => m.id === (id ?? agent?.profile.model));
   const efforts = custom ? [] : (effective(value)?.efforts ?? []);
-  const defaultEffort = custom ? null : (effective(value)?.defaultEffort ?? null);
+  // Without a task effort the session runs the profile's effort, else the model's default.
+  const defaultEffort = custom
+    ? null
+    : (agent?.profile.effort ?? effective(value)?.defaultEffort ?? null);
 
   /** Keeps the effort only when the newly chosen model offers it too. */
   const chooseModel = (next: string | null, typed: boolean) => {

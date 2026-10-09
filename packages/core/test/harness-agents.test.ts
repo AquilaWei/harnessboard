@@ -154,7 +154,7 @@ describe('setAgentEffort', () => {
     expect(harness.config.agents.claude?.effort).toBe('high');
   });
 
-  it('writes the profile in effect when the file does not hold it yet', () => {
+  it('writes the built-in profile when the file does not hold it yet', () => {
     harness.setAgentEffort('claude', { effort: 'high' });
     expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({
       agents: {

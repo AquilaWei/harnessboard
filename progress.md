@@ -137,6 +137,14 @@ turn with `effort` is accepted by the app-server. Spend real runs sparingly.
   `--effort`. Not done (not in the steps): `hb agents` listing does not show the effort,
   and the task pickers' "Default" option does not name the profile's effort.
   Verify: 1478 passed, 14 skipped.
+  Review fixes: (1) `sessionEffort` drops the "own model only" rule; it is now role effort,
+  else profile effort, else none, whatever model the task picks (doc comment on
+  `AgentProfile.effort` and the Settings hint updated). (2) The task pickers' "Default"
+  option names the profile's effort when it has one, else the model's default. (3)
+  `saveUserAgentEffort` writes a profile the file lacks from `defaultAgents()` (the built-in
+  profiles) instead of the one in effect, so `HARNESSBOARD_MODEL` / `HARNESSBOARD_CLAUDE_PATH`
+  are never saved. Regression tests for all three fail on the old code.
+  Verify: 1481 passed, 14 skipped.
 
 ## Open questions
 

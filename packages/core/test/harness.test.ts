@@ -693,7 +693,7 @@ describe('task models', () => {
     expect(args[args.indexOf('--effort') + 1]).toBe('low');
   });
 
-  it("leaves out the profile's effort when the task runs another model", async () => {
+  it("runs with the profile's effort when the task runs another model", async () => {
     scenario([[init(), result('done')]]);
     harness.setAgentEffort('claude', { effort: 'high' });
     await harness.createTask({
@@ -704,7 +704,24 @@ describe('task models', () => {
       queue: true,
     });
     await harness.waitForIdle();
-    expect(fakeRuns()[0]!.args).not.toContain('--effort');
+    const args = fakeRuns()[0]!.args;
+    expect(args[args.indexOf('--effort') + 1]).toBe('high');
+  });
+
+  it("prefers the task's effort over the profile's when the task runs another model", async () => {
+    scenario([[init(), result('done')]]);
+    harness.setAgentEffort('claude', { effort: 'high' });
+    await harness.createTask({
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      implementerModel: 'haiku',
+      implementerEffort: 'low',
+      queue: true,
+    });
+    await harness.waitForIdle();
+    const args = fakeRuns()[0]!.args;
+    expect(args[args.indexOf('--effort') + 1]).toBe('low');
   });
 
   it('runs a task saved before efforts existed with no effort', async () => {

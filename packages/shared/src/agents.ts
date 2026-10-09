@@ -12,8 +12,8 @@ export interface AgentProfile {
   /** Passed to the CLI's model option; `null` keeps the CLI default. */
   model: string | null;
   /**
-   * Reasoning effort passed to the CLI when a task leaves the role's effort unset and the
-   * session runs this profile's own model. Absent: the CLI's default.
+   * Reasoning effort passed to the CLI when a task leaves the role's effort unset, whichever
+   * model the session runs. Absent: the CLI's default.
    */
   effort?: string;
   /** Used when the CLI does not report its context window. */

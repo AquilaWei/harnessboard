@@ -6,6 +6,7 @@ import {
   defaultConfig,
   loadConfig,
   loadProjectConfig,
+  saveUserAgentEffort,
   saveUserConfig,
   userConfigFile,
   validate,
@@ -273,6 +274,21 @@ describe('saveUserConfig', () => {
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
       maxConcurrent: 2,
       quotaPauseUtilization: 0.9,
+    });
+  });
+});
+
+describe('saveUserAgentEffort', () => {
+  it('drops environment overrides of the built-in profile once they are unset', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const env = { HARNESSBOARD_MODEL: 'haiku', HARNESSBOARD_CLAUDE_PATH: '/tmp/claude' };
+    const inEffect = loadConfig({ env, configFile: file }).agents.claude!;
+    saveUserAgentEffort('claude', 'high', inEffect, file);
+    expect(loadConfig({ env: {}, configFile: file }).agents.claude).toEqual({
+      provider: 'claude-code',
+      command: 'claude',
+      model: null,
+      effort: 'high',
     });
   });
 });

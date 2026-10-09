@@ -169,6 +169,15 @@ describe('effort selector', () => {
     expect(optionTexts(effortSelect()!)).toEqual(['Default (Medium)', 'Low', 'Medium']);
   });
 
+  it('names the profile’s effort as the default over the model’s', async () => {
+    api.agents.mockResolvedValue([
+      { ...agents[0]!, profile: { ...agents[0]!.profile, effort: 'high' } },
+    ]);
+    await openDialog();
+    act(() => choose(modelSelect(), 'mini'));
+    expect(optionTexts(effortSelect()!)).toEqual(['Default (High)', 'Low', 'Medium']);
+  });
+
   it('is hidden for the profile default when the profile names no model', async () => {
     await openDialog();
     expect(effortSelect()).toBeNull();
