@@ -127,7 +127,7 @@ describe('formatTaskAgents', () => {
         maxReviewRounds: 3,
       }),
     ).toEqual([
-      'spec         (the implementer)',
+      'spec         (the implementer)  opus  high',
       'designer     -  ',
       'implementer  claude  opus  high',
       'tester       -  ',
@@ -151,6 +151,31 @@ describe('formatTaskAgents', () => {
         maxReviewRounds: 3,
       })[0],
     ).toBe('spec         codex  (default)  xhigh');
+  });
+
+  it('shows the spec effort when the spec runs as the implementer', () => {
+    expect(
+      formatTaskAgents({
+        implementer: 'claude',
+        implementerModel: 'opus',
+        implementerEffort: 'low',
+        reviewer: null,
+        specEffort: 'max',
+        maxReviewRounds: 3,
+      })[0],
+    ).toBe('spec         (the implementer)  opus  max');
+  });
+
+  it('shows the implementer effort for a spec that inherits it', () => {
+    expect(
+      formatTaskAgents({
+        implementer: 'claude',
+        implementerModel: 'opus',
+        implementerEffort: 'high',
+        reviewer: null,
+        maxReviewRounds: 3,
+      })[0],
+    ).toBe('spec         (the implementer)  opus  high');
   });
 });
 

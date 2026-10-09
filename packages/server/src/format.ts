@@ -9,6 +9,7 @@ import type {
   TaskAgents,
   TaskView,
 } from '@harnessboard/shared';
+import { roleEffort, roleModel } from '@harnessboard/shared';
 import { t } from './i18n.js';
 
 const STATUS_WIDTH = 13;
@@ -55,10 +56,10 @@ export function formatSpecChange(taskId: number, change: SpecChangeProposal): st
 export function formatTaskAgents(a: TaskAgents): string[] {
   const shown = (model?: string | null, effort?: string | null) =>
     `${model ?? t('defaultModel')}  ${effort ?? t('defaultEffort')}`;
+  // The spec line shows what its sessions run with, which an unset author inherits from the implementer.
+  const spec = shown(roleModel(a, 'spec'), roleEffort(a, 'spec'));
   return [
-    a.spec
-      ? `spec         ${a.spec}  ${shown(a.specModel, a.specEffort)}`
-      : `spec         ${t('sameAsImplementer')}`,
+    `spec         ${a.spec ?? t('sameAsImplementer')}  ${spec}`,
     `designer     ${a.designer ?? '-'}  ${a.designer ? shown(a.designerModel, a.designerEffort) : ''}`,
     `implementer  ${a.implementer}  ${shown(a.implementerModel, a.implementerEffort)}`,
     `tester       ${a.tester ?? '-'}  ${a.tester ? shown(a.testerModel, a.testerEffort) : ''}`,

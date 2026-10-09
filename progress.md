@@ -115,6 +115,10 @@ turn with `effort` is accepted by the app-server. Spend real runs sparingly.
   of the ids `--effort` takes, plus `(default medium)` when the CLI names a default. Models
   without efforts print only their line (trailing spaces now trimmed).
   Verify: 1453 passed, 14 skipped.
+  Review fix: the `hb models` spec line now always shows the model and effort its sessions
+  run with (`roleModel` / `roleEffort` from shared, the same resolution the harness uses),
+  after the profile or `(the implementer)`, so `--spec-effort max` without a spec profile
+  is no longer hidden. Verify: 1455 passed, 14 skipped.
 
 ## Open questions
 
