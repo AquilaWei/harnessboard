@@ -37,6 +37,8 @@ describe('parseClaudeCatalog', () => {
         description: 'For complex work',
         note: null,
         more: false,
+        efforts: [],
+        defaultEffort: null,
       },
     ]);
   });
@@ -54,6 +56,40 @@ describe('parseClaudeCatalog', () => {
   it('throws when there is no model list', () => {
     expect(() => parseClaudeCatalog({ catalog: {} })).toThrow('no model list');
   });
+
+  const thinking = {
+    type: 'effort',
+    effort_options: [
+      { id: 'low', name: 'Low' },
+      { id: 'medium', name: 'Medium', badge: { message: 'Recommended', variant: 'neutral' } },
+      { id: 'high', name: 'High' },
+      { id: 'xhigh', name: 'Extra' },
+      {
+        id: 'max',
+        name: 'Max',
+        badge: { message: '3.5× or more usage', variant: 'warning' },
+        tooltip: { content: 'Thinks longer' },
+      },
+    ],
+  };
+
+  it('reads the effort options in order, with their badges as notes', () => {
+    expect(parseClaudeCatalog(catalog(1, [{ ...opus, thinking }]))[0]!.efforts).toEqual([
+      { id: 'low', name: 'Low', description: null, note: null },
+      { id: 'medium', name: 'Medium', description: null, note: 'Recommended' },
+      { id: 'high', name: 'High', description: null, note: null },
+      { id: 'xhigh', name: 'Extra', description: null, note: null },
+      { id: 'max', name: 'Max', description: 'Thinks longer', note: '3.5× or more usage' },
+    ]);
+  });
+
+  it('leaves the default effort unknown even when one effort is recommended', () => {
+    expect(parseClaudeCatalog(catalog(1, [{ ...opus, thinking }]))[0]!.defaultEffort).toBeNull();
+  });
+
+  it('offers no efforts for a model without thinking options', () => {
+    expect(parseClaudeCatalog(catalog(1, [opus]))[0]!.efforts).toEqual([]);
+  });
 });
 
 describe('readClaudeModels', () => {
@@ -65,6 +101,15 @@ describe('readClaudeModels', () => {
     write('old.json', catalog(1, [{ id: 'old-model', name: 'Old' }]));
     write('new.json', catalog(2, [opus]));
     expect(readClaudeModels(dir).map((m) => m.id)).toEqual(['claude-opus-5-5']);
+  });
+
+  it('offers no efforts on the aliases', () => {
+    expect(CLAUDE_ALIASES.map((m) => [m.efforts, m.defaultEffort])).toEqual([
+      [[], null],
+      [[], null],
+      [[], null],
+      [[], null],
+    ]);
   });
 
   it('falls back to the aliases without a catalog', () => {
@@ -89,8 +134,36 @@ describe('parseCodexModels', () => {
 
   it('reads slug, display name and description', () => {
     expect(parseCodexModels({ models: [luna] })).toEqual([
-      { id: 'gpt-6-luna', name: 'GPT-6-Luna', description: 'Fast', note: null, more: false },
+      {
+        id: 'gpt-6-luna',
+        name: 'GPT-6-Luna',
+        description: 'Fast',
+        note: null,
+        more: false,
+        efforts: [],
+        defaultEffort: null,
+      },
     ]);
+  });
+
+  it('reads the reasoning levels and the default level', () => {
+    const sol = {
+      ...luna,
+      supported_reasoning_levels: [
+        { effort: 'low', description: 'Fast responses' },
+        { effort: 'medium', description: 'Balanced' },
+        { effort: 'high', description: 'Deeper' },
+      ],
+      default_reasoning_level: 'medium',
+    };
+    expect(parseCodexModels({ models: [sol] })[0]).toMatchObject({
+      efforts: [
+        { id: 'low', name: 'low', description: 'Fast responses', note: null },
+        { id: 'medium', name: 'medium', description: 'Balanced', note: null },
+        { id: 'high', name: 'high', description: 'Deeper', note: null },
+      ],
+      defaultEffort: 'medium',
+    });
   });
 
   it('leaves out models Codex hides from its picker', () => {
@@ -105,16 +178,29 @@ describe('parseCodexModels', () => {
 
 describe('Harness.models', () => {
   const listed: ModelInfo[] = [
-    { id: 'm1', name: 'Model 1', description: null, note: null, more: false },
+    {
+      id: 'm1',
+      name: 'Model 1',
+      description: null,
+      note: null,
+      more: false,
+      efforts: [],
+      defaultEffort: null,
+    },
   ];
   let calls = 0;
   let harness: Harness;
 
-  function open(listModels?: () => Promise<ModelInfo[]>): void {
+  function open(listModels?: () => Promise<ModelInfo[]>, effort = true): void {
     const dir = tempDir('models');
     const config = { ...defaultConfig({}), dataDir: path.join(dir, 'data') };
-    const adapterFactory = (profile: AgentProfile) =>
-      Object.assign(new ClaudeCodeAdapter(profile.command), { listModels });
+    const adapterFactory = (profile: AgentProfile) => {
+      const adapter = new ClaudeCodeAdapter(profile.command);
+      return Object.assign(adapter, {
+        listModels,
+        capabilities: { ...adapter.capabilities, effort },
+      });
+    };
     harness = Harness.open(config, { adapterFactory });
   }
 
@@ -122,6 +208,22 @@ describe('Harness.models', () => {
 
   it("returns the profile CLI's models", async () => {
     open(() => Promise.resolve(listed));
+    expect(await harness.models('claude')).toEqual(listed);
+  });
+
+  it("drops the models' efforts when the CLI can not take an effort", async () => {
+    const withEfforts: ModelInfo[] = [
+      {
+        id: 'm1',
+        name: 'Model 1',
+        description: null,
+        note: null,
+        more: false,
+        efforts: [{ id: 'high', name: 'High', description: null, note: null }],
+        defaultEffort: 'high',
+      },
+    ];
+    open(() => Promise.resolve(withEfforts), false);
     expect(await harness.models('claude')).toEqual(listed);
   });
 

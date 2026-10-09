@@ -3,7 +3,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ClaudeCodeAdapter } from '../src/claude-code.js';
+import { CodexAdapter } from '../src/codex.js';
 import { defaultConfig } from '../src/config.js';
+import { GeminiAdapter } from '../src/gemini.js';
 import { Harness } from '../src/harness.js';
 import {
   ASK_FOR_NOTES,
@@ -111,5 +114,19 @@ describe('a CLI without mid-turn input crossing the soft threshold', () => {
     await harness.waitForIdle();
     const note = harness.store.lastEvent(task.id, 'handoff')!.data as { note: string };
     expect(note.note).toBe('STATUS: CONTINUE\nhalf done');
+  });
+});
+
+describe('the effort capability', () => {
+  it('is on for Claude Code, which takes --effort', () => {
+    expect(new ClaudeCodeAdapter('claude').capabilities.effort).toBe(true);
+  });
+
+  it('is on for Codex, which takes an effort on turn/start', () => {
+    expect(new CodexAdapter('codex').capabilities.effort).toBe(true);
+  });
+
+  it('is off for Gemini, whose CLI has no effort option', () => {
+    expect(new GeminiAdapter('gemini').capabilities.effort).toBe(false);
   });
 });

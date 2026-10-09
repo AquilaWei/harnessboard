@@ -19,6 +19,11 @@ export interface SessionSpec {
    */
   prompt: string;
   model: string | null;
+  /**
+   * Reasoning effort, one of the model's `efforts` ids; `null` leaves it to the CLI.
+   * Ignored by CLIs without the `effort` capability.
+   */
+  effort: string | null;
   access: SessionAccess;
   /**
    * Extra tool rules: the task's list for `edit` sessions; for `readOnly` sessions only
@@ -79,6 +84,11 @@ export interface AgentCapabilities {
    * puts their output in the reviewer's prompt.
    */
   readOnlyGit: boolean;
+  /**
+   * The CLI takes a reasoning effort for a session ({@link SessionSpec.effort}). Without it
+   * no effort is offered for the profile and a given one is not passed on.
+   */
+  effort: boolean;
 }
 
 /**

@@ -3,6 +3,22 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Added
+
+- **Choose a reasoning effort next to every model.** Each role of a task (implementer,
+  spec author, designer, tester, reviewer) can now think more or less deeply: a **Reasoning
+  effort** select sits next to each model picker on the board, and `hb add`, `hb loop` and
+  `hb models` take `--effort`, `--spec-effort`, `--designer-effort`, `--tester-effort` and
+  `--reviewer-effort`. Only the levels the chosen model offers are listed
+  (`hb agents --models <profile>` prints them). Works with Claude Code and Codex; Gemini CLI
+  has no such setting. Changing a role's model clears its effort.
+- **A default effort per agent profile.** Set it in **Settings → Agents**, with
+  `hb agents --add <provider> --effort <level>`, or as `"effort"` in `config.json`. Tasks
+  that pick no effort for a role use it. Tested with scripted CLIs; a real Claude and Codex
+  run at a chosen effort still needs acceptance testing.
+
 ## 0.0.30 - 2026-10-08
 
 ### Fixed

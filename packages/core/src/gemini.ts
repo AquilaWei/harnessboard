@@ -28,6 +28,8 @@ export class GeminiAdapter implements AgentAdapter {
     sessionIds: 'agent',
     permissionPrompts: false,
     readOnlyGit: false,
+    // The `gemini` CLI has no effort option; a given effort is ignored.
+    effort: false,
   };
 
   /**

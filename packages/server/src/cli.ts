@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import spawn from 'cross-spawn';
-import { Argument, Command, Option } from 'commander';
+import { Argument, Command } from 'commander';
 import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import {
-  AGENT_PROVIDERS,
   APP_NAME,
   DEFAULT_COMMANDS,
   definedOnly,
@@ -12,26 +11,31 @@ import {
   formatDuration,
   presetRules,
 } from '@harnessboard/shared';
-import type {
-  AgentProvider,
-  PermissionRequest,
-  PlanQuestion,
-  TaskUsage,
-  TaskView,
-} from '@harnessboard/shared';
+import type { PermissionRequest, PlanQuestion, TaskUsage, TaskView } from '@harnessboard/shared';
 import { ApiClient, ServerUnavailableError } from './client.js';
 import {
   createEventFormatter,
   formatFeature,
+  formatModel,
   formatSpecChange,
+  formatTaskAgents,
   formatTaskRow,
   formatTokens,
 } from './format.js';
 import { t } from './i18n.js';
 import { openTarget } from './open.js';
 import { printUnconfigured, runServer } from './run.js';
-import { parseInteger, parsePresets, taskInput, withTaskOptions } from './task-options.js';
-import type { AddOptions, LoopInput } from './task-options.js';
+import {
+  agentsUpdate,
+  parseInteger,
+  parsePresets,
+  profileInput,
+  taskInput,
+  withAgentOptions,
+  withProfileOptions,
+  withTaskOptions,
+} from './task-options.js';
+import type { AddOptions, AgentsOptions, LoopInput, ModelsOptions } from './task-options.js';
 import pkg from '../package.json' with { type: 'json' };
 
 const FOLLOW_INTERVAL_MS = 500;
@@ -162,57 +166,38 @@ program
     console.log(t('taskStatus', { id, status: task.status }));
   });
 
-interface AgentsOptions {
-  models?: string;
-  add?: AgentProvider;
-  id?: string;
-  model?: string;
-}
-
-program
-  .command('agents')
-  .description('list agent profiles, and agent CLIs found on this machine without one')
-  .addOption(
-    new Option('--add <provider>', 'add a profile for a CLI found on this machine').choices(
-      AGENT_PROVIDERS,
-    ),
-  )
-  .option('--models <id>', "list the models a profile's CLI offers")
-  .option('--id <id>', 'profile id for --add (default: the command name)')
-  .option('--model <model>', 'model for --add (default: the CLI default)')
-  .action(async (o: AgentsOptions) => {
-    const api = client();
-    if (o.models) {
-      const models = await api.agentModels(o.models);
-      if (models.length === 0) console.log(t('noModelList', { id: o.models }));
-      for (const m of models) {
-        const details = [m.description, m.note && `(${m.note})`, m.more && t('moreModel')];
-        console.log(`${m.id.padEnd(28)} ${m.name.padEnd(14)} ${details.filter(Boolean).join(' ')}`);
-      }
-      return;
+withProfileOptions(
+  program
+    .command('agents')
+    .description('list agent profiles, and agent CLIs found on this machine without one'),
+).action(async (o: AgentsOptions) => {
+  const api = client();
+  if (o.models) {
+    const models = await api.agentModels(o.models);
+    if (models.length === 0) console.log(t('noModelList', { id: o.models }));
+    for (const line of models.flatMap(formatModel)) console.log(line);
+    return;
+  }
+  if (o.add) {
+    const provider = o.add;
+    const found = (await api.detectAgents()).find((d) => d.provider === provider);
+    if (!found) {
+      throw new Error(t('agentNotDetected', { provider, command: DEFAULT_COMMANDS[provider] }));
     }
-    if (o.add) {
-      const provider = o.add;
-      const found = (await api.detectAgents()).find((d) => d.provider === provider);
-      if (!found) {
-        throw new Error(t('agentNotDetected', { provider, command: DEFAULT_COMMANDS[provider] }));
-      }
-      const id = o.id ?? found.command;
-      await api.addAgent({ id, provider, command: found.command, model: o.model ?? null });
-      console.log(
-        t('agentAdded', { id, provider, command: found.command, file: userConfigFile() }),
-      );
-      return;
-    }
-    for (const a of await api.agents()) {
-      const state = a.ok ? `✓ ${a.version ?? ''}` : `✗ ${a.error ?? ''}`;
-      const model = a.profile.model ?? t('defaultModel');
-      console.log(
-        `${a.id.padEnd(12)} ${a.profile.provider.padEnd(12)} ${model.padEnd(14)} ${state}`,
-      );
-    }
-    printUnconfigured(await api.detectAgents());
-  });
+    const input = profileInput(found, o);
+    await api.addAgent(input);
+    console.log(
+      t('agentAdded', { id: input.id, provider, command: found.command, file: userConfigFile() }),
+    );
+    return;
+  }
+  for (const a of await api.agents()) {
+    const state = a.ok ? `✓ ${a.version ?? ''}` : `✗ ${a.error ?? ''}`;
+    const model = a.profile.model ?? t('defaultModel');
+    console.log(`${a.id.padEnd(12)} ${a.profile.provider.padEnd(12)} ${model.padEnd(14)} ${state}`);
+  }
+  printUnconfigured(await api.detectAgents());
+});
 
 program
   .command('ls')
@@ -369,47 +354,20 @@ program
     console.log(t('stopRequested', { id }));
   });
 
-program
-  .command('models')
-  .description("show or change a task's agents and models (only models while it runs)")
-  .argument('<id>', 'task id', parseInteger)
-  .option('--model <model>', 'implementer model, or "default" for the profile model')
-  .option('--spec <agent>', 'spec author profile, or "implementer" to let the implementer write it')
-  .option('--spec-model <model>', 'spec author model, or "default" for the profile model')
-  .option('--designer <agent>', 'designer profile, or "none" to skip the UI design')
-  .option('--designer-model <model>', 'designer model, or "default" for the profile model')
-  .option('--tester <agent>', 'tester profile, or "none" to skip testing')
-  .option('--tester-model <model>', 'tester model, or "default" for the profile model')
-  .option('--reviewer <agent>', 'reviewer profile, or "none"')
-  .option('--reviewer-model <model>', 'reviewer model, or "default" for the profile model')
-  .action(async (id: number, o: ModelsOptions) => {
-    const api = client();
-    const model = (m?: string) => (m === undefined ? undefined : m === 'default' ? null : m);
-    const update = definedOnly({
-      implementerModel: model(o.model),
-      spec: o.spec === undefined ? undefined : o.spec === 'implementer' ? null : o.spec,
-      specModel: model(o.specModel),
-      designer: o.designer === undefined ? undefined : o.designer === 'none' ? null : o.designer,
-      designerModel: model(o.designerModel),
-      tester: o.tester === undefined ? undefined : o.tester === 'none' ? null : o.tester,
-      testerModel: model(o.testerModel),
-      reviewer: o.reviewer === undefined ? undefined : o.reviewer === 'none' ? null : o.reviewer,
-      reviewerModel: model(o.reviewerModel),
-    });
-    const task =
-      Object.keys(update).length > 0 ? await api.setAgents(id, update) : await api.getTask(id);
-    const a = task.agents;
-    const shown = (m?: string | null) => m ?? t('defaultModel');
-    console.log(
-      a.spec
-        ? `spec         ${a.spec}  ${shown(a.specModel)}`
-        : `spec         ${t('sameAsImplementer')}`,
-    );
-    console.log(`designer     ${a.designer ?? '-'}  ${a.designer ? shown(a.designerModel) : ''}`);
-    console.log(`implementer  ${a.implementer}  ${shown(a.implementerModel)}`);
-    console.log(`tester       ${a.tester ?? '-'}  ${a.tester ? shown(a.testerModel) : ''}`);
-    console.log(`reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel) : ''}`);
-  });
+withAgentOptions(
+  program
+    .command('models')
+    .description(
+      "show or change a task's agents, models and efforts (only models and efforts while it runs)",
+    )
+    .argument('<id>', 'task id', parseInteger),
+).action(async (id: number, o: ModelsOptions) => {
+  const api = client();
+  const update = agentsUpdate(o);
+  const task =
+    Object.keys(update).length > 0 ? await api.setAgents(id, update) : await api.getTask(id);
+  for (const line of formatTaskAgents(task.agents)) console.log(line);
+});
 
 program
   .command('commits')
@@ -589,18 +547,6 @@ program
     });
     await new Promise<void>((resolve) => child.once('close', () => resolve()));
   });
-
-interface ModelsOptions {
-  model?: string;
-  spec?: string;
-  specModel?: string;
-  designer?: string;
-  designerModel?: string;
-  tester?: string;
-  testerModel?: string;
-  reviewer?: string;
-  reviewerModel?: string;
-}
 
 function indent(text: string): string {
   return text

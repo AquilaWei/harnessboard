@@ -10,6 +10,7 @@ const spec: SessionSpec = {
   resume: false,
   prompt: 'Build it',
   model: 'test-model',
+  effort: null,
   access: 'edit',
   allowedTools: ['Bash(git add *)'],
   skipPermissions: false,
@@ -56,6 +57,31 @@ describe('Codex approval transport', () => {
       model: 'test-model',
       input: [{ type: 'text', text: 'Build it' }],
     });
+  });
+
+  it('sends the effort with turn/start', () => {
+    const { messages } = connect({ effort: 'xhigh' });
+    expect(messages[3]!.params).toMatchObject({ effort: 'xhigh' });
+  });
+
+  it('sends the effort with turn/start on a resumed thread', () => {
+    const { messages } = connect({ resume: true, sessionId: 'old-thread', effort: 'xhigh' });
+    expect(messages[3]!.params).toMatchObject({ effort: 'xhigh' });
+  });
+
+  it('sends no effort with the thread request, which does not take one', () => {
+    const { messages } = connect({ effort: 'xhigh' });
+    expect(messages[2]!.params).not.toHaveProperty('effort');
+  });
+
+  it('sends no effort key without an effort', () => {
+    const { messages } = connect();
+    expect(messages[3]!.params).not.toHaveProperty('effort');
+  });
+
+  it('sends no effort key on a resumed thread without an effort', () => {
+    const { messages } = connect({ resume: true, sessionId: 'old-thread' });
+    expect(messages[3]!.params).not.toHaveProperty('effort');
   });
 
   it('resumes an existing exec thread while overriding its old never-approve policy', () => {

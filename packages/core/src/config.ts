@@ -8,6 +8,7 @@ import {
   ENV_PREFIX,
   PROJECT_CONFIG_FILE,
   assertToolRules,
+  isEffortId,
   resolveThresholds,
 } from '@harnessboard/shared';
 import type { AgentProfile, ContextPolicy } from '@harnessboard/shared';
@@ -95,11 +96,16 @@ export interface ProjectConfig {
 
 type Env = Record<string, string | undefined>;
 
+/** The built-in profiles, before the config file or the environment change them. */
+function defaultAgents(): Record<string, AgentProfile> {
+  return { [DEFAULT_AGENT]: { provider: 'claude-code', command: 'claude', model: null } };
+}
+
 export function defaultConfig(env: Env = process.env): HarnessConfig {
   const paths = envPaths(APP_NAME, { suffix: '' });
   return {
     dataDir: env[`${ENV_PREFIX}HOME`] ?? paths.data,
-    agents: { [DEFAULT_AGENT]: { provider: 'claude-code', command: 'claude', model: null } },
+    agents: defaultAgents(),
     defaultReviewer: null,
     port: 4317,
     maxConcurrent: 1,
@@ -181,6 +187,31 @@ export function saveUserConfig(patch: Partial<HarnessConfig>, file = userConfigF
 export function saveUserAgent(id: string, profile: AgentProfile, file = userConfigFile()): void {
   const current = (readJsonIfExists(file) as Partial<HarnessConfig> | undefined) ?? {};
   saveUserConfig({ agents: { ...current.agents, [id]: profile } }, file);
+}
+
+/**
+ * Sets or (with `null`) removes one profile's `effort` in the user config file, keeping the
+ * profile's other keys as the file has them. A profile the file does not hold yet is written
+ * from its built-in default (the default `claude`), so environment overrides such as
+ * `HARNESSBOARD_MODEL` never end up saved; `profile`, the one in effect, is the last resort
+ * for a profile that is neither in the file nor built in.
+ */
+export function saveUserAgentEffort(
+  id: string,
+  effort: string | null,
+  profile: AgentProfile,
+  file = userConfigFile(),
+): void {
+  const current = (readJsonIfExists(file) as Partial<HarnessConfig> | undefined) ?? {};
+  const base = current.agents?.[id] ?? defaultAgents()[id] ?? profile;
+  saveUserAgent(id, withEffort(base, effort), file);
+}
+
+/** `profile` with `effort` as its default effort, or without one for `null`. */
+export function withEffort(profile: AgentProfile, effort: string | null): AgentProfile {
+  const copy = { ...profile };
+  delete copy.effort;
+  return effort ? { ...copy, effort } : copy;
 }
 
 /** Environment variables override the file; `CLAUDE_PATH` and `MODEL` apply to `claude`. */
@@ -265,6 +296,14 @@ export function validate(config: HarnessConfig): void {
       (typeof profile.sandboxImage !== 'string' || profile.sandboxImage.trim() === '')
     ) {
       throw new Error(`config agents.${id}.sandboxImage must name an image for the sandbox`);
+    }
+    if (
+      profile.effort !== undefined &&
+      (typeof profile.effort !== 'string' || !isEffortId(profile.effort))
+    ) {
+      throw new Error(
+        `config agents.${id}.effort must be a reasoning effort such as "high", got ${JSON.stringify(profile.effort)}`,
+      );
     }
   }
   if (config.defaultReviewer !== null && !config.agents[config.defaultReviewer]) {

@@ -26,6 +26,7 @@ export class CodexAdapter implements AgentAdapter {
     sessionIds: 'agent',
     permissionPrompts: true,
     readOnlyGit: true,
+    effort: true,
   };
 
   constructor(readonly command: string) {}

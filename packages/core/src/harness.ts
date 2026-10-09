@@ -10,17 +10,21 @@ import {
   assertToolRules,
   contextPct,
   definedOnly,
+  isEffortId,
   isModelId,
   isProfileId,
   presetRules,
   resolveThresholds,
+  roleEffort,
   roleModel,
 } from '@harnessboard/shared';
 import type {
+  AgentEffortUpdate,
   AgentEvent,
   AgentInfo,
   AgentProfile,
   AgentProvider,
+  AgentRole,
   DetectedAgent,
   ModelInfo,
   NewAgentProfile,
@@ -65,6 +69,8 @@ import {
   EDITABLE_SETTINGS,
   loadProjectConfig,
   saveUserAgent,
+  saveUserAgentEffort,
+  withEffort,
   saveUserConfig,
   validate,
 } from './config.js';
@@ -118,6 +124,14 @@ const QUOTA_READ_MS = 60_000;
 /** How long a profile's model list is reused before its CLI is asked again. */
 const MODELS_TTL_MS = 10 * 60_000;
 const DEFAULT_REVIEW_ROUNDS = 2;
+/** Each role's model field with the effort field that belongs to it. */
+const ROLE_MODEL_EFFORT = [
+  ['implementerModel', 'implementerEffort'],
+  ['reviewerModel', 'reviewerEffort'],
+  ['specModel', 'specEffort'],
+  ['testerModel', 'testerEffort'],
+  ['designerModel', 'designerEffort'],
+] as const;
 
 export interface HarnessOptions {
   /** Where runtime setting changes are saved; omitted keeps them in memory (tests). */
@@ -264,7 +278,7 @@ export class Harness {
   /**
    * Adds an agent profile and saves it to the user config file, so it can be picked for
    * tasks at once. Throws when the id is invalid or taken, the provider is unknown, the
-   * command is empty, or the model is not a model id; nothing changes then.
+   * command is empty, or the model or effort is not valid; nothing changes then.
    */
   addAgent(input: NewAgentProfile): AgentProfile {
     // Input comes from HTTP as well, so its field types are checked rather than trusted.
@@ -278,10 +292,26 @@ export class Harness {
     if (model !== null && !isModelId(model)) {
       throw new Error(`invalid model id: ${JSON.stringify(model)}`);
     }
-    const profile: AgentProfile = { provider, command, model };
+    const effort = effortOrNull(input.effort);
+    const profile: AgentProfile = { provider, command, model, ...(effort ? { effort } : {}) };
     validate({ ...this.config, agents: { ...this.config.agents, [id]: profile } });
     this.config.agents[id] = profile;
     if (this.settingsFile) saveUserAgent(id, profile, this.settingsFile);
+    return profile;
+  }
+
+  /**
+   * Sets or (with `null`) removes a profile's default reasoning effort and saves it to the
+   * user config file; sessions started from then on use it. Throws when the profile is not
+   * configured or the effort is not an effort id; nothing changes then.
+   */
+  setAgentEffort(agentId: string, update: AgentEffortUpdate): AgentProfile {
+    const current = this.config.agents[agentId];
+    if (!current) throw new Error(`agent profile "${agentId}" is not configured`);
+    const effort = effortOrNull(update.effort);
+    const profile = withEffort(current, effort);
+    this.config.agents[agentId] = profile;
+    if (this.settingsFile) saveUserAgentEffort(agentId, effort, profile, this.settingsFile);
     return profile;
   }
 
@@ -299,6 +329,10 @@ export class Harness {
       models = (await adapter.listModels?.()) ?? [];
     } catch {
       // An older CLI without a model catalog: the picker offers typing an id instead.
+    }
+    // The board offers an effort only from this list, so a CLI that ignores it offers none.
+    if (!adapter.capabilities.effort) {
+      models = models.map((m) => ({ ...m, efforts: [], defaultEffort: null }));
     }
     this.modelLists.set(agentId, { at: Date.now(), models });
     return models;
@@ -532,13 +566,18 @@ export class Harness {
       reviewer: input.reviewer === undefined ? this.config.defaultReviewer : input.reviewer,
       maxReviewRounds: DEFAULT_REVIEW_ROUNDS,
       implementerModel: modelOrNull(input.implementerModel),
+      implementerEffort: effortOrNull(input.implementerEffort),
       reviewerModel: modelOrNull(input.reviewerModel),
+      reviewerEffort: effortOrNull(input.reviewerEffort),
       spec: input.spec ?? null,
       specModel: modelOrNull(input.specModel),
+      specEffort: effortOrNull(input.specEffort),
       tester: input.tester ?? null,
       testerModel: modelOrNull(input.testerModel),
+      testerEffort: effortOrNull(input.testerEffort),
       designer: input.designer ?? null,
       designerModel: modelOrNull(input.designerModel),
+      designerEffort: effortOrNull(input.designerEffort),
     };
     this.checkProfiles(agents);
     const task = this.store.createTask({
@@ -651,10 +690,12 @@ export class Harness {
   }
 
   /**
-   * Changes who works on a task and with which models; fields left out stay as they are.
-   * Takes effect from its next session, so models may change while a session is open, but
-   * the agents (and so the provider) may not. Throws when an agent changes while the task
-   * runs, a profile is not configured or a model id is invalid.
+   * Changes who works on a task and with which models and efforts; fields left out stay as
+   * they are. A role whose model changes loses its effort unless the update sets one too,
+   * since the new model may not offer it. Takes effect from its next session, so models and
+   * efforts may change while a session is open, but the agents (and so the provider) may
+   * not. Throws when an agent changes while the task runs, a profile is not configured or
+   * a model or effort id is invalid; nothing changes then.
    */
   setAgents(id: number, update: AgentsUpdate): Task {
     const task = this.requireTask(id);
@@ -671,18 +712,18 @@ export class Harness {
     if (update.implementer !== undefined) agents.implementer = update.implementer;
     if (update.reviewer !== undefined) agents.reviewer = update.reviewer;
     if (update.spec !== undefined) agents.spec = update.spec;
-    if (update.specModel !== undefined) agents.specModel = modelOrNull(update.specModel);
     if (update.tester !== undefined) agents.tester = update.tester;
-    if (update.testerModel !== undefined) agents.testerModel = modelOrNull(update.testerModel);
     if (update.designer !== undefined) agents.designer = update.designer;
-    if (update.designerModel !== undefined) {
-      agents.designerModel = modelOrNull(update.designerModel);
+    for (const [modelKey, effortKey] of ROLE_MODEL_EFFORT) {
+      const model = update[modelKey];
+      if (model !== undefined) {
+        const next = modelOrNull(model);
+        if (next !== (agents[modelKey] ?? null)) agents[effortKey] = null;
+        agents[modelKey] = next;
+      }
+      const effort = update[effortKey];
+      if (effort !== undefined) agents[effortKey] = effortOrNull(effort);
     }
-    if (update.implementerModel !== undefined) {
-      agents.implementerModel = modelOrNull(update.implementerModel);
-    }
-    if (update.reviewerModel !== undefined)
-      agents.reviewerModel = modelOrNull(update.reviewerModel);
     this.checkProfiles(agents);
     const updated = this.store.updateTask(id, { agents });
     this.emit({ type: 'task', taskId: id, status: updated.status });
@@ -1489,6 +1530,7 @@ export class Harness {
         resume: plan.resume !== null,
         prompt: plan.prompt,
         model: roleModel(task.agents, plan.role) ?? this.config.agents[plan.agentId]!.model,
+        effort: sessionEffort(task.agents, plan.role, this.config.agents[plan.agentId]!),
         access: plan.access,
         // A read-only session may run the task's own check, but nothing that edits.
         allowedTools:
@@ -1713,6 +1755,24 @@ function modelOrNull(model: string | null | undefined): string | null {
     throw new Error(`"${trimmed}" is not a model id; use e.g. opus, sonnet or claude-opus-5-5`);
   }
   return trimmed;
+}
+
+/** A trimmed effort level, or `null` for empty; throws on anything that is not one. */
+function effortOrNull(effort: string | null | undefined): string | null {
+  const trimmed = effort?.trim();
+  if (!trimmed) return null;
+  if (!isEffortId(trimmed)) {
+    throw new Error(`"${trimmed}" is not a reasoning effort; use e.g. low, medium or high`);
+  }
+  return trimmed;
+}
+
+/**
+ * The effort a session of `role` runs with: the task's choice for the role, else the
+ * profile's default effort, else `null` for the CLI's default.
+ */
+function sessionEffort(agents: TaskAgents, role: AgentRole, profile: AgentProfile): string | null {
+  return roleEffort(agents, role) ?? profile.effort ?? null;
 }
 
 function withTool(tools: string[], rule: string): string[] {

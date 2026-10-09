@@ -7,6 +7,7 @@ import type {
   DetectedAgent,
   ModelInfo,
   NewAgentProfile,
+  AgentEffortUpdate,
   AgentsUpdate,
   CommitInfo,
   CreateTaskInput,
@@ -213,6 +214,10 @@ export const api = {
   agentModels: (id: string) => request<ModelInfo[]>(`/agents/${encodeURIComponent(id)}/models`),
   detectAgents: () => request<DetectedAgent[]>('/agents/detect'),
   addAgent: (input: NewAgentProfile) => send<AgentProfile>('POST', '/agents', input),
+  setAgentEffort: (id: string, effort: string | null) =>
+    send<AgentProfile>('PUT', `/agents/${encodeURIComponent(id)}/effort`, {
+      effort,
+    } satisfies AgentEffortUpdate),
   folders: (path?: string) =>
     request<FolderListing>(`/folders${path ? `?path=${encodeURIComponent(path)}` : ''}`),
   inspectFolder: (path: string) =>

@@ -6,6 +6,7 @@ import {
   defaultConfig,
   loadConfig,
   loadProjectConfig,
+  saveUserAgentEffort,
   saveUserConfig,
   userConfigFile,
   validate,
@@ -99,6 +100,22 @@ describe('loadConfig', () => {
     writeFileSync(file, JSON.stringify({ agents: { boxed } }));
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
       'config agents.boxed.sandboxImage must name an image for the sandbox',
+    );
+  });
+
+  it('loads a profile with a reasoning effort', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const deep = { provider: 'codex', command: 'codex', model: 'gpt-6-sol', effort: 'high' };
+    writeFileSync(file, JSON.stringify({ agents: { deep } }));
+    expect(loadConfig({ env: {}, configFile: file }).agents.deep?.effort).toBe('high');
+  });
+
+  it('rejects a profile effort that could be read as an option, naming the profile', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const deep = { provider: 'codex', command: 'codex', model: null, effort: '-x' };
+    writeFileSync(file, JSON.stringify({ agents: { deep } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      'config agents.deep.effort must be a reasoning effort such as "high", got "-x"',
     );
   });
 
@@ -257,6 +274,21 @@ describe('saveUserConfig', () => {
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({
       maxConcurrent: 2,
       quotaPauseUtilization: 0.9,
+    });
+  });
+});
+
+describe('saveUserAgentEffort', () => {
+  it('drops environment overrides of the built-in profile once they are unset', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    const env = { HARNESSBOARD_MODEL: 'haiku', HARNESSBOARD_CLAUDE_PATH: '/tmp/claude' };
+    const inEffect = loadConfig({ env, configFile: file }).agents.claude!;
+    saveUserAgentEffort('claude', 'high', inEffect, file);
+    expect(loadConfig({ env: {}, configFile: file }).agents.claude).toEqual({
+      provider: 'claude-code',
+      command: 'claude',
+      model: null,
+      effort: 'high',
     });
   });
 });

@@ -172,6 +172,7 @@ export class PromptArgAdapter implements AgentAdapter {
     sessionIds: 'agent',
     permissionPrompts: false,
     readOnlyGit: true,
+    effort: false,
   };
   private readonly parser = new ClaudeCodeAdapter(FAKE_CLAUDE);
 

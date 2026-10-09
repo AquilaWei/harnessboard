@@ -68,6 +68,8 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
                   networkAccess: sandbox.networkAccess === true,
                 },
           ...(spec.model ? { model: spec.model } : {}),
+          // Only `turn/start` takes an effort; `thread/start` and `thread/resume` have none.
+          ...(spec.effort ? { effort: spec.effort } : {}),
           input: [{ type: 'text', text: spec.prompt }],
         },
       });

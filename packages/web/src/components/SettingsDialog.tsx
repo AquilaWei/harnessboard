@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentInfo, Settings, TaskSize } from '@harnessboard/shared';
+import type { AgentInfo, ModelInfo, Settings, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
 import { DetectedAgents } from './DetectedAgents';
+import { EffortSelect } from './ModelPicker';
 import { PhoneAccess } from './PhoneAccess';
 import { LANGUAGES, setLanguage } from '../i18n';
 import { parseRules } from '../rules';
@@ -45,6 +46,8 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [permission, setPermission] = useState(notificationPermission);
   const notifyMode = currentNotifyMode();
   const [agents, setAgents] = useState<AgentInfo[] | null>(null);
+  /** Profile efforts changed here, saved with the other settings. */
+  const [efforts, setEfforts] = useState<Record<string, string | null>>({});
   const [error, setError] = useState<string | null>(null);
 
   const loadAgents = () => api.agents().then(setAgents, (e: Error) => setError(e.message));
@@ -53,6 +56,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     try {
+      for (const [id, effort] of Object.entries(efforts)) await api.setAgentEffort(id, effort);
       onSaved(
         await api.saveSettings({
           maxConcurrent,
@@ -168,6 +172,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
                   <th>ID</th>
                   <th>{t('settingsForm.provider')}</th>
                   <th>{t('settingsForm.model')}</th>
+                  <th>{t('settingsForm.effort')}</th>
                   <th>{t('settingsForm.state')}</th>
                 </tr>
               </thead>
@@ -177,6 +182,13 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
                     <td className="mono">{a.id}</td>
                     <td className="mono">{a.profile.provider}</td>
                     <td className="mono">{a.profile.model ?? t('settingsForm.defaultModel')}</td>
+                    <td>
+                      <ProfileEffort
+                        agent={a}
+                        value={a.id in efforts ? efforts[a.id]! : (a.profile.effort ?? null)}
+                        onChange={(effort) => setEfforts({ ...efforts, [a.id]: effort })}
+                      />
+                    </td>
                     <td className={a.ok ? 'ok-text' : 'bad-text'} title={a.error ?? ''}>
                       {a.ok ? `✓ ${a.version ?? ''}` : `✗ ${a.error ?? ''}`}
                     </td>
@@ -185,6 +197,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
               </tbody>
             </table>
           )}
+          {agents && <p className="hint">{t('settingsForm.effortHint')}</p>}
           <DetectedAgents onAdded={() => void loadAgents()} onError={setError} />
           <p className="hint">
             {configFile
@@ -273,5 +286,50 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
         </div>
       </form>
     </>
+  );
+}
+
+/**
+ * A profile's default reasoning effort, chosen from the efforts its own model offers. A
+ * profile without a model, or whose model is not listed, shows the stored effort as text.
+ */
+function ProfileEffort({
+  agent,
+  value,
+  onChange,
+}: {
+  agent: AgentInfo;
+  value: string | null;
+  onChange: (effort: string | null) => void;
+}) {
+  const { t } = useTranslation();
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const model = agent.profile.model;
+
+  useEffect(() => {
+    if (!model) return;
+    let current = true;
+    // Without a list there is nothing to choose from; the stored effort still shows.
+    api.agentModels(agent.id).then(
+      (list) => current && setModels(list),
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [agent.id, model]);
+
+  const info = models.find((m) => m.id === model);
+  if (!info || info.efforts.length === 0) {
+    return <span className="mono">{value ?? t('models.effortDefault')}</span>;
+  }
+  return (
+    <EffortSelect
+      efforts={info.efforts}
+      defaultEffort={info.defaultEffort}
+      value={value}
+      onChange={onChange}
+      label={t('settingsForm.effort')}
+    />
   );
 }

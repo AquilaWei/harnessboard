@@ -32,6 +32,8 @@ side, and none of them touches your files until you say so.
 - **Quota-aware:** it watches your Claude subscription's usage, stops starting work near the
   limit and continues after the reset.
 - **No API key:** it drives the `claude` program you already signed in to.
+- **Your choice of model and effort:** pick each role's model and how deeply it reasons
+  (for example Opus at high effort for the builder, a quick level for the reviewer).
 
 ## Words you will see
 
@@ -198,7 +200,7 @@ Every command and flag is in [docs/cli.md](docs/cli.md); `hb --help` lists them 
 | Everything the web board can do                       | [docs/web-board.md](docs/web-board.md)                                         |
 | Use it from your phone (Tailscale) or the Android app | [docs/phone-access.md](docs/phone-access.md)                                   |
 | A desktop app instead of a terminal                   | [docs/desktop-app.md](docs/desktop-app.md)                                     |
-| Settings, models, permissions, Docker sandbox         | [docs/configuration.md](docs/configuration.md)                                 |
+| Settings, models, reasoning effort, permissions       | [docs/configuration.md](docs/configuration.md)                                 |
 | Build, test and contribute                            | [docs/development.md](docs/development.md), [CONTRIBUTING.md](CONTRIBUTING.md) |
 | How it is built                                       | [docs/architecture.md](docs/architecture.md)                                   |
 
