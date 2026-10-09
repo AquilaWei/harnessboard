@@ -150,6 +150,16 @@ turn with `effort` is accepted by the app-server. Spend real runs sparingly.
   "Default" while that effort is still sent; choosing Default then clears it. Regression
   tests in `settings-effort.test.tsx` fail on the old code.
   Verify: 1483 passed, 14 skipped.
+- **F7 (done):** docs only. `docs/cli.md`: a "Choosing models and reasoning effort" section
+  with a role → option table (all five `--*-effort` options), `hb agents --models` levels,
+  `hb models` output and `default`, and the model-change rule. `docs/configuration.md`: a
+  profile with `"effort"`, who honours it (Claude Code `--effort`, Codex turn effort; not
+  Gemini), the role → profile → none order, how to set it. `docs/architecture.md`: an
+  `effort` row in the capability table and a per-adapter table (`--effort`,
+  `turn/start.effort`, Gemini not passed, Docker forwards). `docs/web-board.md`: the effort
+  select and the Settings column. READMEs: one "Why use it" bullet and the Go-further row,
+  in both languages. CHANGELOG: an `Unreleased` entry; version unchanged.
+  Verify: 1483 passed, 14 skipped.
 
 ## Open questions
 

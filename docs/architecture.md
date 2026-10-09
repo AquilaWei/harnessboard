@@ -47,7 +47,7 @@ The installers come from `electron-builder`. They take their version from
 - **Provider:** an agent CLI Harnessboard knows how to drive. Today there are two,
   `claude-code` and `codex`. Each provider has one `AgentAdapter`.
 - **Profile:** a named way to run a provider, set in the user config. It holds a command,
-  a model, and optionally a context window. `claude` always exists. Adding a second profile
+  a model, and optionally a default reasoning effort and a context window. `claude` always exists. Adding a second profile
   (for example the same CLI with another model) needs no code.
 - **Role:** what a session is asked to do.
   - `spec`: agrees acceptance criteria with the user before anything is built. The
@@ -199,6 +199,21 @@ get `maxReviewRounds` again.
    | `sessionIds`        | The harness picks the id and passes it                                                         | The id comes from `init` and is stored as `agent_session_id`; resume and `hb open` use it                              |
    | `permissionPrompts` | A tool outside the rules emits `permission_request`; the CLI waits for `encodePermissionReply` | Such tools are refused; the user widens the rules with `hb tools` and runs the task again                              |
    | `readOnlyGit`       | A read-only reviewer runs `git log`, `git diff` and `git status` itself                        | The harness runs them, saves the output to files the reviewer may read, and quotes it in the prompt (`reviewEvidence`) |
+   | `effort`            | The adapter passes `SessionSpec.effort` to the CLI; models list their `efforts`                | `SessionSpec.effort` is ignored, and `Harness.models` drops every model's `efforts`, so no effort is offered           |
+
+   **Reasoning effort:** `SessionSpec.effort` is a level id from the model's `efforts`
+   (`ModelInfo.efforts`, parsed from the CLI's model catalog), or `null` to leave it to the
+   CLI. The harness picks it with `sessionEffort`: the task's effort for the role
+   (`roleEffort`), else the profile's `effort`, else `null`. Each adapter passes it this way:
+
+   | Adapter       | `effort` | How it is passed                                                                            |
+   | ------------- | -------- | ------------------------------------------------------------------------------------------- |
+   | `claude-code` | `true`   | `--effort <level>` on every run, new or resumed                                             |
+   | `codex`       | `true`   | `effort` on `turn/start`; `thread/start` and `thread/resume` have no such field             |
+   | `gemini`      | `false`  | Not passed; the CLI has no option for it                                                    |
+   | Docker        | inner    | `DockerSandbox` reports and forwards the inner adapter's capability and arguments unchanged |
+
+   `setAgents` clears a role's effort when its model changes, unless the same update sets one.
 
 5. Map `SessionSpec.access: 'readOnly'` to the CLI's most restrictive mode. Reviewers rely
    on it. The harness also compares HEAD and `git status` before and after every review,
@@ -213,7 +228,8 @@ get `maxReviewRounds` again.
 `core/src/codex.ts` drives `codex app-server --listen stdio://`, checked against CLI 0.162.0:
 
 - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: true`,
-  `readOnlyGit: true` (the read-only sandbox still runs commands that do not write).
+  `readOnlyGit: true` (the read-only sandbox still runs commands that do not write),
+  `effort: true` (sent as `turn/start.effort`, so a resumed thread gets the current level).
 - The optional `createConnection(spec, write)` adapter hook creates a process-scoped RPC
   handshake and parser. It keeps stdin open for requests and replies; adapters without
   the hook retain their existing transport, including Claude's stream-json interface.
@@ -249,7 +265,7 @@ names and fields follow the stream-json types in the Gemini CLI source
 a real run yet.
 
 - Capabilities: `midTurnInput: false`, `sessionIds: 'agent'`, `permissionPrompts: false`,
-  `readOnlyGit: false`.
+  `readOnlyGit: false`, `effort: false`.
 - Output is JSONL: `init` (with `session_id` and `model`), `message` (`role`, `content`, and
   `delta: true` for chunks), `tool_use`, `tool_result`, `error` (`severity`, `message`) and
   `result` (`status`, `error`, `stats`). The parser joins assistant chunks into one message,

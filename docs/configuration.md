@@ -61,6 +61,31 @@ second Claude with another model:
 }
 ```
 
+**Reasoning effort:** a profile may also set `"effort"`, how deeply its model reasons by
+default. It is one of the level ids its CLI lists (`hb agents --models <profile>`), for
+example `low`, `medium`, `high`, `xhigh` or `max` for Claude Code:
+
+```json
+{
+  "agents": {
+    "deep": { "provider": "claude-code", "command": "claude", "model": "opus", "effort": "high" },
+    "codex": { "provider": "codex", "command": "codex", "model": null, "effort": "medium" }
+  }
+}
+```
+
+- **Who honours it:** Claude Code (passed as `--effort`) and Codex (the turn's `effort`).
+  Gemini CLI has no such option, so a Gemini profile's effort is ignored and no effort is
+  offered for it.
+- **Which effort a session gets:** the effort chosen for that role on the task, else the
+  profile's `"effort"`, else none, leaving it to the CLI. The profile's effort applies whatever
+  model the task picks, so a level that model does not offer is still sent; the CLI may then
+  refuse or ignore it.
+- **Setting it:** `hb agents --add <provider> --effort <level>`, the **Reasoning effort**
+  column in **Settings → Agents**, or by hand. Loading the config fails on a value that is not
+  a single word, naming `config agents.<id>.effort`. Remove the key (or pick **Default** in
+  Settings) to leave it to the CLI.
+
 Supported providers: `claude-code`, `codex` and `gemini`. A Codex profile uses the signed-in
 [Codex CLI](https://github.com/openai/codex) (`codex app-server`, checked with CLI 0.162.0),
 so a ChatGPT plan works without an API key. Codex runs in the task's folder with its

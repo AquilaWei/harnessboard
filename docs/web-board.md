@@ -35,6 +35,16 @@
     - **While the task is busy**, your message waits as _pending_ and is sent when the
       current step ends; the workflow then carries on. Cancel it until then.
     - To work in Claude Code itself, the tab also copies `hb open <id>`.
+- **Models and reasoning effort:** in **New task** and in the task's agents editor, each
+  role has a **Reasoning effort** select next to its model. It lists only the levels the
+  chosen model offers (with "Profile default", the profile's own model), and each level's
+  description shows as its tooltip. **Default** names the level that will apply when one is
+  known: the profile's effort, else the CLI's default (Codex names one; Claude Code does
+  not). Switching to a model without the chosen level resets it to Default. The select is
+  hidden for Gemini CLI, for a model typed by hand, and for "Profile default" when the
+  profile names no model. The editor's summary shows the level after the model (`· High`). A stored
+  level the model does not offer stays selected as "(not offered by this model)" until you
+  pick another.
 - **Picking a repository:** type a path (`~` works) or click Browse… to walk through your
   folders. Git repositories are marked. The field checks what you picked right away: missing
   folder, not a repository (with the command to fix it), or no commits yet.
@@ -49,7 +59,9 @@
 - **Settings:**
   - Concurrency, quota pause level, default task size and default reviewer. These are saved
     to your user config file.
-  - The agent profiles and whether each CLI runs.
+  - The agent profiles and whether each CLI runs, with each profile's default **Reasoning
+    effort** (see [configuration](configuration.md#config-files-agents-and-permissions)),
+    saved with Save.
   - Language (English, 繁體中文) and theme (system, light, dark), which apply to this browser
     only.
   - **Notify me when a task needs me:** a desktop notification from this browser when a task

@@ -14,7 +14,8 @@ Every `hb` command and flag, and how merging, working on the base branch and del
 | `hb spec <id> <text>` / `hb reject <id>`                                              | Ask to change the spec after work started; reject a proposed change  |
 | `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)                          |
 | `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them                          |
-| `hb agents`                                                                           | List agent profiles, and agent CLIs found without one                |
+| `--effort <level>` / `--reviewer-effort <level>` on `add` / `loop`                    | Choose how deeply each role reasons (below)                          |
+| `hb agents` / `hb agents --models <profile>`                                          | List agent profiles, and agent CLIs found without one / their models |
 | `hb ls` / `hb show <id>`                                                              | List tasks / show sessions, context, tokens, estimated cost and time |
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                                              |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                                                 |
@@ -26,6 +27,38 @@ Every `hb` command and flag, and how merging, working on the base branch and del
 | `hb allow <id> [--suggested] [--rule RULE...] [--global]` / `hb deny <id> [reason]`   | Answer a tool use the agent waits on                                 |
 | `--no-auto-approve` on `add` / `loop`; `hb auto <id> [on\|off]`; `hb global-tools`    | Ask more or less: see Permissions below                              |
 | `--preset git,node,...` on `add` / `loop`; `hb tools <id> [RULE...]`                  | Choose allowed tools; show or change them                            |
+
+**Choosing models and reasoning effort.** Each role of a task (implementer, spec author,
+designer, tester, reviewer) has a model and a reasoning effort, the level of thinking the
+model spends on each answer. Left out, the profile's model and effort apply, and without those
+the CLI's own defaults.
+
+| Role        | Model on `add` / `loop` / `models` | Effort on `add` / `loop` / `models` |
+| ----------- | ---------------------------------- | ----------------------------------- |
+| Implementer | `--model <m>`                      | `--effort <level>`                  |
+| Spec author | `--spec-model <m>`                 | `--spec-effort <level>`             |
+| Designer    | `--designer-model <m>`             | `--designer-effort <level>`         |
+| Tester      | `--tester-model <m>`               | `--tester-effort <level>`           |
+| Reviewer    | `--reviewer-model <m>`             | `--reviewer-effort <level>`         |
+
+- **Which levels exist** depends on the model: `hb agents --models <profile>` prints each
+  model with an indented `efforts: low, medium, high, …` line of the ids the options take,
+  plus `(default medium)` when the CLI names its default. Claude Code and Codex take an
+  effort; Gemini CLI does not, so its models list none. The server refuses an id that is not
+  a single word.
+- **`hb models <id>`** prints each role with its profile, model and effort; an effort left
+  to the profile or CLI shows `(default effort)`. The spec author without its own profile is
+  shown as `(the implementer)` with the model and effort it runs with. Any of the options
+  above changes them; `default` clears a model or effort. Models and efforts can change while
+  the task runs and apply from its next session.
+- **Changing a role's model clears its effort** unless the same command sets one too, so a
+  level the new model does not offer is not kept by accident.
+
+```bash
+hb add "Refactor the parser" --model opus --effort high --reviewer codex --reviewer-effort low
+hb models 12 --effort max          # the implementer thinks harder from the next session on
+hb models 12 --effort default      # back to the profile's or CLI's default
+```
 
 **Merging a task** (`hb merge`, or **Merge into main** in the task panel of a task in
 review) merges its branch into the branch it started from with a merge commit,

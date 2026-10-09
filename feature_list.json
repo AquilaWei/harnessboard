@@ -88,7 +88,7 @@
         "CHANGELOG.md has a user-facing entry under Unreleased; both READMEs stay in sync.",
         "`pnpm format:check` passes along with the verify command."
       ],
-      "passes": false
+      "passes": true
     }
   ],
   "verify": "pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm format:check && pnpm test",

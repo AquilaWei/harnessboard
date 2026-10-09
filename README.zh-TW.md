@@ -27,6 +27,8 @@
   agent 把進度寫成筆記，再用全新的 session 接著做。
 - **會看額度**：隨時看你的 Claude 訂閱用量，快到上限就不再開新工作，重置後自動續跑。
 - **不需要 API key**：直接使用你已經登入的 `claude`。
+- **模型與推理深度自己選**：每個角色可以選模型和推理深度（例如實作用 Opus 加高深度，
+  審查用較快的等級）。
 
 ## 名詞
 
@@ -187,7 +189,7 @@ flowchart LR
 | 網頁看板的所有功能                       | [docs/web-board.md](docs/web-board.md)                                         |
 | 用手機（Tailscale）或 Android App 使用   | [docs/phone-access.md](docs/phone-access.md)                                   |
 | 不想用終端機：桌面程式                   | [docs/desktop-app.md](docs/desktop-app.md)                                     |
-| 設定、模型、權限、Docker 沙箱            | [docs/configuration.md](docs/configuration.md)                                 |
+| 設定、模型、推理深度、權限、Docker 沙箱  | [docs/configuration.md](docs/configuration.md)                                 |
 | 建置、測試與參與開發                     | [docs/development.md](docs/development.md)、[CONTRIBUTING.md](CONTRIBUTING.md) |
 | 內部架構                                 | [docs/architecture.md](docs/architecture.md)                                   |
 
