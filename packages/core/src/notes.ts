@@ -116,6 +116,6 @@ export function copyNotes(dir: string, content: string): string {
   writeFileSync(file, content);
   return [
     `Your read tools skip \`${NOTES_FILE}\` because git ignores it. The harness saved the same`,
-    `notes to \`${file}\`: read that file instead.`,
+    `notes to \`${file}\`: consult it only when a specific ambiguity needs history.`,
   ].join('\n');
 }

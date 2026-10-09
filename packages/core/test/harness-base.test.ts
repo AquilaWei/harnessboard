@@ -66,7 +66,7 @@ const git = (cwd: string, ...args: string[]) =>
 function commitFile(cwd: string, file: string, content: string): void {
   writeFileSync(path.join(cwd, file), content);
   git(cwd, 'add', file);
-  git(cwd, 'commit', '-q', '-m', `add ${file}`);
+  git(cwd, 'commit', '-q', '-m', `feat: add ${file}`);
 }
 
 function createBaseTask(prompt = 'Add a greeting', queue = true) {
@@ -83,7 +83,7 @@ function createBaseTask(prompt = 'Add a greeting', queue = true) {
 const ADD_HELLO = [
   init(),
   writeFile('hello.txt', 'hi\n'),
-  commitAll('add hello.txt'),
+  commitAll('feat: add hello.txt'),
   result('done'),
 ];
 
@@ -190,7 +190,7 @@ describe('reviewing a base task', () => {
     commitFile(repo, 'before.txt', 'earlier work\n');
     const task = await reviewedBaseTask();
     const commits = await harness.commits(task.id);
-    expect(commits.map((c) => c.subject)).toEqual(['add hello.txt']);
+    expect(commits.map((c) => c.subject)).toEqual(['feat: add hello.txt']);
   });
 
   it('goes straight to done when approved, without a merge commit', async () => {
@@ -349,8 +349,18 @@ describe('a base task after the folder switched to another branch', () => {
   });
 });
 
-const ADD_WORLD = [init(), writeFile('world.txt', 'w\n'), commitAll('add world.txt'), result('ok')];
-const ADD_BYE = [init(), writeFile('bye.txt', 'bye\n'), commitAll('add bye.txt'), result('ok')];
+const ADD_WORLD = [
+  init(),
+  writeFile('world.txt', 'w\n'),
+  commitAll('feat: add world.txt'),
+  result('ok'),
+];
+const ADD_BYE = [
+  init(),
+  writeFile('bye.txt', 'bye\n'),
+  commitAll('feat: add bye.txt'),
+  result('ok'),
+];
 
 /**
  * Base task 1 committed hello.txt and is done; base task 2 then committed world.txt and is
@@ -360,7 +370,7 @@ async function doneTaskThenAnother() {
   const addHelloAndTalk = [
     init(),
     writeFile('hello.txt', 'hi\n'),
-    commitAll('add hello.txt'),
+    commitAll('feat: add hello.txt'),
     assistantText('done', 10_000),
     result('done'),
   ];
@@ -384,7 +394,7 @@ describe('a done base task after another base task worked in the folder', () => 
   it('lists only its own commits', async () => {
     const first = await doneTaskThenAnother();
     const commits = await harness.commits(first.id);
-    expect(commits.map((c) => c.subject)).toEqual(['add hello.txt']);
+    expect(commits.map((c) => c.subject)).toEqual(['feat: add hello.txt']);
   });
 
   it('does not list uncommitted files left in the folder later', async () => {
@@ -398,7 +408,7 @@ describe('a done base task after another base task worked in the folder', () => 
     harness.chat(first.id, 'Say goodbye too');
     await harness.waitForIdle();
     const commits = await harness.commits(first.id);
-    expect(commits.map((c) => c.subject)).toEqual(['add bye.txt', 'add hello.txt']);
+    expect(commits.map((c) => c.subject)).toEqual(['feat: add bye.txt', 'feat: add hello.txt']);
   });
 });
 
@@ -418,7 +428,7 @@ async function stoppedTaskResumedAfterAnother() {
       [
         init(),
         writeFile('hello.txt', 'hi\n'),
-        commitAll('add hello.txt'),
+        commitAll('feat: add hello.txt'),
         askBash('r1', 'node hello.js', 'node *'),
         hang,
       ],
@@ -450,7 +460,7 @@ describe('a stopped base task resumed after another base task worked in the fold
   it('lists its own commits from before and after, but not the other task', async () => {
     const first = await stoppedTaskResumedAfterAnother();
     const commits = await harness.commits(first.id);
-    expect(commits.map((c) => c.subject)).toEqual(['add bye.txt', 'add hello.txt']);
+    expect(commits.map((c) => c.subject)).toEqual(['feat: add bye.txt', 'feat: add hello.txt']);
   });
 
   it('shows its own changes from before and after, but not the other task', async () => {
@@ -507,7 +517,7 @@ describe('a base task stopped before its first review and resumed after another 
         [
           init(),
           writeFile('hello.txt', 'hi\n'),
-          commitAll('add hello.txt'),
+          commitAll('feat: add hello.txt'),
           askBash('r1', 'node hello.js', 'node *'),
           hang,
         ],
@@ -576,8 +586,8 @@ describe('a base task whose spec author left the spec uncommitted', () => {
     await harness.waitForIdle();
     const commits = await harness.commits(task.id);
     expect(commits.map((c) => c.subject)).toEqual([
-      'add hello.txt',
-      'docs: add spec for Add a greeting',
+      'feat: add hello.txt',
+      'docs: add task specification',
     ]);
   });
 });
@@ -617,9 +627,9 @@ describe('a base task whose agent could not start after the harness revised its 
     await harness.waitForIdle();
     const commits = await harness.commits(task.id);
     expect(commits.map((c) => c.subject)).toEqual([
-      'docs: revise spec for Add a greeting',
-      'add hello.txt',
-      'docs: add spec for Add a greeting',
+      'docs: revise task specification',
+      'feat: add hello.txt',
+      'docs: add task specification',
     ]);
   });
 });
@@ -627,7 +637,7 @@ describe('a base task whose agent could not start after the harness revised its 
 /** A worktree task with a committed file waiting for review, then a base task (not started). */
 async function reviewedWorktreeTaskAndBaseTask() {
   scenario(
-    [[init(), writeFile('feature.txt', 'new\n'), commitAll('add feature'), result('ok')]],
+    [[init(), writeFile('feature.txt', 'new\n'), commitAll('feat: add feature'), result('ok')]],
     [TALK],
   );
   const worktree = await harness.createTask({
@@ -725,7 +735,7 @@ describe('a base task whose session was cut off by a crash after committing', ()
     await restarted.waitForIdle();
     await restarted.shutdown();
     const commits = await restarted.commits(task.id);
-    expect(commits.map((c) => c.subject)).toEqual(['add hello.txt']);
+    expect(commits.map((c) => c.subject)).toEqual(['feat: add hello.txt']);
   });
 });
 
@@ -808,7 +818,7 @@ describe('a base task whose tester was stopped and resumed after another base ta
 const ADD_HELLO_AND_TALK = [
   init(),
   writeFile('hello.txt', 'hi\n'),
-  commitAll('add hello.txt'),
+  commitAll('feat: add hello.txt'),
   assistantText('done', 10_000),
   result('done'),
 ];
@@ -887,7 +897,7 @@ async function checkResumedAfterChatChanges(role: 'reviewer' | 'tester', reply: 
   const addByeAndDraft = [
     init(),
     writeFile('bye.txt', 'bye\n'),
-    commitAll('add bye.txt'),
+    commitAll('feat: add bye.txt'),
     writeFile('draft.txt', 'draft\n'),
     result('ok'),
   ];
@@ -922,10 +932,14 @@ describe('a base task whose stopped reviewer resumes after a chat changed the fo
 });
 
 describe('a base task whose stopped tester resumes after a chat changed the folder', () => {
-  it('takes the verdict instead of blaming the tester for the chat', async () => {
+  it('blocks handoff for the chat draft without attributing it to tester edits', async () => {
     const { first } = await checkResumedAfterChatChanges('tester', 'TESTS: PASS');
-    const report = harness.store.lastEvent(first.id, 'test_report')!.data as { verdict: string };
-    expect(report.verdict).toBe('pass');
+    expect(harness.store.getTask(first.id)!.status).toBe('failed');
+    expect(harness.store.lastEvent(first.id, 'commit_check')?.data).toMatchObject({
+      role: 'tester',
+      ok: false,
+      detail: expect.stringContaining('Uncommitted changes'),
+    });
   });
 
   it('asks the tester to check up to the commit the chat made', async () => {
@@ -986,10 +1000,14 @@ describe('a base task whose stopped reviewer resumes after a chat cut off by a c
 });
 
 describe('a base task whose stopped tester resumes after a chat cut off by a crash', () => {
-  it('takes the verdict instead of blaming the tester for the chat', async () => {
+  it('blocks handoff for the chat draft without attributing it to tester edits', async () => {
     const { first } = await checkResumedAfterInterruptedChat('tester', 'TESTS: PASS');
-    const report = harness.store.lastEvent(first.id, 'test_report')!.data as { verdict: string };
-    expect(report.verdict).toBe('pass');
+    expect(harness.store.getTask(first.id)!.status).toBe('failed');
+    expect(harness.store.lastEvent(first.id, 'commit_check')?.data).toMatchObject({
+      role: 'tester',
+      ok: false,
+      detail: expect.stringContaining('Uncommitted changes'),
+    });
   });
 
   it('asks the tester to check up to the commit the chat made', async () => {

@@ -97,10 +97,15 @@ async function waitForStatus(id: number, status: string): Promise<void> {
 const ADD_WORLD = [
   init(),
   writeFile('world.txt', 'world\n'),
-  commitAll('add world.txt'),
+  commitAll('feat: add world.txt'),
   result('ok'),
 ];
-const ADD_BYE = [init(), writeFile('bye.txt', 'goodbye\n'), commitAll('add bye.txt'), result('ok')];
+const ADD_BYE = [
+  init(),
+  writeFile('bye.txt', 'goodbye\n'),
+  commitAll('feat: add bye.txt'),
+  result('ok'),
+];
 
 /**
  * Base task 1 commits hello.txt and is stopped; base task 2 commits world.txt and is done;
@@ -112,7 +117,7 @@ async function geminiReviewAfterAnotherTask(): Promise<string> {
       [
         init(),
         writeFile('hello.txt', 'hello from the first stretch\n'),
-        commitAll('add hello.txt'),
+        commitAll('feat: add hello.txt'),
         askBash('r1', 'node hello.js', 'node *'),
         hang,
       ],
@@ -163,7 +168,7 @@ describe('a Gemini review of a base task with an earlier stretch', () => {
   it('gets the commit log of its earlier stretch', async () => {
     const prompt = await geminiReviewAfterAnotherTask();
     const hello = git(repo, 'log', '--format=%h', '-1', '--', 'hello.txt');
-    expect(prompt).toContain(`${hello} add hello.txt`);
+    expect(prompt).toContain(`${hello} feat: add hello.txt`);
   });
 
   it('does not get the other task’s changes', async () => {
@@ -179,7 +184,7 @@ describe('a Gemini review of a base task with notes from its implementer', () =>
       [
         init(),
         writeFile('hello.txt', 'hi there\n'),
-        commitAll('add hello.txt'),
+        commitAll('feat: add hello.txt'),
         result('done\n\n## Notes\nThe greeting is hard-coded on purpose.'),
       ],
     ]);
@@ -203,10 +208,12 @@ describe('a Gemini review of a base task with notes from its implementer', () =>
     expect(notes).toContain('The greeting is hard-coded on purpose.');
   });
 
-  it('is told to read the copy of the notes', async () => {
+  it('can consult the copy of the notes only when needed', async () => {
     const id = await reviewedWithNotes();
     const copy = path.join(dir, 'data', 'evidence', String(id), 'notes.md');
-    expect(geminiPrompt()).toContain(`notes to \`${copy}\`: read that file instead.`);
+    expect(geminiPrompt()).toContain(
+      `notes to \`${copy}\`: consult it only when a specific ambiguity needs history.`,
+    );
   });
 });
 
@@ -214,7 +221,12 @@ describe('a Gemini review', () => {
   /** Runs a task whose implementer commits hello.txt and that Gemini reviews; returns its id. */
   async function reviewedByGemini(): Promise<number> {
     scenario([
-      [init(), writeFile('hello.txt', 'hi there\n'), commitAll('add hello.txt'), result('ok')],
+      [
+        init(),
+        writeFile('hello.txt', 'hi there\n'),
+        commitAll('feat: add hello.txt'),
+        result('ok'),
+      ],
     ]);
     const task = await harness.createTask({
       prompt: 'Add a greeting',
@@ -282,7 +294,14 @@ describe('a Gemini review', () => {
 describe('a Claude review', () => {
   it('gets the git commands without their output, since it can run them', async () => {
     scenario(
-      [[init(), writeFile('hello.txt', 'hi there\n'), commitAll('add hello.txt'), result('ok')]],
+      [
+        [
+          init(),
+          writeFile('hello.txt', 'hi there\n'),
+          commitAll('feat: add hello.txt'),
+          result('ok'),
+        ],
+      ],
       [[init(), result('VERDICT: APPROVE')]],
     );
     await harness.createTask({

@@ -65,6 +65,17 @@ function create(autoApprove = false) {
 }
 
 describe('Codex app-server approvals in Harnessboard', () => {
+  it('compacts the same thread after a stage completes', async () => {
+    scenario('node report.js');
+    const task = await create(true);
+    await harness.waitForIdle();
+    expect(runs()[0].messages.at(-1)).toEqual({
+      id: 'hb:compact',
+      method: 'thread/compact/start',
+      params: { threadId: 'codex-thread' },
+    });
+    expect(harness.store.listSessions(task.id)[0]!.agentSessionId).toBe('codex-thread');
+  });
   it('commits in the managed linked worktree with the git preset while auto-approve is off', async () => {
     scenario("/bin/bash -lc 'git commit -m report'", true);
     const task = await create();
@@ -87,7 +98,7 @@ describe('Codex app-server approvals in Harnessboard', () => {
       behavior: 'allow',
       auto: true,
     });
-    expect(runs()[0].messages.at(-1)).toEqual({ id: 42, result: { decision: 'accept' } });
+    expect(runs()[0].messages).toContainEqual({ id: 42, result: { decision: 'accept' } });
   });
 
   it('pauses for an unlisted command and forwards a manual allow-once answer', async () => {
@@ -100,7 +111,7 @@ describe('Codex app-server approvals in Harnessboard', () => {
     expect(request!.summary).toBe('node report.js');
     harness.answerPermission(task.id, { requestId: request!.requestId, behavior: 'allow' });
     await harness.waitForIdle();
-    expect(runs()[0].messages.at(-1)).toEqual({ id: 42, result: { decision: 'accept' } });
+    expect(runs()[0].messages).toContainEqual({ id: 42, result: { decision: 'accept' } });
   });
 
   it('forwards a denial without running the requested commit', async () => {
@@ -113,7 +124,7 @@ describe('Codex app-server approvals in Harnessboard', () => {
       message: 'Do not run this',
     });
     await harness.waitForIdle();
-    expect(runs()[0].messages.at(-1)).toEqual({ id: 42, result: { decision: 'decline' } });
+    expect(runs()[0].messages).toContainEqual({ id: 42, result: { decision: 'decline' } });
     expect(
       execFileSync('git', ['status', '--porcelain'], {
         cwd: harness.store.getTask(task.id)!.worktreePath!,
@@ -127,7 +138,7 @@ describe('Codex app-server approvals in Harnessboard', () => {
     const task = await create(true);
     await harness.waitForIdle();
     expect(harness.permissionRequests(task.id)).toEqual([]);
-    expect(runs()[0].messages.at(-1)).toEqual({ id: 42, result: { decision: 'accept' } });
+    expect(runs()[0].messages).toContainEqual({ id: 42, result: { decision: 'accept' } });
   });
 
   it('still asks about a dangerous wrapped command while auto-approve is on', async () => {

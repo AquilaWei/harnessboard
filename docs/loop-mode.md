@@ -20,19 +20,24 @@ hb loop "A CLI calculator with add, subtract, multiply and divide"
      `hb open <id>` opens the same session in Claude Code.
    - **approve** (`hb approve <id> --verify "<command>"`): you confirm or change the verify
      command, and building starts from the plan as it is at that moment.
-3. **One feature per session:** every later session starts with a fresh context. It reads
-   the progress notes, builds the next open feature to its acceptance criteria, runs the
-   verify command, marks the feature as passing and commits.
-4. **Harness checks the work itself:** after each session Harnessboard runs the verify
-   command in the worktree. A feature counts only when that command succeeds. When it
-   fails, the output goes to the next session.
+3. **One feature per turn:** the implementer keeps the same conversation from planning
+   through later features and review fixes. It checks the feature list, builds the next
+   open feature to its acceptance criteria, runs development tests as needed, marks it as passing
+   and commits. Each completed stage is compacted without replacing the session.
+4. **Formal verification:** if a tester is configured, it runs the checks and reports a verdict before review; Harnessboard does not duplicate its run. Without a tester, Harnessboard runs the verify command itself. Only verified features count as progress; failures go back to the implementer in the same conversation.
 5. **Finish or stop for review:** the task moves to Review when every feature passes and
    verification succeeds. It stops as failed if features are removed from the list, or if
-   there is no verified progress for `loopStallSessions` (default 3) sessions in a row.
+   there is no verified progress for `loopStallSessions` (default 3) turns in a row.
+
+The reviewer also keeps its own conversation across features and review rounds. Resumed
+roles receive changed scope; the implementer also receives new reviewer/tester feedback.
+Reviewers and testers consult archived notes only when needed. Writing stages must pass
+the [commit handoff check](workflow.md#commit-checks-before-handoff); read-only review
+does not require a commit.
 
 The verify command always comes from you. The planner's suggestion has no effect until you
 approve it, and the agent is allowed to run exactly the approved command. It runs through
-your shell (`sh` or `cmd.exe`) with a 10-minute timeout (`verifyTimeoutMinutes`). You can
+your shell (`sh` or `cmd.exe`) with a 10-minute timeout when Harnessboard runs it (`verifyTimeoutMinutes`). You can
 also set it up front, with `--verify` or `verifyCommand` in `.harnessboard.json`.
 `--no-confirm-plan` skips the review and starts building right after planning; it needs a
 verify command.

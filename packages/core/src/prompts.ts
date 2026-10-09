@@ -65,7 +65,11 @@ export const SCOPE_CHANGED_PROMPT =
  * First session of a loop task: plan the work as a feature list, implement nothing yet.
  * Without a verify command the planner proposes one; the user confirms it before building.
  */
-export function initializerPrompt(goal: string, verifyCommand: string | null): string {
+export function initializerPrompt(
+  goal: string,
+  verifyCommand: string | null,
+  tester = false,
+): string {
   const verifyLine = verifyCommand
     ? `The user checks the work with \`${verifyCommand}\`.`
     : 'No check command is set yet: propose one in "verify" (see below).';
@@ -98,7 +102,9 @@ export function initializerPrompt(goal: string, verifyCommand: string | null): s
     '5. Reply with a short summary of the plan and your questions.',
     '',
     'The user reviews this plan and may ask for changes before any feature is built. After',
-    'approval, the harness runs the check command itself after every session; a feature only',
+    tester
+      ? 'approval, the tester runs formal verification after each implementation stage; a feature only'
+      : 'approval, the harness runs the check command itself after every session; a feature only',
     'counts as done when that command succeeds.',
   ].join('\n');
 }
@@ -128,18 +134,26 @@ export function loopSessionPrompt(
   failedVerify: VerifyResult | null,
   note: string | null,
   feedback: string | null = null,
+  resumed = false,
+  tester = false,
 ): string {
   const lines = [
-    'You are continuing a long-running project in this worktree. Each session implements',
+    'You are continuing a long-running project in this worktree. Each turn implements',
     'exactly one feature.',
     '',
-    `Goal:\n${goal}`,
+    ...(resumed ? ['Continue the agreed goal in this same conversation.'] : [`Goal:\n${goal}`]),
     '',
-    `1. Read \`${PROGRESS_FILE}\`, \`${FEATURE_LIST_FILE}\` and \`git log --oneline -20\`.`,
-    `2. Run \`${verifyCommand}\`. If something that used to work is broken, fix that first.`,
+    resumed
+      ? `1. Read \`${FEATURE_LIST_FILE}\` for the current feature status. Refer to progress or code when needed.`
+      : `1. Read \`${PROGRESS_FILE}\`, \`${FEATURE_LIST_FILE}\` and \`git log --oneline -20\`.`,
+    tester
+      ? '2. Run focused development tests as needed. The tester owns formal stage verification.'
+      : `2. Check any known regressions; run focused development tests as needed.`,
     '3. Pick the first feature with "passes": false and implement it so its "steps" (the',
     '   acceptance criteria) hold.',
-    `4. Run \`${verifyCommand}\`. Set "passes": true for that feature only if it succeeds.`,
+    tester
+      ? '4. Mark the feature as passing when your implementation and development checks are ready for formal testing.'
+      : `4. Run \`${verifyCommand}\`. Set "passes": true for that feature only if it succeeds.`,
     '   Never remove features or change their descriptions or steps.',
     `5. Update \`${PROGRESS_FILE}\` and commit.`,
     '6. Stop after this one feature.',
@@ -364,7 +378,7 @@ export function specFilePrompt(
     'Acceptance criteria (exactly as approved above).',
     'Another agent will build from this file without having seen the discussion, so include',
     'every decision the user made. Keep it short.',
-    `Then commit only that file with the message \`docs: add spec for ${request.split('\n')[0]!.slice(0, 50)}\`.`,
+    'Then commit only that file with the message `docs: add task specification`.',
   );
   return lines.join('\n');
 }

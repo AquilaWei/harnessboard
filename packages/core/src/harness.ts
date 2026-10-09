@@ -587,14 +587,14 @@ export class Harness {
       baseRef: input.baseRef ?? project.baseRef ?? (await currentRef(repoPath)),
       workspace,
       mode,
-      verifyCommand: mode === 'loop' ? verifyCommand : null,
+      verifyCommand: mode === 'loop' || agents.tester ? verifyCommand : null,
       acceptance,
       confirmPlan,
       contextPolicy,
       permission: {
         // A loop session is told to run the verify command, so it must be allowed to.
         allowedTools:
-          mode === 'loop' && verifyCommand
+          (mode === 'loop' || agents.tester) && verifyCommand
             ? withTool(allowedTools, `Bash(${verifyCommand})`)
             : allowedTools,
         skipPermissions: input.skipPermissions ?? false,
@@ -1405,6 +1405,15 @@ export class Harness {
           const agentSessionId = adapter.capabilities.sessionIds === 'harness' ? sessionId : null;
           this.store.startSession(sessionId, task.id, plan.role, plan.agentId, agentSessionId);
         }
+        const blocked = this.store.lastEvent(task.id, 'commit_check')?.data as
+          { ok: boolean; role: string; since: string } | undefined;
+        plan = {
+          ...plan,
+          commitBase:
+            blocked && !blocked.ok && blocked.role === plan.role
+              ? blocked.since
+              : await headCommit(ready.worktreePath!),
+        };
         this.workflow.started(task.id, sessionId, plan);
         this.setActivity(task.id, this.workflow.phaseOf(ready, plan));
         this.setStatus(task.id, 'running');
@@ -1536,7 +1545,7 @@ export class Harness {
         // A read-only session may run the task's own check, but nothing that edits.
         allowedTools:
           plan.access === 'readOnly'
-            ? task.verifyCommand
+            ? task.verifyCommand && plan.role !== 'reviewer'
               ? [`Bash(${task.verifyCommand})`]
               : []
             : [...new Set([...task.permission.allowedTools, ...this.config.allowedTools])],
@@ -1549,6 +1558,7 @@ export class Harness {
       wrapUp,
       // Every role: compacted only once its turn has ended, never in the middle of work.
       compact: true,
+      compactAfterTurn: !chat,
       contextWindow: window,
       signal,
       onEvent: (event) => {
@@ -1574,6 +1584,7 @@ export class Harness {
       agentId: plan.agentId,
       durationMs: Date.now() - started,
       usage: outcome.usage,
+      cumulative: provider !== 'gemini',
     };
     this.store.appendEvent(task.id, sessionId, 'usage', record);
     return outcome;

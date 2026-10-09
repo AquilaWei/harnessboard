@@ -26,9 +26,10 @@ side, and none of them touches your files until you say so.
 
 - **Safe by default:** every task works in its own git branch and folder, so a bad result
   costs you nothing.
-- **Small contexts:** an AI's memory (its _context_) fills up and its answers get worse.
-  Harnessboard asks the agent to save its progress in a note and continues in a fresh
-  session.
+- **Small contexts:** each implementer, tester and reviewer keeps its own conversation.
+  Harnessboard compacts it after each stage, keeping useful context across features and fixes.
+- **Clear handoffs:** testers run formal checks, reviewers inspect architecture and code rules.
+  Writing stages require committed changes and valid commit messages.
 - **Quota-aware:** it watches your Claude subscription's usage, stops starting work near the
   limit and continues after the reset.
 - **No API key:** it drives the `claude` program you already signed in to.
@@ -171,12 +172,13 @@ flowchart LR
 _Orange **Needs you** cards on the board are the steps where only you can move on: answering
 a question, approving the criteria, allowing a risky command, or reviewing._
 
-When the agent's context fills up, Harnessboard does not let the work degrade:
+Each role continues in its own conversation, compacted at stage boundaries:
 
 ```mermaid
 flowchart LR
-  S1[Session 1] -- context nearly full --> H[Agent commits and writes a handoff note]
-  H --> S2[Fresh session 2 reads the note and continues]
+  S1[Role's session] --> H[Finish stage and commit changes]
+  H --> C[Compact conversation]
+  C --> S2[Next stage in the same session]
 ```
 
 ## Everyday commands

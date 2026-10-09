@@ -32,6 +32,7 @@ const log = () => {
   }
 };
 
+let contextTokens = 0;
 const promptAt = process.argv.indexOf('--prompt');
 if (promptAt !== -1) {
   received.push(process.argv[promptAt + 1]);
@@ -51,7 +52,22 @@ createInterface({ input: process.stdin }).on('line', (line) => {
     return;
   }
   received.push(msg.message.content);
-  const lines = scenario.turns[turn++] ?? [];
+  const scripted = scenario.turns[turn++];
+  const lines =
+    scripted ??
+    (msg.message.content === '/compact'
+      ? [
+          {
+            type: 'system',
+            subtype: 'compact_boundary',
+            compact_metadata: {
+              pre_tokens: contextTokens,
+              post_tokens: Math.min(contextTokens, 1000),
+            },
+          },
+          { type: 'result', subtype: 'success', is_error: false, result: '' },
+        ]
+      : []);
   queue = queue.then(() => emit(lines));
 });
 process.stdin.on('end', () =>
@@ -63,6 +79,13 @@ process.stdin.on('end', () =>
 
 async function emit(lines) {
   for (const line of lines) {
+    if (line.type === 'assistant' && line.message?.usage) {
+      const usage = line.message.usage;
+      contextTokens =
+        (usage.input_tokens ?? 0) +
+        (usage.cache_read_input_tokens ?? 0) +
+        (usage.cache_creation_input_tokens ?? 0);
+    }
     if (line.__exit !== undefined) {
       if (line.__stderr) process.stderr.write(line.__stderr + '\n');
       log();
@@ -75,7 +98,9 @@ async function emit(lines) {
     }
     if (line.__commit !== undefined) {
       execFileSync('git', ['add', '-A'], { stdio: 'pipe' });
-      execFileSync('git', ['commit', '-q', '-m', line.__commit], { stdio: 'pipe' });
+      if (execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()) {
+        execFileSync('git', ['commit', '-q', '-m', line.__commit], { stdio: 'pipe' });
+      }
       continue;
     }
     if (line.__hang) {

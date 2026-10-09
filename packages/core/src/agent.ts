@@ -51,6 +51,8 @@ export type LineParser = (line: string) => AgentEvent[];
 export interface AgentConnection {
   start(): void;
   parseLine: LineParser;
+  /** Starts native compaction on the idle thread; completion arrives as a result event. */
+  compact?(): void;
 }
 
 /** The answer to a `permission_request` event. */
@@ -65,6 +67,8 @@ export interface PermissionReply {
  * See docs/architecture.md for what each known CLI supports.
  */
 export interface AgentCapabilities {
+  /** Native idle-thread compaction through the connection, independent of mid-turn input. */
+  compaction?: boolean;
   /**
    * The CLI reads further user messages on stdin while it works. Without it the prompt is
    * passed as an argument, and a wrap-up request waits until the turn ends and is sent by

@@ -20,6 +20,7 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
   let usage: RunUsage | null = null;
   let window: number | null = null;
   let error: Fields = {};
+  let compacted = false;
   const items = new Map<string, Fields>();
   const readOnly = spec.access === 'readOnly';
   const skip = !readOnly && spec.skipPermissions;
@@ -128,6 +129,10 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
     } else if (method === 'item/started' || method === 'item/completed') {
       const item = fields(params.item);
       items.set(string(item.id), item);
+      if (item.type === 'contextCompaction' && method === 'item/completed') {
+        compacted = true;
+        return [];
+      }
       if (item.type === 'agentMessage' && method === 'item/completed') {
         finalText = string(item.text);
         return [{ kind: 'text', text: finalText }];
@@ -144,6 +149,7 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
           apiErrorStatus: null,
           contextWindow: window,
           usage,
+          ...(compacted ? { compacted: true } : {}),
         },
       ];
     }
@@ -151,6 +157,11 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
   }
 
   return {
+    compact: () => {
+      if (!threadId) throw new Error('cannot compact before a Codex thread is loaded');
+      compacted = false;
+      send({ id: 'hb:compact', method: 'thread/compact/start', params: { threadId } });
+    },
     start: () => {
       if (spec.resume && !spec.sessionId)
         throw new Error('resuming a Codex session needs its thread id');

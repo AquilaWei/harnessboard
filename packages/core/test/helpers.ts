@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AgentAdapter, AgentCapabilities, SessionSpec } from '../src/agent.js';
+import { COMMIT_RULE } from '../src/commit-check.js';
 import { ClaudeCodeAdapter } from '../src/claude-code.js';
 
 export const FAKE_CLAUDE = fileURLToPath(new URL('./fixtures/fake-claude.mjs', import.meta.url));
@@ -105,6 +106,8 @@ export const featureList = (...passes: boolean[]) =>
 
 /** What the harness adds to every workflow prompt while the task has no notes yet. */
 export const ASK_FOR_NOTES =
+  '\n\n' +
+  COMMIT_RULE +
   '\n\nEnd your reply with a `## Notes` section for the roles after you: what you did,\n' +
   'the decisions you made and why, what you are unsure of, and what the next role should check.';
 

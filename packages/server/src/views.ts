@@ -43,7 +43,10 @@ const SUMMARY_CHARS = 600;
 export function taskView(task: Task, harness: Harness): TaskView {
   const { store, config } = harness;
   const sessions = store.listSessions(task.id);
-  const latest = sessions.at(-1);
+  const workflow = store.lastEvent(task.id, 'workflow_run');
+  const chat = store.lastEvent(task.id, 'chat_message');
+  const active = (chat?.id ?? 0) > (workflow?.id ?? 0) ? chat : workflow;
+  const latest = sessions.find((session) => session.id === active?.sessionId) ?? sessions.at(-1);
   return {
     ...task,
     sessionCount: sessions.length,
@@ -90,6 +93,10 @@ export function taskUsage(
     const record = event.data as UsageRecord;
     agentMs += record.durationMs;
     if (!record.usage) continue;
+    if (record.cumulative === false) {
+      addModels(banked, record.usage.models);
+      continue;
+    }
     const key = event.sessionId ?? '';
     const before = latest.get(key);
     if (before && totalTokens(record.usage.models) < totalTokens(before)) addModels(banked, before);

@@ -52,6 +52,8 @@ export type AgentEvent =
       contextWindow: number | null;
       /** The conversation's totals so far; `null` when the agent reported none. */
       usage: RunUsage | null;
+      /** Native compaction completed; its result is not an ordinary agent reply. */
+      compacted?: boolean;
     };
 
 /** Harness-level event pushed to CLI/web subscribers. */

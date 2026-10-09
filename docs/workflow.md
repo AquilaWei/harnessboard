@@ -66,12 +66,12 @@ before review. It writes the tests the step is missing, runs the suite, commits 
 answers `TESTS: PASS` or `TESTS: FAIL`. A failure goes back to the implementer (up to the same
 two rounds as review, then to you); a pass goes on to the reviewer. It may only change test
 files; anything else stops the task. Use `--tester codex --tester-model <model>`, the
-**Tester** menu, or `hb models <id> --tester <agent|none>`. It applies to single tasks.
+**Tester** menu, or `hb models <id> --tester <agent|none>`. It applies to single and loop tasks. The tester owns formal stage verification; the implementer may still run focused tests while developing. When a loop has a tester, Harnessboard does not run the same verification command again.
 
 **Notes between roles:** every role ends its reply with a `## Notes` section for the roles
 after it: what it did, the decisions it made, what it is unsure of and what to check next.
 Harnessboard records each one and keeps them in `.harnessboard/notes.md` in the task's
-worktree, oldest first, which the next role is told to read before it starts. Only
+worktree, oldest first. A resumed implementer receives only new reviewer/tester feedback; a fresh implementer can read the archive. Testers and reviewers consult history only when a specific ambiguity requires it. Only
 Harnessboard writes this file: it is rebuilt from its own records before every session, so
 no agent can change another's report, and git ignores it, so it never reaches a commit. Read
 it on the task's **Notes** tab. A role that writes no notes section is recorded with its
@@ -95,17 +95,23 @@ hb add "Add input validation to the signup form" --reviewer opus
 - **Read-only:** the reviewer runs in the same worktree but can only read files and run
   `git diff`, `git log` and `git show`. If it changes anything anyway, the task stops for
   you.
+- **Static review:** check architecture, logic, test coverage and the configured code rules. Do not rerun tests, lint or builds; formal execution belongs to the tester.
 - **Verdict:** the reviewer answers `VERDICT: APPROVE` or `VERDICT: CHANGES` followed by
-  what to fix. Requested changes go to the implementer's next session.
+  what to fix. Requested changes go to the implementer's next turn in its own session.
 - **Bounded:** after `maxReviewRounds` (2) rounds of requested changes, or a reply without
   a verdict, the task goes to Review for you to decide. Sending it back to work from there
   passes on the last review's points and gives the reviewer its rounds again.
 - **Feature lists:** in a loop task each step is reviewed on the features marked done; the
   ones still to come are not held against it.
+- **Persistent conversations:** the implementer, tester and reviewer each keep a separate
+  session across stages and fixes. Follow-up checks receive changed scope; implementers receive new feedback.
+  updated requirements or review rules are sent again when they change. Every successful
+  stage is compacted by adapters that support it; see [context budget](configuration.md#context-budget).
 - **Default reviewer:** `defaultReviewer` in the config (or the web settings) applies to
   new tasks. `--reviewer none` turns review off for one task.
 - **Your coding rules:** list files in `reviewGuidelines` (config or web settings), for
-  example a coding-standards skill. Every review quotes them, as they are at that moment, and
+  example a coding-standards skill. The first review quotes them, and later reviews send
+  updated rules when they change, and
   a broken rule counts as a required change. This works for any agent, Codex included:
 
   ```json
@@ -122,3 +128,17 @@ Code's own model menu (read from the catalog it caches under `~/.claude`, or its
 `opus`, `sonnet`, `fable` and `haiku` before it has one) and Codex's model catalog
 (`codex debug models`). Older models sit under **More models**, and any other model id can
 still be typed. Gemini CLI can not list its models, so for Gemini the model id is typed. On the command line: `hb agents --models <profile>`.
+
+## Commit checks before handoff
+
+Harnessboard checks writing stages before handing work to another role: the worktree must
+be clean and every commit made since that stage began must use one English line,
+`<type>: <description>`, with `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test` or
+`chore`. Review checks any additional project code rules. A clean stage without changes
+needs no empty commit, and a read-only reviewer does not commit. The check runs locally,
+without an agent call or rereading the entire Git history.
+
+A failed check stops the task with a notice and preserves the session and files. Correct
+the problem and queue it again; the original stage range remains subject to the check.
+Harnessboard never rewrites commit history automatically. Spec and design stages retain
+their existing single-file commit fallback, then undergo the same check.

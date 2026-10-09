@@ -7,6 +7,7 @@ import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
+  commitAll,
   featureList,
   assistantText,
   init,
@@ -61,11 +62,19 @@ function fakeRuns(): FakeRun[] {
 }
 
 /** An agent session that optionally writes files, then replies with `text`. */
-const session = (text: string, ...writes: unknown[]) => [[init(), ...writes, result(text)]];
+const session = (text: string, ...writes: unknown[]) => [
+  [init(), ...writes, commitAll('test: record stage work'), result(text)],
+];
 
 /** Like {@link session}, but the CLI reports the context it used, so the session can be resumed. */
 const sessionWithContext = (text: string, ...writes: unknown[]) => [
-  [init(), assistantText(text, 1000), ...writes, result(text)],
+  [
+    init(),
+    assistantText(text, 1000),
+    ...writes,
+    commitAll('test: record stage work'),
+    result(text),
+  ],
 ];
 
 async function createReviewed(mode: 'single' | 'loop' = 'single') {
@@ -324,7 +333,7 @@ describe('setting review guidelines', () => {
 });
 
 describe('a reviewer of a loop task', () => {
-  it('may run the verify command', async () => {
+  it('does not receive permission to rerun the verify command', async () => {
     scenario(
       session('planned', featureList(false, false)),
       session('F1 done', featureList(true, false)),
@@ -333,7 +342,7 @@ describe('a reviewer of a loop task', () => {
     await createReviewed('loop');
     await runQueued();
     await runQueued();
-    expect(fakeRuns()[2]!.args).toContain('Bash(node -e "process.exit(0)")');
+    expect(fakeRuns()[2]!.args).not.toContain('Bash(node -e "process.exit(0)")');
   });
 
   it('is told the features still to come are not part of the step', async () => {
@@ -382,9 +391,6 @@ describe('a loop task with a reviewer', () => {
     const task = await createReviewed('loop');
     await runQueued();
     await runQueued();
-    expect([status(task.id), roles(task.id)]).toEqual([
-      'queued',
-      ['implementer', 'implementer', 'reviewer'],
-    ]);
+    expect([status(task.id), roles(task.id)]).toEqual(['queued', ['implementer', 'reviewer']]);
   });
 });

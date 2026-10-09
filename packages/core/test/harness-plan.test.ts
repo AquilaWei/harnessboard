@@ -7,6 +7,7 @@ import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
+  commitAll,
   assistantText,
   featureList,
   hang,
@@ -73,7 +74,13 @@ const proposal = (ids: string[], questions: string[] = []) =>
 
 /** An agent session that writes files, reports some context use, and replies. */
 const session = (reply: string, ...writes: unknown[]) => [
-  [init(), ...writes, assistantText(reply, 10_000), result(reply)],
+  [
+    init(),
+    ...writes,
+    commitAll('test: record stage work'),
+    assistantText(reply, 10_000),
+    result(reply),
+  ],
 ];
 
 async function createPlanned() {

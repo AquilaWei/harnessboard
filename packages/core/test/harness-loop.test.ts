@@ -7,6 +7,7 @@ import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
   FAKE_CLAUDE,
+  commitAll,
   assistantText,
   featureList,
   init,
@@ -63,7 +64,13 @@ function fakeRuns(): FakeRun[] {
 
 /** One agent session that optionally rewrites the feature list, then ends its turn. */
 const session = (...writes: unknown[]) => [
-  [init(), ...writes, assistantText('ok', 10_000), result('ok')],
+  [
+    init(),
+    ...writes,
+    commitAll('test: record stage work'),
+    assistantText('ok', 10_000),
+    result('ok'),
+  ],
 ];
 
 async function createLoop(verifyCommand = VERIFY_OK) {
@@ -133,13 +140,13 @@ describe('the initializer session', () => {
 });
 
 describe('a feature session', () => {
-  it('starts fresh with the loop prompt', async () => {
+  it('continues the same conversation with the loop prompt', async () => {
     scenario(session(featureList(false, false)), session(featureList(true, false)));
     await createLoop();
     await runQueued();
     const second = fakeRuns()[1]!;
     expect([second.args.includes('--resume'), second.received[0]]).toEqual([
-      false,
+      true,
       expect.stringContaining('Pick the first feature with "passes": false'),
     ]);
   });

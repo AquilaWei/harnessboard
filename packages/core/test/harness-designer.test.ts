@@ -74,7 +74,11 @@ const design = session(
   'design written',
   writeFile(SPEC_PATH, '# Spec\n\n## UI design\n\nA button.\n'),
 );
-const implementation = session('done', writeFile('hello.txt', 'hi'));
+const implementation = session(
+  'done',
+  writeFile('hello.txt', 'hi'),
+  commitAll('feat: add greeting'),
+);
 
 const sessions = (id: number) => harness.store.listSessions(id).map((s) => [s.role, s.agentId]);
 const status = (id: number) => harness.store.getTask(id)!.status;

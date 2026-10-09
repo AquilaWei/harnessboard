@@ -83,12 +83,14 @@ export interface VerifyResult {
 
 /**
  * Stored as the `features` event after every loop session. `verifiedPassing` only counts
- * features the agent marked as passing when the harness's own verification succeeded.
+ * features the agent marked as passing when formal tester or harness verification succeeded.
  */
 export interface FeatureSnapshot {
   features: Feature[];
   verify: VerifyResult | null;
   verifiedPassing: number;
+  /** Formal tester passed this snapshot; no duplicate Harness verify run. */
+  testerPassed?: boolean;
 }
 
 /** Feature progress shown on the board. */
@@ -96,8 +98,8 @@ export interface LoopProgress {
   total: number;
   /** Marked passing by the agent. */
   claimed: number;
-  /** Marked passing and confirmed by the harness's verify run. */
+  /** Marked passing and confirmed by the tester or the harness's verify run. */
   verified: number;
-  /** Result of the latest verify run; `null` before the first coding session ends. */
+  /** Result of the latest harness verify run; `null` when verification belongs to a tester. */
   lastVerify: VerifyResult | null;
 }

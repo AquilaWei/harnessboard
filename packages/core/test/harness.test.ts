@@ -111,7 +111,7 @@ describe('a task whose session completes', () => {
   it('sends the task prompt as the first message', async () => {
     await harness.createTask({ prompt: 'Fix the bug', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
-    expect(fakeRuns()[0]!.received).toEqual([`Fix the bug${ASK_FOR_NOTES}`]);
+    expect(fakeRuns()[0]!.received[0]).toBe(`Fix the bug${ASK_FOR_NOTES}`);
   });
 
   it('records the context window the agent reported', async () => {

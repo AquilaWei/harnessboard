@@ -14,7 +14,7 @@ web (React) ──REST/SSE── server (Hono, `hb` CLI)
                                │              and where the task goes afterwards
                                ├─ runner      one agent session: spawn, parse, context budget
                                ├─ providers   agent profile → AgentAdapter
-                               ├─ loop        feature list, harness-run verification
+                               ├─ loop        feature list, tester or harness verification
                                ├─ review      reviewer prompt and verdict parsing
                                ├─ worktree    git worktrees and diffs
                                └─ Store       SQLite (node:sqlite): tasks, sessions, events
@@ -76,7 +76,7 @@ The installers come from `electron-builder`. They take their version from
     session is never one the implementer resumes.
   - `implementer`: edits files and commits. For a task with a spec file it is also told to
     keep the README, changelog and docs in step (`DOCS_DUTY`), and the reviewer checks that.
-  - `tester`: optional, single tasks only. After an implementer step, one session with edit
+  - `tester`: optional, single and loop tasks. After an implementer step, one session with edit
     access writes the missing tests, runs them and commits them, then answers
     `TESTS: PASS` or `TESTS: FAIL`. Events: `test_request`, `test_report`. A failure is
     open feedback for the implementer like a review's `CHANGES` (`openFeedback`), counted
@@ -92,7 +92,8 @@ The installers come from `electron-builder`. They take their version from
   asked (`notesPrompt`) to end its reply with a `## Notes` section. When it completes,
   `Workflow.recordNote` stores the section (or the whole reply) as a `role_note` event with
   the role, agent and verdict, and renders all notes into `.harnessboard/notes.md` in the
-  worktree (`core/src/notes.ts`). Later sessions are told to read that file first. The
+  worktree (`core/src/notes.ts`). Resumed implementers receive new reviewer/tester notes;
+  other roles consult the archive only when history is needed. The
   events are the record: `syncNotes` rewrites the file from them before every session, so an
   agent's edit to it never reaches the next role, and the directory is listed in the
   repository's `info/exclude`, so the file is never a change (the reviewer's unchanged-worktree
@@ -253,6 +254,9 @@ get `maxReviewRounds` again.
   cumulative usage and the model window, but not a reliable current context size; no
   `context` events are emitted. Failed turns and startup RPC errors produce error outcomes;
   usage-limit failures become 429 for the quota retry flow.
+- Successful workflow stages request `thread/compact/start` on the same loaded thread.
+  Its acknowledgement is not completion: the connection waits for the compaction item and
+  completed turn, preserves the original reply and keeps the thread ID for the next stage.
 - Legacy exec parsing remains for stored-output fixtures. App-server transport and
   approvals are tested with a protocol fixture and real Git worktrees; a live model turn
   still needs an acceptance run against the user's installed CLI.
@@ -412,3 +416,8 @@ A task's `workspace` says where its agents work. It is chosen when the task is c
 
 - [Phone access](plans/phone-access.md): using the board from a phone over Tailscale, with
   device pairing and a passkey. M0 spike done, M1 not started.
+
+Writing stages must pass a local Git handoff check: clean worktree and single-line English
+commits in the convention described in [workflow](workflow.md#commit-checks-before-handoff).
+Reviewers inspect code and rules without rerunning verification. Historical role notes are
+consulted on demand by testers/reviewers; resumed implementers receive new feedback.

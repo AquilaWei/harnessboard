@@ -333,6 +333,29 @@ describe('Codex approval transport', () => {
     ).toMatchObject([{ kind: 'result', isError: true, text: 'Thread not found' }]);
   });
 
+  it('compacts the loaded thread through the native RPC', () => {
+    const { connection, messages } = connect();
+    connection.compact!();
+    expect(messages.at(-1)).toEqual({
+      id: 'hb:compact',
+      method: 'thread/compact/start',
+      params: { threadId: 'thread' },
+    });
+  });
+
+  it('waits past the compaction acknowledgement for its completed turn', () => {
+    const { connection, emit } = connect();
+    connection.compact!();
+    expect(connection.parseLine(JSON.stringify({ id: 'hb:compact', result: {} }))).toEqual([]);
+    emit('item/completed', {
+      threadId: 'thread',
+      item: { id: 'compact', type: 'contextCompaction' },
+    });
+    expect(
+      emit('turn/completed', { threadId: 'thread', turn: { status: 'completed' } }),
+    ).toMatchObject([{ kind: 'result', compacted: true, isError: false }]);
+  });
+
   it('prices usage with the resolved default model, including cache writes', () => {
     const { init, emit } = connect({ model: null }, 'gpt-6.1-sol');
     expect(init).toMatchObject([{ kind: 'init', model: 'gpt-6.1-sol' }]);

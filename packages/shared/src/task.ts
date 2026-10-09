@@ -30,8 +30,8 @@ export const NOTIFY_STATUSES: ReadonlySet<TaskStatus> = new Set([
 
 /**
  * `single`: one prompt, handed off across sessions until the agent finishes.
- * `loop`: an initializer session writes a feature list, then each session implements one
- * feature and the harness runs the task's verify command itself before counting it.
+ * `loop`: an initializer turn writes a feature list, then each turn implements one
+ * feature; a configured tester or the harness verifies it before counting it.
  */
 export type TaskMode = 'single' | 'loop';
 
@@ -58,8 +58,9 @@ export type TaskSize = 'small' | 'medium' | 'large';
 export interface ContextPolicy {
   size?: TaskSize;
   /**
-   * Context use at which a session is compacted (`/compact`) and carries on; 0 turns it off.
-   * Defaults to 30. Wrap-up at `softPct` and the hard limit still apply after compacting.
+   * Warning for compaction after non-workflow turns; successful workflow stages compact
+   * regardless of size. Defaults to 30; 0 disables automatic compaction. Adapters without
+   * compaction support still use the soft/hard limits.
    */
   compactPct?: number;
   softPct?: number;

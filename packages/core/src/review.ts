@@ -66,7 +66,8 @@ export function reviewPrompt(
 ): string {
   const lines = [
     'You are reviewing work another agent did in this repository. You cannot edit files;',
-    'your job is to decide whether the work is correct and complete.',
+    'your job is to check architecture, implementation logic, edge cases and code rule compliance.',
+    'Inspect test coverage statically. Formal verification belongs to the tester; do not rerun tests, lint or builds.',
     '',
     `Task given to the implementer:\n${goal}`,
     '',
@@ -103,19 +104,48 @@ export function reviewPrompt(
  * Message to a reviewer that is resumed for its next round: it already has the task and its
  * own findings, so it only hears what changed since `reviewedHead`, the head it judged.
  */
-export function reviewFollowUpPrompt(request: ReviewRequest, reviewedHead: string): string {
+export function reviewFollowUpPrompt(
+  request: ReviewRequest,
+  reviewedHead: string,
+  { features = null, verify = null }: ReviewContext = {},
+): string {
   return [
-    'The implementer answered your requested changes. This is review round ' +
+    'The implementer finished another step. This is review round ' +
       `${request.round}; you still have the task and your earlier findings.`,
     '',
     `Check what changed since you last reviewed (${reviewedHead}):`,
     `- \`git log --oneline ${reviewedHead}..HEAD\` and \`git diff ${reviewedHead}..HEAD\``,
     '- `git status` for anything left uncommitted',
     ...earlierWork(request),
+    ...(features ? ['', ...stepScope(features)] : []),
+    ...(verify?.ok
+      ? ['', `The harness ran \`${verify.command}\` after this step and it passed.`]
+      : []),
     'Confirm each of your earlier findings is fixed, and look for problems the new changes add.',
+    'Focus on architecture, logic and code rules. Inspect tests statically; do not rerun tests, lint or builds.',
     '',
     `Make the first line of your reply exactly \`${VERDICT_APPROVE}\` or \`${VERDICT_CHANGES}\`.`,
     `After ${VERDICT_CHANGES}, list each required change with the file and what to do.`,
+  ].join('\n');
+}
+
+/** A tester keeps its earlier tests and findings; only changed work needs a new examination. */
+export function testFollowUpPrompt(
+  request: TestRequest,
+  testedHead: string,
+  verifyCommand: string | null,
+  features: Feature[] | null = null,
+): string {
+  return [
+    `Continue testing this task in your own conversation (round ${request.round}).`,
+    `Check \`git diff ${testedHead}..HEAD\` and \`git status\` for the latest changes.`,
+    ...earlierWork(request),
+    ...(features ? stepScope(features) : []),
+    'Recheck your earlier findings and cover regressions and missing acceptance criteria.',
+    'You may edit test files only. Commit any tests you add or change.',
+    ...(verifyCommand ? [`Run \`${verifyCommand}\`.`] : []),
+    `Make the first line of your reply exactly \`${TESTS_PASS}\` or \`${TESTS_FAIL}\`.`,
+    'On failure, list each required fix with the file and what to do.',
   ].join('\n');
 }
 
@@ -272,6 +302,7 @@ export function testPrompt(
   request: TestRequest,
   verifyCommand: string | null,
   hasCriteria: boolean,
+  features: Feature[] | null = null,
 ): string {
   const lines = [
     'You are the tester for work another agent did in this repository. Decide whether it',
@@ -284,6 +315,7 @@ export function testPrompt(
     '- `git status` for anything left uncommitted',
     ...earlierWork(request),
     '',
+    ...(features ? stepScope(features) : []),
     hasCriteria
       ? 'Make sure every acceptance criterion is covered by a test that would fail without it.'
       : 'Make sure the behaviour the task asked for is covered by tests that would fail without it.',

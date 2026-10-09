@@ -236,9 +236,10 @@ describe('a chat reply that reports no usage', () => {
 
   it('keeps the context size the session had', async () => {
     const task = await finishedTask();
+    const before = harness.store.listSessions(task.id)[0]!.contextTokens;
     harness.chat(task.id, '/status');
     await harness.waitForIdle();
-    expect(harness.store.listSessions(task.id)[0]!.contextTokens).toBe(10_000);
+    expect(harness.store.listSessions(task.id)[0]!.contextTokens).toBe(before);
   });
 });
 

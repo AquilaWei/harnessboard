@@ -286,3 +286,9 @@ describe('specRevisionPrompt', () => {
     );
   });
 });
+
+it('keeps the prescribed spec commit message English for a Chinese task', () => {
+  expect(specFilePrompt('docs/specs/001-x.md', '新增登入功能', '- 登入成功', null)).toContain(
+    'with the message `docs: add task specification`',
+  );
+});

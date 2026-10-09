@@ -27,6 +27,8 @@ export interface UsageRecord {
   durationMs: number;
   /** `null` when the agent reported none, e.g. it was stopped before its first reply. */
   usage: RunUsage | null;
+  /** False when the provider reports only this process's usage, rather than thread totals. */
+  cumulative?: boolean;
 }
 
 /** A task's usage over all its sessions (`TaskView.usage`). */

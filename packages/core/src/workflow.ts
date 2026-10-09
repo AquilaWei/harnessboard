@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -35,6 +36,7 @@ import type {
 } from '@harnessboard/shared';
 import type { SessionAccess } from './agent.js';
 import type { HarnessConfig } from './config.js';
+import { checkCommits, COMMIT_RULE } from './commit-check.js';
 import { readGuidelines } from './guidelines.js';
 import { missingFeatures, readPlan, runVerify } from './loop.js';
 import { notesPrompt, parseNotes, renderNotes, writeNotes } from './notes.js';
@@ -69,6 +71,7 @@ import {
   reviewFollowUpPrompt,
   reviewPrompt,
   testFeedback,
+  testFollowUpPrompt,
   testPrompt,
 } from './review.js';
 import type { SessionOutcome } from './runner.js';
@@ -109,6 +112,10 @@ export interface SessionPlan {
   review?: ReviewRequest;
   /** Directories outside the worktree the session reads; set by the harness, see `SessionSpec`. */
   readableDirs?: string[];
+  /** Fingerprint of requirements/rules, so a resumed role receives them again only when changed. */
+  contextKey?: string;
+  /** HEAD before this stage, for the commit handoff check. */
+  commitBase?: string;
 }
 
 /** What a task's next session is for, in the order {@link Workflow} picks it. */
@@ -141,17 +148,54 @@ export class Workflow {
 
   /**
    * A reviewer session while a review is pending; otherwise an implementer session: fresh
-   * for a new task, after a handoff, after review feedback or for the next loop feature, and
-   * `--resume` of the previous session after a quota pause, stop or error, but only while
-   * that session still has budget.
+   * for a new task or after an emergency handoff. Each role otherwise resumes its own
+   * conversation across features and feedback, with compaction at stage boundaries.
    */
   plan(task: Task): SessionPlan {
     const plan = this.nextSession(task);
     // A resumed session was already told; the discussion is with the user, not other roles.
-    if (plan.prompt === QUOTA_RESUME_PROMPT || !this.keepsNotes(plan)) return plan;
+    if (!this.keepsNotes(plan)) return plan;
     const hasNotes = this.notes(task.id).length > 0;
+    const writing = plan.access === 'edit' ? [COMMIT_RULE] : [];
+    const blocked = this.host.store.lastEvent(task.id, 'commit_check');
+    const correction = blocked?.data as
+      { ok: boolean; role: AgentRole; detail: string } | undefined;
+    if (correction && !correction.ok && correction.role === plan.role)
+      writing.push(correction.detail);
+    if (plan.role !== 'implementer') {
+      return {
+        ...plan,
+        prompt: [
+          plan.prompt,
+          ...writing,
+          notesPrompt(false),
+          ...(hasNotes
+            ? [
+                'Archived role notes are available in `.harnessboard/notes.md`. Consult them only when a specific ambiguity requires history; do not read them routinely.',
+              ]
+            : []),
+        ].join('\n\n'),
+      };
+    }
     const duty = plan.role === 'implementer' && this.specFile(task.id) ? [SPEC_CHANGE_DUTY] : [];
-    return { ...plan, prompt: [plan.prompt, ...duty, notesPrompt(hasNotes)].join('\n\n') };
+    if (plan.resume) {
+      const previous = this.host.store.lastSessionEvent(plan.resume.id, 'workflow_run');
+      const notes = this.host.store
+        .eventsOfKinds(task.id, ['role_note'], previous?.id ?? 0)
+        .filter(
+          (event) => event.data && ['reviewer', 'tester'].includes((event.data as RoleNote).role),
+        )
+        .map((event) => ({ note: event.data as RoleNote, at: event.ts }));
+      const updates = notes.length > 0 ? [renderNotes(task.id, task.title, notes)] : [];
+      return {
+        ...plan,
+        prompt: [plan.prompt, ...writing, ...duty, ...updates, notesPrompt(false)].join('\n\n'),
+      };
+    }
+    return {
+      ...plan,
+      prompt: [plan.prompt, ...writing, ...duty, notesPrompt(hasNotes)].join('\n\n'),
+    };
   }
 
   /**
@@ -181,7 +225,7 @@ export class Workflow {
   }
 
   private nextSession(task: Task): SessionPlan {
-    const sessions = this.host.store.listSessions(task.id);
+    const sessions = this.recentSessions(task.id);
     const last = sessions.at(-1);
     // The spec author's answers to the user and the designer's session are not the
     // implementer's work to continue.
@@ -204,7 +248,11 @@ export class Workflow {
         return this.testPlan(task, step.request, last);
       case 'conflict': {
         const { base, files } = step.conflict;
-        return this.implement(task, mergeConflictPrompt(this.goal(task), base, files));
+        return this.implement(
+          task,
+          mergeConflictPrompt(this.goal(task), base, files),
+          own && this.canResume(task, own, task.agents.implementer) ? own : null,
+        );
       }
       case 'specFile':
         return this.specFilePlan(task, last);
@@ -226,7 +274,7 @@ export class Workflow {
     }
     // After a review or test round, the implementer goes on in its own conversation with only
     // the findings, which keeps what it already read instead of starting over.
-    const findings = task.mode === 'single' && work !== own ? this.openFeedback(task.id) : null;
+    const findings = work !== own ? this.openFeedback(task.id) : null;
     if (
       findings !== null &&
       own?.endReason === 'completed' &&
@@ -234,12 +282,27 @@ export class Workflow {
     ) {
       return this.implement(task, findings, own);
     }
-    // Each loop feature starts from a clean context; its state lives in the worktree files.
-    const loopStepDone = task.mode === 'loop' && work.endReason === 'completed';
+    // A new feature is a new turn in the implementer's own conversation, not a new session.
+    if (
+      task.mode === 'loop' &&
+      own?.endReason === 'completed' &&
+      this.canResume(task, own, this.activeAgent(task))
+    ) {
+      const plan = this.continuation(task, null, true);
+      return { ...plan, resume: own };
+    }
     // A session that never reached the model was never saved by the CLI, so it can't be resumed.
-    const resumable = !loopStepDone && this.canResume(task, work, this.activeAgent(task));
+    const resumable = this.canResume(task, work, this.activeAgent(task));
     if (resumable) return this.implement(task, QUOTA_RESUME_PROMPT, work);
     return this.continuation(task, task.mode === 'single' ? this.handoffNote(task) : null);
+  }
+
+  /** A resumed conversation keeps its original start time; scheduling follows its latest run. */
+  private recentSessions(taskId: number): Session[] {
+    const sessions = this.host.store.listSessions(taskId);
+    const runs = this.host.store.eventsOfKind(taskId, 'workflow_run');
+    const order = new Map(runs.map((event) => [event.sessionId, event.id]));
+    return sessions.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   }
 
   /**
@@ -284,6 +347,11 @@ export class Workflow {
    * carries. Runs as the session starts, before the agent sees the prompt.
    */
   started(taskId: number, sessionId: string, plan: SessionPlan): void {
+    this.host.store.appendEvent(taskId, sessionId, 'workflow_run', {
+      role: plan.role,
+      contextKey: plan.contextKey ?? null,
+      commitBase: plan.commitBase ?? null,
+    });
     for (const eventId of plan.delivers ?? []) {
       const delivery: SpecDelivery = { eventId };
       this.host.store.appendEvent(taskId, sessionId, 'spec_delivered', delivery);
@@ -333,28 +401,40 @@ export class Workflow {
       last?.role === 'reviewer' &&
       last.endReason !== 'completed' &&
       last.agentSessionId !== null &&
-      last.contextTokens > 0 &&
+      this.hasConversation(last) &&
       this.hasBudget(task, last);
     const base = { role: 'reviewer', agentId: reviewer, access: 'readOnly' } as const;
     if (resumable && this.requestSeen(task.id, 'review_request', last))
       return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
-    const earlier = this.priorReviewer(task, request, reviewer);
-    // Round 2 and later: the reviewer goes on in its own conversation with only what changed.
-    if (earlier) {
+    const goal = this.goal(task);
+    const guidelines = readGuidelines(this.host.config.reviewGuidelines);
+    const contextKey = this.contextKey({ goal, guidelines });
+    const earlier = this.priorReviewer(task, reviewer);
+    // Across rounds and features, the reviewer keeps its own conversation.
+    if (earlier && this.sameContext(earlier.session, contextKey)) {
       return {
         ...base,
         resume: earlier.session,
-        prompt: reviewFollowUpPrompt(request, earlier.head),
-        review: request,
+        prompt: reviewFollowUpPrompt(
+          request,
+          task.workspace === 'base' ? request.since : earlier.head,
+          {
+            features:
+              task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.features ?? null) : null,
+            verify: task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.verify ?? null) : null,
+          },
+        ),
+        review: task.workspace === 'base' ? request : { ...request, since: earlier.head },
+        contextKey,
       };
     }
     const snapshot = task.mode === 'loop' ? this.snapshots(task.id).at(-1) : undefined;
-    const prompt = reviewPrompt(this.goal(task), request, {
+    const prompt = reviewPrompt(goal, request, {
       verify: snapshot?.verify ?? null,
       hasCriteria: task.acceptance !== null,
       features: snapshot?.features ?? null,
       // Read for every review, so an edited rules file applies from the next one.
-      guidelines: readGuidelines(this.host.config.reviewGuidelines),
+      guidelines,
     });
     // The request was rebuilt after the session stopped; it goes on with the new scope.
     if (resumable) {
@@ -363,31 +443,26 @@ export class Workflow {
         resume: last,
         prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}`,
         review: request,
+        contextKey,
       };
     }
-    return { ...base, resume: null, prompt, review: request };
+    return { ...base, resume: earlier?.session ?? null, prompt, review: request, contextKey };
   }
 
   /**
-   * The reviewer's own finished conversation and the head it judged, when this review is the
-   * round after one that asked for changes and that conversation still has room.
+   * The reviewer's own finished conversation and the head it judged, across rounds and
+   * features, while the conversation can continue.
    */
-  private priorReviewer(
-    task: Task,
-    request: ReviewRequest,
-    agentId: string,
-  ): { session: Session; head: string } | null {
+  private priorReviewer(task: Task, agentId: string): { session: Session; head: string } | null {
     const record = this.host.store.lastEvent(task.id, 'review')?.data as ReviewRecord | undefined;
-    const session = this.host.store.listSessions(task.id).findLast((s) => s.role === 'reviewer');
+    const session = this.recentSessions(task.id).findLast((s) => s.role === 'reviewer');
     if (
-      request.round < 2 ||
-      record?.verdict !== 'changes' ||
-      record.round !== request.round - 1 ||
+      !record ||
       !session ||
       session.agentId !== agentId ||
       session.endReason !== 'completed' ||
       session.agentSessionId === null ||
-      session.contextTokens <= 0 ||
+      !this.hasConversation(session) ||
       !this.hasBudget(task, session)
     ) {
       return null;
@@ -441,20 +516,56 @@ export class Workflow {
       last?.role === 'tester' &&
       last.endReason !== 'completed' &&
       last.agentSessionId !== null &&
-      last.contextTokens > 0 &&
+      this.hasConversation(last) &&
       this.hasBudget(task, last);
     const base = { role: 'tester', agentId: tester, access: 'edit' } as const;
     if (resumable && this.requestSeen(task.id, 'test_request', last))
       return { ...base, resume: last, prompt: QUOTA_RESUME_PROMPT };
+    const goal = this.goal(task);
+    const contextKey = this.contextKey({ goal, verify: task.verifyCommand });
     const prompt = testPrompt(
-      this.goal(task),
+      goal,
       request,
       task.verifyCommand,
       task.acceptance !== null,
+      this.snapshots(task.id).at(-1)?.features,
     );
     // The request was rebuilt after the session stopped; it goes on with the new scope.
-    if (resumable) return { ...base, resume: last, prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}` };
-    return { ...base, resume: null, prompt };
+    if (resumable)
+      return { ...base, resume: last, prompt: `${SCOPE_CHANGED_PROMPT}\n\n${prompt}`, contextKey };
+    const previous = this.recentSessions(task.id).findLast((s) => s.role === 'tester');
+    const report = this.testReports(task.id).at(-1);
+    if (
+      previous?.endReason === 'completed' &&
+      previous.agentId === tester &&
+      this.hasConversation(previous) &&
+      this.hasBudget(task, previous)
+    ) {
+      return {
+        ...base,
+        resume: previous,
+        prompt:
+          report && this.sameContext(previous, contextKey)
+            ? testFollowUpPrompt(
+                request,
+                task.workspace === 'base' ? request.since : report.head,
+                task.verifyCommand,
+                this.snapshots(task.id).at(-1)?.features,
+              )
+            : prompt,
+        contextKey,
+      };
+    }
+    return { ...base, resume: null, prompt, contextKey };
+  }
+
+  private contextKey(context: unknown): string {
+    return createHash('sha256').update(JSON.stringify(context)).digest('hex');
+  }
+
+  private sameContext(session: Session, key: string): boolean {
+    const run = this.host.store.lastSessionEvent(session.id, 'workflow_run');
+    return (run?.data as { contextKey?: string } | undefined)?.contextKey === key;
   }
 
   /**
@@ -512,8 +623,18 @@ export class Workflow {
       (last.role === 'implementer' || last.role === 'spec') &&
       last.agentId === agentId &&
       last.agentSessionId !== null &&
-      last.contextTokens > 0 &&
+      this.hasConversation(last) &&
       this.hasBudget(task, last)
+    );
+  }
+
+  private hasConversation(session: Session): boolean {
+    // Codex and Gemini do not report current context; a saved thread is still resumable.
+    return (
+      session.agentSessionId !== null &&
+      (session.contextTokens > 0 ||
+        session.endReason === 'completed' ||
+        this.host.config.agents[session.agentId]?.provider !== 'claude-code')
     );
   }
 
@@ -523,7 +644,8 @@ export class Workflow {
   }
 
   private firstPrompt(task: Task): string {
-    if (task.mode === 'loop') return initializerPrompt(this.goal(task), task.verifyCommand);
+    if (task.mode === 'loop')
+      return initializerPrompt(this.goal(task), task.verifyCommand, task.agents.tester !== null);
     return this.discussing(task) ? criteriaPrompt(task.prompt, task.acceptance) : this.goal(task);
   }
 
@@ -620,7 +742,11 @@ export class Workflow {
    * else, commits the file itself if the designer left it uncommitted, and records it for
    * the implementer and reviewer.
    */
-  private async finishDesign(task: Task, outcome: SessionOutcome): Promise<void> {
+  private async finishDesign(
+    task: Task,
+    outcome: SessionOutcome,
+    plan: SessionPlan,
+  ): Promise<void> {
     if (outcome.reason === 'handoff' || outcome.reason === 'context_hard_limit') {
       this.host.notice(task.id, 'the designer ran out of context before writing the UI design');
       this.host.setStatus(task.id, 'failed');
@@ -652,6 +778,7 @@ export class Workflow {
       this.host.notice(task.id, `the designer left ${spec.path} uncommitted; committed it`);
     }
     const record: SpecRecord = { path: spec.path, head: await headCommit(dir) };
+    if (!(await this.checkHandoff(task, plan))) return;
     this.host.store.appendEvent(task.id, null, 'design_written', record);
     this.host.notice(task.id, `UI design committed in ${spec.path}`);
     this.host.setStatus(task.id, 'queued');
@@ -702,7 +829,11 @@ export class Workflow {
    * Checks the spec author wrote the file and nothing else, commits the file itself if the
    * author left it uncommitted, and records it for the agents after it.
    */
-  private async finishSpecFile(task: Task, outcome: SessionOutcome): Promise<void> {
+  private async finishSpecFile(
+    task: Task,
+    outcome: SessionOutcome,
+    plan: SessionPlan,
+  ): Promise<void> {
     if (outcome.reason === 'handoff' || outcome.reason === 'context_hard_limit') {
       this.host.notice(task.id, 'the spec author ran out of context before writing the spec');
       this.host.setStatus(task.id, 'failed');
@@ -731,10 +862,11 @@ export class Workflow {
       return;
     }
     if (!(await isCommitted(dir, file))) {
-      await commitFile(dir, file, `docs: add spec for ${task.title.slice(0, 50)}`);
+      await commitFile(dir, file, 'docs: add task specification');
       this.host.notice(task.id, `the spec author left ${file} uncommitted; committed it`);
     }
     const record: SpecRecord = { path: file, head: await headCommit(dir) };
+    if (!(await this.checkHandoff(task, plan))) return;
     this.host.store.appendEvent(task.id, null, 'spec_written', record);
     this.host.notice(task.id, `spec committed in ${file}`);
     this.host.setStatus(task.id, 'queued');
@@ -790,7 +922,7 @@ export class Workflow {
     return this.implement(task, continuationPrompt(this.firstPrompt(task), null, revision));
   }
 
-  private continuation(task: Task, note: string | null): SessionPlan {
+  private continuation(task: Task, note: string | null, resumed = false): SessionPlan {
     const feedback = this.openFeedback(task.id);
     if (task.mode === 'single') {
       if (this.discussing(task)) {
@@ -806,7 +938,15 @@ export class Workflow {
     const failed = verify && !verify.ok ? verify : null;
     return this.implement(
       task,
-      loopSessionPrompt(this.goal(task), task.verifyCommand!, failed, note, feedback),
+      loopSessionPrompt(
+        this.goal(task),
+        task.verifyCommand!,
+        failed,
+        note,
+        feedback,
+        resumed,
+        task.agents.tester !== null,
+      ),
     );
   }
 
@@ -822,9 +962,9 @@ export class Workflow {
 
   private hasBudget(task: Task, session: Session): boolean {
     const window = session.contextWindow ?? this.contextWindow(session.agentId);
-    return (
-      contextPct(session.contextTokens, window) < resolveThresholds(task.contextPolicy).softPct
-    );
+    const thresholds = resolveThresholds(task.contextPolicy);
+    const limit = thresholds.compactPct !== null ? 90 : thresholds.softPct;
+    return contextPct(session.contextTokens, window) < limit;
   }
 
   /** Best known window for an agent profile: last reported, then configured, then fallback. */
@@ -843,6 +983,12 @@ export class Workflow {
     outcome: SessionOutcome,
     signal: AbortSignal,
   ): Promise<void> {
+    this.host.store.appendEvent(
+      task.id,
+      plan.resume?.id ?? this.recentSessions(task.id).at(-1)!.id,
+      'workflow_end',
+      { role: plan.role, reason: outcome.reason },
+    );
     await this.finishSession(task, plan, outcome, signal);
     this.reviseAfterStep(task.id);
   }
@@ -857,6 +1003,13 @@ export class Workflow {
       task.id,
       `session ended: ${outcome.reason}${outcome.detail ? ` (${outcome.detail})` : ''}`,
     );
+    if (
+      outcome.reason === 'completed' &&
+      plan.access === 'edit' &&
+      (plan.role === 'implementer' || plan.role === 'tester') &&
+      !(await this.checkHandoff(task, plan))
+    )
+      return;
     if (outcome.reason === 'completed' && this.keepsNotes(plan)) {
       await this.recordNote(task, plan, outcome.finalText);
     }
@@ -865,7 +1018,7 @@ export class Workflow {
       return;
     }
     if (plan.role === 'spec' && plan.access === 'edit') {
-      await this.finishSpecFile(task, outcome);
+      await this.finishSpecFile(task, outcome, plan);
       return;
     }
     if (plan.role === 'spec' && !this.discussing(task)) {
@@ -877,7 +1030,7 @@ export class Workflow {
       return;
     }
     if (plan.role === 'designer') {
-      await this.finishDesign(task, outcome);
+      await this.finishDesign(task, outcome, plan);
       return;
     }
     switch (outcome.reason) {
@@ -893,6 +1046,22 @@ export class Workflow {
       default:
         this.interrupted(task, outcome);
     }
+  }
+
+  private async checkHandoff(task: Task, plan: SessionPlan): Promise<boolean> {
+    if (!plan.commitBase) throw new Error('Missing stage commit baseline');
+    const detail = await checkCommits(task.worktreePath!, plan.commitBase);
+    this.host.store.appendEvent(task.id, null, 'commit_check', {
+      role: plan.role,
+      ok: detail === null,
+      detail,
+      since: plan.commitBase,
+    });
+    if (detail) {
+      this.host.notice(task.id, `commit handoff blocked: ${detail}`);
+      this.host.setStatus(task.id, 'failed');
+    }
+    return detail === null;
   }
 
   /** Every workflow session reports to the notes file, except the discussion with the user. */
@@ -1215,7 +1384,7 @@ export class Workflow {
     const full = path.join(dir, file);
     const content = await readFile(full, 'utf8');
     await writeFile(full, reviseSpec(content, decision.criteria, date, revisionSummary(decision)));
-    await commitFile(dir, file, `docs: revise spec for ${task.title.slice(0, 50)}`);
+    await commitFile(dir, file, 'docs: revise task specification');
     const record: SpecRevisionRecord = { path: file, head: await headCommit(dir), date };
     store.appendEvent(task.id, null, 'spec_revised', record);
     this.host.notice(task.id, `spec revised in ${file}`);
@@ -1246,7 +1415,7 @@ export class Workflow {
    * With a reviewer, new commits are sent for review first; otherwise the task moves on.
    */
   private async stepDone(task: Task): Promise<void> {
-    if (task.agents.tester && task.mode === 'single') await this.requestTest(task);
+    if (task.agents.tester) await this.requestTest(task);
     else await this.requestReview(task);
   }
 
@@ -1345,6 +1514,27 @@ export class Workflow {
     const { verdict, findings } = parseTestVerdict(outcome.finalText);
     record(verdict, findings, head);
     if (verdict === 'pass') {
+      if (task.mode === 'loop') {
+        const snapshots = this.snapshots(task.id);
+        const snapshot = snapshots.at(-1)!;
+        const verifiedPassing = snapshot.features.filter((feature) => feature.passes).length;
+        this.recordSnapshot(task.id, { ...snapshot, testerPassed: true, verifiedPassing });
+        const limit = this.host.config.loopStallSessions;
+        const recent = [
+          0,
+          ...snapshots.filter((s) => s.testerPassed).map((s) => s.verifiedPassing),
+          verifiedPassing,
+        ].slice(-(limit + 1));
+        const reviewFix = this.reviews(task.id).at(-1)?.verdict === 'changes';
+        if (!reviewFix && recent.length === limit + 1 && recent.every((n) => n === recent[0])) {
+          this.host.notice(
+            task.id,
+            `no verified progress in ${limit} sessions; stopping for review`,
+          );
+          this.host.setStatus(task.id, 'failed');
+          return;
+        }
+      }
       this.host.notice(task.id, `${plan.agentId} passed round ${request.round}`);
       await this.requestReview(task);
     } else if (verdict === null) {
@@ -1502,7 +1692,7 @@ export class Workflow {
       return;
     }
     const last = this.snapshots(task.id).at(-1);
-    const done = last?.verify?.ok && last.features.every((f) => f.passes);
+    const done = (last?.verify?.ok || last?.testerPassed) && last.features.every((f) => f.passes);
     this.host.setStatus(task.id, done ? 'review' : 'queued');
   }
 
@@ -1560,8 +1750,8 @@ export class Workflow {
   }
 
   /**
-   * After a loop session: checks the feature list, runs the verify command independently of
-   * what the agent reported, and decides whether to continue, finish, or stop for review.
+   * After a loop session: checks the feature list and sends formal verification to the
+   * tester, or runs the verify command itself when no tester is configured.
    */
   private async finishLoopStep(task: Task, signal: AbortSignal, reply: string): Promise<void> {
     let plan: ReturnType<typeof readPlan>;
@@ -1603,6 +1793,15 @@ export class Workflow {
       return;
     }
 
+    if (task.agents.tester) {
+      this.recordSnapshot(task.id, {
+        features,
+        verify: null,
+        verifiedPassing: snapshots.at(-1)!.verifiedPassing,
+      });
+      await this.stepDone(task);
+      return;
+    }
     const addressingReview = this.openFeedback(task.id) !== null;
     this.host.notice(task.id, `verifying: ${task.verifyCommand}`);
     this.host.setActivity(task.id, { phase: 'verifying', agentId: null });
@@ -1645,14 +1844,15 @@ export class Workflow {
   private handOff(task: Task, outcome: SessionOutcome): void {
     const note = outcome.reason === 'handoff' && outcome.finalText ? outcome.finalText : null;
     this.host.store.appendEvent(task.id, null, 'handoff', { note });
-    // Counted since the last completed session, so a long loop of features is not capped.
-    const sessions = this.host.store.listSessions(task.id);
-    const sinceCompleted = sessions.slice(
-      sessions.findLastIndex((s) => s.endReason === 'completed') + 1,
+    // A reused session's endReason changes each turn, so count immutable run outcomes.
+    const ends = this.host.store.eventsOfKind(task.id, 'workflow_end');
+    const sinceCompleted = ends.slice(
+      ends.findLastIndex((event) => (event.data as { reason: string }).reason === 'completed') + 1,
     );
-    const handoffs = sinceCompleted.filter(
-      (s) => s.endReason === 'handoff' || s.endReason === 'context_hard_limit',
-    ).length;
+    const handoffs = sinceCompleted.filter((event) => {
+      const { reason } = event.data as { reason: string };
+      return reason === 'handoff' || reason === 'context_hard_limit';
+    }).length;
     if (handoffs >= this.host.config.maxHandoffs) {
       this.host.notice(task.id, `reached ${handoffs} handoffs (maxHandoffs); stopping for review`);
       this.host.setStatus(task.id, 'failed');

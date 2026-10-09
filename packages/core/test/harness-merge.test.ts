@@ -55,7 +55,17 @@ const git = (cwd: string, ...args: string[]) =>
 function commitFile(cwd: string, file: string, content: string): void {
   writeFileSync(path.join(cwd, file), content);
   git(cwd, 'add', file);
-  git(cwd, '-c', 'user.name=T', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', file);
+  git(
+    cwd,
+    '-c',
+    'user.name=T',
+    '-c',
+    'user.email=t@example.com',
+    'commit',
+    '-q',
+    '-m',
+    `fix: update ${file}`,
+  );
 }
 
 /** A single task whose session finished with a commit, waiting in review. */
@@ -176,7 +186,7 @@ describe('a merge that cannot start', () => {
 
 describe('merging a task whose base changed the same lines', () => {
   async function conflicted() {
-    const reviewed = await reviewedTask([[init(), result('resolved')]]);
+    const reviewed = await reviewedTask([[init(), result('resolved')]], [[init(), result('done')]]);
     commitFile(repo, 'hello.txt', 'hello from main\n');
     const merge = await harness.mergeTask(reviewed.task.id);
     await harness.waitForIdle();
@@ -190,7 +200,7 @@ describe('merging a task whose base changed the same lines', () => {
 
   it('leaves the base unchanged', async () => {
     await conflicted();
-    expect(git(repo, 'log', '-1', '--format=%s')).toBe('hello.txt');
+    expect(git(repo, 'log', '-1', '--format=%s')).toBe('fix: update hello.txt');
   });
 
   it('starts merging the base in the task worktree', async () => {
@@ -203,14 +213,16 @@ describe('merging a task whose base changed the same lines', () => {
     expect(fakeRuns()[1]!.received[0]).toContain('These files have conflicts:\n- hello.txt');
   });
 
-  it('brings the task back for review afterwards', async () => {
+  it('blocks handoff while merge conflicts remain uncommitted', async () => {
     const { task } = await conflicted();
-    expect(harness.store.getTask(task.id)!.status).toBe('review');
+    expect(harness.store.getTask(task.id)!.status).toBe('failed');
   });
 
   it('merges once the agent committed the resolution', async () => {
     const { task, worktree } = await conflicted();
     commitFile(worktree, 'hello.txt', 'hi and hello\n');
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
     await harness.mergeTask(task.id);
     expect(readFileSync(path.join(repo, 'hello.txt'), 'utf8')).toBe('hi and hello\n');
   });

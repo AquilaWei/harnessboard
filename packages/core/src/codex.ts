@@ -22,6 +22,7 @@ export class CodexAdapter implements AgentAdapter {
   readonly provider = 'codex';
   readonly versionArgs = ['--version'];
   readonly capabilities: AgentCapabilities = {
+    compaction: true,
     midTurnInput: false,
     sessionIds: 'agent',
     permissionPrompts: true,

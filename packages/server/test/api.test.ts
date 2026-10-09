@@ -135,6 +135,19 @@ describe('version API', () => {
 });
 
 describe('tasks API', () => {
+  it('shows the resumed implementer context after a newer reviewer session', async () => {
+    const task = await harness.createTask({ prompt: 'Fix it', repo });
+    harness.store.startSession('worker', task.id, 'implementer', 'claude', 'worker', 1000);
+    harness.store.startSession('reviewer', task.id, 'reviewer', 'checker', 'reviewer', 2000);
+    harness.store.updateSessionContext('worker', 1234, 100000);
+    harness.store.appendEvent(task.id, 'reviewer', 'workflow_run', { role: 'reviewer' });
+    harness.store.appendEvent(task.id, 'worker', 'workflow_run', { role: 'implementer' });
+    const response = await app.request(`/api/tasks/${task.id}`, { headers: local });
+    expect(await response.json()).toMatchObject({
+      latestSessionId: 'worker',
+      context: { tokens: 1234 },
+    });
+  });
   it('creates a backlog task when queue is false', async () => {
     const res = await post('/api/tasks', { prompt: 'Fix it', repo }, { [CLIENT_HEADER]: 'test' });
     expect([res.status, ((await res.json()) as { status: string }).status]).toEqual([

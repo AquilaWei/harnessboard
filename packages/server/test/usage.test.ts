@@ -45,6 +45,14 @@ afterEach(() => store.close());
 const usage = () => taskUsage(id, store, store.listSessions(id), false);
 
 describe('taskUsage', () => {
+  it('adds per-run reports when a provider resumes the same conversation', () => {
+    store.appendEvent(id, 's1', 'usage', { ...run(100, 10, 40, 0.02), cumulative: false });
+    store.appendEvent(id, 's1', 'usage', { ...run(200, 25, 90, 0.05), cumulative: false });
+    expect([usage().tokens, usage().costUsd]).toEqual([
+      { input: 35, output: 130, cacheRead: 0, cacheWrite: 0 },
+      0.07,
+    ]);
+  });
   it('adds up the sessions', () => {
     store.appendEvent(id, 's1', 'usage', run(100, 10, 40, 0.02));
     store.appendEvent(id, 's2', 'usage', run(200, 5, 20, 0.01));

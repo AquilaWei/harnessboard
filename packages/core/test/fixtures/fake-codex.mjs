@@ -58,6 +58,23 @@ rl.on('line', (line) => {
   } else if (msg.method === 'turn/start') {
     send({ id: msg.id, result: { turn: { id: turnId, status: 'inProgress' } } });
     next();
+  } else if (msg.method === 'thread/compact/start') {
+    send({ id: msg.id, result: {} });
+    send({
+      method: 'item/completed',
+      params: {
+        threadId,
+        turnId: 'compact-turn',
+        item: { type: 'contextCompaction', id: 'compact' },
+      },
+    });
+    send({
+      method: 'turn/completed',
+      params: {
+        threadId,
+        turn: { id: 'compact-turn', status: 'completed' },
+      },
+    });
   } else if (msg.id === scenario.requests?.[index]?.id) {
     const request = scenario.requests[index];
     if (msg.result?.decision === 'accept' && request.commit) {

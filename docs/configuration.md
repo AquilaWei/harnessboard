@@ -13,16 +13,23 @@ Context budget, config files, agent profiles, permissions and the Docker sandbox
 The next session starts fresh with the original task and the handoff note. Percentages are of
 the model's context window, which the CLI reports.
 
-**Compacting:** when an agent's turn ends at 30 % or more (the implementer finishing a step,
-the reviewer giving its verdict, a chat reply), Harnessboard sends `/compact` before the
-session closes. Work is never interrupted for it, and the agent's reply stays the result.
-The conversation is then small when it is continued later: in a chat, after a quota pause,
-or when work starts after the acceptance criteria were agreed. Change the level with
-`--compact <pct>` or `compactPct` in a context policy; `0` turns it off. While compaction is
+**Compacting:** every successful workflow stage (planning, implementation, testing or
+review) is followed by compaction, even below the warning threshold. Other turns, such
+as chat replies, compact only when they finish at or above `compactPct` (30 % by default).
+Work is never interrupted just to compact, and the agent's reply stays the result.
+Each implementer, tester and reviewer continues its own session across stages and fixes;
+compaction preserves the session ID. Claude Code uses `/compact`; Codex uses its native
+`thread/compact/start` RPC and waits for the compaction turn to finish. Gemini currently
+manages its own context; Harnessboard cannot request its compaction through the headless
+adapter. Codex's cumulative usage is not treated as current context size, so threshold
+compaction requires current-context telemetry; its workflow stage compaction still runs.
+Change the warning level with `--compact <pct>` or `compactPct` in a context policy;
+`0` disables both stage and threshold compaction. While compaction is
 on, the soft and hard thresholds do not act within a turn: the agent is not asked to wrap up
 and is not cut off, and the turn finishes and is compacted. Only a context at 90 % or more
 ends a turn early, so a runaway turn can not overflow the window. With compaction off, or for
 an agent that can not be compacted, the soft and hard thresholds apply within the turn.
+Emergency context handoffs and unavailable conversations can still require a fresh session.
 
 ## Usage estimates
 

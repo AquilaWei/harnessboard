@@ -3,6 +3,31 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Changed
+
+- Formal stage verification belongs to the configured tester, including loop features;
+  Harnessboard no longer duplicates that run. Reviewers focus on architecture, logic and
+  code rules without rerunning tests. Only implementers automatically receive new feedback;
+  testers and reviewers consult historical notes on demand.
+- Writing stages now require a clean worktree and valid single-line English commit messages
+  before handoff. Failed checks preserve the work and session and explain what to fix.
+
+- Implementers, reviewers and testers keep their own conversations across features and
+  fixes. Follow-up turns receive new handoff notes and changed scope instead of rereading
+  the entire notes history. Changed requirements and review rules are still sent again.
+- Successful workflow stages compact their conversation even below the warning threshold.
+  Other completed turns compact at the configured threshold. Codex uses native thread
+  compaction; Claude Code uses `/compact`. Explicitly disabling compaction is respected.
+
+### Fixed
+
+- Saved Codex and Gemini conversations can resume without current-context telemetry.
+- Context displays and handoff limits follow the latest role run when sessions are reused.
+- Gemini's per-run token reports are added across resumed turns rather than replacing
+  earlier usage for the same conversation.
+
 ## 0.1.1 - 2026-10-09
 
 Local debug/test build; live Codex cost display still needs acceptance testing.

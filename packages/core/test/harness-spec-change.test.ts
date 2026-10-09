@@ -215,7 +215,7 @@ describe('approving a spec change the user asked for', () => {
 
   it('commits the spec file', async () => {
     const task = await approved();
-    expect(lastCommitMessage(task.id)).toBe('docs: revise spec for Add a greeting');
+    expect(lastCommitMessage(task.id)).toBe('docs: revise task specification');
   });
 
   it('leaves the spec file without uncommitted changes', async () => {

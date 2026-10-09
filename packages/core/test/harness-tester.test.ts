@@ -9,6 +9,7 @@ import { Harness } from '../src/harness.js';
 import { isTestPath, parseTestVerdict } from '../src/review.js';
 import {
   FAKE_CLAUDE,
+  commitAll,
   init,
   makeRepo,
   result,
@@ -61,7 +62,9 @@ function fakeRuns(): FakeRun[] {
     .map((line) => JSON.parse(line) as FakeRun);
 }
 
-const session = (text: string, ...writes: unknown[]) => [[init(), ...writes, result(text)]];
+const session = (text: string, ...writes: unknown[]) => [
+  [init(), ...writes, commitAll('test: record stage work'), result(text)],
+];
 const status = (id: number) => harness.store.getTask(id)!.status;
 const roles = (id: number) => harness.store.listSessions(id).map((s) => s.role);
 
@@ -149,14 +152,7 @@ describe('a reviewer that requests changes after the tests passed', () => {
     await runQueued(); // implementer fixes
     await runQueued(); // tester again
     await runQueued(); // reviewer again
-    expect(roles(task.id)).toEqual([
-      'implementer',
-      'tester',
-      'reviewer',
-      'implementer',
-      'tester',
-      'reviewer',
-    ]);
+    expect(roles(task.id)).toEqual(['implementer', 'tester', 'reviewer']);
   });
 });
 
@@ -169,27 +165,24 @@ describe('a tester that reports failures', () => {
     await runQueued();
     await runQueued();
     expect([roles(task.id), fakeRuns()[2]!.received[0]]).toEqual([
-      ['implementer', 'tester', 'implementer'],
+      ['implementer', 'tester'],
       expect.stringContaining('greet() returns nothing'),
     ]);
   });
 
-  it('starts a new implementer session rather than continuing the tester', async () => {
+  it('resumes the implementer session after the tester reports failures', async () => {
     scenario(implemented, failing, session('fixed'));
     await tested();
     await runQueued();
     await runQueued();
-    expect(fakeRuns()[2]!.args).not.toContain('--resume');
+    expect(fakeRuns()[2]!.args).toContain('--resume');
   });
 
   it('hands the task to a human after the allowed rounds', async () => {
     scenario(implemented, failing, session('fixed', writeFile('hello2.txt', 'x')), failing);
     const task = await tested();
     for (let i = 0; i < 3; i++) await runQueued();
-    expect([roles(task.id), status(task.id)]).toEqual([
-      ['implementer', 'tester', 'implementer', 'tester'],
-      'review',
-    ]);
+    expect([roles(task.id), status(task.id)]).toEqual([['implementer', 'tester'], 'review']);
   });
 
   it('gets fresh rounds when a human sends the task back', async () => {

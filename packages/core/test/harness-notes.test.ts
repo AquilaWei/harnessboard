@@ -10,6 +10,7 @@ import { Harness } from '../src/harness.js';
 import { parseNotes } from '../src/notes.js';
 import {
   FAKE_CLAUDE,
+  commitAll,
   init,
   makeRepo,
   result,
@@ -60,7 +61,9 @@ function fakeRuns(): FakeRun[] {
     .map((line) => JSON.parse(line) as FakeRun);
 }
 
-const session = (text: string, ...writes: unknown[]) => [[init(), ...writes, result(text)]];
+const session = (text: string, ...writes: unknown[]) => [
+  [init(), ...writes, commitAll('test: record stage work'), result(text)],
+];
 const notesFile = (id: number) =>
   path.join(harness.store.getTask(id)!.worktreePath!, '.harnessboard', 'notes.md');
 const notes = (id: number) => readFileSync(notesFile(id), 'utf8');
@@ -114,11 +117,12 @@ describe('a finished implementer step', () => {
 });
 
 describe('the role after the implementer', () => {
-  it('is told to read the notes file first', async () => {
+  it('only consults the notes archive when history is needed', async () => {
     scenario(implemented, passing);
     await created({ tester: 'qa' });
     await runQueued();
-    expect(fakeRuns()[1]!.received[0]).toContain('Before you start, read `.harnessboard/notes.md`');
+    expect(fakeRuns()[1]!.received[0]).not.toContain('Before you start, read');
+    expect(fakeRuns()[1]!.received[0]).toContain('Consult them only when');
   });
 
   it('has its verdict in the heading of its note', async () => {
