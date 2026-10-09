@@ -64,7 +64,7 @@
         "`hb agents --models claude` prints each model's efforts (e.g. 'efforts: low, medium, high, xhigh, max') and nothing extra for models without efforts.",
         "CLI messages exist in both en and zh-TW; the verify command passes."
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "F6",

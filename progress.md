@@ -105,6 +105,16 @@ turn with `effort` is accepted by the app-server. Spend real runs sparingly.
   needs no capability field in the API. Tests: `packages/web/test/effort.test.tsx`, one new
   case in `core/test/models.test.ts`.
   Verify: 1440 passed, 14 skipped.
+- **F5 (done):** `hb add` / `hb loop` take `--effort`, `--spec-effort`, `--designer-effort`,
+  `--tester-effort`, `--reviewer-effort` (`withTaskOptions` / `taskInput`); the server
+  validates them, as with models. `hb models`' options moved into `withAgentOptions` and its
+  request into `agentsUpdate` (both in `task-options.ts`) so they can be tested; it takes the
+  same five effort options, `default` sends `null`. Its output is `formatTaskAgents` and
+  `hb agents --models` uses `formatModel` (both in `format.ts`): an unset effort shows
+  `(default effort)`, and a model with efforts gets an indented `efforts: low, medium, …` line
+  of the ids `--effort` takes, plus `(default medium)` when the CLI names a default. Models
+  without efforts print only their line (trailing spaces now trimmed).
+  Verify: 1453 passed, 14 skipped.
 
 ## Open questions
 

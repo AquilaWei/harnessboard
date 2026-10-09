@@ -2,9 +2,11 @@
 import type {
   AgentEvent,
   Feature,
+  ModelInfo,
   PermissionDecisionRecord,
   PermissionRequest,
   SpecChangeProposal,
+  TaskAgents,
   TaskView,
 } from '@harnessboard/shared';
 import { t } from './i18n.js';
@@ -44,6 +46,37 @@ export function formatSpecChange(taskId: number, change: SpecChangeProposal): st
     proposed,
     t('specChangeNext', { id: taskId }),
   ].join('\n');
+}
+
+/**
+ * `hb models`: each role's profile, model and effort, one role per line. An unset model or
+ * effort shows as the default label, since the profile or the CLI then decides.
+ */
+export function formatTaskAgents(a: TaskAgents): string[] {
+  const shown = (model?: string | null, effort?: string | null) =>
+    `${model ?? t('defaultModel')}  ${effort ?? t('defaultEffort')}`;
+  return [
+    a.spec
+      ? `spec         ${a.spec}  ${shown(a.specModel, a.specEffort)}`
+      : `spec         ${t('sameAsImplementer')}`,
+    `designer     ${a.designer ?? '-'}  ${a.designer ? shown(a.designerModel, a.designerEffort) : ''}`,
+    `implementer  ${a.implementer}  ${shown(a.implementerModel, a.implementerEffort)}`,
+    `tester       ${a.tester ?? '-'}  ${a.tester ? shown(a.testerModel, a.testerEffort) : ''}`,
+    `reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel, a.reviewerEffort) : ''}`,
+  ];
+}
+
+/**
+ * `hb agents --models`: a model's line, then its effort ids (what `--effort` takes) on an
+ * indented line when it offers a choice.
+ */
+export function formatModel(m: ModelInfo): string[] {
+  const details = [m.description, m.note && `(${m.note})`, m.more && t('moreModel')];
+  const line = `${m.id.padEnd(28)} ${m.name.padEnd(14)} ${details.filter(Boolean).join(' ')}`;
+  if (m.efforts.length === 0) return [line.trimEnd()];
+  const efforts = m.efforts.map((e) => e.id).join(', ');
+  const fallback = m.defaultEffort ? ` ${t('effortDefault', { effort: m.defaultEffort })}` : '';
+  return [line.trimEnd(), `  ${t('effortList', { efforts })}${fallback}`];
 }
 
 export function formatTokens(tokens: number): string {
