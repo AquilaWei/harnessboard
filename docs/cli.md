@@ -62,7 +62,7 @@ hb models 12 --effort default      # back to the profile's or CLI's default
 
 **Merging a task** (`hb merge`, or **Merge into main** in the task panel of a task in
 review) merges its branch into the branch it started from with a merge commit,
-`Merge task #N: <title>`, keeping every commit of the task. The task is then done, and its
+`chore: merge task #N` (the title is in the message body), keeping every commit of the task. The task is then done, and its
 worktree and branch are removed.
 
 - Your own checkout only changes if it has that branch checked out. It is then

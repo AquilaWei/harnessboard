@@ -5,6 +5,12 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Fixed
+
+- **Merge commits follow the commit format.** A merged task's commit is now `chore: merge task #N`
+  with the title in its body, instead of copying the title (which could be in any language) into
+  the subject.
+
 ### Added
 
 - **Choose a reasoning effort next to every model.** Each role of a task (implementer,

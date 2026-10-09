@@ -1118,8 +1118,8 @@ export class Harness {
   }
 
   /**
-   * Merges a reviewed task's branch into its base branch with a merge commit (`Merge task
-   * #N: title`), then marks the task done, removes its worktree and deletes the merged
+   * Merges a reviewed task's branch into its base branch with a merge commit (`chore: merge task
+   * #N`, the title in the body), then marks the task done, removes its worktree and deletes the merged
    * branch. The merge is made without a worktree; the user's own checkout only changes when
    * it has the base branch checked out, and is then fast-forwarded, which git refuses when
    * local changes would be overwritten.
@@ -1184,7 +1184,8 @@ export class Harness {
       resolveCommit(repo, base),
       resolveCommit(repo, branch),
     ]);
-    const message = `Merge task #${id}: ${task.title}\n\nBranch ${branch}`;
+    // The subject stays fixed and English; the title is free text, so it goes in the body.
+    const message = `chore: merge task #${id}\n\n${task.title}\n\nBranch ${branch}`;
     const commit = await commitTree(repo, merged.tree, [from, head], message);
     await advanceBranch(repo, base, from, commit);
     const record: MergeRecord = { base, branch, commit };
