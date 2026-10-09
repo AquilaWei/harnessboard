@@ -12,7 +12,7 @@
         "`roleEffort` mirrors `roleModel`: returns `implementerEffort` / `reviewerEffort` / `testerEffort` / `designerEffort` / `specEffort`, `null` when unset, and a spec author left unset inherits the implementer's effort.",
         "All existing tests that build ModelInfo objects are updated and the verify command passes."
       ],
-      "passes": false
+      "passes": true
     },
     {
       "id": "F2",

@@ -8,7 +8,7 @@ Build in order; each feature is one session. See `feature_list.json` for accepta
 
 | ID  | Feature                                                               | Status |
 | --- | --------------------------------------------------------------------- | ------ |
-| F1  | Shared types + catalogs list each model's effort levels               | todo   |
+| F1  | Shared types + catalogs list each model's effort levels               | done   |
 | F2  | Adapters pass `effort` to the CLI (`--effort`, Codex `turn/start`)    | todo   |
 | F3  | Tasks store effort per role; harness and API use it                   | todo   |
 | F4  | Web board: effort selector next to every model picker (en + zh-TW)    | todo   |
@@ -56,6 +56,18 @@ real-machine acceptance.
 **Needs real-machine acceptance (cannot be automated):** a real Claude session started with
 `--effort` actually runs at that effort (check the session's `init`/status), and a real Codex
 turn with `effort` is accepted by the app-server. Spend real runs sparingly.
+
+## Session log
+
+- **F1 (done):** `EffortInfo`, `ModelInfo.efforts` / `defaultEffort`, `isEffortId`, `roleEffort`
+  and the five `*Effort` fields on `TaskAgents` are in `packages/shared/src/agents.ts`.
+  `parseClaudeCatalog` reads `thinking.effort_options` (name from `name`, description from
+  `tooltip.content`, note from `badge.message`); `parseCodexModels` reads
+  `supported_reasoning_levels` (name = id, since Codex gives no display name) and
+  `default_reasoning_level`. Decision: Claude's `defaultEffort` stays `null`; the
+  "Recommended" badge is still visible as the effort's note, but it is not proof of what the
+  CLI uses without `--effort`, so F4's "Default" option should not claim a level for Claude.
+  Verify: 1396 passed, 14 skipped.
 
 ## Open questions
 

@@ -2,15 +2,23 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { ModelInfo } from '@harnessboard/shared';
+import type { EffortInfo, ModelInfo } from '@harnessboard/shared';
 
-/** Claude Code's aliases, which always mean the latest model of a family. */
+/**
+ * Claude Code's aliases, which always mean the latest model of a family. Which efforts an
+ * alias offers depends on the model it points at, so they list none.
+ */
 export const CLAUDE_ALIASES: ModelInfo[] = [
-  { id: 'opus', name: 'Opus', description: 'Latest Opus', note: null, more: false },
-  { id: 'sonnet', name: 'Sonnet', description: 'Latest Sonnet', note: null, more: false },
-  { id: 'fable', name: 'Fable', description: 'Latest Fable', note: null, more: false },
-  { id: 'haiku', name: 'Haiku', description: 'Latest Haiku', note: null, more: false },
+  alias('opus', 'Opus'),
+  alias('sonnet', 'Sonnet'),
+  alias('fable', 'Fable'),
+  alias('haiku', 'Haiku'),
 ];
+
+function alias(id: string, name: string): ModelInfo {
+  const description = `Latest ${name}`;
+  return { id, name, description, note: null, more: false, efforts: [], defaultEffort: null };
+}
 
 type Json = Record<string, unknown>;
 const text = (value: unknown): string | null =>
@@ -32,6 +40,24 @@ export function parseClaudeCatalog(catalog: unknown): ModelInfo[] {
       description: text(m.description),
       note: text((m.badge as Json | undefined)?.message),
       more: m.section === 'overflow',
+      efforts: claudeEfforts(m.thinking as Json | undefined),
+      // The catalog only badges one effort "Recommended"; it does not say which one the CLI
+      // uses without `--effort`, so the default stays unknown.
+      defaultEffort: null,
+    }));
+}
+
+/** A Claude catalog model's `thinking.effort_options`; empty when it has none. */
+function claudeEfforts(thinking: Json | undefined): EffortInfo[] {
+  const options = thinking?.effort_options;
+  if (!Array.isArray(options)) return [];
+  return (options as Json[])
+    .filter((o) => text(o.id) !== null)
+    .map((o) => ({
+      id: o.id as string,
+      name: text(o.name) ?? (o.id as string),
+      description: text((o.tooltip as Json | undefined)?.content),
+      note: text((o.badge as Json | undefined)?.message),
     }));
 }
 
@@ -74,5 +100,20 @@ export function parseCodexModels(catalog: unknown): ModelInfo[] {
       description: text(m.description),
       note: null,
       more: false,
+      efforts: codexEfforts(m.supported_reasoning_levels),
+      defaultEffort: text(m.default_reasoning_level),
+    }));
+}
+
+/** A Codex model's `supported_reasoning_levels`; Codex names a level only by its id. */
+function codexEfforts(levels: unknown): EffortInfo[] {
+  if (!Array.isArray(levels)) return [];
+  return (levels as Json[])
+    .filter((l) => text(l.effort) !== null)
+    .map((l) => ({
+      id: l.effort as string,
+      name: l.effort as string,
+      description: text(l.description),
+      note: null,
     }));
 }

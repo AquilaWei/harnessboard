@@ -53,6 +53,20 @@ export interface ModelInfo {
   note: string | null;
   /** Listed among further models rather than the main choices. */
   more: boolean;
+  /** Reasoning efforts the model offers, in the platform's order; empty when it offers no choice. */
+  efforts: EffortInfo[];
+  /** The effort the CLI uses when none is passed; `null` when the platform does not say. */
+  defaultEffort: string | null;
+}
+
+/** A reasoning effort a model offers, e.g. `high`, as the platform describes it. */
+export interface EffortInfo {
+  /** What is passed to the CLI's effort option. */
+  id: string;
+  name: string;
+  description: string | null;
+  /** A caveat the platform shows with the effort, e.g. that it uses more of the limits. */
+  note: string | null;
 }
 
 // Letters, digits and the punctuation model ids use, e.g. `claude-opus-5-5` or `opus[1m]`;
@@ -64,6 +78,15 @@ export function isModelId(model: string): boolean {
   return MODEL_ID.test(model);
 }
 
+// Effort ids are single words such as `high` or `xhigh`; never starting with `-`, so an
+// effort can not be read as a CLI option.
+const EFFORT_ID = /^[A-Za-z0-9][\w-]*$/;
+
+/** True for a string that can be passed to an agent CLI as a reasoning effort. */
+export function isEffortId(effort: string): boolean {
+  return EFFORT_ID.test(effort);
+}
+
 /** Which agent profile plays each role in a task. */
 export interface TaskAgents {
   implementer: string;
@@ -71,8 +94,12 @@ export interface TaskAgents {
   reviewer: string | null;
   /** Model for the implementer; absent or `null` uses the profile's model. */
   implementerModel?: string | null;
+  /** Reasoning effort for the implementer; absent or `null` uses the CLI's default. */
+  implementerEffort?: string | null;
   /** Model for the reviewer; absent or `null` uses the profile's model. */
   reviewerModel?: string | null;
+  /** Reasoning effort for the reviewer; absent or `null` uses the CLI's default. */
+  reviewerEffort?: string | null;
   /**
    * Agent that writes the spec (the acceptance criteria discussed with the user before
    * anything is built); absent or `null` lets the implementer do it.
@@ -80,6 +107,8 @@ export interface TaskAgents {
   spec?: string | null;
   /** Model for the spec author; absent or `null` uses the profile's model. */
   specModel?: string | null;
+  /** Reasoning effort for the spec author; absent or `null` uses the CLI's default. */
+  specEffort?: string | null;
   /**
    * Agent that tests each finished implementer step before it is reviewed: it writes the
    * missing tests and runs them. Absent or `null` skips testing.
@@ -87,6 +116,8 @@ export interface TaskAgents {
   tester?: string | null;
   /** Model for the tester; absent or `null` uses the profile's model. */
   testerModel?: string | null;
+  /** Reasoning effort for the tester; absent or `null` uses the CLI's default. */
+  testerEffort?: string | null;
   /**
    * Agent that adds a "UI design" section to the spec file once the spec is written, before
    * the implementer starts. Absent or `null` skips it, as for a task without a UI.
@@ -94,6 +125,8 @@ export interface TaskAgents {
   designer?: string | null;
   /** Model for the designer; absent or `null` uses the profile's model. */
   designerModel?: string | null;
+  /** Reasoning effort for the designer; absent or `null` uses the CLI's default. */
+  designerEffort?: string | null;
   /** Review rounds per step before the task goes to a human anyway. */
   maxReviewRounds: number;
 }
@@ -147,4 +180,15 @@ export function roleModel(agents: TaskAgents, role: AgentRole): string | null {
   // A spec author left unset is the implementer, so it keeps the implementer's model too.
   if (agents.specModel) return agents.specModel;
   return agents.spec ? null : (agents.implementerModel ?? null);
+}
+
+/** The reasoning effort chosen for `role` in a task; `null` means the CLI's default. */
+export function roleEffort(agents: TaskAgents, role: AgentRole): string | null {
+  if (role === 'reviewer') return agents.reviewerEffort ?? null;
+  if (role === 'implementer') return agents.implementerEffort ?? null;
+  if (role === 'tester') return agents.testerEffort ?? null;
+  if (role === 'designer') return agents.designerEffort ?? null;
+  // A spec author left unset is the implementer, so it keeps the implementer's effort too.
+  if (agents.specEffort) return agents.specEffort;
+  return agents.spec ? null : (agents.implementerEffort ?? null);
 }
