@@ -497,7 +497,7 @@ program
   });
 
 program
-  .command('plan')
+  .command('discuss')
   .description("discuss a draft's spec; once approved it waits as pending")
   .argument('<id>', 'task id', parseInteger)
   .option('-m, --message <text>', 'the spec change wanted, for a draft that already has a spec')
@@ -526,7 +526,7 @@ program
 
 program
   .command('done')
-  .description('mark a reviewed task as done')
+  .description('mark a reviewed, failed or stopped task as done (nothing is merged)')
   .argument('<id>', 'task id', parseInteger)
   .action(async (id: number) => {
     const task = await client().completeTask(id);

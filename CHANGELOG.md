@@ -3,6 +3,19 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Fixed
+
+- **`hb` works again.** Since 0.1.6 every `hb` command failed at start-up ("cannot add
+  command 'plan'") because planning a draft reused the name of `hb plan`. It is now
+  `hb discuss <id>`.
+
+### Changed
+
+- **A failed or stopped task can be marked done** (drag it to Done, or `hb done`), for work
+  you decided to close without merging.
+
 ## 0.1.9 - 2026-10-10
 
 Local test build for the Android crash fix; real-device acceptance is pending.
@@ -55,7 +68,7 @@ Local test build for the pending queue and one-click phone pairing; real-device 
 
 ### Added
 
-- A **Pending** column. Plan a draft's spec with **Plan the spec** (`hb plan`); once you
+- A **Pending** column. Plan a draft's spec with **Plan the spec** (`hb discuss`); once you
   approve it, the task waits as pending and the harness starts pending tasks one at a time
   whenever quota is available, so a batch planned ahead is taken up after the quota resets.
 - Move tasks by hand between Draft, Pending and Done: drag a card, use the task panel

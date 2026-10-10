@@ -34,12 +34,12 @@ the New task dialog, or `hb models <id> --spec <agent>`. With a different agent 
 conversation does not carry over: after you approve, the implementer starts a new session
 from the approved criteria.
 
-**Planning ahead:** `hb plan <id>` (or **Plan the spec** on a draft) runs the same
+**Planning ahead:** `hb discuss <id>` (or **Plan the spec** on a draft) runs the same
 discussion but, once you approve, the task waits as **pending** instead of building. The
 harness takes pending tasks in order, one slot at a time, whenever the agent's quota is not
 used up; `hb pend <id>` lines up a draft that already has criteria, and `hb draft <id>` takes
 any idle task (including a done one) back to draft. A task that already has a spec is planned
-with `hb plan <id> -m "what should change"`.
+with `hb discuss <id> -m "what should change"`.
 
 **Changing the spec after work has started:** once the spec file exists, a task that is
 running, queued, in review, stopped or failed can still have its criteria changed.

@@ -175,18 +175,18 @@ flowchart LR
 
 在任何資料夾都能執行 `hb`；任務屬於你執行 `hb add` 時所在的 repository。
 
-| 指令                              | 作用                                     |
-| --------------------------------- | ---------------------------------------- |
-| `hb add "<要做什麼>"`             | 排入一個任務                             |
-| `hb ls` / `hb show <id>`          | 列出任務／顯示單一任務的 session 與費用  |
-| `hb logs <id> [-f]`               | 印出或跟隨 agent 的 log                  |
-| `hb diff <id>`                    | 看任務改了什麼                           |
-| `hb chat <id> "<訊息>"`           | 和任務的 agent 對話                      |
-| `hb merge <id>`                   | 把審過的任務合併進它的基底分支           |
-| `hb stop <id>` / `hb resume <id>` | 停止任務／重新排入                       |
-| `hb plan <id>` / `hb pend <id>`   | 規劃草稿的規格／排入待處理，之後自動開始 |
-| `hb open <id>`                    | 在 Claude Code 裡接手這個任務的對話      |
-| `hb delete <id>`                  | 刪除沒在執行的任務                       |
+| 指令                               | 作用                                     |
+| ---------------------------------- | ---------------------------------------- |
+| `hb add "<要做什麼>"`              | 排入一個任務                             |
+| `hb ls` / `hb show <id>`           | 列出任務／顯示單一任務的 session 與費用  |
+| `hb logs <id> [-f]`                | 印出或跟隨 agent 的 log                  |
+| `hb diff <id>`                     | 看任務改了什麼                           |
+| `hb chat <id> "<訊息>"`            | 和任務的 agent 對話                      |
+| `hb merge <id>`                    | 把審過的任務合併進它的基底分支           |
+| `hb stop <id>` / `hb resume <id>`  | 停止任務／重新排入                       |
+| `hb discuss <id>` / `hb pend <id>` | 規劃草稿的規格／排入待處理，之後自動開始 |
+| `hb open <id>`                     | 在 Claude Code 裡接手這個任務的對話      |
+| `hb delete <id>`                   | 刪除沒在執行的任務                       |
 
 所有指令和參數見 [docs/cli.md](docs/cli.md)，`hb --help` 也能列出。
 

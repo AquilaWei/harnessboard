@@ -111,8 +111,16 @@ describe('dropAction', () => {
     expect(dropAction(task('review'), 'done')).toBe('complete');
   });
 
-  it('refuses to complete a failed task', () => {
-    expect(dropAction(task('failed'), 'done')).toBeNull();
+  it('completes a failed task dropped on Done', () => {
+    expect(dropAction(task('failed'), 'done')).toBe('complete');
+  });
+
+  it('completes a stopped task dropped on Done', () => {
+    expect(dropAction(task('stopped'), 'done')).toBe('complete');
+  });
+
+  it('refuses to complete a draft', () => {
+    expect(dropAction(task('backlog'), 'done')).toBeNull();
   });
 
   it('refuses to complete a running task', () => {

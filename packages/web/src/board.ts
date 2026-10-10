@@ -145,6 +145,6 @@ export function dropAction(task: TaskView, target: Stage): TaskAction | null {
   if (target === 'pending' && resting && task.status !== 'pending') return 'pend';
   if (target === 'draft' && resting && task.status !== 'backlog') return 'draft';
   if (target === 'attention' && from === 'active') return 'stop';
-  if (target === 'done' && task.status === 'review') return 'complete';
+  if (target === 'done' && ['review', 'failed', 'stopped'].includes(task.status)) return 'complete';
   return null;
 }

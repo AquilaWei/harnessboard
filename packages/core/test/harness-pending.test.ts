@@ -168,6 +168,24 @@ describe('moving tasks by hand', () => {
     expect(harness.toDraft(task.id).status).toBe('backlog');
   });
 
+  it('marks a stopped task done without merging', async () => {
+    useUpQuota();
+    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    harness.stopTask(task.id);
+    expect(harness.completeTask(task.id).status).toBe('done');
+  });
+
+  it('marks a failed task done', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    harness.store.updateTask(task.id, { status: 'failed' });
+    expect(harness.completeTask(task.id).status).toBe('done');
+  });
+
+  it('refuses to mark a draft done', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    expect(() => harness.completeTask(task.id)).toThrow(/only a task in review, failed or stopped/);
+  });
+
   it('takes a done task back to draft', async () => {
     scenario(worked);
     const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });

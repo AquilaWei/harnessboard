@@ -187,18 +187,18 @@ flowchart LR
 
 Run them from any folder with `hb`; tasks belong to the repository you run `hb add` in.
 
-| Command                           | What it does                                     |
-| --------------------------------- | ------------------------------------------------ |
-| `hb add "<what to do>"`           | Queue a task                                     |
-| `hb ls` / `hb show <id>`          | List tasks / show one with its sessions and cost |
-| `hb logs <id> [-f]`               | Print or follow the agent's log                  |
-| `hb diff <id>`                    | See what the task changed                        |
-| `hb chat <id> "<message>"`        | Talk to the task's agent                         |
-| `hb merge <id>`                   | Merge a reviewed task into its base branch       |
-| `hb stop <id>` / `hb resume <id>` | Stop a task / queue it again                     |
-| `hb plan <id>` / `hb pend <id>`   | Plan a draft's spec / line it up to start later  |
-| `hb open <id>`                    | Continue the task's conversation in Claude Code  |
-| `hb delete <id>`                  | Remove a task that is not running                |
+| Command                            | What it does                                     |
+| ---------------------------------- | ------------------------------------------------ |
+| `hb add "<what to do>"`            | Queue a task                                     |
+| `hb ls` / `hb show <id>`           | List tasks / show one with its sessions and cost |
+| `hb logs <id> [-f]`                | Print or follow the agent's log                  |
+| `hb diff <id>`                     | See what the task changed                        |
+| `hb chat <id> "<message>"`         | Talk to the task's agent                         |
+| `hb merge <id>`                    | Merge a reviewed task into its base branch       |
+| `hb stop <id>` / `hb resume <id>`  | Stop a task / queue it again                     |
+| `hb discuss <id>` / `hb pend <id>` | Plan a draft's spec / line it up to start later  |
+| `hb open <id>`                     | Continue the task's conversation in Claude Code  |
+| `hb delete <id>`                   | Remove a task that is not running                |
 
 Every command and flag is in [docs/cli.md](docs/cli.md); `hb --help` lists them too.
 

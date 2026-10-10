@@ -165,6 +165,8 @@ const STARTABLE: TaskStatus[] = [
   'waiting_quota',
 ];
 /** Statuses `toDraft` and `pendTask` can take a task out of; neither interrupts a session. */
+/** Statuses you can close as done by hand: finished work, or work you decided to give up on. */
+const COMPLETABLE: TaskStatus[] = ['review', 'failed', 'stopped'];
 const MOVABLE: TaskStatus[] = ['pending', 'stopped', 'failed', 'review', 'done'];
 /**
  * A `base` task in one of these is using the repository folder: it works there, or its
@@ -1313,7 +1315,11 @@ export class Harness {
   /** Marks a reviewed task as done. */
   completeTask(id: number): Task {
     const task = this.requireTask(id);
-    if (task.status !== 'review') throw new Error(`task ${id} is ${task.status}, not review`);
+    if (!COMPLETABLE.includes(task.status)) {
+      throw new Error(
+        `task ${id} is ${task.status}; only a task in review, failed or stopped can be marked done`,
+      );
+    }
     return this.setStatus(id, 'done');
   }
 
