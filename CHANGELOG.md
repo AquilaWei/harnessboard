@@ -3,7 +3,9 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
-## Unreleased
+## 0.1.5 - 2026-10-10
+
+Local test build for the commit handoff check fix; real-agent acceptance is pending.
 
 ### Fixed
 
