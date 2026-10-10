@@ -32,7 +32,7 @@ export interface HarnessConfig {
   maxHandoffs: number;
   /** A verify run that takes longer is killed and counts as failed. */
   verifyTimeoutMinutes: number;
-  /** A loop task stops for review after this many sessions without verified progress. */
+  /** Loop stall limit: unchanged implementer turns pause for review; unverified progress also stops. */
   loopStallSessions: number;
   /** Applied to new tasks before project and per-task settings. */
   defaultContextPolicy: ContextPolicy;

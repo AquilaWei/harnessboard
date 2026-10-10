@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   FEATURE_LIST_FILE,
+  PROGRESS_FILE,
   contextPct,
   resolveThresholds,
   roleAgent,
@@ -39,7 +40,7 @@ import type { HarnessConfig } from './config.js';
 import { checkCommits, COMMIT_RULE } from './commit-check.js';
 import { readGuidelines } from './guidelines.js';
 import { missingFeatures, readPlan, runVerify } from './loop.js';
-import { notesPrompt, parseNotes, renderNotes, writeNotes } from './notes.js';
+import { NOTES_FILE, notesPrompt, parseNotes, renderNotes, writeNotes } from './notes.js';
 import {
   QUOTA_RESUME_PROMPT,
   SCOPE_CHANGED_PROMPT,
@@ -116,6 +117,8 @@ export interface SessionPlan {
   contextKey?: string;
   /** HEAD before this stage, for the commit handoff check. */
   commitBase?: string;
+  /** Actual HEAD at this turn's start, independent of a retried commit check. */
+  progressHead?: string;
 }
 
 /** What a task's next session is for, in the order {@link Workflow} picks it. */
@@ -351,6 +354,7 @@ export class Workflow {
       role: plan.role,
       contextKey: plan.contextKey ?? null,
       commitBase: plan.commitBase ?? null,
+      progressHead: plan.progressHead ?? null,
     });
     for (const eventId of plan.delivers ?? []) {
       const delivery: SpecDelivery = { eventId };
@@ -1036,7 +1040,8 @@ export class Workflow {
     switch (outcome.reason) {
       case 'completed':
         if (this.discussing(task)) this.proposeCriteria(task, outcome.finalText);
-        else if (task.mode === 'loop') await this.finishLoopStep(task, signal, outcome.finalText);
+        else if (task.mode === 'loop')
+          await this.finishLoopStep(task, plan, signal, outcome.finalText);
         else if (!this.proposeSpecChange(task, outcome.finalText)) await this.stepDone(task);
         return;
       case 'handoff':
@@ -1518,11 +1523,12 @@ export class Workflow {
         const snapshots = this.snapshots(task.id);
         const snapshot = snapshots.at(-1)!;
         const verifiedPassing = snapshot.features.filter((feature) => feature.passes).length;
+        const progressSnapshots = this.progressSnapshots(task.id);
         this.recordSnapshot(task.id, { ...snapshot, testerPassed: true, verifiedPassing });
         const limit = this.host.config.loopStallSessions;
         const recent = [
           0,
-          ...snapshots.filter((s) => s.testerPassed).map((s) => s.verifiedPassing),
+          ...progressSnapshots.filter((s) => s.testerPassed).map((s) => s.verifiedPassing),
           verifiedPassing,
         ].slice(-(limit + 1));
         const reviewFix = this.reviews(task.id).at(-1)?.verdict === 'changes';
@@ -1671,6 +1677,7 @@ export class Workflow {
    */
   sendBack(taskId: number): void {
     this.host.store.appendEvent(taskId, null, 'sent_back', {});
+    this.resetImplementerProgress(taskId);
   }
 
   /**
@@ -1753,7 +1760,12 @@ export class Workflow {
    * After a loop session: checks the feature list and sends formal verification to the
    * tester, or runs the verify command itself when no tester is configured.
    */
-  private async finishLoopStep(task: Task, signal: AbortSignal, reply: string): Promise<void> {
+  private async finishLoopStep(
+    task: Task,
+    sessionPlan: SessionPlan,
+    signal: AbortSignal,
+    reply: string,
+  ): Promise<void> {
     let plan: ReturnType<typeof readPlan>;
     try {
       plan = readPlan(task.worktreePath!);
@@ -1793,6 +1805,17 @@ export class Workflow {
       return;
     }
 
+    // Check before cached test/review results can send this task around the loop again.
+    if (
+      await this.stopUnchangedImplementer(
+        task,
+        sessionPlan,
+        reply,
+        features.every((f) => f.passes),
+      )
+    )
+      return;
+
     if (task.agents.tester) {
       this.recordSnapshot(task.id, {
         features,
@@ -1814,6 +1837,7 @@ export class Workflow {
     const claimed = features.filter((f) => f.passes).length;
     // Claims made while verification fails are not credited.
     const verifiedPassing = verify.ok ? claimed : snapshots.at(-1)!.verifiedPassing;
+    const progressSnapshots = this.progressSnapshots(task.id);
     this.recordSnapshot(task.id, { features, verify, verifiedPassing });
     this.host.notice(
       task.id,
@@ -1824,7 +1848,7 @@ export class Workflow {
 
     // Fixing review feedback is expected to add no new features, so it is not a stall.
     const limit = this.host.config.loopStallSessions;
-    const recent = [...snapshots.map((s) => s.verifiedPassing), verifiedPassing].slice(
+    const recent = [...progressSnapshots.map((s) => s.verifiedPassing), verifiedPassing].slice(
       -(limit + 1),
     );
     const stalled = recent.length === limit + 1 && recent.every((n) => n === recent[0]);
@@ -1835,6 +1859,64 @@ export class Workflow {
     }
     if (verify.ok) await this.stepDone(task);
     else this.host.setStatus(task.id, 'queued');
+  }
+
+  /** User retries begin a new progress window; automatic scheduling never resets it. */
+  resetImplementerProgress(taskId: number): void {
+    if (this.host.store.lastEvent(taskId, 'implementer_progress')) {
+      this.host.store.appendEvent(taskId, null, 'implementer_progress_reset', {});
+    }
+  }
+
+  /** Persist per-turn progress independently of provider sessions and cached verdicts. */
+  private async stopUnchangedImplementer(
+    task: Task,
+    plan: SessionPlan,
+    reply: string,
+    completionPending: boolean,
+  ): Promise<boolean> {
+    if (!plan.progressHead) throw new Error('Missing implementer progress baseline');
+    const store = this.host.store;
+    const previousEvent = store.lastEvent(task.id, 'implementer_progress');
+    const reset = store.lastEvent(task.id, 'implementer_progress_reset')?.id ?? 0;
+    const previous =
+      previousEvent && previousEvent.id > reset
+        ? (previousEvent.data as { unchangedTurns: number; verifiedPassing: number })
+        : undefined;
+    const verifiedPassing = this.snapshots(task.id).at(-1)!.verifiedPassing;
+    const paths = await changedPaths(task.worktreePath!, plan.progressHead);
+    const changed = paths.some(
+      (file) => file !== FEATURE_LIST_FILE && file !== PROGRESS_FILE && file !== NOTES_FILE,
+    );
+    const priorTurns =
+      verifiedPassing > (previous?.verifiedPassing ?? 0) ? 0 : (previous?.unchangedTurns ?? 0);
+    const unchangedTurns = changed ? 0 : priorTurns + 1;
+    store.appendEvent(task.id, null, 'implementer_progress', {
+      unchangedTurns,
+      verifiedPassing,
+      startHead: plan.progressHead,
+      endHead: await headCommit(task.worktreePath!),
+    });
+    // Let a final feature claim reach verification; failed checks retain their own retry limits.
+    const finalClaim = completionPending && paths.includes(FEATURE_LIST_FILE);
+    if (finalClaim || unchangedTurns < this.host.config.loopStallSessions) return false;
+    this.host.notice(
+      task.id,
+      `no implementation progress in ${unchangedTurns} implementer turns; paused for review. ` +
+        `Resolve the blocker and send the task back to work to reset the counter. ` +
+        `Last reply: ${reply.slice(0, 1000)}`,
+    );
+    this.host.setStatus(task.id, 'review');
+    return true;
+  }
+
+  /** Historical baselines remain available, but a human retry starts fresh stall counts. */
+  private progressSnapshots(taskId: number): FeatureSnapshot[] {
+    const reset = this.host.store.lastEvent(taskId, 'implementer_progress_reset')?.id ?? 0;
+    return this.host.store
+      .eventsOfKind(taskId, 'features')
+      .filter((event) => event.id > reset)
+      .map((event) => event.data as FeatureSnapshot);
   }
 
   private recordSnapshot(taskId: number, snapshot: FeatureSnapshot): void {

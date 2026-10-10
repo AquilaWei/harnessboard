@@ -15,6 +15,7 @@ import {
   result,
   tempDir,
   writeScenario,
+  writeFile,
 } from './helpers.js';
 
 interface FakeRun {
@@ -194,8 +195,8 @@ describe('a feature session', () => {
   it('stops for review after sessions without verified progress', async () => {
     scenario(
       session(featureList(false, false)),
-      session(featureList(false, false)),
-      session(featureList(false, false)),
+      session(featureList(false, false), writeFile('calculator.js', 'first attempt')),
+      session(featureList(false, false), writeFile('calculator.js', 'second attempt')),
     );
     const task = await createLoop();
     await runQueued();
@@ -243,5 +244,49 @@ describe('handoffs in a long loop', () => {
     await runQueued();
     await runQueued();
     expect(status(task.id)).toBe('queued');
+  });
+});
+
+describe('implementer turns without changes', () => {
+  it('allows final feature claims to reach verification at the stall threshold', async () => {
+    harness.config.loopStallSessions = 1;
+    scenario(session(featureList(false)), session(featureList(true)));
+    const task = await createLoop();
+    await runQueued();
+    expect(status(task.id)).toBe('review');
+    expect(harness.store.lastEvent(task.id, 'features')?.data).toMatchObject({
+      verifiedPassing: 1,
+      verify: { ok: true },
+    });
+  });
+
+  it('counts progress notes and unverified feature flags as unchanged turns', async () => {
+    scenario(
+      session(featureList(false, false)),
+      session(featureList(false, false), writeFile('progress.md', 'waiting for phone')),
+      session(featureList(true, false), writeFile('progress.md', 'still waiting for phone')),
+    );
+    const task = await createLoop();
+    await runQueued();
+    await runQueued();
+    expect(status(task.id)).toBe('review');
+    expect(harness.store.lastEvent(task.id, 'implementer_progress')?.data).toMatchObject({
+      unchangedTurns: 2,
+      verifiedPassing: 0,
+    });
+  });
+
+  it('starts a fresh progress window when the user sends a stalled task back', async () => {
+    scenario(session(featureList(false, false)), session(), session(), session());
+    const task = await createLoop();
+    await runQueued();
+    await runQueued();
+    expect(status(task.id)).toBe('review');
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    expect(status(task.id)).toBe('queued');
+    expect(harness.store.lastEvent(task.id, 'implementer_progress')?.data).toMatchObject({
+      unchangedTurns: 1,
+    });
   });
 });

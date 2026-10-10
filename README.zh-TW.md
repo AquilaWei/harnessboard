@@ -1,6 +1,6 @@
 # Harnessboard
 
-![version](https://img.shields.io/badge/version-0.1.3-blue)
+![version](https://img.shields.io/badge/version-0.1.4-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -77,7 +77,7 @@ pnpm build               # 約一分鐘
 
 ```bash
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # 會印出版本，例如 0.1.3
+hb --version             # 會印出版本，例如 0.1.4
 ```
 
 <details>

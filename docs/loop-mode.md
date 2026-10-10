@@ -28,6 +28,15 @@ hb loop "A CLI calculator with add, subtract, multiply and divide"
 5. **Finish or stop for review:** the task moves to Review when every feature passes and
    verification succeeds. It stops as failed if features are removed from the list, or if
    there is no verified progress for `loopStallSessions` (default 3) turns in a row.
+   Independently, consecutive implementer turns without implementation or test content
+   changes pause in Review at the same limit, before another test or review is scheduled.
+   This check also applies when passed test/review results or provider sessions are reused.
+   Changes only to `progress.md`, `feature_list.json`, or role notes do not reset the counter;
+   implementation changes or newly verified features reset it. Final feature claims still
+   reach verification so completed work can finish normally.
+   The pause notice includes the last reply. Resolve the blocker, then send the task back
+   to work to start a fresh counter. Counts survive restarting Harnessboard; older tasks
+   begin counting from their first implementation turn after this update.
 
 The reviewer also keeps its own conversation across features and review rounds. Resumed
 roles receive changed scope; the implementer also receives new reviewer/tester feedback.

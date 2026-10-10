@@ -10,6 +10,7 @@ import { isTestPath, parseTestVerdict } from '../src/review.js';
 import {
   FAKE_CLAUDE,
   commitAll,
+  featureList,
   init,
   makeRepo,
   result,
@@ -260,4 +261,109 @@ describe('isTestPath', () => {
   it.each(['src/greeting.js', 'latest.js', 'README.md', 'contest/a.js'])('rejects %s', (file) =>
     expect(isTestPath(file)).toBe(false),
   );
+});
+
+describe('loop implementer progress', () => {
+  async function preparedLoop(...turns: unknown[][][]) {
+    harness.config.loopStallSessions = 2;
+    scenario(
+      session('plan', featureList(false, false)),
+      session('implemented', featureList(true, false), writeFile('hello.txt', 'hi')),
+      session('TESTS: PASS'),
+      session('VERDICT: APPROVE'),
+      ...turns,
+    );
+    const task = await tested({
+      mode: 'loop',
+      verifyCommand: 'node -e "process.exit(0)"',
+      reviewer: 'checker',
+    });
+    await runQueued();
+    await runQueued();
+    await runQueued();
+    return task;
+  }
+
+  it('preserves the counter across a restart and a replacement implementer session', async () => {
+    const task = await preparedLoop(session('blocked'), session('still blocked'));
+    await runQueued();
+    expect(harness.store.lastEvent(task.id, 'implementer_progress')?.data).toMatchObject({
+      unchangedTurns: 1,
+    });
+    const previous = harness.store.listSessions(task.id).find((s) => s.role === 'implementer')!;
+    harness.store.endSession(previous.id, 'context_hard_limit');
+    const config = harness.config;
+    await harness.shutdown();
+    harness.store.close();
+    harness = Harness.open(config);
+    await runQueued();
+    expect(status(task.id)).toBe('review');
+    expect(fakeRuns()[5]!.args).not.toContain('--resume');
+    expect(harness.store.lastEvent(task.id, 'implementer_progress')?.data).toMatchObject({
+      unchangedTurns: 2,
+    });
+  });
+
+  it('does not exempt unchanged turns merely because every feature is marked passing', async () => {
+    const task = await preparedLoop(
+      session('finished', featureList(true, true), writeFile('hello.txt', 'finished')),
+      session('TESTS: PASS'),
+      session('VERDICT: APPROVE'),
+      session('nothing changed'),
+    );
+    await runQueued();
+    await runQueued();
+    await runQueued();
+    expect(status(task.id)).toBe('review');
+    harness.config.loopStallSessions = 1;
+    harness.queueTask(task.id);
+    await harness.waitForIdle();
+    expect(status(task.id)).toBe('review');
+    expect(harness.store.lastEvent(task.id, 'notice')?.data).toEqual({
+      message: expect.stringContaining('1 implementer turns'),
+    });
+  });
+
+  it('resets the counter when implementation content changes', async () => {
+    const task = await preparedLoop(
+      session('blocked'),
+      session('partial implementation', writeFile('hello.txt', 'hello Samsung')),
+    );
+    await runQueued();
+    await runQueued();
+    expect(status(task.id)).toBe('queued');
+    expect(harness.store.lastEvent(task.id, 'implementer_progress')?.data).toMatchObject({
+      unchangedTurns: 0,
+    });
+  });
+
+  it('stops repeated unchanged turns even when test and review results are reused', async () => {
+    harness.config.loopStallSessions = 2;
+    scenario(
+      session('plan', featureList(false, false)),
+      session('implemented', featureList(true, false), writeFile('hello.txt', 'hi')),
+      session('TESTS: PASS'),
+      session('VERDICT: APPROVE'),
+      session('Blocked: connect the Samsung phone'),
+      session('Blocked: connect the Samsung phone'),
+    );
+    const task = await tested({
+      mode: 'loop',
+      verifyCommand: 'node -e "process.exit(0)"',
+      reviewer: 'checker',
+    });
+    await runQueued();
+    await runQueued();
+    await runQueued();
+    await runQueued();
+    expect(status(task.id)).toBe('queued');
+    await runQueued();
+    expect(status(task.id)).toBe('review');
+    expect(fakeRuns()).toHaveLength(6);
+    expect(harness.store.lastEvent(task.id, 'notice')?.data).toEqual({
+      message: expect.stringContaining('2 implementer turns'),
+    });
+    await runQueued();
+    expect(fakeRuns()).toHaveLength(6);
+  });
 });

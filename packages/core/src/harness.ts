@@ -621,6 +621,8 @@ export class Harness {
     if (task.status === 'review') {
       this.workflow.sendBack(id);
       this.notice(id, 'sent back to work by you; review rounds start again');
+    } else {
+      this.workflow.resetImplementerProgress(id);
     }
     const queued = this.setStatus(id, 'queued', { resumeAt: null });
     this.tick();
@@ -1407,12 +1409,12 @@ export class Harness {
         }
         const blocked = this.store.lastEvent(task.id, 'commit_check')?.data as
           { ok: boolean; role: string; since: string } | undefined;
+        const progressHead = await headCommit(ready.worktreePath!);
         plan = {
           ...plan,
+          progressHead,
           commitBase:
-            blocked && !blocked.ok && blocked.role === plan.role
-              ? blocked.since
-              : await headCommit(ready.worktreePath!),
+            blocked && !blocked.ok && blocked.role === plan.role ? blocked.since : progressHead,
         };
         this.workflow.started(task.id, sessionId, plan);
         this.setActivity(task.id, this.workflow.phaseOf(ready, plan));

@@ -3,6 +3,17 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.4 - 2026-10-09
+
+Local test build for loop stall protection; real-agent acceptance is pending.
+
+### Fixed
+
+- Loop tasks pause for review after consecutive implementer turns without implementation
+  progress, including when passed test/review results or agent sessions are reused.
+  Progress counters survive restarts and reset when you send the task back to work.
+  Notes and unverified feature flags alone do not count as implementation progress.
+
 ## 0.1.3 - 2026-10-09
 
 Local test build for threshold-only automatic compaction; real-agent workflow acceptance
