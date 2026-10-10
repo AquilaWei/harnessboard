@@ -16,7 +16,9 @@ nothing is opened to the internet.
    from the phone's model; change it if you like): the phone asks for your fingerprint, face
    or screen lock to create its passkey. The phone is paired only once the passkey is made.
 
-   If the button is greyed out, Tailscale was not found or is not running. If pairing fails
+   If the button is greyed out, the line above it says why (Tailscale not installed, its
+   service not running, or not logged in). On Linux, **Start Tailscale** starts and enables
+   the service after a system password prompt and shows the login address if one is needed. If pairing fails
    with a Tailscale error, run `tailscale serve --bg 4317` in a terminal to see the reason
    (for example, HTTPS certificates are off, or your user may not change Tailscale's
    settings). `tailscale serve reset` turns the sharing off again.

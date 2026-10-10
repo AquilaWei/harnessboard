@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
-import { tailscaleHost, tailscaleServe } from '../src/tailscale.js';
+import { startTailscale, tailscaleHost, tailscaleServe, tailscaleState } from '../src/tailscale.js';
 
 const printing = (stdout: string) => () => Promise.resolve(stdout);
 
@@ -85,5 +85,102 @@ describe('tailscaleServe', () => {
     await expect(tailscaleServe(4317, run)).rejects.toThrow(
       'run "tailscale serve --bg 4317" in a terminal to see why',
     );
+  });
+});
+
+describe('tailscaleState', () => {
+  it('is missing when the command is not installed', async () => {
+    const run = () => Promise.reject(new Error('spawn tailscale ENOENT'));
+    expect(await tailscaleState(run)).toBe('missing');
+  });
+
+  it('is stopped when the command cannot reach the service', async () => {
+    const run = () => Promise.reject(new Error('tailscale status --json exited with code 1'));
+    expect(await tailscaleState(run)).toBe('stopped');
+  });
+
+  it('needs login when the service is up but logged out', async () => {
+    expect(await tailscaleState(printing('{"BackendState":"NeedsLogin"}'))).toBe('needs-login');
+  });
+
+  it('needs login when Tailscale was switched off with tailscale down', async () => {
+    expect(await tailscaleState(printing('{"BackendState":"Stopped"}'))).toBe('needs-login');
+  });
+
+  it('is running when connected', async () => {
+    expect(await tailscaleState(printing('{"BackendState":"Running"}'))).toBe('running');
+  });
+});
+
+describe('startTailscale', () => {
+  /** A fake machine: each state it passes through, and every command run against it. */
+  function machine(states: string[], loginUrl: string | null = null) {
+    const commands: string[] = [];
+    const queue = [...states];
+    const starter = {
+      run: (command: string, args: string[]) => {
+        commands.push([command, ...args].join(' '));
+        if (command === 'pkexec') return Promise.resolve('');
+        const next = queue.length > 1 ? queue.shift()! : queue[0]!;
+        return next === 'ENOENT'
+          ? Promise.reject(new Error('spawn tailscale ENOENT'))
+          : next === 'DOWN'
+            ? Promise.reject(new Error('exited with code 1'))
+            : Promise.resolve(`{"BackendState":"${next}"}`);
+      },
+      up: () => {
+        commands.push('tailscale up');
+        return Promise.resolve(loginUrl);
+      },
+    };
+    return { commands, starter };
+  }
+
+  it('starts the service through pkexec on Linux, then returns the login address', async () => {
+    const { commands, starter } = machine(
+      ['DOWN', 'NeedsLogin'],
+      'https://login.tailscale.com/a/1',
+    );
+    const result = await startTailscale('linux', starter);
+    expect(commands).toEqual([
+      'tailscale status --json',
+      'pkexec systemctl enable --now tailscaled',
+      'tailscale status --json',
+      'tailscale up',
+    ]);
+    expect(result).toEqual({ state: 'needs-login', loginUrl: 'https://login.tailscale.com/a/1' });
+  });
+
+  it('does not ask for a password when the service already runs', async () => {
+    const { commands, starter } = machine(['NeedsLogin'], 'https://login.tailscale.com/a/1');
+    await startTailscale('linux', starter);
+    expect(commands.some((c) => c.startsWith('pkexec'))).toBe(false);
+  });
+
+  it('leaves a stopped service alone on other systems', async () => {
+    const { commands, starter } = machine(['DOWN']);
+    expect(await startTailscale('darwin', starter)).toEqual({ state: 'stopped' });
+    expect(commands).toEqual(['tailscale status --json']);
+  });
+
+  it('does nothing when Tailscale is not installed', async () => {
+    const { starter } = machine(['ENOENT']);
+    expect(await startTailscale('linux', starter)).toEqual({ state: 'missing' });
+  });
+
+  it('reports running without a login address when up finished by itself', async () => {
+    const { starter } = machine(['NeedsLogin', 'Running'], null);
+    expect(await startTailscale('linux', starter)).toEqual({ state: 'running' });
+  });
+
+  it('passes on the refusal when the password prompt is cancelled', async () => {
+    const starter = {
+      run: (command: string) =>
+        command === 'pkexec'
+          ? Promise.reject(new Error('pkexec exited with code 126'))
+          : Promise.reject(new Error('exited with code 1')),
+      up: () => Promise.resolve(null),
+    };
+    await expect(startTailscale('linux', starter)).rejects.toThrow('code 126');
   });
 });

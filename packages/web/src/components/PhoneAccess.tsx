@@ -19,6 +19,8 @@ interface Props {
 export function PhoneAccess({ onError }: Props) {
   const { t, i18n } = useTranslation();
   const [setup, setSetup] = useState<PairingSetup | null>(null);
+  const [loginUrl, setLoginUrl] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [pairing, setPairing] = useState<{ code: PairingCreated; url: string; qr: string } | null>(
     null,
@@ -39,7 +41,35 @@ export function PhoneAccess({ onError }: Props) {
     return () => window.clearInterval(timer);
   }, [pairing, loadDevices]);
 
+  // While Tailscale is not up, read its state again so the page notices once it is.
+  const waiting = setup !== null && setup.tailscale !== 'running';
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(
+      () => void api.pairingSetup().then(setSetup, () => undefined),
+      DEVICE_POLL_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, [waiting]);
+
   const detected = setup?.tailscaleHost ?? null;
+  const startable =
+    setup !== null &&
+    (setup.tailscale === 'needs-login' ||
+      (setup.tailscale === 'stopped' && setup.canStartTailscale));
+
+  const startTailscale = async () => {
+    setStarting(true);
+    try {
+      const started = await api.startTailscale();
+      setLoginUrl(started.loginUrl ?? null);
+      setSetup(await api.pairingSetup());
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setStarting(false);
+    }
+  };
   const time = (ms: number) =>
     new Date(ms).toLocaleString(i18n.language, { dateStyle: 'short', timeStyle: 'short' });
 
@@ -68,7 +98,27 @@ export function PhoneAccess({ onError }: Props) {
     <section className="detail-section">
       <h3>{t('phone.title')}</h3>
       <p className="hint">{t('phone.intro')}</p>
-      {setup && !detected && <p className="hint">{t('phone.notDetected')}</p>}
+      {setup && !detected && <p className="hint">{t(`phone.tailscale.${setup.tailscale}`)}</p>}
+      {startable && (
+        <p>
+          <button
+            type="button"
+            className="btn"
+            disabled={starting}
+            onClick={() => void startTailscale()}
+          >
+            {t('phone.startTailscale')}
+          </button>
+        </p>
+      )}
+      {loginUrl && !detected && (
+        <p className="hint">
+          {t('phone.tailscaleLogin')}{' '}
+          <a href={loginUrl} target="_blank" rel="noreferrer">
+            {loginUrl}
+          </a>
+        </p>
+      )}
 
       <p>
         <button

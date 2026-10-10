@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   pairingSetup: vi.fn(),
   devices: vi.fn(),
   createPairing: vi.fn(),
+  startTailscale: vi.fn(),
   revokeDevice: vi.fn(),
   saveSettings: vi.fn(),
 }));
@@ -43,7 +44,11 @@ beforeEach(() => {
   root = createRoot(container);
   api.agents.mockResolvedValue([]);
   api.detectAgents.mockResolvedValue([]);
-  api.pairingSetup.mockResolvedValue({ tailscaleHost: 'pc.tailnet.ts.net' });
+  api.pairingSetup.mockResolvedValue({
+    tailscaleHost: 'pc.tailnet.ts.net',
+    tailscale: 'running',
+    canStartTailscale: true,
+  });
   api.devices.mockResolvedValue([]);
   api.createPairing.mockResolvedValue({ code: 'abc', expiresAt: 0, host: 'pc.tailnet.ts.net' });
 });
@@ -99,13 +104,54 @@ describe('Settings: phone access', () => {
     );
   });
 
-  it('disables pairing and says why when Tailscale is not found', async () => {
-    api.pairingSetup.mockResolvedValue({ tailscaleHost: null });
+  it('disables pairing and says Tailscale is not installed when it is missing', async () => {
+    api.pairingSetup.mockResolvedValue({
+      tailscaleHost: null,
+      tailscale: 'missing',
+      canStartTailscale: true,
+    });
     await open();
     expect([button('Pair a phone').disabled, container.textContent]).toEqual([
       true,
-      expect.stringContaining('Tailscale was not found'),
+      expect.stringContaining('not installed'),
     ]);
+  });
+
+  it('offers to start Tailscale when its service is stopped', async () => {
+    api.pairingSetup.mockResolvedValue({
+      tailscaleHost: null,
+      tailscale: 'stopped',
+      canStartTailscale: true,
+    });
+    await open();
+    expect(button('Start Tailscale')).toBeDefined();
+  });
+
+  it('does not offer to start a stopped Tailscale where it cannot be started from here', async () => {
+    api.pairingSetup.mockResolvedValue({
+      tailscaleHost: null,
+      tailscale: 'stopped',
+      canStartTailscale: false,
+    });
+    await open();
+    expect(button('Start Tailscale')).toBeUndefined();
+  });
+
+  it('shows the login address Start Tailscale returns', async () => {
+    api.pairingSetup.mockResolvedValue({
+      tailscaleHost: null,
+      tailscale: 'needs-login',
+      canStartTailscale: true,
+    });
+    api.startTailscale.mockResolvedValue({
+      tailscale: 'needs-login',
+      loginUrl: 'https://login.tailscale.com/a/1',
+    });
+    await open();
+    await act(async () => button('Start Tailscale').click());
+    expect(container.querySelector('a')!.getAttribute('href')).toBe(
+      'https://login.tailscale.com/a/1',
+    );
   });
 
   it('lists the paired devices', async () => {

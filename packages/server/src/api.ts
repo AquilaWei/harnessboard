@@ -3,7 +3,15 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
-import { inspectFolder, listFolders, tailscaleHost, tailscaleServe } from '@harnessboard/core';
+import {
+  inspectFolder,
+  listFolders,
+  startTailscale,
+  tailscaleHost,
+  tailscaleServe,
+  tailscaleState,
+} from '@harnessboard/core';
+import type { TailscaleStartResult, TailscaleState } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
 import type {
   AgentsUpdate,
@@ -15,6 +23,7 @@ import type {
   PairRequest,
   PairingCreated,
   PairingSetup,
+  TailscaleStarted,
   PasskeySession,
   PermissionDecision,
   PushKey,
@@ -60,6 +69,10 @@ export interface ApiDeps {
   detectTailscale: () => Promise<string | null>;
   /** Lets the tailnet reach the board's port; tests record the call instead of running Tailscale. */
   serveTailscale: (port: number) => Promise<void>;
+  /** Where Tailscale stands; tests fake it. */
+  tailscaleState: () => Promise<TailscaleState>;
+  /** Starts and logs in Tailscale; tests fake it, as it asks for a password. */
+  startTailscale: () => Promise<TailscaleStartResult>;
   /** Checks passkeys; tests fake the phone's signed responses. */
   verifier: PasskeyVerifier;
   /** Delivers pushes to paired phones; tests record them instead. */
@@ -79,6 +92,8 @@ export function createApi(
     now = Date.now,
     detectTailscale = () => tailscaleHost(),
     serveTailscale = (port: number) => tailscaleServe(port),
+    tailscaleState: readTailscaleState = () => tailscaleState(),
+    startTailscale: startTailscaleService = () => startTailscale(),
     verifier = webauthnVerifier,
     pushSender = webPushSender,
   } = deps;
@@ -127,8 +142,16 @@ export function createApi(
   app.get('/pairing/setup', async (c) =>
     c.json({
       tailscaleHost: await detectTailscale(),
+      tailscale: await readTailscaleState(),
+      canStartTailscale: process.platform === 'linux',
     } satisfies PairingSetup),
   );
+  // Starts Tailscale for a computer that has it stopped or logged out (the system asks for the
+  // password); the reply carries the login address when one is needed.
+  app.post('/pairing/tailscale/start', async (c) => {
+    const { state, loginUrl } = await startTailscaleService();
+    return c.json({ tailscale: state, ...(loginUrl && { loginUrl }) } satisfies TailscaleStarted);
+  });
   app.post('/pair', async (c) => {
     const body = await c.req.json<Partial<PairRequest>>().catch(() => ({}) as Partial<PairRequest>);
     const name = typeof body.name === 'string' ? body.name.trim() : '';

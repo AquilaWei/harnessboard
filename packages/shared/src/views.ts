@@ -89,6 +89,17 @@ export interface PairingCreated extends PairingCode {
 export interface PairingSetup {
   /** This machine's Tailscale name, or `null` when Tailscale is missing or not running. */
   tailscaleHost: string | null;
+  /** Why there is no name: `missing` (not installed), `stopped` (service off), `needs-login`. */
+  tailscale: 'missing' | 'stopped' | 'needs-login' | 'running';
+  /** Whether "Start Tailscale" can fix `stopped` here (Linux, through the system password prompt). */
+  canStartTailscale: boolean;
+}
+
+/** Reply of `POST /api/pairing/tailscale/start`. */
+export interface TailscaleStarted {
+  tailscale: PairingSetup['tailscale'];
+  /** Where to log in, when Tailscale is waiting for it. */
+  loginUrl?: string;
 }
 
 /** Body of `POST /api/pair`. */

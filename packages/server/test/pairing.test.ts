@@ -18,6 +18,7 @@ let app: Hono;
 let clock: number;
 let tailscale: string | null;
 let served: number[];
+let started: number;
 let serveError: Error | null;
 
 beforeEach(() => {
@@ -31,6 +32,7 @@ beforeEach(() => {
   clock = START;
   tailscale = 'box.tail1234.ts.net';
   served = [];
+  started = 0;
   serveError = null;
   const sessions = new Sessions();
   app = new Hono();
@@ -43,6 +45,14 @@ beforeEach(() => {
     createApi(harness, sessions, {
       now: () => clock,
       detectTailscale: () => Promise.resolve(tailscale),
+      tailscaleState: () => Promise.resolve(tailscale ? 'running' : 'stopped'),
+      startTailscale: () => {
+        started++;
+        return Promise.resolve({
+          state: 'needs-login',
+          loginUrl: 'https://login.tailscale.com/a/1',
+        });
+      },
       serveTailscale: (port) => {
         served.push(port);
         return serveError ? Promise.reject(serveError) : Promise.resolve();
@@ -106,13 +116,37 @@ describe('POST /api/pairing and Tailscale', () => {
 describe('GET /api/pairing/setup', () => {
   it('returns the Tailscale name', async () => {
     const res = await app.request('/api/pairing/setup', { headers: local });
-    expect((await res.json()) as PairingSetup).toEqual({ tailscaleHost: 'box.tail1234.ts.net' });
+    expect((await res.json()) as PairingSetup).toEqual({
+      tailscaleHost: 'box.tail1234.ts.net',
+      tailscale: 'running',
+      canStartTailscale: process.platform === 'linux',
+    });
   });
 
   it('returns a null name when Tailscale is not running', async () => {
     tailscale = null;
     const res = await app.request('/api/pairing/setup', { headers: local });
-    expect((await res.json()) as PairingSetup).toEqual({ tailscaleHost: null });
+    expect((await res.json()) as PairingSetup).toEqual({
+      tailscaleHost: null,
+      tailscale: 'stopped',
+      canStartTailscale: process.platform === 'linux',
+    });
+  });
+});
+
+describe('POST /api/pairing/tailscale/start', () => {
+  it('starts Tailscale and returns the login address', async () => {
+    const res = await send('POST', '/api/pairing/tailscale/start', local);
+    expect([res.status, await res.json(), started]).toEqual([
+      200,
+      { tailscale: 'needs-login', loginUrl: 'https://login.tailscale.com/a/1' },
+      1,
+    ]);
+  });
+
+  it('is refused for a request from an unpaired device', async () => {
+    const res = await send('POST', '/api/pairing/tailscale/start', { host: 'box.tail1234.ts.net' });
+    expect([res.status, started]).toEqual([401, 0]);
   });
 });
 

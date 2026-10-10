@@ -548,7 +548,15 @@ export const en = {
     title: 'Phone access',
     intro:
       'Use the board from a phone through Tailscale. The board stays on this computer; only devices you pair here can reach it.',
-    notDetected: 'Tailscale was not found on this computer, or it is not running.',
+    tailscale: {
+      missing:
+        'Tailscale is not installed on this computer. Install it from tailscale.com, then come back.',
+      stopped: 'Tailscale is installed but its background service is not running.',
+      'needs-login': 'Tailscale is not logged in, or has been switched off.',
+      running: '',
+    },
+    startTailscale: 'Start Tailscale',
+    tailscaleLogin: 'Open this address in a browser to log in:',
     pair: 'Pair a phone',
     newCode: 'New code',
     scan: 'Scan this with the phone’s camera, or open the address below on it. The code works once, until {{time}}.',
@@ -1130,7 +1138,14 @@ export const zhTW: typeof en = {
     title: '手機存取',
     intro:
       '透過 Tailscale 從手機使用看板。看板留在這台電腦上，只有在這裡配對過的裝置，才能連進來。',
-    notDetected: '這台電腦上找不到 Tailscale，或 Tailscale 沒有在執行。',
+    tailscale: {
+      missing: '這台電腦還沒安裝 Tailscale。請先到 tailscale.com 安裝，再回來。',
+      stopped: '已安裝 Tailscale，但它的背景服務沒有在執行。',
+      'needs-login': 'Tailscale 尚未登入，或已被關閉。',
+      running: '',
+    },
+    startTailscale: '啟動 Tailscale',
+    tailscaleLogin: '請在瀏覽器開啟這個網址登入：',
     pair: '配對手機',
     newCode: '換一個配對碼',
     scan: '用手機相機掃描，或在手機上打開下面的網址。配對碼只能用一次，{{time}} 前有效。',

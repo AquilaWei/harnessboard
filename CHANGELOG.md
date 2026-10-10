@@ -3,6 +3,15 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Changed
+
+- **Settings → Phone access says what is wrong with Tailscale** (not installed, service not
+  running, not logged in) and, on Linux, has a **Start Tailscale** button. It starts and
+  enables the `tailscaled` service through the system password prompt and shows the login
+  address when Tailscale needs one, so no terminal is needed.
+
 ## 0.1.7 - 2026-10-10
 
 Local test build for phones that connect on their own; real-device acceptance is pending.
