@@ -13,6 +13,10 @@ are test versions that have not been accepted on real machines yet.
 - **Pairing a phone is one tap.** The pairing screen suggests the phone's model as its name
   and one **Pair this phone** button pairs it and asks for the passkey, instead of typing a
   name and tapping twice.
+- **The Android app connects on its own.** The first launch opens the QR scanner at once
+  (no setup screen to get through), a pairing link from the phone's camera sets the board
+  up when none is saved, and a board that does not answer shows a clear message with
+  **Retry** instead of the browser's error page.
 
 ## 0.1.6 - 2026-10-10
 

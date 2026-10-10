@@ -71,6 +71,11 @@
                 android:resource="@drawable/ic_notification" />
         </service>
 
+        <!-- Not exported: the launcher shows it when the board does not answer. -->
+        <activity
+            android:name=".UnreachableActivity"
+            android:exported="false" />
+
         <!-- Not exported: Chrome starts it through the service's pending intent. -->
         <activity
             android:name=".NotificationPermissionActivity"

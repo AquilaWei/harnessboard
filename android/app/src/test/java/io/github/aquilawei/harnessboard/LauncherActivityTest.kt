@@ -65,6 +65,7 @@ class LauncherActivityTest {
             },
         )
         ShadowHeldBindings.connections.clear()
+        LauncherActivity.probe = BoardProbe { _, done -> done(true) }
         context
             .getSharedPreferences(PreferencesBoardStore.FILE_NAME, Context.MODE_PRIVATE)
             .edit()
@@ -126,6 +127,58 @@ class LauncherActivityTest {
         assertEquals(
             listOf(BROWSER, Uri.parse("https://other.example/page")),
             listOf(started?.`package`, started?.data),
+        )
+    }
+
+    @Test
+    fun `a board that does not answer shows the unreachable screen instead of opening the browser`() {
+        LauncherActivity.probe = BoardProbe { _, done -> done(false) }
+
+        Robolectric.buildActivity(LauncherActivity::class.java, pairingIntent()).setup()
+
+        val started = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertEquals(
+            listOf(UnreachableActivity::class.java.name, PAIRING_URL),
+            listOf(started?.component?.className, started?.getStringExtra(UnreachableActivity.EXTRA_URL)),
+        )
+        assertEquals(0, ShadowHeldBindings.connections.size)
+    }
+
+    @Test
+    fun `open anyway skips the check`() {
+        LauncherActivity.probe = BoardProbe { _, done -> done(false) }
+
+        Robolectric.buildActivity(LauncherActivity::class.java, pairingIntent().putExtra(LauncherActivity.EXTRA_SKIP_CHECK, true)).setup()
+
+        connectBrowser(ShadowHeldBindings.connections.single())
+        assertEquals(Uri.parse(PAIRING_URL), shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity?.data)
+    }
+
+    @Test
+    fun `the check asks for the board page without the pairing code`() {
+        val asked = mutableListOf<String>()
+        LauncherActivity.probe = BoardProbe { url, done -> asked.add(url).also { done(true) } }
+
+        Robolectric.buildActivity(LauncherActivity::class.java, pairingIntent()).setup()
+
+        assertEquals(listOf(PAIRING_URL), asked)
+    }
+
+    @Test
+    fun `a pairing link without a saved board saves that board and opens its pairing page`() {
+        context
+            .getSharedPreferences(PreferencesBoardStore.FILE_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
+        val url = "https://new.tail1234.ts.net/#pair=AB12"
+
+        Robolectric.buildActivity(LauncherActivity::class.java, linkIntent(url)).setup()
+        connectBrowser(ShadowHeldBindings.connections.single())
+
+        assertEquals(
+            listOf("https://new.tail1234.ts.net", Uri.parse(url)),
+            listOf(PreferencesBoardStore(context).origin(), shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity?.data),
         )
     }
 

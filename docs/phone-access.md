@@ -69,9 +69,12 @@ like the browser does.
 1. **Install it:** build the APK as described in [Development](development.md) (no prebuilt
    APK is published at the moment), copy it to the phone and open it. Android asks once to
    allow installs from Chrome (or your file manager).
-2. **Connect:** open **Harnessboard** and tap **Scan pairing QR**, then scan the QR code from
-   **Settings → Phone access → Pair a phone** on the computer. Without a QR code, type the
-   board's address (`https://<machine>.<tailnet>.ts.net`) and tap **Connect**.
+2. **Connect:** open **Harnessboard**; the first time, the scanner opens at once. Scan the QR
+   code from **Settings → Phone access → Pair a phone** on the computer. If you back out, the
+   screen offers **Scan pairing QR** again, or type the board's address
+   (`https://<machine>.<tailnet>.ts.net`) and tap **Connect**. Scanning the QR with the
+   phone's camera app also works when Android offers to open the link in Harnessboard; with
+   no board saved yet, the app takes a pairing link on a `.ts.net` address as its board.
 3. **Pair:** the board opens inside the app with the pairing screen. Tap
    **Pair this phone**, as in step 2 above. The app keeps the address; later the icon opens
    the board directly.
@@ -96,6 +99,10 @@ even when the app was closed. This needs the board's asset links verified (no UR
 below); otherwise Chrome shows the pushes and a tap opens a Chrome tab. On Android 8–11 the app
 can appear in "Open with" lists for web links, because it takes the board's links; links to other
 sites are passed on to your browser.
+
+**Cannot reach the board:** before opening it, the app checks that the board answers. If not
+(the computer is off, Harnessboard is not running, or Tailscale is off on the phone) it says
+so, with **Retry**, **Change board** and **Open anyway**, instead of the browser's error page.
 
 **Change board:** long-press the app icon and tap **Change board**. The app forgets the
 address and shows the setup screen again; the computer still lists the phone until you

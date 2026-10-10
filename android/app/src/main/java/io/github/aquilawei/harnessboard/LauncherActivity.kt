@@ -17,8 +17,9 @@ import androidx.browser.trusted.Token
 
 /**
  * The app icon's activity. It shows nothing itself: it opens the saved board in the browser's
- * Trusted Web Activity (or a Custom Tab when no browser supports one), or the setup screen when
- * no board is saved, and then finishes. It also takes https links, which is how a tapped push
+ * Trusted Web Activity (or a Custom Tab when no browser supports one), after checking that the
+ * board answers ([BoardProbe]; [UnreachableActivity] explains when it does not), or opens the
+ * setup screen with the code scanner running when no board is saved, and then finishes. It also takes https links, which is how a tapped push
  * notification reopens the closed app on its task: see [LaunchTarget.forLink].
  */
 class LauncherActivity : Activity() {
@@ -40,17 +41,41 @@ class LauncherActivity : Activity() {
         }
         when (val target = launchTarget()) {
             LaunchTarget.Setup -> {
-                startActivity(Intent(this, SetupActivity::class.java))
+                startActivity(Intent(this, SetupActivity::class.java).putExtra(SetupActivity.EXTRA_AUTO_SCAN, true))
                 finish()
             }
 
             is LaunchTarget.Board -> {
-                urlToOpen = target.url
-                open(target.url)
+                openChecked(target.url)
+            }
+
+            is LaunchTarget.Adopt -> {
+                PreferencesBoardStore(this).save(target.link)
+                openChecked(target.link.openUrl())
             }
 
             is LaunchTarget.Browser -> {
                 openInBrowser(target.url)
+            }
+        }
+    }
+
+    /** Opens [url] once the board has answered; otherwise tells the user why it cannot be reached. */
+    private fun openChecked(url: String) {
+        urlToOpen = url
+        if (intent.getBooleanExtra(EXTRA_SKIP_CHECK, false)) {
+            open(url)
+            return
+        }
+        probe.check(url) { reachable ->
+            // An answer that arrives after a rotation belongs to the old activity; the recreated
+            // one opens the saved URL itself.
+            if (isFinishing || isDestroyed) return@check
+            if (reachable) {
+                open(url)
+            } else {
+                startActivity(Intent(this, UnreachableActivity::class.java).putExtra(UnreachableActivity.EXTRA_URL, url))
+                finish()
             }
         }
     }
@@ -211,6 +236,15 @@ class LauncherActivity : Activity() {
     companion object {
         /** The URL the setup screen hands over to open once, e.g. the pairing QR's `#pair=` URL. */
         const val EXTRA_PENDING_URL = "io.github.aquilawei.harnessboard.PENDING_URL"
+
+        /** Set by [UnreachableActivity]'s "Open anyway": open the board without asking it first. */
+        const val EXTRA_SKIP_CHECK = "io.github.aquilawei.harnessboard.SKIP_CHECK"
+
+        /**
+         * How the board is asked whether it answers. Replaced in tests, which have no network; the
+         * app never changes it.
+         */
+        internal var probe: BoardProbe = HttpBoardProbe()
 
         private const val STATE_URL_TO_OPEN = "url_to_open"
 

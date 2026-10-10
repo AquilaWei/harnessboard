@@ -15,6 +15,11 @@
     <string name="setup_error_not_board_root">Use the board\'s address alone, without a path or a \?query.</string>
     <string name="setup_error_empty_pairing_code">This pairing link has no code. Show a new pairing QR on the computer and scan it again.</string>
 
+    <string name="unreachable_title">Can\'t reach your board</string>
+    <string name="unreachable_body">Turn on Tailscale on this phone and make sure Harnessboard is running on the computer, then try again.</string>
+    <string name="unreachable_retry">Retry</string>
+    <string name="unreachable_open_anyway">Open anyway</string>
+
     <string name="launch_no_browser">The board needs a web browser. Install or turn on Chrome, then open the app again.</string>
     <string name="shortcut_change_board">Change board</string>
 </resources>

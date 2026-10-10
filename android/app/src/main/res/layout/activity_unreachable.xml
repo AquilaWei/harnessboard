@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- fitsSystemWindows pads the content clear of the status and navigation bars, which the app
+     draws under on Android 15 and later. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/unreachable_title"
+            android:textAppearance="@android:style/TextAppearance.Material.Headline" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/unreachable_body"
+            android:textAppearance="@android:style/TextAppearance.Material.Body1" />
+
+        <Button
+            android:id="@+id/retry"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/unreachable_retry" />
+
+        <Button
+            android:id="@+id/open_anyway"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/unreachable_open_anyway" />
+
+        <Button
+            android:id="@+id/change_board"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/shortcut_change_board" />
+    </LinearLayout>
+</ScrollView>

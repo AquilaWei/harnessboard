@@ -90,6 +90,46 @@ class LaunchTargetTest {
     }
 
     @Test
+    fun `a Tailscale pairing link without a saved board sets that board up`() {
+        assertEquals(
+            LaunchTarget.Adopt(BoardLink("https://pc.tail1234.ts.net", "AB12")),
+            LaunchTarget.forLink(savedOrigin = null, linkUrl = "https://pc.tail1234.ts.net/#pair=AB12"),
+        )
+    }
+
+    @Test
+    fun `a pairing link on another domain without a saved board goes to a browser`() {
+        assertEquals(
+            LaunchTarget.Browser("https://evil.example/#pair=AB12"),
+            LaunchTarget.forLink(savedOrigin = null, linkUrl = "https://evil.example/#pair=AB12"),
+        )
+    }
+
+    @Test
+    fun `a host that only ends like a Tailscale name goes to a browser`() {
+        assertEquals(
+            LaunchTarget.Browser("https://pc.ts.net.evil.example/#pair=AB12"),
+            LaunchTarget.forLink(savedOrigin = null, linkUrl = "https://pc.ts.net.evil.example/#pair=AB12"),
+        )
+    }
+
+    @Test
+    fun `a Tailscale link without a pairing code and without a saved board goes to a browser`() {
+        assertEquals(
+            LaunchTarget.Browser("https://pc.tail1234.ts.net/#task=4"),
+            LaunchTarget.forLink(savedOrigin = null, linkUrl = "https://pc.tail1234.ts.net/#task=4"),
+        )
+    }
+
+    @Test
+    fun `a Tailscale pairing link for another board does not replace the saved board`() {
+        assertEquals(
+            LaunchTarget.Browser("https://other.tail1234.ts.net/#pair=AB12"),
+            LaunchTarget.forLink(savedOrigin = "https://pc.tail1234.ts.net", linkUrl = "https://other.tail1234.ts.net/#pair=AB12"),
+        )
+    }
+
+    @Test
     fun `a link without a saved board goes to a browser`() {
         assertEquals(
             LaunchTarget.Browser("https://host.example/#task=42"),

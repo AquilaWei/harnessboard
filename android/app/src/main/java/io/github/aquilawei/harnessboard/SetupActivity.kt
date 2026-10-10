@@ -31,6 +31,9 @@ class SetupActivity : Activity() {
         address = findViewById(R.id.address)
         error = findViewById(R.id.error)
 
+        // The first launch goes straight to the camera; backing out leaves this screen to use.
+        if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_AUTO_SCAN, false)) scan()
+
         findViewById<Button>(R.id.scan).setOnClickListener { scan() }
         findViewById<Button>(R.id.connect).setOnClickListener { connect() }
         address.setOnEditorActionListener { _, actionId, _ ->
@@ -82,7 +85,10 @@ class SetupActivity : Activity() {
         }
     }
 
-    private companion object {
-        const val TAG = "SetupActivity"
+    companion object {
+        /** Start the code scanner as soon as the screen opens (the app's first launch). */
+        const val EXTRA_AUTO_SCAN = "io.github.aquilawei.harnessboard.AUTO_SCAN"
+
+        private const val TAG = "SetupActivity"
     }
 }
