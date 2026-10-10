@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
-import { Harness, userConfigFile } from '@harnessboard/core';
+import { Harness, tailscaleHost, tailscaleServe, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import type { AgentInfo, DetectedAgent } from '@harnessboard/shared';
 import { cachedTailscaleHost } from './tailscale-host.js';
@@ -11,6 +11,7 @@ import { access } from './access.js';
 import { createApi } from './api.js';
 import { createWellKnown } from './assetlinks.js';
 import { Sessions } from './session.js';
+import { keepPhoneReady } from './phone-ready.js';
 import { serveWeb } from './static.js';
 
 // The bundled CLI lives in dist/; the web build is copied next to it in dist/web.
@@ -46,11 +47,18 @@ export async function startServer(config: HarnessConfig): Promise<RunningServer>
     s.once('error', reject);
   });
   await harness.start();
+  const stopPhoneReady = keepPhoneReady(config.port, {
+    hasDevices: () => harness.store.listDevices().length > 0,
+    detect: () => tailscaleHost(),
+    serve: (port) => tailscaleServe(port),
+    log: (message) => console.warn(message),
+  });
   return {
     url: `http://127.0.0.1:${config.port}`,
     agents,
     detected,
     close: async () => {
+      stopPhoneReady();
       await harness.shutdown();
       await new Promise<void>((resolve) => {
         server.close(() => resolve());

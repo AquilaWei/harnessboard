@@ -3,6 +3,14 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Changed
+
+- **Paired phones connect as soon as Harnessboard runs.** At start-up, and every five
+  minutes until it works, Harnessboard makes the board reachable on your tailnet again when
+  a phone is already paired, so nothing needs opening in Settings after a reboot.
+
 ## 0.1.6 - 2026-10-10
 
 Local test build for the pending queue and one-click phone pairing; real-device acceptance is pending.
