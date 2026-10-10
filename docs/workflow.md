@@ -140,5 +140,8 @@ without an agent call or rereading the entire Git history.
 
 A failed check stops the task with a notice and preserves the session and files. Correct
 the problem and queue it again; the original stage range remains subject to the check.
-Harnessboard never rewrites commit history automatically. Spec and design stages retain
+An agent may rewrite its own stage's commits to fix a message. When that replaces the
+stage's starting commit, the check measures from the common ancestor of the old start and
+HEAD, so every rewritten commit must still pass. Harnessboard never rewrites commit
+history automatically. Spec and design stages retain
 their existing single-file commit fallback, then undergo the same check.

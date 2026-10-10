@@ -51,3 +51,28 @@ it('does not validate unrelated commits merged from the base branch', async () =
   await git(repo, ['merge', '--no-ff', '-m', 'chore: merge base updates', 'main']);
   expect(await checkCommits(repo, before)).toBeNull();
 });
+
+it('accepts rewritten history when every rewritten message is valid', async () => {
+  const repo = makeRepo();
+  await git(repo, ['commit', '--allow-empty', '-m', 'feat: first']);
+  await git(repo, ['commit', '--allow-empty', '-m', 'fix: second']);
+  const before = await headCommit(repo);
+  await git(repo, ['reset', '--hard', 'HEAD~2']);
+  await git(repo, ['commit', '--allow-empty', '-m', 'feat: first renamed']);
+  await git(repo, ['commit', '--allow-empty', '-m', 'fix: second renamed']);
+  expect(await checkCommits(repo, before)).toBeNull();
+});
+
+it('rejects an invalid message left in rewritten history', async () => {
+  const repo = makeRepo();
+  await git(repo, ['commit', '--allow-empty', '-m', 'feat: first']);
+  const before = await headCommit(repo);
+  await git(repo, ['reset', '--hard', 'HEAD~1']);
+  await git(repo, ['commit', '--allow-empty', '-m', 'not conventional']);
+  expect(await checkCommits(repo, before)).toContain('Invalid commit');
+});
+
+it('reports a starting commit that can no longer be found', async () => {
+  const repo = makeRepo();
+  expect(await checkCommits(repo, '0'.repeat(40))).toContain('starting history');
+});

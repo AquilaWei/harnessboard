@@ -3,6 +3,14 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Fixed
+
+- A tester or implementer that rewrites its own commits to fix a message no longer fails
+  the task with "rewrote its starting history". The check follows the rewrite and still
+  requires every rewritten commit to be valid.
+
 ## 0.1.4 - 2026-10-09
 
 Local test build for loop stall protection; real-agent acceptance is pending.
