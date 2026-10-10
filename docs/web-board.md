@@ -4,8 +4,10 @@
 
 - **Version next to the name:** the header shows the server's version (for example
   `v0.0.21`), in the browser and in the desktop app alike.
-- **Four stages that fit one screen:**
-  - **Draft**
+- **Five stages that fit one screen:**
+  - **Draft:** not started, or its spec is being planned with an agent
+  - **Pending:** planned and waiting; the harness starts these by itself, one at a time,
+    when the agent's quota allows
   - **In progress:** queued, running, or waiting for quota
   - **Needs you:** ready for review, failed, or stopped
   - **Done**
@@ -15,8 +17,16 @@
 - **Every card says what is happening** in one sentence, for example "claude is building
   feature 2 of 3", "reviewer is reviewing the latest step", or "Paused for quota; continues
   at 20:40".
-- **Every card has one button** for the next step: Start, Stop, Review or Retry. Dragging
-  between stages still works and follows the same rules.
+- **Every card has one button** for the next step: Plan the spec, Start, Stop, Review or
+  Retry. Dragging between stages still works and follows the same rules. You can drag an
+  idle task (draft, pending, stopped, failed, in review or done) to **Draft** to discuss it
+  again or to **Pending** to line it up; a running task has to be stopped first.
+- **Plan now, run later:** **Plan the spec** discusses a draft with the agent while it stays
+  in Draft. When you approve the criteria or plan, the task moves to **Pending** instead of
+  starting. Pending tasks start in order whenever quota is available and a slot is free, so
+  after the quota resets they are taken up one by one. **Start** on a pending card runs it
+  now. Reopening a done task keeps its branch and history; asking for a change on a draft
+  that already has a spec rejects or approves the revision like any spec change.
 - **Task panel:**
   - At the top, the current situation and what you can do about it (for example Mark done
     or Continue with the review). When the reviewer still wants changes, its points are shown

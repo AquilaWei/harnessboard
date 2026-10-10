@@ -225,6 +225,10 @@ export const api = {
   createTask: (input: CreateTaskInput) => send<TaskView>('POST', '/tasks', input),
   queue: (id: number) => send<unknown>('POST', `/tasks/${id}/queue`),
   stop: (id: number) => send<unknown>('POST', `/tasks/${id}/stop`),
+  planSpec: (id: number, message?: string) =>
+    send<unknown>('POST', `/tasks/${id}/plan`, message ? { message } : {}),
+  pend: (id: number) => send<unknown>('POST', `/tasks/${id}/pend`),
+  toDraft: (id: number) => send<unknown>('POST', `/tasks/${id}/draft`),
   complete: (id: number) => send<unknown>('POST', `/tasks/${id}/complete`),
   answerPermission: (id: number, decision: PermissionDecision) =>
     send<unknown>('POST', `/tasks/${id}/permission`, decision),

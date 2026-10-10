@@ -960,6 +960,11 @@ export class Workflow {
     return data?.note ?? null;
   }
 
+  /** A loop task's feature list was approved, so there is nothing left to plan. */
+  hasPlan(taskId: number): boolean {
+    return this.snapshots(taskId).length > 0;
+  }
+
   private snapshots(taskId: number): FeatureSnapshot[] {
     return this.host.store.eventsOfKind(taskId, 'features').map((e) => e.data as FeatureSnapshot);
   }

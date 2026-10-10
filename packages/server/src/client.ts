@@ -46,6 +46,10 @@ export class ApiClient {
   getTask = (id: number) => this.get<TaskDetail>(`/tasks/${id}`);
   createTask = (input: CreateTaskInput) => this.post<TaskView>('/tasks', input);
   queueTask = (id: number) => this.post<Task>(`/tasks/${id}/queue`);
+  planTask = (id: number, message?: string) =>
+    this.post<Task>(`/tasks/${id}/plan`, message ? { message } : {});
+  pendTask = (id: number) => this.post<Task>(`/tasks/${id}/pend`);
+  toDraft = (id: number) => this.post<Task>(`/tasks/${id}/draft`);
   stopTask = (id: number) => this.post<Task>(`/tasks/${id}/stop`);
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);
   setAutoApprove = (id: number, on: boolean) =>

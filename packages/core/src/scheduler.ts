@@ -38,3 +38,8 @@ export function startable(
   const free = Math.max(0, maxConcurrent - running.size);
   return tasks.filter((t) => t.status === 'queued' && !running.has(t.id)).slice(0, free);
 }
+
+/** The first `free` of the pending tasks, oldest first; the caller drops those that must wait. */
+export function promotable(pending: Task[], free: number): Task[] {
+  return pending.filter((t) => t.status === 'pending').slice(0, Math.max(0, free));
+}

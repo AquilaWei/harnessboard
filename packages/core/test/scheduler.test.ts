@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import type { Task } from '@harnessboard/shared';
-import { dueForRetry, quotaBlocks, startable } from '../src/scheduler.js';
+import { dueForRetry, promotable, quotaBlocks, startable } from '../src/scheduler.js';
 
 const task = (id: number, status: Task['status'], resumeAt: number | null = null) =>
   ({ id, status, resumeAt }) as Task;
@@ -63,5 +63,20 @@ describe('startable', () => {
   it('skips a queued task that is already starting', () => {
     const tasks = [task(1, 'queued'), task(2, 'queued')];
     expect(startable(tasks, new Map([[1, null]]), 2).map((t) => t.id)).toEqual([2]);
+  });
+});
+
+describe('promotable', () => {
+  it('takes pending tasks oldest first up to the free slots', () => {
+    const tasks = [task(1, 'pending'), task(2, 'pending'), task(3, 'pending')];
+    expect(promotable(tasks, 2).map((t) => t.id)).toEqual([1, 2]);
+  });
+
+  it('takes nothing when no slot is free', () => {
+    expect(promotable([task(1, 'pending')], 0)).toEqual([]);
+  });
+
+  it('skips tasks that are not pending', () => {
+    expect(promotable([task(1, 'queued'), task(2, 'pending')], 5).map((t) => t.id)).toEqual([2]);
   });
 });

@@ -2,14 +2,15 @@
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
 
 /**
- * Board columns, grouped by who has to act: nobody yet (draft), the agents (active),
- * you (attention), or nobody any more (done).
+ * Board columns, grouped by who has to act: nobody yet (draft), the harness once quota
+ * allows (pending), the agents (active), you (attention), or nobody any more (done).
  */
-export const STAGES = ['draft', 'active', 'attention', 'done'] as const;
+export const STAGES = ['draft', 'pending', 'active', 'attention', 'done'] as const;
 export type Stage = (typeof STAGES)[number];
 
 const STAGE_OF: Record<TaskStatus, Stage> = {
   backlog: 'draft',
+  pending: 'pending',
   queued: 'active',
   running: 'active',
   awaiting_permission: 'attention',
@@ -26,15 +27,25 @@ export function stageOf(status: TaskStatus): Stage {
 }
 
 /**
+ * The column a task sits in. A draft whose spec is being discussed stays in Draft while its
+ * agent works or waits for your approval, since approving only moves it to Pending.
+ */
+export function stageOfTask(task: Pick<TaskView, 'status' | 'deferred'>): Stage {
+  const stage = STAGE_OF[task.status];
+  return task.deferred && (stage === 'active' || stage === 'attention') ? 'draft' : stage;
+}
+
+/**
  * Tabs of the board at phone width, where only one column fits. They split the desktop's
  * Needs you stage, so a finished task to review is not buried among questions waiting for
  * an answer. Drafts wait for you to start them, so they sit under `waiting`.
  */
-export const PHONE_TABS = ['waiting', 'active', 'review', 'done'] as const;
+export const PHONE_TABS = ['waiting', 'pending', 'active', 'review', 'done'] as const;
 export type PhoneTab = (typeof PHONE_TABS)[number];
 
 const PHONE_TAB_OF: Record<TaskStatus, PhoneTab> = {
   backlog: 'waiting',
+  pending: 'pending',
   queued: 'active',
   running: 'active',
   awaiting_permission: 'waiting',
@@ -48,7 +59,13 @@ const PHONE_TAB_OF: Record<TaskStatus, PhoneTab> = {
 
 /** Tasks grouped by phone tab, each group in the order the tasks were given. */
 export function groupByPhoneTab(tasks: TaskView[]): Record<PhoneTab, TaskView[]> {
-  const groups: Record<PhoneTab, TaskView[]> = { waiting: [], active: [], review: [], done: [] };
+  const groups: Record<PhoneTab, TaskView[]> = {
+    waiting: [],
+    pending: [],
+    active: [],
+    review: [],
+    done: [],
+  };
   for (const task of tasks) groups[PHONE_TAB_OF[task.status]].push(task);
   return groups;
 }
@@ -65,7 +82,7 @@ export function attentionTab(tasks: TaskView[]): PhoneTab {
 }
 
 /** API calls the board can make for a task. */
-export type TaskAction = 'queue' | 'stop' | 'complete';
+export type TaskAction = 'queue' | 'stop' | 'complete' | 'plan' | 'pend' | 'draft';
 
 /**
  * The one button a card offers, if any. `review` opens the task on its changes,
@@ -73,11 +90,20 @@ export type TaskAction = 'queue' | 'stop' | 'complete';
  * criteria, `answerPermission` on the tool use it waits on.
  */
 export type PrimaryAction =
-  'start' | 'stop' | 'review' | 'retry' | 'approvePlan' | 'approveCriteria' | 'answerPermission';
+  | 'plan'
+  | 'start'
+  | 'stop'
+  | 'review'
+  | 'retry'
+  | 'approvePlan'
+  | 'approveCriteria'
+  | 'answerPermission';
 
 export function primaryAction(task: TaskView): PrimaryAction | null {
   switch (task.status) {
     case 'backlog':
+      return 'plan';
+    case 'pending':
       return 'start';
     case 'queued':
     case 'running':
@@ -102,12 +128,22 @@ export function primaryAction(task: TaskView): PrimaryAction | null {
  * is not possible (e.g. a running task cannot be dropped on Done).
  */
 export function dropAction(task: TaskView, target: Stage): TaskAction | null {
-  const from = stageOf(task.status);
+  const from = stageOfTask(task);
   // A plan or a tool use waiting for you moves on through your answer, not by queueing.
   const waitsForAnswer =
     task.status === 'awaiting_approval' || task.status === 'awaiting_permission';
-  const queueable = from === 'draft' || (from === 'attention' && !waitsForAnswer);
+  const queueable =
+    task.status === 'backlog' ||
+    task.status === 'pending' ||
+    (from === 'attention' && !waitsForAnswer);
+  // Idle tasks can be put back in line or taken back to discuss; a session or a question
+  // in progress has to be stopped or answered first.
+  const resting = ['backlog', 'pending', 'stopped', 'failed', 'review', 'done'].includes(
+    task.status,
+  );
   if (target === 'active' && queueable) return 'queue';
+  if (target === 'pending' && resting && task.status !== 'pending') return 'pend';
+  if (target === 'draft' && resting && task.status !== 'backlog') return 'draft';
   if (target === 'attention' && from === 'active') return 'stop';
   if (target === 'done' && task.status === 'review') return 'complete';
   return null;

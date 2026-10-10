@@ -4,6 +4,7 @@ import type { PlanQuestion } from './loop.js';
 
 export const TASK_STATUSES = [
   'backlog',
+  'pending',
   'queued',
   'running',
   'awaiting_permission',
@@ -126,6 +127,11 @@ export interface Task {
    * discussion first.
    */
   confirmPlan: boolean;
+  /**
+   * The task is being planned in Draft: when its plan or criteria are approved it waits as
+   * `pending` until the harness picks it, instead of starting at once.
+   */
+  deferred: boolean;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
   agents: TaskAgents;

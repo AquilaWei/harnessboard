@@ -85,7 +85,7 @@ import type { AdapterFactory } from './providers.js';
 import { reviewEvidence } from './review.js';
 import { runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
-import { dueForRetry, quotaBlocks, startable } from './scheduler.js';
+import { dueForRetry, promotable, quotaBlocks, startable } from './scheduler.js';
 import { Store } from './store.js';
 import { riskOf } from './risk.js';
 import { Workflow } from './workflow.js';
@@ -156,7 +156,16 @@ interface HeldReplies {
   replies: { pending: PendingPermission; reply: PermissionReply }[];
 }
 
-const STARTABLE: TaskStatus[] = ['backlog', 'stopped', 'failed', 'review', 'waiting_quota'];
+const STARTABLE: TaskStatus[] = [
+  'backlog',
+  'pending',
+  'stopped',
+  'failed',
+  'review',
+  'waiting_quota',
+];
+/** Statuses `toDraft` and `pendTask` can take a task out of; neither interrupts a session. */
+const MOVABLE: TaskStatus[] = ['pending', 'stopped', 'failed', 'review', 'done'];
 /**
  * A `base` task in one of these is using the repository folder: it works there, or its
  * work there waits for an answer or a review that another task's commits would mix into.
@@ -624,9 +633,88 @@ export class Harness {
     } else {
       this.workflow.resetImplementerProgress(id);
     }
+    const queued = this.setStatus(id, 'queued', { resumeAt: null, deferred: false });
+    this.tick();
+    return queued;
+  }
+
+  /**
+   * Where an approved task goes: a task planned in Draft waits as `pending` for the harness
+   * to pick it, any other starts at once. Leaves Draft planning behind either way.
+   */
+  private statusAfterApproval(task: Task): TaskStatus {
+    return task.deferred ? 'pending' : 'queued';
+  }
+
+  /**
+   * Plans a draft's spec with its agent without building: the discussion runs as for a
+   * queued task, but the approved task waits as `pending`. A task that already has a spec
+   * (one reopened from done, say) asks the spec author for `message`, the change wanted.
+   * Throws when the task is not a draft, a task with a spec has no message, or a loop task
+   * is already planned.
+   */
+  planTask(id: number, message?: string): Task {
+    const task = this.requireTask(id);
+    if (task.status !== 'backlog') {
+      throw new Error(`task ${id} is ${task.status}; only a draft can be planned`);
+    }
+    if (task.workspace === 'base') this.assertFolderFree(task);
+    const hasSpec = task.mode === 'single' && !!this.workflow.specFile(id);
+    if (task.mode === 'loop' && this.workflow.hasPlan(id)) {
+      throw new Error(`task ${id} is already planned; put it in pending instead`);
+    }
+    if (hasSpec) {
+      this.workflow.requestSpecRevision(id, message ?? '', 'queued');
+    } else {
+      this.workflow.resetImplementerProgress(id);
+    }
+    this.store.updateTask(id, { deferred: true });
     const queued = this.setStatus(id, 'queued', { resumeAt: null });
     this.tick();
     return queued;
+  }
+
+  /**
+   * Puts a task in the pending line: the harness starts it by itself, one at a time, when
+   * its agent's quota allows. A task in review or done goes back to work with fresh review
+   * rounds. Throws when the task is a draft without agreed criteria, is not at rest, or
+   * works on the base while another such task holds the folder.
+   */
+  pendTask(id: number): Task {
+    const task = this.requireTask(id);
+    if (task.status === 'backlog') {
+      if (!task.acceptance && !task.verifyCommand) {
+        throw new Error(`task ${id} has no agreed spec yet; plan it first`);
+      }
+    } else if (!MOVABLE.includes(task.status)) {
+      throw new Error(`task ${id} is ${task.status} and cannot be put in pending`);
+    }
+    if (task.status === 'pending') return task;
+    this.prepareForRestart(task);
+    return this.setStatus(id, 'pending', { resumeAt: null });
+  }
+
+  /**
+   * Takes a task back to Draft to discuss it again, keeping its branch, spec and history.
+   * A queued or quota-waiting task is stopped first. Throws when the task is running or
+   * waits for an answer, since that would drop the question.
+   */
+  toDraft(id: number): Task {
+    const task = this.requireTask(id);
+    if (task.status === 'backlog') return task;
+    const idle = task.status === 'queued' || task.status === 'waiting_quota';
+    if (!idle && !MOVABLE.includes(task.status)) {
+      throw new Error(`task ${id} is ${task.status} and cannot be moved to draft`);
+    }
+    if (this.running.has(id)) throw new Error(`task ${id} is running; stop it first`);
+    this.prepareForRestart(task);
+    return this.setStatus(id, 'backlog', { resumeAt: null, deferred: false });
+  }
+
+  /** Counts review rounds afresh for work taken up again after review or completion. */
+  private prepareForRestart(task: Task): void {
+    if (task.status === 'review' || task.status === 'done') this.workflow.sendBack(task.id);
+    else this.workflow.resetImplementerProgress(task.id);
   }
 
   /**
@@ -685,7 +773,7 @@ export class Harness {
       this.dropPermissions(id);
       return task;
     }
-    if (task.status === 'queued' || task.status === 'waiting_quota') {
+    if (['queued', 'waiting_quota', 'pending'].includes(task.status)) {
       return this.setStatus(id, 'stopped', { resumeAt: null });
     }
     return task;
@@ -844,9 +932,9 @@ export class Harness {
     const baseline: FeatureSnapshot = { features, verify: null, verifiedPassing: 0 };
     this.store.appendEvent(id, null, 'features', baseline);
     this.notice(id, `plan approved: ${features.length} features, verify with ${command}`);
-    const queued = this.setStatus(id, 'queued');
+    const next = this.setStatus(id, this.statusAfterApproval(task));
     this.tick();
-    return queued;
+    return next;
   }
 
   /**
@@ -868,10 +956,10 @@ export class Harness {
     this.store.updateTask(id, { acceptance: agreed });
     const approval: CriteriaApproval = { criteria: agreed };
     this.store.appendEvent(id, null, 'criteria_approved', approval);
-    this.notice(id, 'acceptance criteria approved; starting work');
-    const queued = this.setStatus(id, 'queued');
+    this.notice(id, 'acceptance criteria approved');
+    const next = this.setStatus(id, this.statusAfterApproval(task));
     this.tick();
-    return queued;
+    return next;
   }
 
   /** Latest proposed criteria of a single task, until they are approved. */
@@ -921,9 +1009,9 @@ export class Harness {
     const decision = this.workflow.decideSpecChange(task, true, optionalText(criteria, 'criteria'));
     this.store.updateTask(id, { acceptance: decision.criteria });
     this.notice(id, 'spec change approved; revising the spec');
-    const queued = this.setStatus(id, 'queued');
+    const next = this.setStatus(id, this.statusAfterApproval(task));
     this.tick();
-    return queued;
+    return next;
   }
 
   /**
@@ -936,7 +1024,8 @@ export class Harness {
     const { onReject } = this.workflow.specChange(id)!;
     this.workflow.decideSpecChange(task, false);
     this.notice(id, 'spec change rejected; the spec stays as it is');
-    const next = this.setStatus(id, onReject);
+    // A change asked for in Draft that is rejected leaves the task in Draft, not building.
+    const next = this.setStatus(id, task.deferred && onReject === 'queued' ? 'backlog' : onReject);
     if (onReject === 'queued') this.tick();
     return next;
   }
@@ -1315,6 +1404,7 @@ export class Harness {
     for (const task of dueForRetry(this.store.listTasks(), now)) {
       this.setStatus(task.id, 'queued', { resumeAt: null });
     }
+    this.promotePending(now);
     // Like a message written to an idle task, these do not wait for a free slot.
     for (const task of this.store.listTasks()) {
       if (CHATTABLE.includes(task.status) && !this.running.has(task.id)) {
@@ -1329,6 +1419,33 @@ export class Harness {
     // Pending messages take the task's turn; its workflow goes on once the reply ends.
     for (const task of next) {
       if (!this.deliverPendingChat(task)) void this.runTask(task);
+    }
+  }
+
+  /**
+   * Lets pending tasks, oldest first, take the slots queued and running tasks leave free.
+   * One whose agent is out of quota, or whose repository folder another `base` task holds,
+   * stays pending; the tasks behind it may still go.
+   */
+  private promotePending(now: number): void {
+    const tasks = this.store.listTasks();
+    const busy = tasks.filter((t) => t.status === 'queued' || this.running.has(t.id)).length;
+    const free = Math.max(0, this.config.maxConcurrent - busy);
+    const ready = tasks.filter(
+      (t) =>
+        t.status === 'pending' &&
+        !this.nextSessionBlocked(t, now) &&
+        (t.workspace !== 'base' || this.folderBusy(t) === null),
+    );
+    // A promoted `base` task holds its folder at once, so only one per folder goes in a pass.
+    const folders = new Set<string>();
+    for (const task of promotable(ready, free)) {
+      if (task.workspace === 'base') {
+        if (folders.has(task.repoPath)) continue;
+        folders.add(task.repoPath);
+      }
+      this.notice(task.id, 'picked from pending');
+      this.setStatus(task.id, 'queued', { resumeAt: null, deferred: false });
     }
   }
 
@@ -1738,7 +1855,7 @@ export class Harness {
   private setStatus(
     id: number,
     status: TaskStatus,
-    extra: { resumeAt?: number | null } = {},
+    extra: { resumeAt?: number | null; deferred?: boolean } = {},
   ): Task {
     const task = this.store.updateTask(id, { status, ...extra });
     this.emit({ type: 'task', taskId: id, status });

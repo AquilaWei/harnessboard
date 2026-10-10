@@ -63,11 +63,11 @@ afterEach(() => {
 });
 
 describe('Board at phone width', () => {
-  it('shows the four tabs', async () => {
+  it('shows the five tabs', async () => {
     width(true);
     await render('waiting');
     const tabs = [...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
-    expect(tabs).toEqual(['Waiting for you 1', 'In progress 0', 'Review 1', 'Done 0']);
+    expect(tabs).toEqual(['Waiting for you 1', 'Pending 0', 'In progress 0', 'Review 1', 'Done 0']);
   });
 
   it('shows only the tasks of the chosen tab', async () => {
@@ -79,10 +79,10 @@ describe('Board at phone width', () => {
 });
 
 describe('Board at desktop width', () => {
-  it('shows the four stages side by side without tabs', async () => {
+  it('shows the five stages side by side without tabs', async () => {
     width(false);
     await render('waiting');
-    expect(container.querySelectorAll('section.stage')).toHaveLength(4);
+    expect(container.querySelectorAll('section.stage')).toHaveLength(5);
     expect(container.querySelector('[role="tab"]')).toBeNull();
   });
 });

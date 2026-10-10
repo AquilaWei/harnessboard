@@ -19,6 +19,8 @@ Every `hb` command and flag, and how merging, working on the base branch and del
 | `hb ls` / `hb show <id>`                                                              | List tasks / show sessions, context, tokens, estimated cost and time |
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                                              |
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                                                 |
+| `hb plan <id> [-m <change>]`                                                          | Discuss a draft's spec; once approved it waits as pending            |
+| `hb pend <id>` / `hb draft <id>`                                                      | Line a task up for automatic start / take it back to draft           |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish                              |
 | `hb chat <id> <message>` / `hb chat <id> --cancel`                                    | Write to the task's agent; drop pending ones                         |
 | `hb commits <id>`                                                                     | List the commits on the task branch                                  |

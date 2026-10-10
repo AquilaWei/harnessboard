@@ -23,6 +23,9 @@ export function TaskCard({ task, onOpen, onAction, onDragStart, onDragEnd, dragg
 
   const runPrimary = () => {
     switch (primary) {
+      case 'plan':
+        onAction('plan');
+        return;
       case 'start':
       case 'retry':
         onAction('queue');

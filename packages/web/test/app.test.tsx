@@ -61,7 +61,7 @@ const server = (url: string) => {
   if (revoked) return new Response('{"error":"this device is not paired"}', { status: 401 });
   if (locked)
     return new Response('{"error":"this device is locked","locked":true}', { status: 401 });
-  if (reauth && url === '/api/tasks/1/queue')
+  if (reauth && url === '/api/tasks/1/plan')
     return new Response('{"error":"confirm with your passkey first","reauth":true}', {
       status: 401,
     });
@@ -163,7 +163,7 @@ describe('App', () => {
 
   it('swaps the board for the not-paired screen when an action after revocation gets 401', async () => {
     revoked = true;
-    await act(async () => button('Start').click());
+    await act(async () => button('Plan the spec').click());
     expect(container.querySelector('[role="alert"] h2')?.textContent).toBe(
       'This device is not paired',
     );
@@ -182,7 +182,7 @@ describe('App', () => {
   it('swaps the board for the unlock screen when a call gets 401 locked', async () => {
     vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
     locked = true;
-    await act(async () => button('Start').click());
+    await act(async () => button('Plan the spec').click());
     expect([container.querySelector('h2')?.textContent, button('Unlock') !== undefined]).toEqual([
       'The board is locked',
       true,
@@ -191,7 +191,7 @@ describe('App', () => {
 
   it('tells a browser without passkeys to open the page in Chrome or Safari instead of unlocking', async () => {
     locked = true;
-    await act(async () => button('Start').click());
+    await act(async () => button('Plan the spec').click());
     expect([container.textContent?.includes('Chrome or Safari'), button('Unlock')]).toEqual([
       true,
       undefined,
@@ -248,7 +248,7 @@ describe('App', () => {
   it('keeps the board and says why when the passkey prompt for an action is cancelled', async () => {
     webauthn.startAuthentication.mockRejectedValueOnce(new Error('The operation was cancelled'));
     reauth = true;
-    await act(async () => button('Start').click());
+    await act(async () => button('Plan the spec').click());
     expect([
       container.querySelector('[role="status"]')?.textContent,
       container.textContent?.includes('Write the docs'),

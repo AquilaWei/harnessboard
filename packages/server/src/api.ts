@@ -289,6 +289,12 @@ export function createApi(
   });
 
   app.post('/tasks/:id/queue', (c) => c.json(harness.queueTask(taskId(c))));
+  app.post('/tasks/:id/plan', async (c) => {
+    const body = await c.req.json<{ message?: string }>().catch(() => ({}) as { message?: string });
+    return c.json(harness.planTask(taskId(c), body.message));
+  });
+  app.post('/tasks/:id/pend', (c) => c.json(harness.pendTask(taskId(c))));
+  app.post('/tasks/:id/draft', (c) => c.json(harness.toDraft(taskId(c))));
   app.post('/tasks/:id/stop', (c) => c.json(harness.stopTask(taskId(c))));
   app.post('/tasks/:id/complete', (c) => c.json(harness.completeTask(taskId(c))));
 

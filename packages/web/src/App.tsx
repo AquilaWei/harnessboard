@@ -27,10 +27,12 @@ import { checkPasskey, passkeysAvailable } from './passkey';
 import { pairCodeFromHash } from './phone';
 import { currentNotifyMode, taskFromHash, taskFromMessage } from './push';
 
-const ACTIONS: Record<TaskAction, (id: number) => Promise<unknown>> = {
+const ACTIONS: Record<Exclude<TaskAction, 'plan'>, (id: number) => Promise<unknown>> = {
   queue: api.queue,
   stop: api.stop,
   complete: api.complete,
+  pend: api.pend,
+  draft: api.toDraft,
 };
 
 export function App() {
@@ -169,8 +171,14 @@ export function App() {
   });
 
   const act = useCallback(
-    (task: TaskView, action: TaskAction) => ACTIONS[action](task.id).then(load, showError),
-    [load, showError],
+    (task: TaskView, action: TaskAction) => {
+      if (action !== 'plan') return ACTIONS[action](task.id).then(load, showError);
+      // A task that already has a spec is planned against the change asked for.
+      const message = task.specFile ? window.prompt(t('planChangePrompt')) : undefined;
+      if (task.specFile && !message?.trim()) return Promise.resolve();
+      return api.planSpec(task.id, message ?? undefined).then(load, showError);
+    },
+    [load, showError, t],
   );
 
   const invalidMove = (task: TaskView, target: Stage) =>

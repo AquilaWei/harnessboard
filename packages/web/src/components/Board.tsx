@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TaskView } from '@harnessboard/shared';
-import { PHONE_TABS, STAGES, dropAction, groupByPhoneTab, stageOf } from '../board';
+import { PHONE_TABS, STAGES, dropAction, groupByPhoneTab, stageOfTask } from '../board';
 import type { PhoneTab, Stage, TaskAction } from '../board';
 import { usePhoneWidth } from '../media';
 import type { DrawerTab } from './TaskDrawer';
@@ -19,12 +19,12 @@ interface Props {
   onNewTask: () => void;
 }
 
-/** The four stages side by side, or one tab at a time at phone width. */
+/** The five stages side by side, or one tab at a time at phone width. */
 export function Board(props: Props) {
   return usePhoneWidth() ? <PhoneBoard {...props} /> : <StageBoard {...props} />;
 }
 
-/** Four stages that fit one screen; cards carry their own buttons, dragging is optional. */
+/** Five stages that fit one screen; cards carry their own buttons, dragging is optional. */
 function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onNewTask }: Props) {
   const { t } = useTranslation();
   const [dragged, setDragged] = useState<TaskView | null>(null);
@@ -32,7 +32,7 @@ function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onNewTask }: Props
 
   const drop = (target: Stage) => {
     setOver(null);
-    if (!dragged || stageOf(dragged.status) === target) return;
+    if (!dragged || stageOfTask(dragged) === target) return;
     const action = dropAction(dragged, target);
     if (action) onAction(dragged, action);
     else onInvalidMove(dragged, target);
@@ -42,14 +42,14 @@ function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onNewTask }: Props
     <main className="board">
       {STAGES.map((stage) => {
         // Newest first, so fresh work is at the top of each stage.
-        const items = tasks.filter((task) => stageOf(task.status) === stage).reverse();
+        const items = tasks.filter((task) => stageOfTask(task) === stage).reverse();
         const droppable = dragged !== null && dropAction(dragged, stage) !== null;
         return (
           <section
             key={stage}
             id={`stage-${stage}`}
             className={`stage stage-${stage} ${items.length > 0 ? 'has-items' : ''} ${over === stage && droppable ? 'drop-ok' : ''} ${
-              dragged && !droppable && stageOf(dragged.status) !== stage ? 'drop-no' : ''
+              dragged && !droppable && stageOfTask(dragged) !== stage ? 'drop-no' : ''
             }`}
             aria-label={t(`stage.${stage}`)}
             onDragOver={(e) => {

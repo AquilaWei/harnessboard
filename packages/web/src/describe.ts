@@ -27,6 +27,8 @@ export function describeTask(task: TaskView): Description {
   switch (task.status) {
     case 'backlog':
       return d('draft', 'idle');
+    case 'pending':
+      return d('pending', 'idle');
     case 'queued':
       // Only an answered tool use waiting for quota is queued with its agent still open.
       if (task.activity) return d('answerHeld', 'working');

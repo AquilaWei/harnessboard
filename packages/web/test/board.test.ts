@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
-import { attentionTab, dropAction, groupByPhoneTab, primaryAction, stageOf } from '../src/board';
+import {
+  attentionTab,
+  dropAction,
+  groupByPhoneTab,
+  primaryAction,
+  stageOf,
+  stageOfTask,
+} from '../src/board';
 
 const task = (status: TaskStatus) => ({ status }) as TaskView;
 
@@ -19,9 +26,27 @@ describe('stageOf', () => {
   });
 });
 
+describe('stageOfTask', () => {
+  it('keeps a draft being planned in Draft while it waits for approval', () => {
+    expect(stageOfTask({ status: 'awaiting_approval', deferred: true })).toBe('draft');
+  });
+
+  it('puts a pending task in Pending', () => {
+    expect(stageOfTask({ status: 'pending', deferred: true })).toBe('pending');
+  });
+
+  it('puts a task that is not planned in Draft by its status', () => {
+    expect(stageOfTask({ status: 'awaiting_approval', deferred: false })).toBe('attention');
+  });
+});
+
 describe('primaryAction', () => {
-  it('offers Start for a draft', () => {
-    expect(primaryAction(task('backlog'))).toBe('start');
+  it('offers Plan the spec for a draft', () => {
+    expect(primaryAction(task('backlog'))).toBe('plan');
+  });
+
+  it('offers Start now for a pending task', () => {
+    expect(primaryAction(task('pending'))).toBe('start');
   });
 
   it('offers Stop while waiting for quota', () => {
@@ -46,6 +71,26 @@ describe('primaryAction', () => {
 });
 
 describe('dropAction', () => {
+  it('puts a draft in Pending when dropped there', () => {
+    expect(dropAction(task('backlog'), 'pending')).toBe('pend');
+  });
+
+  it('takes a done task back to Draft', () => {
+    expect(dropAction(task('done'), 'draft')).toBe('draft');
+  });
+
+  it('reopens a done task as Pending', () => {
+    expect(dropAction(task('done'), 'pending')).toBe('pend');
+  });
+
+  it('starts a pending task now when dropped on In progress', () => {
+    expect(dropAction(task('pending'), 'active')).toBe('queue');
+  });
+
+  it('does not move a running task to Draft', () => {
+    expect(dropAction(task('running'), 'draft')).toBeNull();
+  });
+
   it('does not queue a task waiting for permission when dropped on In progress', () => {
     expect(dropAction(task('awaiting_permission'), 'active')).toBeNull();
   });
@@ -116,6 +161,7 @@ describe('groupByPhoneTab', () => {
   it('puts a finished task to review under Review, not Waiting for you', () => {
     expect(groupByPhoneTab([withId(1, 'review')])).toEqual({
       waiting: [],
+      pending: [],
       active: [],
       review: [withId(1, 'review')],
       done: [],

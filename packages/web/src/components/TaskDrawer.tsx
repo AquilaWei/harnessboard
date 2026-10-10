@@ -220,8 +220,37 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                   </button>
                 )}
                 {s === 'backlog' && (
+                  <>
+                    <button type="button" className="btn primary" onClick={() => act('plan')}>
+                      {t('actions.plan')}
+                    </button>
+                    <button type="button" className="btn" onClick={() => act('queue')}>
+                      {t('actions.start')}
+                    </button>
+                  </>
+                )}
+                {s === 'pending' && (
                   <button type="button" className="btn primary" onClick={() => act('queue')}>
                     {t('actions.start')}
+                  </button>
+                )}
+                {(s === 'backlog' || s === 'stopped' || s === 'failed' || s === 'review') && (
+                  <button type="button" className="btn" onClick={() => act('pend')}>
+                    {t('actions.pend')}
+                  </button>
+                )}
+                {s === 'done' && (
+                  <button type="button" className="btn" onClick={() => act('pend')}>
+                    {t('actions.reopenPending')}
+                  </button>
+                )}
+                {(s === 'pending' ||
+                  s === 'stopped' ||
+                  s === 'failed' ||
+                  s === 'review' ||
+                  s === 'done') && (
+                  <button type="button" className="btn" onClick={() => act('draft')}>
+                    {t(s === 'done' ? 'actions.reopenDraft' : 'actions.toDraft')}
                   </button>
                 )}
                 {(s === 'failed' || s === 'stopped') && (
@@ -232,6 +261,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                 {(s === 'running' ||
                   s === 'awaiting_permission' ||
                   s === 'queued' ||
+                  s === 'pending' ||
                   s === 'waiting_quota') && (
                   <button type="button" className="btn danger" onClick={() => act('stop')}>
                     {t('actions.stop')}

@@ -103,6 +103,8 @@ const MIGRATIONS = [
   // Where a `base` task's work last ended, and its earlier stretches as JSON.
   `ALTER TABLE tasks ADD COLUMN end_commit TEXT;
    ALTER TABLE tasks ADD COLUMN prior_spans TEXT NOT NULL DEFAULT '[]';`,
+  // A task planned in Draft: once its spec is approved it waits as `pending`, not `queued`.
+  `ALTER TABLE tasks ADD COLUMN deferred INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 /** A device's Web Push subscription, with the device it reaches. */
@@ -204,6 +206,7 @@ export class Store {
         | 'acceptance'
         | 'permission'
         | 'agents'
+        | 'deferred'
       >
     >,
     now = Date.now(),
@@ -220,13 +223,14 @@ export class Store {
       acceptance: 'acceptance',
       permission: 'permission',
       agents: 'agents',
+      deferred: 'deferred',
     };
-    // Objects are stored as JSON, like on insert.
+    // Objects are stored as JSON, like on insert; booleans as 0/1.
     const entries = Object.entries(fields)
       .filter(([, v]) => v !== undefined)
       .map(([k, v]): [string, unknown] => [
         k,
-        v !== null && typeof v === 'object' ? JSON.stringify(v) : v,
+        v !== null && typeof v === 'object' ? JSON.stringify(v) : typeof v === 'boolean' ? +v : v,
       ]);
     const sets = entries.map(([k]) => `${columns[k]} = ?`);
     this.db
@@ -567,6 +571,7 @@ function toTask(row: Row): Task {
     verifyCommand: (row.verify_command as string | null) ?? null,
     acceptance: (row.acceptance as string | null) ?? null,
     confirmPlan: Number(row.confirm_plan) === 1,
+    deferred: Number(row.deferred) === 1,
     contextPolicy: JSON.parse(String(row.context_policy)) as ContextPolicy,
     permission: JSON.parse(String(row.permission)) as PermissionPolicy,
     agents: JSON.parse(String(row.agents)) as TaskAgents,

@@ -3,6 +3,17 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Added
+
+- A **Pending** column. Plan a draft's spec with **Plan the spec** (`hb plan`); once you
+  approve it, the task waits as pending and the harness starts pending tasks one at a time
+  whenever quota is available, so a batch planned ahead is taken up after the quota resets.
+- Move tasks by hand between Draft, Pending and Done: drag a card, use the task panel
+  buttons, or `hb pend` / `hb draft`. A done task can be reopened in Draft or Pending and
+  keeps its history.
+
 ## 0.1.5 - 2026-10-10
 
 Local test build for the commit handoff check fix; real-agent acceptance is pending.

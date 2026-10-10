@@ -156,6 +156,31 @@ describe('tasks API', () => {
     ]);
   });
 
+  it('takes a draft back to draft without changing it', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(`/api/tasks/${id}/draft`, {}, { [CLIENT_HEADER]: 'test' });
+    expect(((await res.json()) as { status: string }).status).toBe('backlog');
+  });
+
+  it('refuses to put a draft without a spec in pending', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(`/api/tasks/${id}/pend`, {}, { [CLIENT_HEADER]: 'test' });
+    expect(((await res.json()) as { error: string }).error).toMatch(/plan it first/);
+  });
+
+  it('puts a draft with criteria in pending', async () => {
+    const created = await post(
+      '/api/tasks',
+      { prompt: 'x', repo, acceptance: '- ok' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const { id } = (await created.json()) as { id: number };
+    const res = await post(`/api/tasks/${id}/pend`, {}, { [CLIENT_HEADER]: 'test' });
+    expect(((await res.json()) as { status: string }).status).toBe('pending');
+  });
+
   it('returns the error message for an invalid request', async () => {
     const res = await post(
       '/api/tasks',

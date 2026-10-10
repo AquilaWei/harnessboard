@@ -497,6 +497,34 @@ program
   });
 
 program
+  .command('plan')
+  .description("discuss a draft's spec; once approved it waits as pending")
+  .argument('<id>', 'task id', parseInteger)
+  .option('-m, --message <text>', 'the spec change wanted, for a draft that already has a spec')
+  .action(async (id: number, o: { message?: string }) => {
+    const task = await client().planTask(id, o.message);
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
+  .command('pend')
+  .description('put a task in the pending line; it starts by itself when quota allows')
+  .argument('<id>', 'task id', parseInteger)
+  .action(async (id: number) => {
+    const task = await client().pendTask(id);
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
+  .command('draft')
+  .description('take a task back to draft to discuss it again')
+  .argument('<id>', 'task id', parseInteger)
+  .action(async (id: number) => {
+    const task = await client().toDraft(id);
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
   .command('done')
   .description('mark a reviewed task as done')
   .argument('<id>', 'task id', parseInteger)
