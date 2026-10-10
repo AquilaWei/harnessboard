@@ -61,3 +61,28 @@ class HttpBoardProbeTest {
         assertFalse(HttpBoardProbe(timeoutMillis = 500).reachable("http://127.0.0.1:$port"))
     }
 }
+
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+class HttpBoardProbeThreadTest {
+    @Test
+    fun `the request runs off the main thread and the answer comes back on it`() {
+        val mainThread = Thread.currentThread()
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var requestThread: Thread? = null
+        var answerThread: Thread? = null
+
+        HttpBoardProbe(reach = {
+            requestThread = Thread.currentThread()
+            true
+        }).check("https://pc.ts.net") {
+            answerThread = Thread.currentThread()
+            latch.countDown()
+        }
+        latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        org.robolectric.Shadows
+            .shadowOf(android.os.Looper.getMainLooper())
+            .idle()
+
+        assertTrue(requestThread != null && requestThread !== mainThread && answerThread === mainThread)
+    }
+}

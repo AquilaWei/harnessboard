@@ -3,6 +3,15 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.9 - 2026-10-10
+
+Local test build for the Android crash fix; real-device acceptance is pending.
+
+### Fixed
+
+- **The Android app no longer crashes on launch** when a board is saved: the reachability
+  check made its network request on the main thread, which Android forbids.
+
 ## 0.1.8 - 2026-10-10
 
 Local test build for starting Tailscale from Phone access; real-device acceptance is pending.

@@ -24,13 +24,20 @@ fun interface BoardProbe {
  */
 class HttpBoardProbe(
     private val timeoutMillis: Int = TIMEOUT_MILLIS,
+    // Replaces the network call in tests that check which thread it runs on.
+    private val reach: ((String) -> Boolean)? = null,
 ) : BoardProbe {
     override fun check(
         url: String,
         done: (Boolean) -> Unit,
     ) {
         val main = Handler(Looper.getMainLooper())
-        Thread { main.post { done(reachable(url)) } }.start()
+        // The request runs on this thread; only the answer is posted to the main thread, which
+        // Android forbids to touch the network.
+        Thread {
+            val answer = (reach ?: ::reachable)(url)
+            main.post { done(answer) }
+        }.start()
     }
 
     /** Blocks on the network: call it off the main thread. */
