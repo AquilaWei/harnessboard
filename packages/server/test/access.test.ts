@@ -49,7 +49,13 @@ beforeEach(() => {
     '*',
     access(harness, sessions, () => clock),
   );
-  app.route('/api', createApi(harness, sessions));
+  app.route(
+    '/api',
+    createApi(harness, sessions, {
+      detectTailscale: () => Promise.resolve(REMOTE),
+      serveTailscale: () => Promise.resolve(),
+    }),
+  );
   app.route('/.well-known', createWellKnown(harness));
   app.get('*', (c) => c.text('index.html'));
 });
@@ -129,6 +135,53 @@ describe('access from an unknown host', () => {
 
   it('answers 403 to static files on an unknown Host', async () => {
     const res = await app.request('/', { headers: { host: 'evil.example' } });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('access from the Tailscale name of this computer', () => {
+  const TAILSCALE = 'other.tail1234.ts.net';
+  const withTailscale = (name: string | null) => {
+    const guarded = new Hono();
+    guarded.use(
+      '*',
+      access(
+        harness,
+        sessions,
+        () => clock,
+        () => Promise.resolve(name),
+      ),
+    );
+    guarded.get('*', (c) => c.text('index.html'));
+    return guarded;
+  };
+
+  it('accepts the detected name although it is not a saved remote host', async () => {
+    const res = await withTailscale(TAILSCALE).request('/', { headers: { host: TAILSCALE } });
+    expect(res.status).toBe(200);
+  });
+
+  it('accepts the detected name without regard to case', async () => {
+    const res = await withTailscale(TAILSCALE).request('/', {
+      headers: { host: 'Other.Tail1234.TS.net' },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('still answers 403 to another host', async () => {
+    const res = await withTailscale(TAILSCALE).request('/', { headers: { host: 'evil.example' } });
+    expect(res.status).toBe(403);
+  });
+
+  it('answers 403 to the detected name when Tailscale is not running', async () => {
+    const res = await withTailscale(null).request('/', { headers: { host: TAILSCALE } });
+    expect(res.status).toBe(403);
+  });
+
+  it('answers 403 to a Funnel request on the detected name', async () => {
+    const res = await withTailscale(TAILSCALE).request('/', {
+      headers: { host: TAILSCALE, 'tailscale-funnel-request': '?1' },
+    });
     expect(res.status).toBe(403);
   });
 });

@@ -78,6 +78,6 @@
     waits for permission, approval or review, or fails, while the board is open but not in
     front. Click it to open the task.
 
-The API accepts only loopback `Host` headers, plus the remote hosts you add for
-[phone access](phone-access.md), and it requires a custom header on every write. A web page you
+The API accepts only loopback `Host` headers, plus this computer's own Tailscale name and any
+`remoteHosts` in `config.json`, for [phone access](phone-access.md), and it requires a custom header on every write. A web page you
 visit cannot drive your agents through the browser.

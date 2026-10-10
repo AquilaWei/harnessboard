@@ -6,6 +6,7 @@ import { Hono } from 'hono';
 import { Harness, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import type { AgentInfo, DetectedAgent } from '@harnessboard/shared';
+import { cachedTailscaleHost } from './tailscale-host.js';
 import { access } from './access.js';
 import { createApi } from './api.js';
 import { createWellKnown } from './assetlinks.js';
@@ -33,7 +34,7 @@ export async function startServer(config: HarnessConfig): Promise<RunningServer>
   const [agents, detected] = await Promise.all([harness.probeAgents(), harness.detectAgents()]);
   const app = new Hono();
   const sessions = new Sessions();
-  app.use('*', access(harness, sessions));
+  app.use('*', access(harness, sessions, Date.now, cachedTailscaleHost()));
   app.route('/api', createApi(harness, sessions));
   app.route('/.well-known', createWellKnown(harness));
   app.get('*', serveWeb(WEB_ROOT));

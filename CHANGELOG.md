@@ -5,6 +5,15 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Changed
+
+- **Phone access is two things in Settings:** **Pair a phone** (QR code) and the list of
+  paired devices. The remote-hosts field, the `tailscale serve` command and the Android app
+  block are gone. Pairing now makes the board reachable on your tailnet by itself
+  (`tailscale serve --bg`, never Funnel), and this computer's Tailscale name is accepted
+  automatically. Hosts already in `config.json` keep working, and `androidAppFingerprints`
+  is now set in `config.json` only.
+
 ### Added
 
 - A **Pending** column. Plan a draft's spec with **Plan the spec** (`hb plan`); once you

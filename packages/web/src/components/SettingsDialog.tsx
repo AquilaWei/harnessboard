@@ -39,8 +39,6 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const [globalRules, setGlobalRules] = useState(settings.allowedTools.join('\n'));
   const parsedRules = parseRules(globalRules);
   const [guidelines, setGuidelines] = useState(settings.reviewGuidelines.join('\n'));
-  const [remoteHosts, setRemoteHosts] = useState(settings.remoteHosts.join('\n'));
-  const [fingerprints, setFingerprints] = useState(settings.androidAppFingerprints.join('\n'));
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [notify, setNotify] = useState(notificationsEnabled);
   const [permission, setPermission] = useState(notificationPermission);
@@ -65,8 +63,6 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           defaultReviewer: reviewer === '' ? null : reviewer,
           allowedTools: parsedRules.rules,
           reviewGuidelines: lines(guidelines),
-          remoteHosts: lines(remoteHosts),
-          androidAppFingerprints: lines(fingerprints),
         }),
       );
     } catch (err) {
@@ -206,14 +202,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           </p>
         </section>
 
-        <PhoneAccess
-          savedHosts={settings.remoteHosts}
-          hosts={remoteHosts}
-          onHostsChange={setRemoteHosts}
-          fingerprints={fingerprints}
-          onFingerprintsChange={setFingerprints}
-          onError={setError}
-        />
+        <PhoneAccess onError={setError} />
 
         <div className="row">
           <label className="field">

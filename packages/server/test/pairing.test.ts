@@ -17,6 +17,8 @@ let harness: Harness;
 let app: Hono;
 let clock: number;
 let tailscale: string | null;
+let served: number[];
+let serveError: Error | null;
 
 beforeEach(() => {
   const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-pairing-'));
@@ -28,6 +30,8 @@ beforeEach(() => {
   });
   clock = START;
   tailscale = 'box.tail1234.ts.net';
+  served = [];
+  serveError = null;
   const sessions = new Sessions();
   app = new Hono();
   app.use(
@@ -39,6 +43,10 @@ beforeEach(() => {
     createApi(harness, sessions, {
       now: () => clock,
       detectTailscale: () => Promise.resolve(tailscale),
+      serveTailscale: (port) => {
+        served.push(port);
+        return serveError ? Promise.reject(serveError) : Promise.resolve();
+      },
     }),
   );
 });
@@ -69,19 +77,42 @@ describe('POST /api/pairing', () => {
   });
 });
 
+describe('POST /api/pairing and Tailscale', () => {
+  it('serves the board port on the tailnet', async () => {
+    await newCode();
+    expect(served).toEqual([PORT]);
+  });
+
+  it('returns the Tailscale name for the phone to open', async () => {
+    const { host } = (await newCode()) as PairingCode & { host: string };
+    expect(host).toBe('box.tail1234.ts.net');
+  });
+
+  it('answers with an error when Tailscale is not running, without serving', async () => {
+    tailscale = null;
+    const res = await send('POST', '/api/pairing', local);
+    expect([res.status, served]).toEqual([400, []]);
+  });
+
+  it('answers with the error when serving fails', async () => {
+    serveError = new Error('tailscale could not serve the board');
+    const res = await send('POST', '/api/pairing', local);
+    expect(((await res.json()) as { error: string }).error).toBe(
+      'tailscale could not serve the board',
+    );
+  });
+});
+
 describe('GET /api/pairing/setup', () => {
-  it('returns the Tailscale name and the port', async () => {
+  it('returns the Tailscale name', async () => {
     const res = await app.request('/api/pairing/setup', { headers: local });
-    expect((await res.json()) as PairingSetup).toEqual({
-      tailscaleHost: 'box.tail1234.ts.net',
-      port: 4999,
-    });
+    expect((await res.json()) as PairingSetup).toEqual({ tailscaleHost: 'box.tail1234.ts.net' });
   });
 
   it('returns a null name when Tailscale is not running', async () => {
     tailscale = null;
     const res = await app.request('/api/pairing/setup', { headers: local });
-    expect((await res.json()) as PairingSetup).toEqual({ tailscaleHost: null, port: 4999 });
+    expect((await res.json()) as PairingSetup).toEqual({ tailscaleHost: null });
   });
 });
 

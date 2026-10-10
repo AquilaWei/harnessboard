@@ -68,7 +68,7 @@ beforeEach(() => {
   api.agentModels.mockResolvedValue([SOL]);
   api.setAgentEffort.mockResolvedValue({});
   api.detectAgents.mockResolvedValue([]);
-  api.pairingSetup.mockResolvedValue({ tailscaleHost: null, port: 4317 });
+  api.pairingSetup.mockResolvedValue({ tailscaleHost: null });
   api.devices.mockResolvedValue([]);
   api.saveSettings.mockResolvedValue(settings);
 });

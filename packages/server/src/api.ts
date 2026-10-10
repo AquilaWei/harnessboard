@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
-import { inspectFolder, listFolders, tailscaleHost } from '@harnessboard/core';
+import { inspectFolder, listFolders, tailscaleHost, tailscaleServe } from '@harnessboard/core';
 import type { EditableSettings, Harness } from '@harnessboard/core';
 import type {
   AgentsUpdate,
@@ -13,6 +13,7 @@ import type {
   NewAgentProfile,
   AgentEffortUpdate,
   PairRequest,
+  PairingCreated,
   PairingSetup,
   PasskeySession,
   PermissionDecision,
@@ -57,6 +58,8 @@ export interface ApiDeps {
   now: () => number;
   /** Finds this machine's Tailscale name, so tests do not depend on whether it runs Tailscale. */
   detectTailscale: () => Promise<string | null>;
+  /** Lets the tailnet reach the board's port; tests record the call instead of running Tailscale. */
+  serveTailscale: (port: number) => Promise<void>;
   /** Checks passkeys; tests fake the phone's signed responses. */
   verifier: PasskeyVerifier;
   /** Delivers pushes to paired phones; tests record them instead. */
@@ -75,6 +78,7 @@ export function createApi(
   const {
     now = Date.now,
     detectTailscale = () => tailscaleHost(),
+    serveTailscale = (port: number) => tailscaleServe(port),
     verifier = webauthnVerifier,
     pushSender = webPushSender,
   } = deps;
@@ -112,12 +116,17 @@ export function createApi(
   );
 
   // Pairing a phone: the computer makes a code (shown as a QR code), the phone sends it back.
-  app.post('/pairing', (c) => c.json(pairing.create(), 201));
+  // Also makes the board reachable on the tailnet, so pairing needs no other setup.
+  app.post('/pairing', async (c) => {
+    const host = await detectTailscale();
+    if (!host) throw new Error('Tailscale is not running on this computer');
+    await serveTailscale(harness.config.port);
+    return c.json({ ...pairing.create(), host } satisfies PairingCreated, 201);
+  });
   // What the settings dialog needs to explain phone access; under /pairing so it stays local.
   app.get('/pairing/setup', async (c) =>
     c.json({
       tailscaleHost: await detectTailscale(),
-      port: harness.config.port,
     } satisfies PairingSetup),
   );
   app.post('/pair', async (c) => {

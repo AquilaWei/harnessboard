@@ -8,27 +8,23 @@ nothing is opened to the internet.
 
 1. **Install Tailscale** on the computer and the phone, signed in to the same tailnet. Turn
    on MagicDNS and HTTPS certificates in the Tailscale admin console.
-2. **Add the remote host:** on the computer, open **Settings → Phone access**. It shows this
-   computer's Tailscale name (`<machine>.<tailnet>.ts.net`); click **Add as remote host**
-   and **Save**.
-3. **Serve the board on the tailnet**, once, with the command the section shows (the port is
-   the board's, 4317 by default):
+2. **Pair the phone:** on the computer, open **Settings → Phone access** and click
+   **Pair a phone**. Harnessboard makes the board reachable on your tailnet itself (it runs
+   `tailscale serve --bg <port>`, tailnet only, never Funnel) and shows a QR code. Scan it
+   with the phone's camera. The first HTTPS request can take about 30 seconds while Tailscale
+   issues the certificate. The code works once, for 5 minutes. Give the phone a name, tap
+   **Pair**, then **Create passkey**: the phone asks for your fingerprint, face or screen
+   lock. The phone is paired only once the passkey is made.
 
-   ```bash
-   tailscale serve --bg 4317
-   ```
+   If the button is greyed out, Tailscale was not found or is not running. If pairing fails
+   with a Tailscale error, run `tailscale serve --bg 4317` in a terminal to see the reason
+   (for example, HTTPS certificates are off, or your user may not change Tailscale's
+   settings). `tailscale serve reset` turns the sharing off again.
 
-   The first HTTPS request can take about 30 seconds while Tailscale issues the certificate.
-   `tailscale serve reset` turns it off again.
-
-4. **Pair the phone:** click **Pair a phone** and scan the QR code with the phone's camera.
-   The code works once, for 5 minutes. Give the phone a name, tap **Pair**, then **Create passkey**:
-   the phone asks for your fingerprint, face or screen lock. The phone is paired only once
-   the passkey is made.
-5. **Add to Home Screen** (optional on Android, needed for push on an iPhone): in Chrome's
+3. **Add to Home Screen** (optional on Android, needed for push on an iPhone): in Chrome's
    menu, **Add to Home Screen** (on Safari, in the Share menu). The Harnessboard icon then
    opens the board full screen, without the address bar.
-6. **Turn on push notifications** (optional): on the phone, open **Settings** and switch on
+4. **Turn on push notifications** (optional): on the phone, open **Settings** and switch on
    **Notify me when a task needs me**, then allow notifications. The phone gets a push when
    a task waits for permission, approval or review, or fails, even with the board closed.
    Tapping it opens the task on the tab that needs you (after unlocking, if the board was
@@ -62,12 +58,12 @@ nothing is opened to the internet.
 - **Push notifications on an iPhone** need iOS 16.4 or later and the board opened from the
   Home Screen; in Safari itself the switch says push is not available.
 - Tailscale Funnel (the public internet) is always refused. Another HTTPS reverse proxy
-  works too: add its host name as a remote host.
+  works too: add its host name to `remoteHosts` in `config.json` (see [Configuration](configuration.md)).
 
 ## Android app
 
 The Android app (Android 8.0 or later, with Chrome) opens the same phone board with its own
-icon. It runs the board in Chrome's engine, so it needs the Tailscale setup above (steps 1–3)
+icon. It runs the board in Chrome's engine, so it needs the Tailscale setup above (steps 1–2)
 like the browser does.
 
 1. **Install it:** build the APK as described in [Development](development.md) (no prebuilt
@@ -77,7 +73,7 @@ like the browser does.
    **Settings → Phone access → Pair a phone** on the computer. Without a QR code, type the
    board's address (`https://<machine>.<tailnet>.ts.net`) and tap **Connect**.
 3. **Pair:** the board opens inside the app with the pairing screen. Name the phone, tap
-   **Pair**, then **Create passkey**, as in step 4 above. The app keeps the address; later the icon opens
+   **Pair**, then **Create passkey**, as in step 2 above. The app keeps the address; later the icon opens
    the board directly.
 
 **What changes compared with the browser**
@@ -91,7 +87,7 @@ like the browser does.
 - **Passkey, lock and push rules:** the same passkey, the 30-minute lock, the check before
   sensitive actions and the same push notifications.
 - **Chrome's storage:** the app uses Chrome's cookies and site data, so a phone already
-  paired in Chrome stays paired; just type the address in step 2.
+  paired in Chrome stays paired; just type the address in step 2 of this list.
 - **Revoking** the phone on the computer locks out the app and Chrome together.
 
 **Push in the app:** when you turn on push, Android asks whether **Harnessboard** may send
@@ -108,6 +104,6 @@ revoke it.
 **URL bar still showing?** The board tells Android which apps it trusts through
 `/.well-known/assetlinks.json`, using the app's signing fingerprints. For a released APK,
 copy the fingerprint printed in the release's CI log; for an app you built yourself, its own
-(see [Development](development.md)). Paste it under **Settings → Phone access → Android app →
-App signing fingerprints**, **Save**, then clear Chrome's data for the app or reinstall it
-so Android checks again.
+(see [Development](development.md)). Add it to `androidAppFingerprints` in `config.json` (the
+list of SHA-256 fingerprints, `AB:CD:…` as keytool prints them), restart Harnessboard, then clear
+Chrome's data for the app or reinstall it so Android checks again.

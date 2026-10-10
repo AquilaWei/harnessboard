@@ -90,13 +90,15 @@ const SENSITIVE_ROUTES: { method: string | null; path: RegExp }[] = [
  *   passkey check is older than {@link REAUTH_MS}.
  *
  * Local requests see neither the lock nor the reauth. Remote hosts are read from the harness on
- * every request, so a settings change applies at once. `now` is injectable for the lock, the
+ * every request, so a settings change applies at once; this machine's own Tailscale name
+ * (`tailscaleHost`) is always accepted too, so phone access needs no host setting. `now` is injectable for the lock, the
  * reauth and the throttled `last_seen_at` / `last_active_at` writes.
  */
 export function access(
   harness: Harness,
   sessions: Sessions,
   now: () => number = Date.now,
+  tailscaleHost: () => Promise<string | null> = () => Promise.resolve(null),
 ): MiddlewareHandler<AccessEnv> {
   const port = harness.config.port;
   const loopbackHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`]);
@@ -107,7 +109,11 @@ export function access(
     const host = (c.req.header('host') ?? '').toLowerCase();
     const loopback = loopbackHosts.has(host);
     const remoteHosts = harness.config.remoteHosts.map((h) => h.toLowerCase());
-    if (!loopback && !remoteHosts.includes(host)) {
+    if (
+      !loopback &&
+      !remoteHosts.includes(host) &&
+      host !== (await tailscaleHost())?.toLowerCase()
+    ) {
       return c.json({ error: 'forbidden host' }, 403);
     }
     if (c.req.method !== 'GET' && !c.req.header(CLIENT_HEADER)) {
