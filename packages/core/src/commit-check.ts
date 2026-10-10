@@ -3,7 +3,7 @@ import { git, isMergedInto, mergeBase, porcelainStatus } from './worktree.js';
 
 /** Commit convention shared by writing roles and the deterministic handoff check. */
 export const COMMIT_RULE =
-  'Before handing off, commit all task changes. Commit messages must be one concise English line: ' +
+  'Before handing off, commit all task changes. Commit messages must be one concise English line (a trailer such as Co-Authored-By may follow): ' +
   '`<type>: <description>`, where type is feat, fix, docs, style, refactor, perf, test or chore. ' +
   'Follow the repository code rules as well. If nothing changed, do not create an empty commit.';
 
@@ -30,13 +30,23 @@ export async function checkCommits(dir: string, since: string): Promise<string |
   for (const raw of messages.split('\0')) {
     const message = raw.trim();
     if (!message) continue;
-    if (
-      !/^(feat|fix|docs|style|refactor|perf|test|chore): [\x20-\x7e]*[A-Za-z][\x20-\x7e]*$/.test(
-        message,
-      )
-    ) {
-      return 'Invalid commit message: use one English line, `<type>: <description>` (feat, fix, docs, style, refactor, perf, test or chore). Correct the commit before handing off.';
+    if (!validMessage(message)) {
+      return 'Invalid commit message: use one English line, `<type>: <description>` (feat, fix, docs, style, refactor, perf, test or chore), optionally followed by trailers such as Co-Authored-By. Correct the commit before handing off.';
     }
   }
   return null;
+}
+
+const SUBJECT =
+  /^(feat|fix|docs|style|refactor|perf|test|chore): [\x20-\x7e]*[A-Za-z][\x20-\x7e]*$/;
+// A git trailer such as "Co-Authored-By: Name <mail>", which tools and attribution rules append.
+const TRAILER = /^[A-Za-z][A-Za-z-]*: \S.*$/;
+
+/** One conventional English line, then at most a blank line and a block of trailers. */
+function validMessage(message: string): boolean {
+  const [subject = '', ...rest] = message.split('\n');
+  if (!SUBJECT.test(subject)) return false;
+  if (rest.length === 0) return true;
+  const [blank, ...trailers] = rest;
+  return blank === '' && trailers.length > 0 && trailers.every((line) => TRAILER.test(line));
 }

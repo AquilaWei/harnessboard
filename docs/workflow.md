@@ -141,7 +141,7 @@ still be typed. Gemini CLI can not list its models, so for Gemini the model id i
 Harnessboard checks writing stages before handing work to another role: the worktree must
 be clean and every commit made since that stage began must use one English line,
 `<type>: <description>`, with `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test` or
-`chore`. Review checks any additional project code rules. A clean stage without changes
+`chore`. A trailer such as `Co-Authored-By: …` may follow after a blank line. Review checks any additional project code rules. A clean stage without changes
 needs no empty commit, and a read-only reviewer does not commit. The check runs locally,
 without an agent call or rereading the entire Git history.
 

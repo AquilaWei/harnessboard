@@ -11,6 +11,10 @@ are test versions that have not been accepted on real machines yet.
   command 'plan'") because planning a draft reused the name of `hb plan`. It is now
   `hb discuss <id>`.
 
+- **A commit with a `Co-Authored-By` trailer no longer fails the handoff check.** A task
+  whose agent added the attribution line was stopped with "Invalid commit message" even
+  though the subject was correct.
+
 ### Changed
 
 - **A failed or stopped task can be marked done** (drag it to Done, or `hb done`), for work

@@ -33,6 +33,36 @@ it('rejects a multiline commit body', async () => {
   expect(await checkCommits(repo, before)).toContain('Invalid commit');
 });
 
+it('accepts a Co-Authored-By trailer after the subject', async () => {
+  const repo = makeRepo();
+  const before = await headCommit(repo);
+  await git(repo, [
+    'commit',
+    '--allow-empty',
+    '-m',
+    'docs: plan rpm packaging',
+    '-m',
+    'Co-Authored-By: Claude <noreply@anthropic.com>',
+  ]);
+  expect(await checkCommits(repo, before)).toBeNull();
+});
+
+it('rejects a body that is not made of trailers', async () => {
+  const repo = makeRepo();
+  const before = await headCommit(repo);
+  await git(repo, [
+    'commit',
+    '--allow-empty',
+    '-m',
+    'feat: add feature',
+    '-m',
+    'Co-Authored-By: Claude <noreply@anthropic.com>',
+    '-m',
+    'and then some prose',
+  ]);
+  expect(await checkCommits(repo, before)).toContain('Invalid commit');
+});
+
 it('accepts conventional English commits without validating older history', async () => {
   const repo = makeRepo();
   const before = await headCommit(repo);
