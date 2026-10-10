@@ -10,6 +10,9 @@ are test versions that have not been accepted on real machines yet.
 - **Paired phones connect as soon as Harnessboard runs.** At start-up, and every five
   minutes until it works, Harnessboard makes the board reachable on your tailnet again when
   a phone is already paired, so nothing needs opening in Settings after a reboot.
+- **Pairing a phone is one tap.** The pairing screen suggests the phone's model as its name
+  and one **Pair this phone** button pairs it and asks for the passkey, instead of typing a
+  name and tapping twice.
 
 ## 0.1.6 - 2026-10-10
 

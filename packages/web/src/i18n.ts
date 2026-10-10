@@ -558,9 +558,10 @@ export const en = {
     lastSeen: 'Last seen',
     revoke: 'Revoke',
     pairTitle: 'Pair this device',
-    pairIntro: 'Give this device a name. The computer lists it under that name.',
+    pairIntro:
+      'The computer lists this phone under this name. One tap pairs it and asks for your fingerprint, face or screen lock to create its passkey.',
     deviceName: 'Device name',
-    pairSubmit: 'Pair',
+    pairSubmit: 'Pair this phone',
     notPairedTitle: 'This device is not paired',
     notPairedBody:
       'On the computer, open Settings → Phone access → Pair a phone, then scan the QR code with this device.',
@@ -1139,9 +1140,10 @@ export const zhTW: typeof en = {
     lastSeen: '最後使用',
     revoke: '撤銷',
     pairTitle: '配對這個裝置',
-    pairIntro: '幫這個裝置取個名字，電腦上的裝置清單會用這個名字顯示。',
+    pairIntro:
+      '電腦上的裝置清單會用這個名字顯示這支手機。按一下就會配對，並請你用指紋、臉部或螢幕鎖建立 passkey。',
     deviceName: '裝置名稱',
-    pairSubmit: '配對',
+    pairSubmit: '配對這支手機',
     notPairedTitle: '這個裝置還沒有配對',
     notPairedBody: '請在電腦上打開「設定 → 手機存取 → 配對手機」，再用這個裝置掃描 QR code。',
     passkeyIntro:

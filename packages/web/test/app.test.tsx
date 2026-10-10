@@ -201,10 +201,10 @@ describe('App', () => {
   it('tells a browser without passkeys to open the pairing page in Chrome or Safari', async () => {
     history.replaceState(null, '', '/#pair=abc');
     await reopen();
-    expect([container.textContent?.includes('Chrome or Safari'), button('Pair')]).toEqual([
-      true,
-      undefined,
-    ]);
+    expect([
+      container.textContent?.includes('Chrome or Safari'),
+      button('Pair this phone'),
+    ]).toEqual([true, undefined]);
   });
 
   it('keeps the pairing code in the address of a browser without passkeys', async () => {
@@ -217,7 +217,7 @@ describe('App', () => {
     vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
     history.replaceState(null, '', '/#pair=abc');
     await reopen();
-    expect(button('Pair')).toBeDefined();
+    expect(button('Pair this phone')).toBeDefined();
   });
 
   it('shows the board after pairing once the passkey is created', async () => {
@@ -227,7 +227,7 @@ describe('App', () => {
     history.replaceState(null, '', '/#pair=abc');
     await reopen();
     act(() => type(container.querySelector('input')!, 'Pixel 9'));
-    await act(async () => button('Pair').click());
+    await act(async () => button('Pair this phone').click());
     expect(container.textContent).toContain('Write the docs');
   });
 
@@ -238,7 +238,7 @@ describe('App', () => {
     history.replaceState(null, '', '/#pair=abc');
     await reopen();
     act(() => type(container.querySelector('input')!, 'Pixel 9'));
-    await act(async () => button('Pair').click());
+    await act(async () => button('Pair this phone').click());
     expect([container.textContent?.includes('Write the docs'), button('Create passkey')]).toEqual([
       false,
       expect.anything(),
@@ -263,7 +263,7 @@ describe('App', () => {
     await reopen();
     holding = [];
     act(() => type(container.querySelector('input')!, 'Pixel 9'));
-    await act(async () => button('Pair').click());
+    await act(async () => button('Pair this phone').click());
     await release();
     expect(container.textContent).toContain('Write the docs');
   });
@@ -409,7 +409,7 @@ describe('notifications after pairing again', () => {
     history.replaceState(null, '', '/#pair=abc');
     await reopen();
     act(() => type(container.querySelector('input')!, 'Pixel 9'));
-    await act(async () => button('Pair').click());
+    await act(async () => button('Pair this phone').click());
   };
 
   it('shows notifications switched off once the browser is paired again', async () => {

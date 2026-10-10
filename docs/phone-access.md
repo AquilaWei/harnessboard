@@ -12,9 +12,9 @@ nothing is opened to the internet.
    **Pair a phone**. Harnessboard makes the board reachable on your tailnet itself (it runs
    `tailscale serve --bg <port>`, tailnet only, never Funnel) and shows a QR code. Scan it
    with the phone's camera. The first HTTPS request can take about 30 seconds while Tailscale
-   issues the certificate. The code works once, for 5 minutes. Give the phone a name, tap
-   **Pair**, then **Create passkey**: the phone asks for your fingerprint, face or screen
-   lock. The phone is paired only once the passkey is made.
+   issues the certificate. The code works once, for 5 minutes. Tap **Pair this phone** (the name is filled in
+   from the phone's model; change it if you like): the phone asks for your fingerprint, face
+   or screen lock to create its passkey. The phone is paired only once the passkey is made.
 
    If the button is greyed out, Tailscale was not found or is not running. If pairing fails
    with a Tailscale error, run `tailscale serve --bg 4317` in a terminal to see the reason
@@ -72,8 +72,8 @@ like the browser does.
 2. **Connect:** open **Harnessboard** and tap **Scan pairing QR**, then scan the QR code from
    **Settings → Phone access → Pair a phone** on the computer. Without a QR code, type the
    board's address (`https://<machine>.<tailnet>.ts.net`) and tap **Connect**.
-3. **Pair:** the board opens inside the app with the pairing screen. Name the phone, tap
-   **Pair**, then **Create passkey**, as in step 2 above. The app keeps the address; later the icon opens
+3. **Pair:** the board opens inside the app with the pairing screen. Tap
+   **Pair this phone**, as in step 2 above. The app keeps the address; later the icon opens
    the board directly.
 
 **What changes compared with the browser**

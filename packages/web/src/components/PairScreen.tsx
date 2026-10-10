@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import { resetNotifications } from '../notify';
+import { deviceNameFromUserAgent } from '../phone';
 import { checkPasskey, passkeysAvailable, registerPasskey } from '../passkey';
 
 interface Props {
@@ -13,13 +14,13 @@ interface Props {
 }
 
 /**
- * Shown on a phone that opened a pairing address: names the device, pairs it, then creates its
- * passkey. The device counts as paired only after the passkey; if that step fails the screen
+ * Shown on a phone that opened a pairing address: pairs it under a suggested name (editable),
+ * then creates its passkey, all from one button. The device counts as paired only after the passkey; if that step fails the screen
  * stays and retries it alone, since the code is used up.
  */
 export function PairScreen({ code, onPaired }: Props) {
   const { t } = useTranslation();
-  const [name, setName] = useState('');
+  const [name, setName] = useState(() => deviceNameFromUserAgent(navigator.userAgent));
   const [paired, setPaired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +31,7 @@ export function PairScreen({ code, onPaired }: Props) {
     setError(null);
     try {
       if (!paired) {
-        await api.pair({ code, name: name.trim() });
+        await api.pair({ code, name: name.trim() || deviceNameFromUserAgent(navigator.userAgent) });
         resetNotifications(); // a new device has no push subscription on the board yet
         setPaired(true);
       }
@@ -55,12 +56,11 @@ export function PairScreen({ code, onPaired }: Props) {
             value={name}
             maxLength={64}
             placeholder="Pixel 9"
-            autoFocus
             onChange={(e) => setName(e.target.value)}
           />
         </label>
       )}
-      <button type="submit" className="btn primary" disabled={busy || name.trim() === ''}>
+      <button type="submit" className="btn primary" disabled={busy}>
         {t(paired ? 'phone.passkeySubmit' : 'phone.pairSubmit')}
       </button>
     </form>

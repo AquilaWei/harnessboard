@@ -13,3 +13,15 @@ export function pairCodeFromHash(hash: string): string | null {
   const code = new URLSearchParams(hash.replace(/^#/, '')).get('pair');
   return code ? code : null;
 }
+
+/**
+ * A name for the pairing screen to suggest, read from the browser's user agent: the model on
+ * Android ("Pixel 9"), "iPhone" or "iPad" on iOS, otherwise "Phone". The user can still change it.
+ */
+export function deviceNameFromUserAgent(userAgent: string): string {
+  const model = /Android[^;)]*;\s*([^;)]+?)(?:\s+Build\/[^;)]*)?[;)]/.exec(userAgent)?.[1]?.trim();
+  if (model && model !== 'K') return model;
+  if (/iPhone/.test(userAgent)) return 'iPhone';
+  if (/iPad/.test(userAgent)) return 'iPad';
+  return 'Phone';
+}
