@@ -3,6 +3,28 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.12 - 2026-10-12
+
+Local test build; real-device acceptance is pending.
+
+### Changed
+
+- New tasks automatically discuss their spec in Draft. Confirming the spec places them
+  at the end of Pending; prefilled criteria still require confirmation.
+- Desktop, mobile, CLI and API now share the same approval requirement. New drafts
+  cannot bypass discussion by starting directly or dragging to execution.
+
+## 0.1.11 - 2026-10-10
+
+Local test build for spec-first planning and a reorderable pending queue; real-device acceptance is pending.
+
+### Changed
+
+- **Spec discussions remain available when quota is paused.** Completing a spec puts the task
+  in Pending; Harnessboard starts it when quota and a slot are available.
+- **Pending tasks follow your order.** Drag cards to reorder them, or use `hb move`; dragging
+  a task to In progress still starts it immediately.
+
 ## 0.1.10 - 2026-10-10
 
 Local test build for the `hb` start-up fix and the commit trailer fix; real-device acceptance is pending.

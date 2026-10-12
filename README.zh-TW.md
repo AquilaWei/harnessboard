@@ -1,6 +1,8 @@
 # Harnessboard
 
-![version](https://img.shields.io/badge/version-0.1.10-blue)
+新任務會自動在草稿中討論規格；按「規格完成」後才進待處理。預填驗收條件也需要確認。
+
+![version](https://img.shields.io/badge/version-0.1.12-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -77,7 +79,7 @@ pnpm build               # 約一分鐘
 
 ```bash
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # 會印出版本，例如 0.1.10
+hb --version             # 會印出版本，例如 0.1.12
 ```
 
 <details>
