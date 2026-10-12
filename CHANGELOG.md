@@ -3,6 +3,18 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.13 - 2026-10-12
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- **A loop task can reopen its plan from Draft.** After sending a task with an approved plan
+  back to Draft, Plan now has the planner revise it and wait for your approval again,
+  instead of refusing. Approving again makes the revised feature list the new baseline.
+- **Codex sessions report their context size**, so the context limits (such as the 30%
+  handoff) apply to Codex tasks too instead of never triggering.
+
 ## 0.1.12 - 2026-10-12
 
 Local test build; real-device acceptance is pending.
