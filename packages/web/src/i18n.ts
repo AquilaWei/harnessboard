@@ -247,6 +247,13 @@ export const en = {
   compactAt: 'compact {{pct}}%',
   invalidMove: '“{{from}}” cannot be moved to {{to}}.',
   planChangePrompt: 'What should change in the spec?',
+  planChange: {
+    label: 'Task #{{id}}',
+    required: 'Describe the change; the planner revises the spec against it.',
+    optional: 'Optional. Leave empty to discuss the plan again from where it stands.',
+    send: 'Plan again',
+    cancel: 'Cancel',
+  },
   tabs: {
     timeline: 'Timeline',
     changes: 'Changes',
@@ -856,6 +863,13 @@ export const zhTW: typeof en = {
   compactAt: '壓縮 {{pct}}%',
   invalidMove: '「{{from}}」的任務不能移到「{{to}}」。',
   planChangePrompt: '規格要改什麼？',
+  planChange: {
+    label: '任務 #{{id}}',
+    required: '寫下要改的地方，規劃者會照這個修改規格。',
+    optional: '可以不填。留空會從目前的規劃重新開始討論。',
+    send: '重新規劃',
+    cancel: '取消',
+  },
   tabs: {
     timeline: '時間軸',
     changes: '變更',

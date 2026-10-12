@@ -44,6 +44,10 @@ let reauth = false;
 let title = 'Write the docs';
 /** The status `/api/tasks` answers with. */
 let status = 'backlog';
+/** Other fields `/api/tasks` answers with, e.g. a loop task's progress. */
+let fields: Partial<TaskView> = {};
+/** The bodies the board sent to plan task 1, oldest first. */
+let planned: unknown[] = [];
 const server = (url: string) => {
   // Pairing and creating the passkey, as a phone that opened the pairing address does them.
   if (url === '/api/pair') return Response.json({ id: 1, name: 'Pixel 9' }, { status: 201 });
@@ -65,7 +69,7 @@ const server = (url: string) => {
     return new Response('{"error":"confirm with your passkey first","reauth":true}', {
       status: 401,
     });
-  if (url === '/api/tasks') return Response.json([{ ...task, title, status }]);
+  if (url === '/api/tasks') return Response.json([{ ...task, title, status, ...fields }]);
   // The task panel's event and timeline lists, empty; its other reads stay null (loading).
   if (/^\/api\/tasks\/1\/(events|timeline)\b/.test(url)) return Response.json([]);
   if (url === '/api/version') return Response.json({ version: '0.0.0' });
@@ -117,10 +121,13 @@ beforeEach(async () => {
   reauth = false;
   title = 'Write the docs';
   status = 'backlog';
+  fields = {};
+  planned = [];
   streams = [];
   holding = [];
   held = [];
-  vi.stubGlobal('fetch', (url: string) => {
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
+    if (url === '/api/tasks/1/plan') planned.push(JSON.parse(String(init?.body ?? '{}')));
     const res = server(url);
     if (!holding.includes(url)) return Promise.resolve(res);
     return new Promise<Response>((resolve) => held.push(() => resolve(res)));
@@ -365,6 +372,65 @@ describe('App', () => {
     expect(container.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe(
       'Changes',
     );
+  });
+});
+
+describe('planning a draft again from the desktop app', () => {
+  // Electron, which runs the desktop app, throws instead of showing a browser prompt.
+  beforeEach(() => {
+    vi.stubGlobal('prompt', () => {
+      throw new Error('prompt() is not supported.');
+    });
+  });
+
+  /** Puts the board's task back as a loop draft with an approved plan. */
+  const loopDraft = async () => {
+    fields = { mode: 'loop', loop: { verified: 1, total: 3 } } as Partial<TaskView>;
+    await reopen();
+  };
+
+  /** Types into the dialog's React-controlled text area. */
+  const typeChange = (value: string) => {
+    const area = container.querySelector<HTMLTextAreaElement>('[role="dialog"] textarea')!;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(area, value);
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  it('asks what should change in the app instead of a browser prompt for a loop draft', async () => {
+    await loopDraft();
+    await act(async () => button('Plan the spec').click());
+    expect(container.querySelector('[role="dialog"] h2')?.textContent).toBe(
+      'What should change in the spec?',
+    );
+  });
+
+  it('sends the change typed for a loop draft to the planner', async () => {
+    await loopDraft();
+    await act(async () => button('Plan the spec').click());
+    act(() => typeChange('  Split the importer feature  '));
+    await act(async () => button('Plan again').click());
+    expect(planned).toEqual([{ message: 'Split the importer feature' }]);
+  });
+
+  it('plans a loop draft again without a message when the change is left empty', async () => {
+    await loopDraft();
+    await act(async () => button('Plan the spec').click());
+    await act(async () => button('Plan again').click());
+    expect(planned).toEqual([{}]);
+  });
+
+  it('does not plan when the dialog is cancelled', async () => {
+    await loopDraft();
+    await act(async () => button('Plan the spec').click());
+    await act(async () => button('Cancel').click());
+    expect([planned, container.querySelector('[role="dialog"]')]).toEqual([[], null]);
+  });
+
+  it('keeps the send button disabled while a draft with a spec file has no change typed', async () => {
+    fields = { specFile: 'docs/spec.md' } as Partial<TaskView>;
+    await reopen();
+    await act(async () => button('Plan the spec').click());
+    expect(button('Plan again').disabled).toBe(true);
   });
 });
 

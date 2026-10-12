@@ -17,6 +17,7 @@ import { Board } from './components/Board';
 import { Header } from './components/Header';
 import { NewTaskDialog } from './components/NewTaskDialog';
 import { NotPaired, PairScreen, UnlockScreen } from './components/PairScreen';
+import { PlanChangeDialog } from './components/PlanChangeDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { TaskDrawer } from './components/TaskDrawer';
 import type { DrawerTab } from './components/TaskDrawer';
@@ -43,6 +44,8 @@ export function App() {
   const [version, setVersion] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ id: number; tab: DrawerTab } | null>(null);
   const [dialog, setDialog] = useState<'new' | 'settings' | null>(null);
+  // The draft whose plan button asked what should change.
+  const [planAsk, setPlanAsk] = useState<TaskView | null>(null);
   const [phoneTab, setPhoneTab] = useState<PhoneTab>('waiting');
   const [toast, setToast] = useState<string | null>(null);
   // A phone opened the pairing address the computer showed as a QR code.
@@ -175,13 +178,19 @@ export function App() {
       if (action !== 'plan') return ACTIONS[action](task.id).then(load, showError);
       // A task that already has a spec is planned against the change asked for; a loop
       // task with an approved plan may be discussed again without a specific change.
-      const asks = !!task.specFile || !!task.loop;
-      const message = asks ? window.prompt(t('planChangePrompt')) : undefined;
-      if (message === null || (task.specFile && !message?.trim())) return Promise.resolve();
-      return api.planSpec(task.id, message?.trim() || undefined).then(load, showError);
+      if (task.specFile || task.loop) {
+        setPlanAsk(task);
+        return Promise.resolve();
+      }
+      return api.planSpec(task.id).then(load, showError);
     },
-    [load, showError, t],
+    [load, showError],
   );
+
+  const planAgain = (task: TaskView, message: string | undefined) => {
+    setPlanAsk(null);
+    void api.planSpec(task.id, message).then(load, showError);
+  };
 
   const invalidMove = (task: TaskView, target: Stage) =>
     showToast(t('invalidMove', { from: t(`status.${task.status}`), to: t(`stage.${target}`) }));
@@ -271,6 +280,13 @@ export function App() {
             showToast(t('settingsForm.saved'));
             void load();
           }}
+        />
+      )}
+      {planAsk && (
+        <PlanChangeDialog
+          task={planAsk}
+          onSubmit={(message) => planAgain(planAsk, message)}
+          onClose={() => setPlanAsk(null)}
         />
       )}
       {toast && (
