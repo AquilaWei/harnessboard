@@ -109,6 +109,8 @@ export class CodexAdapter implements AgentAdapter {
           for (const event of events) if (event.kind === 'text') lastMessage = event.text;
           return events;
         }
+        // `exec` reports only cumulative usage, so there is no current context size to emit;
+        // the app-server connection (codex-app-server.ts) does.
         case 'turn.completed':
           return [
             {

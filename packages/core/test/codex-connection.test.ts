@@ -324,6 +324,30 @@ describe('Codex approval transport', () => {
     ]);
   });
 
+  it('reports the latest model call as the current context size', () => {
+    const { emit } = connect();
+    expect(
+      emit('thread/tokenUsage/updated', {
+        threadId: 'thread',
+        tokenUsage: {
+          total: { inputTokens: 900000, cachedInputTokens: 800000, outputTokens: 10 },
+          last: { inputTokens: 70000, cachedInputTokens: 60000, outputTokens: 5 },
+          modelContextWindow: 200000,
+        },
+      }),
+    ).toEqual([{ kind: 'context', tokens: 70000 }]);
+  });
+
+  it('reports no context size when the usage update has no latest call', () => {
+    const { emit } = connect();
+    expect(
+      emit('thread/tokenUsage/updated', {
+        threadId: 'thread',
+        tokenUsage: { total: { inputTokens: 900000, outputTokens: 10 } },
+      }),
+    ).toEqual([]);
+  });
+
   it('reports a startup RPC error as a failure', () => {
     const { connection } = connect();
     expect(

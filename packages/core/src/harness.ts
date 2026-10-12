@@ -1181,7 +1181,8 @@ export class Harness {
       (s) =>
         s.role === 'implementer' &&
         s.agentSessionId !== null &&
-        // Codex reports its thread id but no context size; zero does not mean no conversation.
+        // Codex's exec fallback reports its thread id but no context size; zero does not mean
+        // no conversation.
         (s.contextTokens > 0 || this.config.agents[s.agentId]?.provider === 'codex'),
     );
     if (!session) return `task ${task.id} has no conversation to continue yet`;

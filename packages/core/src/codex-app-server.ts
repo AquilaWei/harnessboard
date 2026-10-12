@@ -126,6 +126,10 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
       const tokens = fields(params.tokenUsage);
       usage = tokenUsage(fields(tokens.total), model);
       window = typeof tokens.modelContextWindow === 'number' ? tokens.modelContextWindow : null;
+      // `total` is cumulative over the thread; `last` is the latest model call, i.e. the
+      // current context size that the session's context thresholds are measured against.
+      const current = fields(tokens.last).inputTokens;
+      if (typeof current === 'number') return [{ kind: 'context', tokens: current }];
     } else if (method === 'item/started' || method === 'item/completed') {
       const item = fields(params.item);
       items.set(string(item.id), item);

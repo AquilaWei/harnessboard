@@ -633,7 +633,8 @@ export class Workflow {
   }
 
   private hasConversation(session: Session): boolean {
-    // Codex and Gemini do not report current context; a saved thread is still resumable.
+    // Gemini and Codex's exec fallback do not report current context; a saved thread is still
+    // resumable.
     return (
       session.agentSessionId !== null &&
       (session.contextTokens > 0 ||
