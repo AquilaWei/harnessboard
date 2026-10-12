@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // A task whose agent profile runs in the Docker sandbox fails, instead of running the agent
 // unsandboxed, when docker is missing. The PATH holds git but no docker.
 import { execFileSync } from 'node:child_process';
@@ -46,7 +47,7 @@ afterEach(async () => {
 });
 
 async function runToEnd(): Promise<number> {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     confirmPlan: false,

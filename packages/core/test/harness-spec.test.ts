@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // The spec author: the agent that writes the acceptance criteria before anything is built.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -83,7 +84,7 @@ const PROPOSAL = 'I read main.js.\n## Acceptance criteria\n- prints hi';
 const sessions = (id: number) => harness.store.listSessions(id);
 
 async function discuss(extra: Partial<CreateTaskInput> = {}) {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     queue: true,
@@ -235,13 +236,13 @@ describe('a spec author that does not write the spec properly', () => {
 
 describe('changing the spec agent of a task', () => {
   it('is saved with its model', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, reviewer: null });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewer: null });
     const updated = harness.setAgents(task.id, { spec: 'writer', specModel: 'spec-model' });
     expect([updated.agents.spec, updated.agents.specModel]).toEqual(['writer', 'spec-model']);
   });
 
   it('is refused for a profile that is not configured', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, reviewer: null });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewer: null });
     expect(() => harness.setAgents(task.id, { spec: 'nobody' })).toThrow(/not configured/);
   });
 });

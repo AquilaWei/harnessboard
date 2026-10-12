@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // The task's notes file: what each role reports to the roles after it, kept by the harness.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -74,7 +75,7 @@ async function runQueued(): Promise<void> {
 }
 
 async function created(extra: Partial<CreateTaskInput> = {}) {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     confirmPlan: false,

@@ -12,14 +12,14 @@ hb loop "A CLI calculator with add, subtract, multiply and divide"
    - It suggests a verify command (for example `npm test`) and lists questions it needs
      you to answer.
    - It implements nothing yet.
-2. **You review the plan:** the task waits in _Needs you_. Open its **Plan** tab (or run
+2. **You review the plan:** the task stays in _Draft_, waiting for spec confirmation. Open its **Plan** tab (or run
    `hb plan <id>`) to read the features, acceptance criteria, questions and suggested
    command. Then either:
    - **reply** (`hb feedback <id> "..."`): the planner revises the plan in the same
      conversation and asks again. Repeat as often as you like. To talk it through live,
      `hb open <id>` opens the same session in Claude Code.
    - **approve** (`hb approve <id> --verify "<command>"`): you confirm or change the verify
-     command, and building starts from the plan as it is at that moment.
+     command, and the task joins Pending. Building starts when quota and a slot allow.
 3. **One feature per turn:** the implementer keeps the same conversation from planning
    through later features and review fixes. It checks the feature list, builds the next
    open feature to its acceptance criteria, runs development tests as needed, marks it as passing
@@ -48,5 +48,5 @@ The verify command always comes from you. The planner's suggestion has no effect
 approve it, and the agent is allowed to run exactly the approved command. It runs through
 your shell (`sh` or `cmd.exe`) with a 10-minute timeout when Harnessboard runs it (`verifyTimeoutMinutes`). You can
 also set it up front, with `--verify` or `verifyCommand` in `.harnessboard.json`.
-`--no-confirm-plan` skips the review and starts building right after planning; it needs a
-verify command.
+Every new loop task requires explicit plan approval, including when a verify command
+is supplied. `--no-confirm-plan` is no longer supported.

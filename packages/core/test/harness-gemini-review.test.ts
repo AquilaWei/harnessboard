@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // A Gemini reviewer runs in plan mode, which refuses shell commands, so the harness gives it
 // the git output. The implementer is the fake Claude CLI; the reviewer is the fake Gemini CLI.
 import { execFileSync } from 'node:child_process';
@@ -125,7 +126,7 @@ async function geminiReviewAfterAnotherTask(): Promise<string> {
     [ADD_WORLD],
     [ADD_BYE],
   );
-  const first = await harness.createTask({
+  const first = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     workspace: 'base',
@@ -137,7 +138,7 @@ async function geminiReviewAfterAnotherTask(): Promise<string> {
   await waitForStatus(first.id, 'awaiting_permission');
   harness.stopTask(first.id);
   await harness.waitForIdle();
-  const second = await harness.createTask({
+  const second = await createHistoricalTask(harness, {
     prompt: 'Another change',
     repo,
     workspace: 'base',
@@ -188,7 +189,7 @@ describe('a Gemini review of a base task with notes from its implementer', () =>
         result('done\n\n## Notes\nThe greeting is hard-coded on purpose.'),
       ],
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       workspace: 'base',
@@ -228,7 +229,7 @@ describe('a Gemini review', () => {
         result('ok'),
       ],
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       confirmPlan: false,
@@ -304,7 +305,7 @@ describe('a Claude review', () => {
       ],
       [[init(), result('VERDICT: APPROVE')]],
     );
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       confirmPlan: false,

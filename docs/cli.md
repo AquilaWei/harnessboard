@@ -1,14 +1,21 @@
 # Command line (`hb`)
 
+New tasks automatically discuss their specification in Draft. Only explicit spec
+approval moves them to Pending, where normal quota and slot scheduling applies.
+Prefilled criteria are discussion input, not approval. This applies to the UI, CLI
+and API; `confirmPlan` and `queue` creation fields are deprecated and ignored.
+CLI `--no-discuss` and `--no-confirm-plan` are no longer supported; `--no-queue`
+is deprecated and does not prevent automatic discussion.
+
 Every `hb` command and flag, and how merging, working on the base branch and deleting behave.
 
 ## Commands
 
 | Command                                                                               | What it does                                                         |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create and queue a task                                              |
+| `hb add <prompt> [--size small\|medium\|large] [--soft N --hard N] [--allow RULE...]` | Create a draft and automatically discuss its spec                    |
 | `hb loop <goal> [--verify <command>]` [same options as `add`]                         | Start a Loop task (see below)                                        |
-| `--criteria <text>` / `--no-discuss` on `add`                                         | Give acceptance criteria, or skip agreeing                           |
+| `--criteria <text>` on `add`                                                          | Supply draft criteria for discussion and approval                    |
 | `--on-base` on `add` / `loop`                                                         | Work directly on the base branch, without a worktree (below)         |
 | `hb plan <id>` / `hb feedback <id> <text>` / `hb approve <id> [--verify <command>]`   | Review, discuss and approve criteria or plan                         |
 | `hb spec <id> <text>` / `hb reject <id>`                                              | Ask to change the spec after work started; reject a proposed change  |
@@ -21,6 +28,7 @@ Every `hb` command and flag, and how merging, working on the base branch and del
 | `hb stop <id>` / `hb resume <id>`                                                     | Stop, or queue again                                                 |
 | `hb discuss <id> [-m <change>]`                                                       | Discuss a draft's spec; once approved it waits as pending            |
 | `hb pend <id>` / `hb draft <id>`                                                      | Line a task up for automatic start / take it back to draft           |
+| `hb move <id> [--before <id>]`                                                        | Reorder a task in Pending; without `--before`, put it last           |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish                              |
 | `hb chat <id> <message>` / `hb chat <id> --cancel`                                    | Write to the task's agent; drop pending ones                         |
 | `hb commits <id>`                                                                     | List the commits on the task branch                                  |

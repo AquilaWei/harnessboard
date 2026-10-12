@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // The optional UI designer: adds a UI design section to the spec before anything is built.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -92,7 +93,7 @@ async function runQueued(): Promise<void> {
 
 /** Agrees on the criteria, approves them, and runs every session that follows. */
 async function approved(extra: Partial<CreateTaskInput>) {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     queue: true,
@@ -249,7 +250,7 @@ const designerStopped = [[init(), assistantText('designing', 10_000), hang]];
 
 /** Approves the criteria, then stops the designer as it works and asks for a spec change. */
 async function revisedBeforeDesign() {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     queue: true,
@@ -325,7 +326,7 @@ describe('a designer of a task on the base branch', () => {
    * git is slow enough on Windows to be cut off by a fixed pause.
    */
   async function interrupted(committed?: string) {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       workspace: 'base',
@@ -382,18 +383,18 @@ describe('a designer of a task on the base branch', () => {
 
 describe('changing the designer of a task', () => {
   it('is saved with its model', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, reviewer: null });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewer: null });
     const updated = harness.setAgents(task.id, { designer: 'artist', designerModel: 'opus' });
     expect([updated.agents.designer, updated.agents.designerModel]).toEqual(['artist', 'opus']);
   });
 
   it('is refused for a profile that is not configured', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, reviewer: null });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewer: null });
     expect(() => harness.setAgents(task.id, { designer: 'nobody' })).toThrow(/not configured/);
   });
 
   it('is off by default', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, reviewer: null });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewer: null });
     expect(task.agents.designer).toBeNull();
   });
 });

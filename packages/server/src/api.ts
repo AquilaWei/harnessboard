@@ -326,6 +326,16 @@ export function createApi(
     return c.json(harness.planTask(taskId(c), body.message));
   });
   app.post('/tasks/:id/pend', (c) => c.json(harness.pendTask(taskId(c))));
+  app.post('/tasks/:id/reorder', async (c) => {
+    const body = await c.req.json<{ beforeId?: unknown }>();
+    if (
+      body.beforeId !== null &&
+      (!Number.isInteger(body.beforeId) || (body.beforeId as number) < 1)
+    ) {
+      throw new Error('beforeId must be a positive task id or null');
+    }
+    return c.json(harness.reorderPending(taskId(c), body.beforeId as number | null));
+  });
   app.post('/tasks/:id/draft', (c) => c.json(harness.toDraft(taskId(c))));
   app.post('/tasks/:id/stop', (c) => c.json(harness.stopTask(taskId(c))));
   app.post('/tasks/:id/complete', (c) => c.json(harness.completeTask(taskId(c))));

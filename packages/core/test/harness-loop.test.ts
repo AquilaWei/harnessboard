@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Loop mode against real git worktrees, the fake agent CLI and real verify commands.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -75,7 +76,7 @@ const session = (...writes: unknown[]) => [
 ];
 
 async function createLoop(verifyCommand = VERIFY_OK) {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Build a calculator',
     repo,
     mode: 'loop',
@@ -103,14 +104,18 @@ async function waitForNotice(id: number, prefix: string): Promise<void> {
 const status = (id: number) => harness.store.getTask(id)!.status;
 
 describe('creating a loop task', () => {
-  it('rejects a loop task that skips plan approval without a verify command', async () => {
-    await expect(
-      harness.createTask({ prompt: 'x', repo, mode: 'loop', confirmPlan: false }),
-    ).rejects.toThrow(/needs a verify command/);
+  it('requires approval even when creation requests skipping it without a verify command', async () => {
+    const task = await harness.createTask({
+      prompt: 'Build a thing',
+      repo,
+      mode: 'loop',
+      confirmPlan: false,
+    });
+    expect(task.confirmPlan).toBe(true);
   });
 
   it('allows the agent to run the verify command', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       mode: 'loop',
@@ -228,7 +233,7 @@ describe('handoffs in a long loop', () => {
       session(featureList(true, false)),
       handoff(),
     );
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build a calculator',
       repo,
       mode: 'loop',

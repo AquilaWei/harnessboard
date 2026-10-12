@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Tasks that work directly on the base branch in the repository folder, with real git.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -70,7 +71,7 @@ function commitFile(cwd: string, file: string, content: string): void {
 }
 
 function createBaseTask(prompt = 'Add a greeting', queue = true) {
-  return harness.createTask({
+  return createHistoricalTask(harness, {
     prompt,
     repo,
     workspace: 'base',
@@ -97,7 +98,7 @@ async function reviewedBaseTask() {
 
 describe('creating a task', () => {
   it('works in a worktree when no workspace is given', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     expect(task.workspace).toBe('worktree');
   });
 
@@ -108,7 +109,7 @@ describe('creating a task', () => {
 
   it('refuses an unknown workspace', async () => {
     await expect(
-      harness.createTask({ prompt: 'x', repo, workspace: 'elsewhere' as 'base' }),
+      createHistoricalTask(harness, { prompt: 'x', repo, workspace: 'elsewhere' as 'base' }),
     ).rejects.toThrow('unknown workspace elsewhere; use worktree or base');
   });
 });
@@ -159,7 +160,7 @@ describe('running a base task', () => {
   it('fails with a clear notice when the base is not checked out in the folder', async () => {
     git(repo, 'checkout', '-q', '-b', 'other');
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       baseRef: 'main',
@@ -216,7 +217,7 @@ describe('a base task with a reviewer', () => {
     commitFile(repo, 'before.txt', 'earlier work\n');
     const start = git(repo, 'rev-parse', 'HEAD');
     scenario([ADD_HELLO], [[init(), result('Looks fine.')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       workspace: 'base',
@@ -249,7 +250,7 @@ describe('a second base task on the same repository', () => {
 
   it('does not keep a worktree task from starting', async () => {
     await reviewedBaseTask();
-    const other = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    const other = await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false });
     expect(harness.queueTask(other.id).status).toBe('queued');
   });
 });
@@ -436,7 +437,7 @@ async function stoppedTaskResumedAfterAnother() {
     [ADD_WORLD],
     [ADD_BYE],
   );
-  const first = await harness.createTask({
+  const first = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     workspace: 'base',
@@ -483,7 +484,7 @@ describe('an approved base task resumed after another base task worked in the fo
       [ADD_BYE],
       [[init(), result('VERDICT: APPROVE')]],
     );
-    const first = await harness.createTask({
+    const first = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       workspace: 'base',
@@ -527,7 +528,7 @@ describe('a base task stopped before its first review and resumed after another 
       [[init(), result('VERDICT: APPROVE')]],
     );
     const start = git(repo, 'rev-parse', 'HEAD');
-    const first = await harness.createTask({
+    const first = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       workspace: 'base',
@@ -572,7 +573,7 @@ describe('a base task whose spec author left the spec uncommitted', () => {
       [[init(), writeFile('docs/specs/001-add-a-greeting.md', '# Spec'), result('written')]],
       [ADD_HELLO],
     );
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       workspace: 'base',
@@ -603,7 +604,7 @@ describe('a base task whose agent could not start after the harness revised its 
       [[init(), assistantText(revised, 10_000), result(revised)]],
       [TALK],
     );
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       workspace: 'base',
@@ -640,7 +641,7 @@ async function reviewedWorktreeTaskAndBaseTask() {
     [[init(), writeFile('feature.txt', 'new\n'), commitAll('feat: add feature'), result('ok')]],
     [TALK],
   );
-  const worktree = await harness.createTask({
+  const worktree = await createHistoricalTask(harness, {
     prompt: 'Add a feature',
     repo,
     confirmPlan: false,
@@ -754,7 +755,7 @@ const READ_AND_HANG = [init(), assistantText('Reading the diff.', 10_000), hang]
 async function checkResumedAfterAnother(role: 'reviewer' | 'tester', reply: string) {
   scenario([ADD_HELLO], [READ_AND_HANG], [ADD_WORLD], [[init(), result(reply)]]);
   const start = git(repo, 'rev-parse', 'HEAD');
-  const first = await harness.createTask({
+  const first = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     workspace: 'base',
@@ -826,7 +827,7 @@ const ADD_HELLO_AND_TALK = [
 /** Base task 1 committed hello.txt; its `role` (reviewer or tester) was stopped partway. */
 async function stoppedCheck(role: 'reviewer' | 'tester') {
   const start = git(repo, 'rev-parse', 'HEAD');
-  const first = await harness.createTask({
+  const first = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     workspace: 'base',

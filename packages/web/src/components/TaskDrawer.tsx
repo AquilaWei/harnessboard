@@ -224,9 +224,6 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                     <button type="button" className="btn primary" onClick={() => act('plan')}>
                       {t('actions.plan')}
                     </button>
-                    <button type="button" className="btn" onClick={() => act('queue')}>
-                      {t('actions.start')}
-                    </button>
                   </>
                 )}
                 {s === 'pending' && (
@@ -234,7 +231,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                     {t('actions.start')}
                   </button>
                 )}
-                {(s === 'backlog' || s === 'stopped' || s === 'failed' || s === 'review') && (
+                {(s === 'stopped' || s === 'failed' || s === 'review') && (
                   <button type="button" className="btn" onClick={() => act('pend')}>
                     {t('actions.pend')}
                   </button>

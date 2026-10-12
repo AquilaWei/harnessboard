@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -53,7 +54,7 @@ function runs() {
 }
 
 function create(autoApprove = false) {
-  return harness.createTask({
+  return createHistoricalTask(harness, {
     prompt: 'Write a report and commit it',
     repo,
     confirmPlan: false,

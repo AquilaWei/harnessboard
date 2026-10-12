@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // The tester: a session that writes and runs tests after each implementer step, before review.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -76,7 +77,7 @@ async function runQueued(): Promise<void> {
 
 /** A single task with a tester that has run its implementer step. */
 async function tested(extra: Partial<CreateTaskInput> = {}) {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     confirmPlan: false,
@@ -224,13 +225,13 @@ describe('a tester that changes more than tests', () => {
 
 describe('changing the tester of a task', () => {
   it('is saved with its model', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, reviewer: null });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewer: null });
     const updated = harness.setAgents(task.id, { tester: 'qa', testerModel: 'qa-model' });
     expect([updated.agents.tester, updated.agents.testerModel]).toEqual(['qa', 'qa-model']);
   });
 
   it('is refused for a profile that is not configured', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, reviewer: null });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewer: null });
     expect(() => harness.setAgents(task.id, { tester: 'nobody' })).toThrow(/not configured/);
   });
 });

@@ -216,18 +216,11 @@ export interface CreateTaskInput {
   designer?: string | null;
   designerModel?: string | null;
   designerEffort?: string | null;
-  /**
-   * Loop tasks: optional while `confirmPlan` is on (the default), because it can be set
-   * when the plan is approved; otherwise required unless `.harnessboard.json` sets one.
-   */
+  /** Loop verification command; may be chosen when approving the plan. */
   verifyCommand?: string;
   /** What must hold for the work to count as done; see {@link Task.acceptance}. */
   acceptance?: string;
-  /**
-   * Wait for the user to approve a plan before building. Loop tasks default to true; single
-   * tasks default to true only without `acceptance`, and their agent then proposes criteria
-   * (refining `acceptance` as a draft when both are given).
-   */
+  /** @deprecated All new tasks require explicit spec approval; this value is ignored. */
   confirmPlan?: boolean;
   size?: ContextPolicy['size'];
   compactPct?: number;
@@ -237,7 +230,7 @@ export interface CreateTaskInput {
   skipPermissions?: boolean;
   /** Allow unlisted tools without asking unless they are dangerous; see `PermissionPolicy`. */
   autoApprove?: boolean;
-  /** Queue immediately instead of leaving the task in the backlog. */
+  /** @deprecated All new tasks automatically discuss their spec in Draft; ignored. */
   queue?: boolean;
 }
 

@@ -16,6 +16,7 @@ interface Props {
   onOpen: (id: number, tab?: DrawerTab) => void;
   onAction: (task: TaskView, action: TaskAction) => void;
   onInvalidMove: (task: TaskView, target: Stage) => void;
+  onReorder?: (task: TaskView, beforeId: number | null) => void;
   onNewTask: () => void;
 }
 
@@ -25,14 +26,19 @@ export function Board(props: Props) {
 }
 
 /** Five stages that fit one screen; cards carry their own buttons, dragging is optional. */
-function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onNewTask }: Props) {
+function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onReorder, onNewTask }: Props) {
   const { t } = useTranslation();
   const [dragged, setDragged] = useState<TaskView | null>(null);
   const [over, setOver] = useState<Stage | null>(null);
 
   const drop = (target: Stage) => {
     setOver(null);
-    if (!dragged || stageOfTask(dragged) === target) return;
+    if (!dragged) return;
+    if (target === 'pending' && dragged.status === 'pending') {
+      onReorder?.(dragged, null);
+      return;
+    }
+    if (stageOfTask(dragged) === target) return;
     const action = dropAction(dragged, target);
     if (action) onAction(dragged, action);
     else onInvalidMove(dragged, target);
@@ -42,7 +48,10 @@ function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onNewTask }: Props
     <main className="board">
       {STAGES.map((stage) => {
         // Newest first, so fresh work is at the top of each stage.
-        const items = tasks.filter((task) => stageOfTask(task) === stage).reverse();
+        const items = tasks.filter((task) => stageOfTask(task) === stage);
+        if (stage === 'pending')
+          items.sort((a, b) => (a.queueOrder ?? a.id) - (b.queueOrder ?? b.id) || a.id - b.id);
+        else items.reverse();
         const droppable = dragged !== null && dropAction(dragged, stage) !== null;
         return (
           <section
@@ -76,13 +85,21 @@ function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onNewTask }: Props
                 )}
               </div>
             )}
-            {items.map((task) => (
+            {items.map((task, index) => (
               <TaskCard
                 key={task.id}
                 task={task}
                 dragging={dragged?.id === task.id}
                 onOpen={(tab) => onOpen(task.id, tab)}
                 onAction={(action) => onAction(task, action)}
+                onReorderDrop={
+                  stage === 'pending' && task.status === 'pending' && dragged?.id !== task.id
+                    ? (beforeId) => {
+                        if (dragged) onReorder?.(dragged, beforeId);
+                      }
+                    : undefined
+                }
+                afterId={items[index + 1]?.id ?? null}
                 onDragStart={() => setDragged(task)}
                 onDragEnd={() => {
                   setDragged(null);
@@ -102,7 +119,7 @@ function PhoneBoard({ tasks, phoneTab, onPhoneTab, onOpen, onAction, onNewTask }
   const { t } = useTranslation();
   const groups = groupByPhoneTab(tasks);
   // Newest first, as in the stages.
-  const items = [...groups[phoneTab]].reverse();
+  const items = phoneTab === 'pending' ? groups[phoneTab] : [...groups[phoneTab]].reverse();
 
   return (
     <main className="board">
@@ -142,6 +159,7 @@ function PhoneBoard({ tasks, phoneTab, onPhoneTab, onOpen, onAction, onNewTask }
             dragging={false}
             onOpen={(tab) => onOpen(task.id, tab)}
             onAction={(action) => onAction(task, action)}
+            afterId={null}
             onDragStart={() => {}}
             onDragEnd={() => {}}
           />

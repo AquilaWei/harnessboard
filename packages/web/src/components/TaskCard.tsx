@@ -15,9 +15,20 @@ interface Props {
   onDragStart: () => void;
   onDragEnd: () => void;
   dragging: boolean;
+  onReorderDrop?: ((beforeId: number | null) => void) | undefined;
+  afterId?: number | null;
 }
 
-export function TaskCard({ task, onOpen, onAction, onDragStart, onDragEnd, dragging }: Props) {
+export function TaskCard({
+  task,
+  onOpen,
+  onAction,
+  onDragStart,
+  onDragEnd,
+  dragging,
+  onReorderDrop,
+  afterId,
+}: Props) {
   const { t } = useTranslation();
   const primary = primaryAction(task);
 
@@ -52,6 +63,19 @@ export function TaskCard({ task, onOpen, onAction, onDragStart, onDragEnd, dragg
         onDragStart();
       }}
       onDragEnd={onDragEnd}
+      onDragOver={onReorderDrop ? (e) => e.preventDefault() : undefined}
+      onDrop={
+        onReorderDrop
+          ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const bounds = e.currentTarget.getBoundingClientRect();
+              onReorderDrop(
+                e.clientY < bounds.top + bounds.height / 2 ? task.id : (afterId ?? null),
+              );
+            }
+          : undefined
+      }
     >
       <button type="button" className="card-open" onClick={() => onOpen()}>
         <span className="card-title">{task.title}</span>
@@ -59,7 +83,9 @@ export function TaskCard({ task, onOpen, onAction, onDragStart, onDragEnd, dragg
           <span className="card-id">#{task.id}</span>
           <span className={`status-chip ${task.status}`}>
             <span className={`status-dot ${task.status}`} aria-hidden />{' '}
-            {t(`status.${task.status}`)}
+            {t(
+              `status.${task.deferred && task.status === 'awaiting_approval' ? 'specApproval' : task.deferred && ['queued', 'running'].includes(task.status) ? 'discussing' : task.status}`,
+            )}
           </span>
           {task.mode === 'loop' && <span className="badge">{t('loop.badge')}</span>}
           {task.workspace === 'base' && (

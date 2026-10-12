@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
 import type { Task } from '@harnessboard/shared';
 import { CLIENT_HEADER, access } from '../src/access.js';
@@ -43,13 +43,18 @@ beforeEach(() => {
     },
   };
   harness = Harness.open(config);
+  // Router contract tests keep scheduling separate from HTTP state transitions.
+  vi.spyOn(harness, 'tick').mockImplementation(() => {});
   app = new Hono();
   const sessions = new Sessions();
   app.use('*', access(harness, sessions));
   app.route('/api', createApi(harness, sessions));
 });
 
-afterEach(() => harness.store.close());
+afterEach(async () => {
+  await harness.shutdown();
+  harness.store.close();
+});
 
 const local = { host: `127.0.0.1:${PORT}` };
 const post = (url: string, body?: unknown, headers: Record<string, string> = {}) =>
@@ -148,11 +153,15 @@ describe('tasks API', () => {
       context: { tokens: 1234 },
     });
   });
-  it('creates a backlog task when queue is false', async () => {
-    const res = await post('/api/tasks', { prompt: 'Fix it', repo }, { [CLIENT_HEADER]: 'test' });
+  it('automatically starts spec discussion even when queue is false', async () => {
+    const res = await post(
+      '/api/tasks',
+      { prompt: 'Fix it', repo, queue: false, confirmPlan: false },
+      { [CLIENT_HEADER]: 'test' },
+    );
     expect([res.status, ((await res.json()) as { status: string }).status]).toEqual([
       201,
-      'backlog',
+      'queued',
     ]);
   });
 
@@ -167,10 +176,12 @@ describe('tasks API', () => {
     const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
     const { id } = (await created.json()) as { id: number };
     const res = await post(`/api/tasks/${id}/pend`, {}, { [CLIENT_HEADER]: 'test' });
-    expect(((await res.json()) as { error: string }).error).toMatch(/plan it first/);
+    expect(((await res.json()) as { error: string }).error).toMatch(
+      /cannot be put in pending|spec approval/,
+    );
   });
 
-  it('puts a draft with criteria in pending', async () => {
+  it('refuses to put supplied criteria in pending without approval', async () => {
     const created = await post(
       '/api/tasks',
       { prompt: 'x', repo, acceptance: '- ok' },
@@ -178,7 +189,37 @@ describe('tasks API', () => {
     );
     const { id } = (await created.json()) as { id: number };
     const res = await post(`/api/tasks/${id}/pend`, {}, { [CLIENT_HEADER]: 'test' });
-    expect(((await res.json()) as { status: string }).status).toBe('pending');
+    expect(res.status).toBe(400);
+  });
+
+  it('reorders a pending task before another pending task', async () => {
+    const a = await post(
+      '/api/tasks',
+      { prompt: 'a', repo, acceptance: '- ok' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const b = await post(
+      '/api/tasks',
+      { prompt: 'b', repo, acceptance: '- ok' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    const first = (await a.json()) as { id: number };
+    const second = (await b.json()) as { id: number };
+    harness.store.updateTask(first.id, { status: 'backlog' });
+    harness.store.updateTask(second.id, { status: 'backlog' });
+    harness.store.appendEvent(first.id, null, 'criteria_approved', { criteria: '- ok' });
+    harness.store.appendEvent(second.id, null, 'criteria_approved', { criteria: '- ok' });
+    await post(`/api/tasks/${first.id}/pend`, {}, { [CLIENT_HEADER]: 'test' });
+    await post(`/api/tasks/${second.id}/pend`, {}, { [CLIENT_HEADER]: 'test' });
+    const response = await post(
+      `/api/tasks/${second.id}/reorder`,
+      { beforeId: first.id },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect((await response.json()) as { status: string }).toMatchObject({ status: 'pending' });
+    expect(harness.store.getTask(second.id)!.queueOrder).toBeLessThan(
+      harness.store.getTask(first.id)!.queueOrder!,
+    );
   });
 
   it('returns the error message for an invalid request', async () => {

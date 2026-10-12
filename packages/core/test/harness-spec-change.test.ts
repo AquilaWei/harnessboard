@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Changing the spec of a single task after the work on it has started, with the fake agent CLI.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -84,7 +85,7 @@ const lastCommitMessage = (id: number) =>
 /** A task whose criteria were agreed and whose spec file was written; `later` runs after. */
 async function specced(later: unknown[][][], extra: Partial<CreateTaskInput> = {}) {
   scenario(discussion, specFile, ...later);
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     queue: true,
@@ -148,7 +149,12 @@ describe('a spec change the user asks for while the task is in review', () => {
   });
 
   it('is refused for a task without a spec file', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, acceptance: '- a', reviewer: null });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      acceptance: '- a',
+      reviewer: null,
+    });
     expect(() => harness.requestSpecRevision(task.id, 'change it')).toThrow(/no spec file/);
   });
 
@@ -161,7 +167,7 @@ describe('a spec change the user asks for while the task is in review', () => {
 describe('a spec change the user asks for while a session runs', () => {
   it('is answered once the session has ended', async () => {
     scenario(discussion, specFile, session('done'), session(REVISED));
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       queue: true,
@@ -576,7 +582,7 @@ describe('quota checks for a spec change with agents of different providers', ()
   /** The user asks for a change while the implementer's step, which ends in review, runs. */
   async function askedDuringStep(later: unknown[][][], reviewer: string | null) {
     scenario(discussion, specFile, quotaSpent, ...later);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       queue: true,

@@ -1,5 +1,12 @@
 # Task workflow: criteria, roles and review
 
+New tasks automatically discuss their specification in Draft. Only explicit spec
+approval moves them to Pending, where normal quota and slot scheduling applies.
+Prefilled criteria are discussion input, not approval. This applies to the UI, CLI
+and API; `confirmPlan` and `queue` creation fields are deprecated and ignored.
+CLI `--no-discuss` and `--no-confirm-plan` are no longer supported; `--no-queue`
+is deprecated and does not prevent automatic discussion.
+
 How a task is agreed, built, tested and reviewed, and which agent does each part.
 
 ## Acceptance criteria: agree first
@@ -9,16 +16,19 @@ agrees with you on what "done" means.
 
 ```bash
 hb add "Add a dark mode toggle"                       # discuss criteria first
-hb add "Add a dark mode toggle" --criteria "- toggle persists after reload"   # start now
+hb add "Add a dark mode toggle" --criteria "- toggle persists after reload"   # discuss the supplied draft criteria
 ```
 
 1. **Read-only discussion:** Claude reads the repository without changing anything, then
-   proposes acceptance criteria and asks what is unclear. The task waits in _Needs you_.
+   proposes acceptance criteria and asks what is unclear. The task stays in _Draft_, including while waiting for your confirmation.
 2. **You decide** on the **Criteria** tab (or with `hb plan <id>`):
    - **reply** (`hb feedback <id> "..."`): Claude answers and revises the criteria in the
      same conversation.
    - **approve** (`hb approve <id>`, or `--criteria "..."` for your own wording): edit the
-     criteria if you like, then approve.
+     criteria if you like, then mark the spec complete. The task joins **Pending**; when
+     quota and a slot allow, Harnessboard starts it in the order you set there. Drag it to
+     **In progress** to start it immediately. Initial spec discussions can run even when
+     the quota pause level has been reached.
 3. **The spec is committed:** after you approve, the spec author writes what you agreed
    (goal, requirements, out of scope, your criteria) to `docs/specs/<id>-<title>.md` and
    commits it, changing nothing else. It continues the discussion when it can, so every
@@ -35,9 +45,9 @@ conversation does not carry over: after you approve, the implementer starts a ne
 from the approved criteria.
 
 **Planning ahead:** `hb discuss <id>` (or **Plan the spec** on a draft) runs the same
-discussion but, once you approve, the task waits as **pending** instead of building. The
-harness takes pending tasks in order, one slot at a time, whenever the agent's quota is not
-used up; `hb pend <id>` lines up a draft that already has criteria, and `hb draft <id>` takes
+discussion and, once you approve, the task waits as **pending**. The harness takes pending
+tasks in the order shown in the column, one slot at a time, whenever the agent's quota is
+not used up; drag cards to reorder them, or use `hb move <id> [--before <id>]`. `hb pend <id>` lines up a draft that already has criteria, and `hb draft <id>` takes
 any idle task (including a done one) back to draft. A task that already has a spec is planned
 with `hb discuss <id> -m "what should change"`.
 
@@ -48,7 +58,7 @@ running, queued, in review, stopped or failed can still have its criteria change
    send it (or `hb spec <id> "..."`). A running task finishes its current step first. The
    implementer can also stop and propose a change itself when it finds the spec wrong.
 2. **The spec author proposes:** it reads the spec file and your message without changing
-   anything, and answers with the complete revised criteria. The task waits in _Needs you_.
+   anything, and answers with the complete revised criteria. The task stays in _Draft_, including while waiting for your confirmation.
 3. **You decide** on the **Criteria** tab, which shows the current criteria next to the
    proposed ones (or `hb plan <id>`):
    - **approve** (`hb approve <id>`, or `--criteria "..."`): edit the proposed criteria if you
@@ -87,8 +97,8 @@ whole reply. The discussion with you is not part of it; its outcome is the spec 
 When the reviewer asks for changes, the fix goes back through the tester (if there is one)
 before the reviewer sees it again.
 
-Criteria given when creating the task are used as they are. `--no-discuss` (or unticking
-the box in the New task dialog) starts without criteria.
+Criteria given when creating the task are initial discussion input and still require
+explicit approval before implementation.
 
 ## Reviewer: agents checking each other
 

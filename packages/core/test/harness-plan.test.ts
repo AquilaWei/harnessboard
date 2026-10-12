@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Loop tasks that wait for the user to approve the plan, with the fake agent CLI.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -84,7 +85,7 @@ const session = (reply: string, ...writes: unknown[]) => [
 ];
 
 async function createPlanned() {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Build a todo CLI',
     repo,
     mode: 'loop',
@@ -98,7 +99,7 @@ const status = (id: number) => harness.store.getTask(id)!.status;
 
 describe('creating a loop task that confirms its plan', () => {
   it('accepts a missing verify command', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, mode: 'loop' });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, mode: 'loop' });
     expect([task.confirmPlan, task.verifyCommand]).toEqual([true, null]);
   });
 });
@@ -161,7 +162,7 @@ describe('feedback on a plan', () => {
   });
 
   it('is refused while the task is not waiting for approval', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, mode: 'loop' });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, mode: 'loop' });
     expect(() => harness.planFeedback(task.id, 'hi')).toThrow(/not waiting for plan approval/);
   });
 });

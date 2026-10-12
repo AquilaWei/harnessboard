@@ -132,6 +132,8 @@ export interface Task {
    * `pending` until the harness picks it, instead of starting at once.
    */
   deferred: boolean;
+  /** User-controlled position in the pending queue; null preserves legacy id ordering. */
+  queueOrder: number | null;
   contextPolicy: ContextPolicy;
   permission: PermissionPolicy;
   agents: TaskAgents;

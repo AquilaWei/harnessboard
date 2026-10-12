@@ -232,6 +232,9 @@ export function App() {
         onOpen={(id, tab = 'timeline') => setSelected({ id, tab })}
         onAction={act}
         onInvalidMove={invalidMove}
+        onReorder={(task, beforeId) =>
+          void api.reorderPending(task.id, beforeId).then(load, showError)
+        }
         onNewTask={() => setDialog('new')}
       />
       {selected && (

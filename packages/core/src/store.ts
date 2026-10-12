@@ -105,6 +105,7 @@ const MIGRATIONS = [
    ALTER TABLE tasks ADD COLUMN prior_spans TEXT NOT NULL DEFAULT '[]';`,
   // A task planned in Draft: once its spec is approved it waits as `pending`, not `queued`.
   `ALTER TABLE tasks ADD COLUMN deferred INTEGER NOT NULL DEFAULT 0;`,
+  `ALTER TABLE tasks ADD COLUMN queue_order REAL;`,
 ];
 
 /** A device's Web Push subscription, with the device it reaches. */
@@ -206,7 +207,9 @@ export class Store {
         | 'acceptance'
         | 'permission'
         | 'agents'
+        | 'confirmPlan'
         | 'deferred'
+        | 'queueOrder'
       >
     >,
     now = Date.now(),
@@ -223,7 +226,9 @@ export class Store {
       acceptance: 'acceptance',
       permission: 'permission',
       agents: 'agents',
+      confirmPlan: 'confirm_plan',
       deferred: 'deferred',
+      queueOrder: 'queue_order',
     };
     // Objects are stored as JSON, like on insert; booleans as 0/1.
     const entries = Object.entries(fields)
@@ -572,6 +577,7 @@ function toTask(row: Row): Task {
     acceptance: (row.acceptance as string | null) ?? null,
     confirmPlan: Number(row.confirm_plan) === 1,
     deferred: Number(row.deferred) === 1,
+    queueOrder: row.queue_order == null ? null : Number(row.queue_order),
     contextPolicy: JSON.parse(String(row.context_policy)) as ContextPolicy,
     permission: JSON.parse(String(row.permission)) as PermissionPolicy,
     agents: JSON.parse(String(row.agents)) as TaskAgents,

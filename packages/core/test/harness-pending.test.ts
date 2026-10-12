@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Planning in Draft, waiting as pending until quota allows, and moving tasks by hand.
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -87,7 +88,7 @@ async function runAll(now = Date.now()): Promise<void> {
 }
 
 async function plannedAndApproved() {
-  const task = await harness.createTask({ prompt: 'Add a greeting', repo });
+  const task = await createHistoricalTask(harness, { prompt: 'Add a greeting', repo });
   harness.planTask(task.id);
   await harness.waitForIdle();
   harness.approveCriteria(task.id);
@@ -96,9 +97,32 @@ async function plannedAndApproved() {
 }
 
 describe('planning a draft', () => {
+  it('starts the initial spec discussion even when quota is over the configured pause level', async () => {
+    scenario(discussion(PROPOSAL, 0.9));
+    harness.config.quotaPauseUtilization = 0.4;
+    useUpQuota();
+    const task = await createHistoricalTask(harness, { prompt: 'Add a greeting', repo });
+    harness.planTask(task.id);
+    await harness.waitForIdle();
+    expect(status(task.id)).toBe('awaiting_approval');
+  });
+
+  it('puts a normally queued task in pending after its criteria are approved', async () => {
+    scenario(discussion(PROPOSAL, 0.9));
+    useUpQuota();
+    const task = await createHistoricalTask(harness, {
+      prompt: 'Add a greeting',
+      repo,
+      confirmPlan: true,
+      queue: true,
+    });
+    await harness.waitForIdle();
+    expect(harness.store.getTask(task.id)!.deferred).toBe(false);
+    expect(harness.approveCriteria(task.id).status).toBe('pending');
+  });
   it('waits for approval while the task is still marked as planned in Draft', async () => {
     scenario(discussion(PROPOSAL, 0.1));
-    const task = await harness.createTask({ prompt: 'Add a greeting', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'Add a greeting', repo });
     harness.planTask(task.id);
     await harness.waitForIdle();
     expect([status(task.id), harness.store.getTask(task.id)!.deferred]).toEqual([
@@ -109,7 +133,12 @@ describe('planning a draft', () => {
 
   it('is refused for a task that is not a draft', async () => {
     useUpQuota();
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     expect(() => harness.planTask(task.id)).toThrow(/only a draft/);
   });
 });
@@ -145,50 +174,86 @@ describe('approving a planned draft', () => {
 describe('picking pending tasks', () => {
   it('starts one at a time within the concurrency limit', async () => {
     scenario(worked);
-    const first = await harness.createTask({ prompt: 'One', repo, acceptance: '- a' });
-    const second = await harness.createTask({ prompt: 'Two', repo, acceptance: '- b' });
+    const first = await createHistoricalTask(harness, { prompt: 'One', repo, acceptance: '- a' });
+    const second = await createHistoricalTask(harness, { prompt: 'Two', repo, acceptance: '- b' });
+    harness.store.appendEvent(first.id, null, 'criteria_approved', { criteria: '- a' });
+    harness.store.appendEvent(second.id, null, 'criteria_approved', { criteria: '- b' });
     useUpQuota();
     harness.pendTask(first.id);
     harness.pendTask(second.id);
     harness.tick(FUTURE_SEC * 1000 + 1);
     expect([status(first.id), status(second.id)]).toEqual(['queued', 'pending']);
   });
+
+  it('promotes pending tasks in their user-set order', async () => {
+    scenario(worked);
+    const first = await createHistoricalTask(harness, { prompt: 'One', repo, acceptance: '- a' });
+    const second = await createHistoricalTask(harness, { prompt: 'Two', repo, acceptance: '- b' });
+    harness.store.appendEvent(first.id, null, 'criteria_approved', { criteria: '- a' });
+    harness.store.appendEvent(second.id, null, 'criteria_approved', { criteria: '- b' });
+    useUpQuota();
+    harness.pendTask(first.id);
+    harness.pendTask(second.id);
+    harness.reorderPending(second.id, first.id);
+    harness.tick(FUTURE_SEC * 1000 + 1);
+    expect([status(second.id), status(first.id)]).toEqual(['queued', 'pending']);
+  });
+
+  it('refuses to reorder a task that is not pending', async () => {
+    const task = await createHistoricalTask(harness, { prompt: 'One', repo, acceptance: '- a' });
+    expect(() => harness.reorderPending(task.id, null)).toThrow(/only a pending task/);
+  });
 });
 
 describe('moving tasks by hand', () => {
   it('refuses to put a draft without a spec in pending', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     expect(() => harness.pendTask(task.id)).toThrow(/plan it first/);
   });
 
   it('takes a stopped task back to draft', async () => {
     useUpQuota();
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.stopTask(task.id);
     expect(harness.toDraft(task.id).status).toBe('backlog');
   });
 
   it('marks a stopped task done without merging', async () => {
     useUpQuota();
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.stopTask(task.id);
     expect(harness.completeTask(task.id).status).toBe('done');
   });
 
   it('marks a failed task done', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     harness.store.updateTask(task.id, { status: 'failed' });
     expect(harness.completeTask(task.id).status).toBe('done');
   });
 
   it('refuses to mark a draft done', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     expect(() => harness.completeTask(task.id)).toThrow(/only a task in review, failed or stopped/);
   });
 
   it('takes a done task back to draft', async () => {
     scenario(worked);
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     harness.completeTask(task.id);
     expect(harness.toDraft(task.id).status).toBe('backlog');
@@ -196,7 +261,12 @@ describe('moving tasks by hand', () => {
 
   it('reopens a done task as pending', async () => {
     scenario(worked);
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     harness.completeTask(task.id);
     useUpQuota();
@@ -205,7 +275,12 @@ describe('moving tasks by hand', () => {
 
   it('refuses to move a running task to draft', async () => {
     scenario([[init(), assistantText('working', 1)]]);
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     expect(() => harness.toDraft(task.id)).toThrow(/cannot be moved|running/);
     harness.stopTask(task.id);
   });

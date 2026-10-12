@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // A CLI without mid-turn input that assigns its own session ids (like Codex or Gemini).
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -63,7 +64,7 @@ function fakeRuns(): FakeRun[] {
 describe('a CLI that assigns its own session ids', () => {
   it('records the id it reports', async () => {
     scenario([[init('agent-7'), assistantText('done', 5_000), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -75,7 +76,12 @@ describe('a CLI that assigns its own session ids', () => {
 
   it('passes the prompt as an argument', async () => {
     scenario([[init('agent-7'), result('done')]]);
-    await harness.createTask({ prompt: 'Build it', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, {
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     expect(fakeRuns()[0]!.args).toEqual(['--prompt', `Build it${ASK_FOR_NOTES}`]);
   });
@@ -90,7 +96,7 @@ describe('a CLI without mid-turn input crossing the soft threshold', () => {
   });
 
   const create = () =>
-    harness.createTask({
+    createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,

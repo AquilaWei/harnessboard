@@ -49,6 +49,8 @@ export class ApiClient {
   planTask = (id: number, message?: string) =>
     this.post<Task>(`/tasks/${id}/plan`, message ? { message } : {});
   pendTask = (id: number) => this.post<Task>(`/tasks/${id}/pend`);
+  reorderPending = (id: number, beforeId: number | null) =>
+    this.post<Task>(`/tasks/${id}/reorder`, { beforeId });
   toDraft = (id: number) => this.post<Task>(`/tasks/${id}/draft`);
   stopTask = (id: number) => this.post<Task>(`/tasks/${id}/stop`);
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);

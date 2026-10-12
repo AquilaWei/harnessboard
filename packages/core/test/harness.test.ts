@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Integration tests: real git worktrees, the fake agent CLI, and a temporary database.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
@@ -86,7 +87,7 @@ describe('a task whose session completes', () => {
   });
 
   it('moves to review', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Fix the bug',
       repo,
       confirmPlan: false,
@@ -97,7 +98,7 @@ describe('a task whose session completes', () => {
   });
 
   it('runs the agent inside its own worktree on a task branch', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Fix the bug',
       repo,
       confirmPlan: false,
@@ -109,13 +110,23 @@ describe('a task whose session completes', () => {
   });
 
   it('sends the task prompt as the first message', async () => {
-    await harness.createTask({ prompt: 'Fix the bug', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, {
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     expect(fakeRuns()[0]!.received[0]).toBe(`Fix the bug${ASK_FOR_NOTES}`);
   });
 
   it('records the context window the agent reported', async () => {
-    await harness.createTask({ prompt: 'Fix the bug', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, {
+      prompt: 'Fix the bug',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     expect(harness.store.lastKnownContextWindow('claude')).toBe(100_000);
   });
@@ -133,7 +144,7 @@ describe('a session that crosses the soft threshold', () => {
   });
 
   const create = () =>
-    harness.createTask({
+    createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -176,7 +187,7 @@ describe('a wrap-up reply that reports the task done', () => {
       [init(), assistantText('working', 45_000)],
       [assistantText('STATUS: DONE', 46_000), result('STATUS: DONE\nAll steps finished.')],
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -193,7 +204,7 @@ describe('a wrap-up reply that reports the task done', () => {
 describe('a session that crosses the hard threshold', () => {
   it('is killed and ends with context_hard_limit', async () => {
     scenario([[init(), assistantText('huge', 70_000), hang]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -223,7 +234,7 @@ describe('a session that hits the usage limit', () => {
   });
 
   it('waits for the reported reset time', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -235,7 +246,12 @@ describe('a session that hits the usage limit', () => {
   });
 
   it('resumes the same session once the reset time has passed', async () => {
-    await harness.createTask({ prompt: 'Build it', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, {
+      prompt: 'Build it',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await harness.waitForIdle();
     harness.tick(FUTURE_SEC * 1000 + 1);
     await harness.waitForIdle();
@@ -246,9 +262,9 @@ describe('a session that hits the usage limit', () => {
 describe('quota utilisation above the pause threshold', () => {
   it('keeps new tasks queued', async () => {
     scenario([[init(), rateLimit('allowed', 0.97, FUTURE_SEC), result('done')]]);
-    await harness.createTask({ prompt: 'First', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, { prompt: 'First', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
-    const second = await harness.createTask({
+    const second = await createHistoricalTask(harness, {
       prompt: 'Second',
       repo,
       confirmPlan: false,
@@ -262,7 +278,7 @@ describe('quota utilisation above the pause threshold', () => {
 describe('restarting the harness', () => {
   it('restores the last reported quota', async () => {
     scenario([[init(), rateLimit('allowed', 0.4, FUTURE_SEC), result('done')]]);
-    await harness.createTask({ prompt: 'First', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, { prompt: 'First', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     const restarted = new Harness(harness.config, harness.store);
     expect(restarted.status().quotas['claude-code']?.fiveHourUtilization).toBe(0.4);
@@ -272,7 +288,7 @@ describe('restarting the harness', () => {
 describe('stopping a running task', () => {
   it('kills the agent and marks the task stopped', async () => {
     scenario([[init(), hang]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -291,7 +307,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('starts the agent so that it asks instead of refusing', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -305,7 +321,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('pauses the task until the user answers', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -324,7 +340,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('lets the agent go on once allowed', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -342,7 +358,7 @@ describe('a tool the task does not allow', () => {
 
   it('goes back to running once answered', async () => {
     scenario([[init(), askBash('r1', 'node hello.js', 'node *'), hang]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -355,7 +371,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('keeps the task rules unchanged when allowed once', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -369,7 +385,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('adds the rules given with the answer to the task', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -387,7 +403,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('passes the reason to the agent when denied', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -407,7 +423,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('records the request and the answer in the history', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -435,7 +451,7 @@ describe('a tool the task does not allow', () => {
   });
 
   it('rejects an invalid rule without answering the agent', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -450,14 +466,18 @@ describe('a tool the task does not allow', () => {
   });
 
   it('rejects an answer to a request that is not waiting', async () => {
-    const task = await harness.createTask({ autoApprove: false, prompt: 'Run it', repo });
+    const task = await createHistoricalTask(harness, {
+      autoApprove: false,
+      prompt: 'Run it',
+      repo,
+    });
     expect(() => harness.answerPermission(task.id, { requestId: 'r9', behavior: 'allow' })).toThrow(
       /no pending permission request r9/,
     );
   });
 
   it('is stopped, not left waiting, when the user stops it', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -474,7 +494,11 @@ describe('a tool the task does not allow', () => {
   });
 
   it('is queued again after a restart', async () => {
-    const task = await harness.createTask({ autoApprove: false, prompt: 'Run it', repo });
+    const task = await createHistoricalTask(harness, {
+      autoApprove: false,
+      prompt: 'Run it',
+      repo,
+    });
     harness.store.updateTask(task.id, { status: 'awaiting_permission' });
     const restarted = new Harness(harness.config, harness.store);
     await restarted.start();
@@ -496,7 +520,7 @@ describe('answering a tool use while the quota is used up', () => {
   });
 
   it('puts the task back in the queue instead of running on', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -509,7 +533,7 @@ describe('answering a tool use while the quota is used up', () => {
   });
 
   it('records the answer straight away', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -525,7 +549,7 @@ describe('answering a tool use while the quota is used up', () => {
   });
 
   it('does not let the agent go on before the window resets', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -540,7 +564,7 @@ describe('answering a tool use while the quota is used up', () => {
   });
 
   it('sends the answer once the window resets', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -555,7 +579,7 @@ describe('answering a tool use while the quota is used up', () => {
   });
 
   it('stops a task whose answer is held', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -580,7 +604,7 @@ describe('a tool the task rules already cover', () => {
         result('done'),
       ],
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'Run it',
       repo,
@@ -601,7 +625,7 @@ describe('a tool the task rules already cover', () => {
 describe('task models', () => {
   it('runs the implementer with the model chosen for the task', async () => {
     scenario([[init(), result('done')]]);
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       confirmPlan: false,
@@ -615,14 +639,14 @@ describe('task models', () => {
 
   it('uses the profile model when the task does not choose one', async () => {
     scenario([[init(), result('done')]]);
-    await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     expect(fakeRuns()[0]!.args).not.toContain('--model');
   });
 
   it('rejects a model id that could be read as an option', async () => {
     await expect(
-      harness.createTask({
+      createHistoricalTask(harness, {
         prompt: 'x',
         repo,
         confirmPlan: false,
@@ -632,13 +656,13 @@ describe('task models', () => {
   });
 
   it('changes the model of a task that is not running', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     const updated = harness.setAgents(task.id, { implementerModel: 'sonnet' });
     expect(updated.agents.implementerModel).toBe('sonnet');
   });
 
   it('keeps the other agent settings when changing one', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       confirmPlan: false,
@@ -650,7 +674,7 @@ describe('task models', () => {
 
   it('runs the implementer with the effort chosen for the task', async () => {
     scenario([[init(), result('done')]]);
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       confirmPlan: false,
@@ -664,7 +688,7 @@ describe('task models', () => {
 
   it('passes no effort when the task does not choose one', async () => {
     scenario([[init(), result('done')]]);
-    await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     expect(fakeRuns()[0]!.args).not.toContain('--effort');
   });
@@ -672,7 +696,7 @@ describe('task models', () => {
   it("runs with the profile's effort when the task does not choose one", async () => {
     scenario([[init(), result('done')]]);
     harness.setAgentEffort('claude', { effort: 'high' });
-    await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false, queue: true });
     await harness.waitForIdle();
     const args = fakeRuns()[0]!.args;
     expect(args[args.indexOf('--effort') + 1]).toBe('high');
@@ -681,7 +705,7 @@ describe('task models', () => {
   it("prefers the task's effort over the profile's", async () => {
     scenario([[init(), result('done')]]);
     harness.setAgentEffort('claude', { effort: 'high' });
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       confirmPlan: false,
@@ -696,7 +720,7 @@ describe('task models', () => {
   it("runs with the profile's effort when the task runs another model", async () => {
     scenario([[init(), result('done')]]);
     harness.setAgentEffort('claude', { effort: 'high' });
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       confirmPlan: false,
@@ -711,7 +735,7 @@ describe('task models', () => {
   it("prefers the task's effort over the profile's when the task runs another model", async () => {
     scenario([[init(), result('done')]]);
     harness.setAgentEffort('claude', { effort: 'high' });
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       confirmPlan: false,
@@ -726,7 +750,7 @@ describe('task models', () => {
 
   it('runs a task saved before efforts existed with no effort', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false });
     harness.store.updateTask(task.id, {
       agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
     });
@@ -737,12 +761,12 @@ describe('task models', () => {
 
   it('rejects an effort that could be read as an option', async () => {
     await expect(
-      harness.createTask({ prompt: 'x', repo, implementerEffort: '-rf' }),
+      createHistoricalTask(harness, { prompt: 'x', repo, implementerEffort: '-rf' }),
     ).rejects.toThrow(/is not a reasoning effort/);
   });
 
   it('clears the effort of a role whose model changes', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       implementerModel: 'opus',
@@ -753,7 +777,7 @@ describe('task models', () => {
   });
 
   it('keeps the effort sent together with a new model', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       implementerModel: 'opus',
@@ -767,7 +791,7 @@ describe('task models', () => {
   });
 
   it('keeps the effort when the same model is sent again', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       implementerModel: 'opus',
@@ -778,7 +802,7 @@ describe('task models', () => {
   });
 
   it('leaves the task unchanged when an effort is invalid', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, reviewerEffort: 'high' });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewerEffort: 'high' });
     expect(() =>
       harness.setAgents(task.id, { reviewerModel: 'opus', reviewerEffort: '-rf' }),
     ).toThrow(/is not a reasoning effort/);
@@ -787,7 +811,7 @@ describe('task models', () => {
   });
 
   it('rejects an agent profile that is not configured', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     expect(() => harness.setAgents(task.id, { reviewer: 'gemini' })).toThrow(
       /agent profile "gemini" is not configured/,
     );
@@ -800,7 +824,7 @@ describe('task models while a session is open', () => {
   });
 
   it('changes the model for the next session', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'x',
       repo,
@@ -813,7 +837,7 @@ describe('task models while a session is open', () => {
   });
 
   it('changes the effort for the next session', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'x',
       repo,
@@ -826,7 +850,7 @@ describe('task models while a session is open', () => {
   });
 
   it('accepts the unchanged agent sent with a new model', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'x',
       repo,
@@ -839,7 +863,7 @@ describe('task models while a session is open', () => {
   });
 
   it('rejects a different agent', async () => {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       autoApprove: false,
       prompt: 'x',
       repo,
@@ -855,14 +879,14 @@ describe('task models while a session is open', () => {
 
 describe('setAllowedTools', () => {
   it('replaces the rules of a task that is not running', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     const updated = harness.setAllowedTools(task.id, ['Bash(npm *)', ' WebSearch ', 'Bash(npm *)']);
     expect(updated.permission.allowedTools).toEqual(['Bash(npm *)', 'WebSearch']);
   });
 
   it('passes the new rules to the next session', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false });
     harness.setAllowedTools(task.id, ['Bash(./gradlew *)']);
     harness.queueTask(task.id);
     await harness.waitForIdle();
@@ -871,13 +895,13 @@ describe('setAllowedTools', () => {
   });
 
   it('rejects a rule that is not a tool rule', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     expect(() => harness.setAllowedTools(task.id, ['please allow npm'])).toThrow(/not a tool rule/);
   });
 
   it('refuses while the task is running', async () => {
     scenario([[init(), hang]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -891,7 +915,7 @@ describe('setAllowedTools', () => {
 describe('commitDiff', () => {
   it('refuses a ref that is not a commit of the task', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Fix the bug',
       repo,
       confirmPlan: false,
@@ -907,7 +931,7 @@ describe('commitDiff', () => {
 describe('deleting a task', () => {
   it('removes the task with its sessions and events', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Fix the bug',
       repo,
       confirmPlan: false,
@@ -924,7 +948,7 @@ describe('deleting a task', () => {
 
   it('removes its worktree directory', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Fix the bug',
       repo,
       confirmPlan: false,
@@ -938,7 +962,7 @@ describe('deleting a task', () => {
 
   it('keeps its branch so committed work can still be merged', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Fix the bug',
       repo,
       confirmPlan: false,
@@ -951,7 +975,7 @@ describe('deleting a task', () => {
 
   it('works when the worktree directory was already deleted by hand', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Fix the bug',
       repo,
       confirmPlan: false,
@@ -965,7 +989,7 @@ describe('deleting a task', () => {
 
   it('refuses while the task is running', async () => {
     scenario([[init(), hang]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -976,7 +1000,7 @@ describe('deleting a task', () => {
   });
 
   it('tells subscribers the task is gone', async () => {
-    const task = await harness.createTask({ prompt: 'Fix the bug', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'Fix the bug', repo });
     const seen: unknown[] = [];
     harness.subscribe((event) => seen.push(event));
     await harness.deleteTask(task.id);
@@ -986,20 +1010,20 @@ describe('deleting a task', () => {
 
 describe('createTask', () => {
   it('rejects a directory outside any git repository with a way to fix it', async () => {
-    await expect(harness.createTask({ prompt: 'x', repo: tempDir('plain') })).rejects.toThrow(
-      /not inside a git repository\. Run "git init"/,
-    );
+    await expect(
+      createHistoricalTask(harness, { prompt: 'x', repo: tempDir('plain') }),
+    ).rejects.toThrow(/not inside a git repository\. Run "git init"/);
   });
 
   it('accepts a repository path starting with ~', async () => {
     const home = path.relative(os.homedir(), repo);
-    const task = await harness.createTask({ prompt: 'x', repo: `~/${home}` });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo: `~/${home}` });
     expect(task.repoPath).toBe(repo);
   });
 
   it('rejects allowed tools that are not tool rules', async () => {
     await expect(
-      harness.createTask({
+      createHistoricalTask(harness, {
         prompt: 'x',
         repo,
         confirmPlan: false,
@@ -1009,13 +1033,19 @@ describe('createTask', () => {
   });
 
   it('gives the git preset when no rules are given', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     expect(task.permission.allowedTools).toContain('Bash(git commit *)');
   });
 
   it('rejects an invalid context policy', async () => {
     await expect(
-      harness.createTask({ prompt: 'x', repo, confirmPlan: false, softPct: 60, hardPct: 50 }),
+      createHistoricalTask(harness, {
+        prompt: 'x',
+        repo,
+        confirmPlan: false,
+        softPct: 60,
+        hardPct: 50,
+      }),
     ).rejects.toThrow(RangeError);
   });
 });
@@ -1037,7 +1067,7 @@ describe('updateSettings', () => {
 
   it('uses the default context policy for new tasks', async () => {
     harness.updateSettings({ defaultContextPolicy: { size: 'large' } });
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     expect(task.contextPolicy).toEqual({ size: 'large' });
   });
 });
@@ -1045,7 +1075,7 @@ describe('updateSettings', () => {
 describe('retrying a session that never reached the model', () => {
   it('starts a fresh session instead of resuming one that does not exist', async () => {
     scenario([[exitWith(1, 'No conversation found')]], [[init(), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -1061,7 +1091,7 @@ describe('retrying a session that never reached the model', () => {
 describe('an agent that exits before producing a result', () => {
   it('reports its stderr in the session notice', async () => {
     scenario([[exitWith(1, 'No conversation found')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,

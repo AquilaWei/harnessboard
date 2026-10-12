@@ -245,6 +245,8 @@ export const api = {
     send<unknown>('POST', `/tasks/${id}/plan/approve`, { verifyCommand }),
   approveCriteria: (id: number, criteria: string) =>
     send<unknown>('POST', `/tasks/${id}/criteria/approve`, { criteria }),
+  reorderPending: (id: number, beforeId: number | null) =>
+    send<unknown>('POST', `/tasks/${id}/reorder`, { beforeId }),
   requestSpecRevision: (id: number, message: string) =>
     send<unknown>('POST', `/tasks/${id}/spec-revision`, { message }),
   rejectSpecChange: (id: number) => send<unknown>('POST', `/tasks/${id}/spec-change/reject`),

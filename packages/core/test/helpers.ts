@@ -202,3 +202,31 @@ export class PromptArgAdapter implements AgentAdapter {
     return ['--resume', id];
   }
 }
+
+/** Seed a pre-discussion-flow record for existing execution lifecycle scenarios.
+ * These fixtures test historical tasks; new task onboarding uses createTask directly.
+ */
+export async function createHistoricalTask(
+  harness: import('../src/harness.js').Harness,
+  input: import('@harnessboard/shared').CreateTaskInput,
+): Promise<import('@harnessboard/shared').Task> {
+  const factory = harness as unknown as {
+    createDraft(
+      input: import('@harnessboard/shared').CreateTaskInput,
+    ): Promise<import('@harnessboard/shared').Task>;
+  };
+  const task = await factory.createDraft(input);
+  harness.store.updateTask(task.id, {
+    confirmPlan: input.confirmPlan ?? (input.mode === 'loop' || !input.acceptance),
+  });
+  if (!harness.store.getTask(task.id)!.confirmPlan && !input.queue) {
+    // A paused historical execution has no new-task onboarding to repeat.
+    return harness.store.updateTask(task.id, { status: 'stopped' });
+  }
+  if (input.queue) {
+    const queued = harness.store.updateTask(task.id, { status: 'queued' });
+    harness.tick();
+    return queued;
+  }
+  return harness.store.getTask(task.id)!;
+}

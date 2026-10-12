@@ -138,11 +138,13 @@ describe('Store', () => {
     db.exec(
       `DROP TABLE devices; DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
        ALTER TABLE tasks DROP COLUMN confirm_plan; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order;
        PRAGMA user_version = 3;`,
     );
     db.close();
-    expect(new Store(file).getTask(id)!.confirmPlan).toBe(false);
+    const upgraded = new Store(file).getTask(id)!;
+    expect(upgraded.confirmPlan).toBe(false);
+    expect(upgraded.queueOrder).toBeNull();
   });
 
   it('stores approved acceptance criteria on the task', () => {
@@ -160,7 +162,7 @@ describe('Store', () => {
     db.exec(
       `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN acceptance;
        ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; PRAGMA user_version = 5;`,
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 5;`,
     );
     db.close();
     expect(new Store(file).getTask(id)!.acceptance).toBeNull();
@@ -174,7 +176,7 @@ describe('Store', () => {
     const db = new DatabaseSync(file);
     db.exec(
       `ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; PRAGMA user_version = 9;`,
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 9;`,
     );
     db.close();
     const task = new Store(file).getTask(id)!;
@@ -210,7 +212,7 @@ describe('Store', () => {
     first.close();
     const db = new DatabaseSync(file);
     db.exec(
-      `ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred;
+      `ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order;
        PRAGMA user_version = 10;`,
     );
     db.close();
@@ -381,7 +383,7 @@ describe('Store devices', () => {
        ALTER TABLE devices DROP COLUMN sign_count; ALTER TABLE devices DROP COLUMN verified_at;
        ALTER TABLE devices DROP COLUMN last_active_at; ALTER TABLE devices DROP COLUMN push_subscription;
        ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; PRAGMA user_version = 7;`,
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 7;`,
     );
     db.close();
     expect(new Store(file).findDeviceByToken('token-one')).toEqual({
@@ -449,7 +451,7 @@ describe('Store devices', () => {
     const db = new DatabaseSync(file);
     db.exec(
       `ALTER TABLE devices DROP COLUMN push_subscription; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred;
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order;
        PRAGMA user_version = 8;`,
     );
     db.close();
@@ -465,7 +467,7 @@ describe('Store devices', () => {
     const db = new DatabaseSync(file);
     db.exec(
       `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; PRAGMA user_version = 6;`,
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 6;`,
     );
     db.close();
     const store = new Store(file);

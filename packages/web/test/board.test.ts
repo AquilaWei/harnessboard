@@ -71,8 +71,8 @@ describe('primaryAction', () => {
 });
 
 describe('dropAction', () => {
-  it('puts a draft in Pending when dropped there', () => {
-    expect(dropAction(task('backlog'), 'pending')).toBe('pend');
+  it('refuses to bypass spec approval by dropping a draft in Pending', () => {
+    expect(dropAction(task('backlog'), 'pending')).toBeNull();
   });
 
   it('takes a done task back to Draft', () => {
@@ -95,8 +95,8 @@ describe('dropAction', () => {
     expect(dropAction(task('awaiting_permission'), 'active')).toBeNull();
   });
 
-  it('queues a draft dropped on In progress', () => {
-    expect(dropAction(task('backlog'), 'active')).toBe('queue');
+  it('refuses to start a draft by dropping it on In progress', () => {
+    expect(dropAction(task('backlog'), 'active')).toBeNull();
   });
 
   it('queues a failed task dropped back on In progress', () => {
@@ -186,6 +186,15 @@ describe('groupByPhoneTab', () => {
       withId(2, 'stopped'),
     ]);
   });
+
+  it('orders pending tasks by queueOrder and falls back to id for legacy tasks', () => {
+    const first = { ...withId(1, 'pending'), queueOrder: null } as TaskView;
+    const second = { ...withId(2, 'pending'), queueOrder: 4 } as TaskView;
+    const third = { ...withId(3, 'pending'), queueOrder: 2 } as TaskView;
+    expect(groupByPhoneTab([first, second, third]).pending.map((item) => item.id)).toEqual([
+      1, 3, 2,
+    ]);
+  });
 });
 
 describe('attentionTab', () => {
@@ -200,4 +209,9 @@ describe('attentionTab', () => {
   it('opens Waiting for you when a task failed', () => {
     expect(attentionTab([task('failed')])).toBe('waiting');
   });
+});
+
+it('keeps an active spec discussion in the phone waiting tab', () => {
+  const discussing = { ...task('running'), deferred: true };
+  expect(groupByPhoneTab([discussing]).waiting).toEqual([discussing]);
 });

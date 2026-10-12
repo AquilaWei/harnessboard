@@ -71,13 +71,15 @@ export const en = {
     done: 'Finished tasks appear here.',
   },
   stageEmpty: {
-    draft: 'Tasks you have not started yet.',
+    draft: 'Discuss specs here before joining Pending.',
     pending: 'Planned tasks start here one by one when quota allows.',
     active: 'Nothing is running.',
     attention: 'Nothing is waiting for you.',
     done: 'Finished tasks appear here.',
   },
   status: {
+    discussing: 'Discussing spec',
+    specApproval: 'Waiting for spec confirmation',
     backlog: 'Draft',
     pending: 'Pending',
     queued: 'Queued',
@@ -91,7 +93,7 @@ export const en = {
     failed: 'Failed',
   },
   describe: {
-    draft: 'Not started yet.',
+    draft: 'Discuss the spec, then confirm it to join Pending.',
     pending: 'Planned. Starts by itself when quota allows.',
     permissionAsked: '{{agent}} wants to use {{tool}}: {{summary}}. Allow it or not?',
     queued: 'Waiting for a free slot.',
@@ -313,7 +315,9 @@ export const en = {
     placeholder: '- One check per line',
     editHint: 'Taken from the reply. Edit freely: what you approve is what the reviewer checks.',
     missingHint: 'The reply has no criteria section. Write them here, or reply to the agent.',
-    approve: 'Approve and start',
+    approve: 'Spec complete',
+    queueHint:
+      'Moves to Pending. It starts in order when quota and a slot are available. Drag it to In progress to start now.',
     feedback: 'Reply to the agent',
     feedbackHint: 'Answer its questions, or ask for changes to the criteria…',
     revising: 'The agent is working on your reply. This page updates when it is done.',
@@ -351,7 +355,9 @@ export const en = {
     verifyHint: 'Run by the harness after every feature. It only counts once you approve.',
     verifySuggested:
       'Suggested by the planner. Check it: it takes effect only when you approve, and it will run on your machine.',
-    approve: 'Approve and start building',
+    approve: 'Spec complete',
+    queueHint:
+      'Moves to Pending. It starts in order when quota and a slot are available. Drag it to In progress to start now.',
     feedback: 'Reply to the planner',
     feedbackHint:
       'Answer its questions, or ask for changes: missing features, other tools, smaller steps…',
@@ -453,6 +459,7 @@ export const en = {
     open: 'open',
   },
   form: {
+    createDiscuss: 'Create and discuss spec',
     prompt: 'What should be done?',
     promptHint: 'Describe the outcome you want, as you would to a colleague.',
     goal: 'What should the finished project do?',
@@ -687,6 +694,8 @@ export const zhTW: typeof en = {
     done: '完成的任務會出現在這裡。',
   },
   status: {
+    discussing: '討論規格中',
+    specApproval: '等待規格確認',
     backlog: '草稿',
     pending: '待處理',
     queued: '排隊中',
@@ -700,7 +709,7 @@ export const zhTW: typeof en = {
     failed: '失敗',
   },
   describe: {
-    draft: '還沒開始。',
+    draft: '先討論規格，確認完成後才進待處理。',
     pending: '已規劃好，額度允許時會自動開始。',
     permissionAsked: '{{agent}} 想使用 {{tool}}：{{summary}}。要允許嗎？',
     queued: '等待空出執行位置。',
@@ -911,7 +920,8 @@ export const zhTW: typeof en = {
     placeholder: '- 每行一項檢查',
     editHint: '從回覆中擷取，可以直接修改：你確認的內容就是審查者檢查的依據。',
     missingHint: '回覆裡沒有驗收標準段落。請在這裡寫下，或回覆 agent。',
-    approve: '確認並開工',
+    approve: '規格完成',
+    queueHint: '任務會進入待處理，額度與執行位置允許時依序自動開始。想立刻執行可拖到「進行中」。',
     feedback: '回覆 agent',
     feedbackHint: '回答它的問題，或要求修改驗收標準…',
     revising: 'Agent 正在處理你的回覆，完成後這裡會自動更新。',
@@ -948,7 +958,8 @@ export const zhTW: typeof en = {
     verifyHint: '每完成一項 feature 由 harness 執行。你確認開工後才生效。',
     verifySuggested:
       '這是規劃者建議的指令。請檢查內容：它要等你確認開工才生效，而且會在你的電腦上執行。',
-    approve: '確認開工',
+    approve: '規格完成',
+    queueHint: '任務會進入待處理，額度與執行位置允許時依序自動開始。想立刻執行可拖到「進行中」。',
     feedback: '回覆規劃者',
     feedbackHint: '回答它的問題，或要求修改：缺少的 feature、換別的工具、拆得更小……',
     send: '送出意見',
@@ -1049,6 +1060,7 @@ export const zhTW: typeof en = {
     open: '未完成',
   },
   form: {
+    createDiscuss: '建立並討論規格',
     prompt: '要做什麼？',
     promptHint: '像跟同事交代工作一樣，描述你想要的結果。',
     goal: '完成後的專案要能做什麼？',

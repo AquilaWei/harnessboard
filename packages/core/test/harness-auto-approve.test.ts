@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Global tool rules and auto-approve, with the fake agent CLI asking for permission.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -54,7 +55,13 @@ async function waitForStatus(id: number, status: string): Promise<void> {
 }
 
 const create = (autoApprove = false) =>
-  harness.createTask({ prompt: 'Run it', repo, confirmPlan: false, autoApprove, queue: true });
+  createHistoricalTask(harness, {
+    prompt: 'Run it',
+    repo,
+    confirmPlan: false,
+    autoApprove,
+    queue: true,
+  });
 
 const ALLOWED = { answer: { behavior: 'allow', updatedInput: { command: 'node hello.js' } } };
 
@@ -105,7 +112,7 @@ describe('an auto-approving task', () => {
 
 describe('a task created without saying', () => {
   it('auto-approves', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false });
     expect(task.permission.autoApprove).toBe(true);
   });
 });
@@ -121,7 +128,7 @@ describe('a task that does not auto-approve', () => {
 
 describe('turning auto-approve on', () => {
   it('is stored on the task', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false });
     expect(harness.setAutoApprove(task.id, true).permission.autoApprove).toBe(true);
   });
 });

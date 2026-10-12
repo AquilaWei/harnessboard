@@ -46,7 +46,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   const [mode, setMode] = useState<TaskMode>('single');
   const [verify, setVerify] = useState('');
   const [acceptance, setAcceptance] = useState('');
-  const [discuss, setDiscuss] = useState(true);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [who, setWho] = useState<AgentChoice>({
     implementer: 'claude',
@@ -76,8 +75,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   const [allow, setAllow] = useState('');
   const [skip, setSkip] = useState(false);
   const [autoApprove, setAutoApprove] = useState(true);
-  const [queue, setQueue] = useState(true);
-  const [confirmPlan, setConfirmPlan] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -113,8 +110,8 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           mode,
           verifyCommand: mode === 'loop' ? verify.trim() || undefined : undefined,
           acceptance: acceptance.trim() || undefined,
-          // Criteria given up front are used as they are; blank ones are agreed on first.
-          confirmPlan: mode === 'loop' ? confirmPlan : acceptance.trim() ? undefined : discuss,
+          // Supplied criteria are draft input; every task still needs explicit approval.
+          confirmPlan: true,
           implementer: who.implementer,
           implementerModel: who.implementerModel,
           implementerEffort: who.implementerEffort,
@@ -139,7 +136,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           allowedTools: allowedTools(),
           skipPermissions: skip || undefined,
           autoApprove,
-          queue,
         }),
       );
       rememberRepo(repo.trim());
@@ -201,27 +197,9 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
             onChange={(e) => setAcceptance(e.target.value)}
           />
           <small className="hint">
-            {t(
-              mode === 'loop'
-                ? 'form.acceptanceHintLoop'
-                : acceptance.trim()
-                  ? 'form.acceptanceHintGiven'
-                  : discuss
-                    ? 'form.acceptanceHint'
-                    : 'form.acceptanceHintSkip',
-            )}
+            {t(mode === 'loop' ? 'form.acceptanceHintLoop' : 'form.acceptanceHint')}
           </small>
         </label>
-        {mode === 'single' && !acceptance.trim() && (
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={discuss}
-              onChange={(e) => setDiscuss(e.target.checked)}
-            />
-            <span>{t('form.discuss')}</span>
-          </label>
-        )}
 
         <FolderField value={repo} onChange={setRepo} recent={recent} />
 
@@ -250,13 +228,11 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
             <input
               className="mono"
               value={verify}
-              required={!confirmPlan}
-              placeholder={confirmPlan ? t('form.verifyOptional') : 'npm test'}
+
+              placeholder={t('form.verifyOptional')}
               onChange={(e) => setVerify(e.target.value)}
             />
-            <small className="hint">
-              {t(confirmPlan ? 'form.verifyHintPlan' : 'form.verifyHint')}
-            </small>
+            <small className="hint">{t('form.verifyHintPlan')}</small>
           </label>
         )}
 
@@ -377,23 +353,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
               {skip && <span className="warn-text">⚠ {t('form.skipWarn')}</span>}
             </span>
           </label>
-          {mode === 'loop' && (
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={confirmPlan}
-                onChange={(e) => setConfirmPlan(e.target.checked)}
-              />
-              <span>
-                {t('form.confirmPlan')}
-                <small className="hint">{t('form.confirmPlanHint')}</small>
-              </span>
-            </label>
-          )}
-          <label className="check">
-            <input type="checkbox" checked={queue} onChange={(e) => setQueue(e.target.checked)} />
-            <span>{t('form.queueNow')}</span>
-          </label>
         </details>
 
         <div className="modal-actions">
@@ -401,7 +360,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
             {t('form.cancel')}
           </button>
           <button type="submit" className="btn primary" disabled={busy || extra.invalid.length > 0}>
-            {t(queue ? 'form.create' : 'form.createOnly')}
+            {t('form.createDiscuss')}
           </button>
         </div>
       </form>

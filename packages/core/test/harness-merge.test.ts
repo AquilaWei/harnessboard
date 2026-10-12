@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Merging a reviewed task's branch into its base, with real git repositories.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -71,7 +72,7 @@ function commitFile(cwd: string, file: string, content: string): void {
 /** A single task whose session finished with a commit, waiting in review. */
 async function reviewedTask(...later: unknown[][][]) {
   scenario([[init(), result('done')]], ...later);
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     confirmPlan: false,
@@ -160,7 +161,7 @@ describe('merging into a checkout with local changes in the way', () => {
 
 describe('a merge that cannot start', () => {
   it('is refused for a task that is not in review', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false });
     await expect(harness.mergeTask(task.id)).rejects.toThrow(/not review/);
   });
 
@@ -172,7 +173,7 @@ describe('a merge that cannot start', () => {
 
   it('is refused when the base already has every commit', async () => {
     scenario([[init(), result('done')]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'x',
       repo,
       confirmPlan: false,

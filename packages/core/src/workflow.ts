@@ -662,6 +662,11 @@ export class Workflow {
     return this.discussing(task);
   }
 
+  /** Whether the next session is still agreeing on the task's initial spec. */
+  isPlanningSession(task: Task): boolean {
+    return this.inPlanning(task);
+  }
+
   /** A single task agreeing on acceptance criteria with the user; it may not edit yet. */
   private discussing(task: Task): boolean {
     return (

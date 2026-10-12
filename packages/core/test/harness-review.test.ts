@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Reviewer sessions against real git worktrees and the fake agent CLI.
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -78,7 +79,7 @@ const sessionWithContext = (text: string, ...writes: unknown[]) => [
 ];
 
 async function createReviewed(mode: 'single' | 'loop' = 'single') {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     reviewer: 'checker',
@@ -116,7 +117,7 @@ describe('a finished step with a reviewer', () => {
 
   it('runs the reviewer with the model chosen for the task', async () => {
     scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       reviewer: 'checker',
@@ -135,7 +136,7 @@ describe('a finished step with a reviewer', () => {
 
   it('runs the reviewer with the effort chosen for it', async () => {
     scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       reviewer: 'checker',
@@ -152,7 +153,7 @@ describe('a finished step with a reviewer', () => {
 
   it('runs the reviewer with no effort when only the implementer has one', async () => {
     scenario(session('done', writeFile('hello.txt', 'hi')), session('VERDICT: APPROVE'));
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       reviewer: 'checker',

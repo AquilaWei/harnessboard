@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -60,7 +61,7 @@ async function next(): Promise<void> {
 }
 
 async function loop() {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Build two features',
     repo,
     mode: 'loop',
@@ -162,7 +163,7 @@ describe('persistent tester conversation', () => {
       turn('worker', 'fixed', writeFile('zero.txt', 'handled'), commitAll('fix: zero')),
       turn('tester', 'TESTS: PASS'),
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       confirmPlan: false,
@@ -187,7 +188,7 @@ describe('handoff responsibilities', () => {
     process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
       turn('worker', 'done', writeFile('hello.ts', 'export const hi = 1;')),
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add hello',
       repo,
       confirmPlan: false,
@@ -210,7 +211,7 @@ describe('handoff responsibilities', () => {
       ),
       turn('reviewer', 'VERDICT: APPROVE'),
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add hello',
       repo,
       confirmPlan: false,
@@ -231,7 +232,7 @@ describe('handoff responsibilities', () => {
       turn('tester', 'TESTS: PASS'),
       turn('reviewer', 'VERDICT: APPROVE'),
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add hello',
       repo,
       mode: 'loop',
@@ -266,7 +267,7 @@ describe('commit recovery', () => {
       turn('worker', 'still done'),
       turn('worker', 'corrected'),
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add hello',
       repo,
       confirmPlan: false,
@@ -292,7 +293,7 @@ describe('commit recovery', () => {
       turn('worker', 'done', writeFile('hello.ts', 'hi'), commitAll('feat: hello')),
       turn('tester', 'TESTS: PASS', writeFile('hello.test.ts', 'test')),
     ]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add hello',
       repo,
       confirmPlan: false,

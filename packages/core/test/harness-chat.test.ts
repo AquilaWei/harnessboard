@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Chatting with a task's agent from the board, with the fake agent CLI.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -63,7 +64,7 @@ const session = (reply: string) => [[init(), assistantText(reply, 10_000), resul
 
 /** A single task whose only session finished, so it waits in review. */
 async function finishedTask() {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Add a greeting',
     repo,
     confirmPlan: false,
@@ -162,7 +163,7 @@ describe('a stopped Codex task without context telemetry', () => {
   });
 
   async function stoppedTask() {
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       confirmPlan: false,
@@ -263,7 +264,7 @@ describe('a chat that cannot be sent', () => {
   beforeEach(() => scenario(session('done')));
 
   it('is refused before the task has a conversation', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo, confirmPlan: false });
     harness.store.updateTask(task.id, { status: 'stopped' });
     expect(() => harness.chat(task.id, 'hi')).toThrow(/no conversation to continue/);
   });
@@ -316,34 +317,59 @@ describe('a chat message written while the task is busy', () => {
   beforeEach(() => scenario(session('done'), session('It prints hi.')));
 
   it('waits as pending', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.chat(task.id, 'What does it print?');
     expect(harness.pendingChat(task.id)).toEqual(['What does it print?']);
   });
 
   it('does not interrupt the running session', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.chat(task.id, 'What does it print?');
     await harness.waitForIdle();
     expect(fakeRuns()).toHaveLength(1);
   });
 
   it('is sent once the step ends', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.chat(task.id, 'What does it print?');
     await runQueued();
     expect(fakeRuns()[1]!.received).toEqual(['What does it print?']);
   });
 
   it('returns the task to the status the step ended with', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.chat(task.id, 'What does it print?');
     await runQueued();
     expect(status(task.id)).toBe('review');
   });
 
   it('is no longer pending once sent', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.chat(task.id, 'What does it print?');
     await runQueued();
     expect(harness.pendingChat(task.id)).toEqual([]);
@@ -354,7 +380,12 @@ describe('several pending chat messages', () => {
   beforeEach(() => scenario(session('done'), session('ok')));
 
   it('are sent as one message', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.chat(task.id, 'First');
     harness.chat(task.id, 'Second');
     await runQueued();
@@ -395,7 +426,12 @@ describe('a pending chat message of a stopped task', () => {
   beforeEach(() => scenario([[init(), assistantText('x', 10_000), hang]], session('Stopped.')));
 
   it('is sent once the stopped session has ended', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     await new Promise((resolve) => setTimeout(resolve, 300));
     harness.chat(task.id, 'Why did you stop?');
     harness.stopTask(task.id);
@@ -408,7 +444,12 @@ describe('cancelling pending chat messages', () => {
   beforeEach(() => scenario(session('done'), session('unexpected')));
 
   it('keeps them from being sent', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.chat(task.id, 'Never mind');
     harness.cancelChat(task.id);
     await runQueued();
@@ -416,7 +457,12 @@ describe('cancelling pending chat messages', () => {
   });
 
   it('records that they were cancelled', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false, queue: true });
+    const task = await createHistoricalTask(harness, {
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+      queue: true,
+    });
     harness.chat(task.id, 'Never mind');
     harness.cancelChat(task.id);
     expect(harness.store.lastEvent(task.id, 'chat_queue_cleared')!.data).toEqual({

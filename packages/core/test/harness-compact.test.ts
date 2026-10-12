@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Sessions compacted with /compact at the compact threshold, with the fake agent CLI.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -65,7 +66,7 @@ const compactedSession = [
 ];
 
 async function create() {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Build it',
     repo,
     confirmPlan: false,
@@ -129,7 +130,7 @@ describe('a turn that crosses the soft and hard thresholds while compaction is o
   );
 
   const createWithLimits = () =>
-    harness.createTask({
+    createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -154,7 +155,7 @@ describe('a turn that crosses the soft and hard thresholds while compaction is o
 describe('a turn that reaches the safety limit while compaction is on', () => {
   it('is ended with context_hard_limit', async () => {
     scenario([[init(), assistantText('huge', 95_000), hang]]);
-    const task = await harness.createTask({
+    const task = await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,
@@ -202,7 +203,7 @@ describe('a task with compaction turned off', () => {
   beforeEach(() => scenario([[init(), assistantText('working', 35_000), result('done')]]));
 
   it('is never compacted', async () => {
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'Build it',
       repo,
       confirmPlan: false,

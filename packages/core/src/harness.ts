@@ -168,6 +168,10 @@ const STARTABLE: TaskStatus[] = [
 /** Statuses you can close as done by hand: finished work, or work you decided to give up on. */
 const COMPLETABLE: TaskStatus[] = ['review', 'failed', 'stopped'];
 const MOVABLE: TaskStatus[] = ['pending', 'stopped', 'failed', 'review', 'done'];
+
+function comparePending(a: Task, b: Task): number {
+  return (a.queueOrder ?? a.id) - (b.queueOrder ?? b.id) || a.id - b.id;
+}
 /**
  * A `base` task in one of these is using the repository folder: it works there, or its
  * work there waits for an answer or a review that another task's commits would mix into.
@@ -541,7 +545,14 @@ export class Harness {
    * allowed-tools entry is not a tool rule, an agent profile or model id is invalid, or the
    * workspace is unknown.
    */
+  /** Creates a draft and starts spec discussion; supplied criteria still need approval. */
   async createTask(input: CreateTaskInput): Promise<Task> {
+    const task = await this.createDraft(input);
+    return this.planTask(task.id);
+  }
+
+  /** Validates and persists a draft before starting its initial discussion. */
+  private async createDraft(input: CreateTaskInput): Promise<Task> {
     const workspace = input.workspace ?? 'worktree';
     if (workspace !== 'worktree' && workspace !== 'base') {
       throw new Error(`unknown workspace ${String(workspace)}; use worktree or base`);
@@ -562,14 +573,8 @@ export class Harness {
     const mode = input.mode ?? 'single';
     const verifyCommand = input.verifyCommand?.trim() || project.verifyCommand || null;
     const acceptance = optionalText(input.acceptance, 'acceptance')?.trim() || null;
-    // With plan approval the command can be chosen (or taken from the planner) at approval.
-    // A single task without criteria agrees on them with the user first.
-    const confirmPlan = input.confirmPlan ?? (mode === 'loop' || !acceptance);
-    if (mode === 'loop' && !confirmPlan && !verifyCommand) {
-      throw new Error(
-        'a loop task that starts without plan approval needs a verify command, e.g. "npm test"',
-      );
-    }
+    // Every new task agrees its spec before implementation, even with supplied criteria.
+    const confirmPlan = true;
     const allowedTools = input.allowedTools ?? project.allowedTools ?? DEFAULT_ALLOWED_TOOLS;
     assertToolRules(allowedTools);
     const agents: TaskAgents = {
@@ -614,7 +619,6 @@ export class Harness {
       agents,
     });
     this.emit({ type: 'task', taskId: task.id, status: task.status });
-    if (input.queue) return this.queueTask(task.id);
     return task;
   }
 
@@ -628,6 +632,12 @@ export class Harness {
     if (!STARTABLE.includes(task.status)) {
       throw new Error(`task ${id} is ${task.status} and cannot be queued`);
     }
+    if (task.status === 'backlog' && !this.hasApprovedSpec(task)) {
+      throw new Error(`task ${id} needs spec approval; discuss it first`);
+    }
+    if (!this.hasApprovedSpec(task)) {
+      this.store.updateTask(id, { confirmPlan: true, deferred: true });
+    }
     if (task.workspace === 'base') this.assertFolderFree(task);
     if (task.status === 'review') {
       this.workflow.sendBack(id);
@@ -635,17 +645,12 @@ export class Harness {
     } else {
       this.workflow.resetImplementerProgress(id);
     }
-    const queued = this.setStatus(id, 'queued', { resumeAt: null, deferred: false });
+    const queued = this.setStatus(id, 'queued', {
+      resumeAt: null,
+      deferred: !this.hasApprovedSpec(task),
+    });
     this.tick();
     return queued;
-  }
-
-  /**
-   * Where an approved task goes: a task planned in Draft waits as `pending` for the harness
-   * to pick it, any other starts at once. Leaves Draft planning behind either way.
-   */
-  private statusAfterApproval(task: Task): TaskStatus {
-    return task.deferred ? 'pending' : 'queued';
   }
 
   /**
@@ -670,7 +675,7 @@ export class Harness {
     } else {
       this.workflow.resetImplementerProgress(id);
     }
-    this.store.updateTask(id, { deferred: true });
+    this.store.updateTask(id, { deferred: true, confirmPlan: true });
     const queued = this.setStatus(id, 'queued', { resumeAt: null });
     this.tick();
     return queued;
@@ -685,15 +690,68 @@ export class Harness {
   pendTask(id: number): Task {
     const task = this.requireTask(id);
     if (task.status === 'backlog') {
-      if (!task.acceptance && !task.verifyCommand) {
+      if (!this.hasApprovedSpec(task)) {
         throw new Error(`task ${id} has no agreed spec yet; plan it first`);
       }
     } else if (!MOVABLE.includes(task.status)) {
       throw new Error(`task ${id} is ${task.status} and cannot be put in pending`);
     }
+    if (!this.hasApprovedSpec(task)) {
+      throw new Error(`task ${id} needs spec approval; discuss it first`);
+    }
     if (task.status === 'pending') return task;
     this.prepareForRestart(task);
-    return this.setStatus(id, 'pending', { resumeAt: null });
+    this.putAtPendingEnd(task);
+    return this.setStatus(id, 'pending', { resumeAt: null, deferred: false });
+  }
+
+  /** Legacy work already started keeps its execution eligibility. */
+  private hasApprovedSpec(task: Task): boolean {
+    return !!(
+      this.store.lastEvent(task.id, task.mode === 'loop' ? 'plan_approved' : 'criteria_approved') ||
+      (!task.deferred &&
+        ((task.worktreePath && !this.workflow.isPlanningSession(task)) ||
+          (!task.confirmPlan && task.status !== 'backlog')))
+    );
+  }
+
+  /** Inserts a pending task before another one, or at the end when `beforeId` is null. */
+  reorderPending(id: number, beforeId: number | null): Task {
+    const task = this.requireTask(id);
+    if (task.status !== 'pending') {
+      throw new Error(`task ${id} is ${task.status}; only a pending task can be reordered`);
+    }
+    const ordered = this.store
+      .listTasks()
+      .filter((item) => item.status === 'pending')
+      .sort(comparePending);
+    if (beforeId === id) return task;
+    const without = ordered.filter((item) => item.id !== id);
+    const index =
+      beforeId === null ? without.length : without.findIndex((item) => item.id === beforeId);
+    if (index < 0) throw new Error(`task ${beforeId} is not pending`);
+    for (const [position, item] of without.entries()) {
+      if (item.queueOrder === null) this.store.updateTask(item.id, { queueOrder: position });
+    }
+    const previous = index > 0 ? without[index - 1] : undefined;
+    const next = index < without.length ? without[index] : undefined;
+    const low = previous ? (previous.queueOrder ?? index - 1) : null;
+    const high = next ? (next.queueOrder ?? index) : null;
+    const queueOrder = low === null ? (high ?? 0) - 1 : high === null ? low + 1 : (low + high) / 2;
+    if (low !== null && high !== null && !(low < queueOrder && queueOrder < high)) {
+      for (const [position, item] of without.entries()) {
+        this.store.updateTask(item.id, { queueOrder: position < index ? position : position + 1 });
+      }
+      return this.store.updateTask(id, { queueOrder: index });
+    }
+    return this.store.updateTask(id, { queueOrder });
+  }
+
+  private putAtPendingEnd(task: Task): void {
+    if (task.queueOrder !== null) return;
+    const pending = this.store.listTasks().filter((item) => item.status === 'pending');
+    const max = pending.reduce((value, item) => Math.max(value, item.queueOrder ?? item.id), 0);
+    this.store.updateTask(task.id, { queueOrder: max + 1 });
   }
 
   /**
@@ -901,8 +959,7 @@ export class Harness {
   }
 
   /**
-   * Approves the plan as it is in the worktree now (it may have been changed in an
-   * interactive session) and starts building. The verify command is the given one or the
+   * Approves the plan in the worktree and adds the task to Pending. The verify command is the given one or the
    * task's own; the planner's suggestion is never used unless the user passes it here.
    * Throws when the task is not waiting for approval, no command is given, or the feature
    * list is invalid.
@@ -934,13 +991,14 @@ export class Harness {
     const baseline: FeatureSnapshot = { features, verify: null, verifiedPassing: 0 };
     this.store.appendEvent(id, null, 'features', baseline);
     this.notice(id, `plan approved: ${features.length} features, verify with ${command}`);
-    const next = this.setStatus(id, this.statusAfterApproval(task));
+    this.putAtPendingEnd(task);
+    const next = this.setStatus(id, 'pending', { deferred: false });
     this.tick();
     return next;
   }
 
   /**
-   * Approves a single task's acceptance criteria and lets its agent start changing files.
+   * Approves a single task's acceptance criteria and adds it to Pending.
    * `criteria` replaces the proposed ones, e.g. after the user edited them. Throws when the
    * task is not a single task waiting for approval, or there are no criteria to approve.
    */
@@ -959,7 +1017,8 @@ export class Harness {
     const approval: CriteriaApproval = { criteria: agreed };
     this.store.appendEvent(id, null, 'criteria_approved', approval);
     this.notice(id, 'acceptance criteria approved');
-    const next = this.setStatus(id, this.statusAfterApproval(task));
+    this.putAtPendingEnd(task);
+    const next = this.setStatus(id, 'pending', { deferred: false });
     this.tick();
     return next;
   }
@@ -1011,7 +1070,7 @@ export class Harness {
     const decision = this.workflow.decideSpecChange(task, true, optionalText(criteria, 'criteria'));
     this.store.updateTask(id, { acceptance: decision.criteria });
     this.notice(id, 'spec change approved; revising the spec');
-    const next = this.setStatus(id, this.statusAfterApproval(task));
+    const next = this.setStatus(id, 'queued');
     this.tick();
     return next;
   }
@@ -1437,12 +1496,14 @@ export class Harness {
     const tasks = this.store.listTasks();
     const busy = tasks.filter((t) => t.status === 'queued' || this.running.has(t.id)).length;
     const free = Math.max(0, this.config.maxConcurrent - busy);
-    const ready = tasks.filter(
-      (t) =>
-        t.status === 'pending' &&
-        !this.nextSessionBlocked(t, now) &&
-        (t.workspace !== 'base' || this.folderBusy(t) === null),
-    );
+    const ready = tasks
+      .filter(
+        (t) =>
+          t.status === 'pending' &&
+          !this.nextSessionBlocked(t, now) &&
+          (t.workspace !== 'base' || this.folderBusy(t) === null),
+      )
+      .sort(comparePending);
     // A promoted `base` task holds its folder at once, so only one per folder goes in a pass.
     const folders = new Set<string>();
     for (const task of promotable(ready, free)) {
@@ -1456,6 +1517,7 @@ export class Harness {
   }
 
   private nextSessionBlocked(task: Task, now: number): boolean {
+    if (this.workflow.isPlanningSession(task)) return false;
     const profile = this.config.agents[this.workflow.nextAgentId(task)];
     return profile !== undefined && this.quotaBlocked(profile.provider, now);
   }

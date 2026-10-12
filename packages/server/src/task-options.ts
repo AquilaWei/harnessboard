@@ -115,7 +115,7 @@ export function withTaskOptions(command: Command): Command {
     .option('--reviewer <agent>', 'agent profile that reviews each finished step, or "none"')
     .option('--reviewer-model <model>', 'model for the reviewer')
     .option('--reviewer-effort <level>', 'reasoning effort for the reviewer')
-    .option('--no-queue', 'leave the task in the backlog');
+    .option('--no-queue', 'deprecated: new tasks always discuss their spec in Draft');
 }
 
 /** The `POST /api/tasks` body for the parsed options; unset options are left to the server. */

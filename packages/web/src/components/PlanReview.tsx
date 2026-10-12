@@ -126,6 +126,7 @@ export function PlanReview({ task, version, onDone, onError }: Props) {
             >
               {t('plan.approve')}
             </button>
+            <small className="hint">{t('plan.queueHint')}</small>
           </section>
           <section className="plan-section">
             <label className="field">

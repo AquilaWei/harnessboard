@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Tokens and cost recorded per agent run, with the fake agent CLI.
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -43,7 +44,7 @@ function scenario(...sessions: unknown[][][]): void {
 }
 
 async function create() {
-  const task = await harness.createTask({
+  const task = await createHistoricalTask(harness, {
     prompt: 'Build it',
     repo,
     confirmPlan: false,

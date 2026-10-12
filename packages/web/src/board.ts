@@ -66,7 +66,10 @@ export function groupByPhoneTab(tasks: TaskView[]): Record<PhoneTab, TaskView[]>
     review: [],
     done: [],
   };
-  for (const task of tasks) groups[PHONE_TAB_OF[task.status]].push(task);
+  for (const task of tasks) {
+    groups[stageOfTask(task) === 'draft' ? 'waiting' : PHONE_TAB_OF[task.status]].push(task);
+  }
+  groups.pending.sort((a, b) => (a.queueOrder ?? a.id) - (b.queueOrder ?? b.id) || a.id - b.id);
   return groups;
 }
 
@@ -132,17 +135,15 @@ export function dropAction(task: TaskView, target: Stage): TaskAction | null {
   // A plan or a tool use waiting for you moves on through your answer, not by queueing.
   const waitsForAnswer =
     task.status === 'awaiting_approval' || task.status === 'awaiting_permission';
-  const queueable =
-    task.status === 'backlog' ||
-    task.status === 'pending' ||
-    (from === 'attention' && !waitsForAnswer);
+  const queueable = task.status === 'pending' || (from === 'attention' && !waitsForAnswer);
   // Idle tasks can be put back in line or taken back to discuss; a session or a question
   // in progress has to be stopped or answered first.
   const resting = ['backlog', 'pending', 'stopped', 'failed', 'review', 'done'].includes(
     task.status,
   );
   if (target === 'active' && queueable) return 'queue';
-  if (target === 'pending' && resting && task.status !== 'pending') return 'pend';
+  if (target === 'pending' && task.status !== 'backlog' && resting && task.status !== 'pending')
+    return 'pend';
   if (target === 'draft' && resting && task.status !== 'backlog') return 'draft';
   if (target === 'attention' && from === 'active') return 'stop';
   if (target === 'done' && ['review', 'failed', 'stopped'].includes(task.status)) return 'complete';

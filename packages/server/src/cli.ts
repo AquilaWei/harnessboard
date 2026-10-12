@@ -67,14 +67,9 @@ async function createTask(prompt: string, o: AddOptions, loop: LoopInput = {}): 
 withTaskOptions(
   program
     .command('add')
-    .description(
-      'create a task and queue it; without --criteria the agent first proposes acceptance criteria',
-    )
-    .argument('<prompt...>', 'what the agent should do')
-    .option('--no-discuss', 'without --criteria, start right away instead of agreeing on them'),
-).action((words: string[], o: AddOptions & { discuss: boolean }) =>
-  createTask(words.join(' '), o, { confirmPlan: o.discuss }),
-);
+    .description('create a draft and automatically discuss its spec before approval')
+    .argument('<prompt...>', 'what the agent should do'),
+).action((words: string[], o: AddOptions) => createTask(words.join(' '), o, { confirmPlan: true }));
 
 withTaskOptions(
   program
@@ -84,13 +79,12 @@ withTaskOptions(
     .option(
       '--verify <command>',
       'command the harness runs to check each feature (optional: can be set at approval)',
-    )
-    .option('--no-confirm-plan', 'start building right after planning (needs --verify)'),
-).action((words: string[], o: AddOptions & { verify?: string; confirmPlan: boolean }) =>
+    ),
+).action((words: string[], o: AddOptions & { verify?: string }) =>
   createTask(
     words.join(' '),
     o,
-    definedOnly({ mode: 'loop' as const, verifyCommand: o.verify, confirmPlan: o.confirmPlan }),
+    definedOnly({ mode: 'loop' as const, verifyCommand: o.verify, confirmPlan: true }),
   ),
 );
 
@@ -512,6 +506,16 @@ program
   .argument('<id>', 'task id', parseInteger)
   .action(async (id: number) => {
     const task = await client().pendTask(id);
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
+  .command('move')
+  .description('reorder a task in the pending line')
+  .argument('<id>', 'task id', parseInteger)
+  .option('--before <id>', 'place before this pending task', parseInteger)
+  .action(async (id: number, o: { before?: number }) => {
+    const task = await client().reorderPending(id, o.before ?? null);
     console.log(t('taskStatus', { id, status: task.status }));
   });
 

@@ -1,5 +1,12 @@
 # Web board
 
+New tasks automatically discuss their specification in Draft. Only explicit spec
+approval moves them to Pending, where normal quota and slot scheduling applies.
+Prefilled criteria are discussion input, not approval. This applies to the UI, CLI
+and API; `confirmPlan` and `queue` creation fields are deprecated and ignored.
+CLI `--no-discuss` and `--no-confirm-plan` are no longer supported; `--no-queue`
+is deprecated and does not prevent automatic discussion.
+
 `hb serve` also serves the board at **http://127.0.0.1:4317**:
 
 - **Version next to the name:** the header shows the server's version (for example
@@ -7,7 +14,8 @@
 - **Five stages that fit one screen:**
   - **Draft:** not started, or its spec is being planned with an agent
   - **Pending:** planned and waiting; the harness starts these by itself, one at a time,
-    when the agent's quota allows
+    when the agent's quota allows. Drag a card above or below another to set its order;
+    dropping in blank space puts it last.
   - **In progress:** queued, running, or waiting for quota
   - **Needs you:** ready for review, failed, or stopped
   - **Done**
@@ -19,8 +27,8 @@
   at 20:40".
 - **Every card has one button** for the next step: Plan the spec, Start, Stop, Review or
   Retry. Dragging between stages still works and follows the same rules. You can drag an
-  idle task (draft, pending, stopped, failed, in review or done) to **Draft** to discuss it
-  again or to **Pending** to line it up; a running task has to be stopped first.
+  idle task to **Draft** to discuss it again. Only tasks with a confirmed spec can
+  move to **Pending** or **In progress**; a running task has to be stopped first.
 - **Plan now, run later:** **Plan the spec** discusses a draft with the agent while it stays
   in Draft. When you approve the criteria or plan, the task moves to **Pending** instead of
   starting. Pending tasks start in order whenever quota is available and a slot is free, so

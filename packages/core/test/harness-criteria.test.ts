@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { createHistoricalTask } from './helpers.js';
 // Single tasks that agree on acceptance criteria with the user first, with the fake agent CLI.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -73,7 +74,7 @@ const specFile = [
 const PROPOSAL = 'I read main.js.\n## Acceptance criteria\n- prints hi\n## Questions\n- Colour?';
 
 async function createDiscussed() {
-  const task = await harness.createTask({ prompt: 'Add a greeting', repo, queue: true });
+  const task = await createHistoricalTask(harness, { prompt: 'Add a greeting', repo, queue: true });
   await harness.waitForIdle();
   return task;
 }
@@ -91,14 +92,18 @@ describe('creating a single task', () => {
     expect([task.confirmPlan, task.acceptance]).toEqual([true, null]);
   });
 
-  it('starts right away with criteria given', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, acceptance: ' - prints hi ' });
-    expect([task.confirmPlan, task.acceptance]).toEqual([false, '- prints hi']);
+  it('discusses supplied criteria before approval', async () => {
+    const task = await harness.createTask({
+      prompt: 'x',
+      repo,
+      acceptance: ' - prints hi ',
+    });
+    expect([task.confirmPlan, task.acceptance]).toEqual([true, '- prints hi']);
   });
 
-  it('starts right away without criteria when discussion is turned off', async () => {
+  it('requires discussion even when creation requests skipping it', async () => {
     const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
-    expect(task.confirmPlan).toBe(false);
+    expect(task.confirmPlan).toBe(true);
   });
 });
 
@@ -135,7 +140,7 @@ describe('the discussion session', () => {
   });
 
   it('is told about criteria the user drafted', async () => {
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       acceptance: '- prints hi',
@@ -211,7 +216,7 @@ describe('approving criteria', () => {
   });
 
   it('is refused for a task that is not waiting for approval', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await createHistoricalTask(harness, { prompt: 'x', repo });
     expect(() => harness.approveCriteria(task.id)).toThrow(/not waiting/);
   });
 });
@@ -229,7 +234,7 @@ describe('a task created with criteria', () => {
   beforeEach(() => scenario(session('done')));
 
   it('gives the agent the criteria with the prompt', async () => {
-    await harness.createTask({
+    await createHistoricalTask(harness, {
       prompt: 'Add a greeting',
       repo,
       acceptance: '- prints hi',

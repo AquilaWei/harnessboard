@@ -106,6 +106,7 @@ export function CriteriaReview({ task, onDone, onError }: Props) {
             >
               {t('criteria.approve')}
             </button>
+            <small className="hint">{t('criteria.queueHint')}</small>
           </section>
           {proposal.questions.length > 0 && (
             <section className="plan-section plan-questions">
