@@ -3,6 +3,16 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.14 - 2026-10-12
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- **Plan the spec works again in the desktop app.** For a draft that already has a spec or
+  an approved loop plan, the button now asks what should change in its own dialog. Before,
+  it did nothing, because the desktop app cannot show the browser's input prompt.
+
 ## 0.1.13 - 2026-10-12
 
 Local test build; real-device acceptance is pending.
