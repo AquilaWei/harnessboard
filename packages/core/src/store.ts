@@ -339,6 +339,12 @@ export class Store {
     return row ? toEvent(row) : undefined;
   }
 
+  /** Whether a loop task's approved plan was reopened for discussion and not approved again. */
+  planReopened(taskId: number): boolean {
+    const reopened = this.lastEvent(taskId, 'plan_reopened');
+    return !!reopened && reopened.id > (this.lastEvent(taskId, 'plan_approved')?.id ?? 0);
+  }
+
   /** True when any session of the task recorded an event after event `afterId`. */
   hasSessionEventsAfter(taskId: number, afterId: number): boolean {
     const row = this.db

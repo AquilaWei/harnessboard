@@ -656,9 +656,9 @@ export class Harness {
   /**
    * Plans a draft's spec with its agent without building: the discussion runs as for a
    * queued task, but the approved task waits as `pending`. A task that already has a spec
-   * (one reopened from done, say) asks the spec author for `message`, the change wanted.
-   * Throws when the task is not a draft, a task with a spec has no message, or a loop task
-   * is already planned.
+   * (one reopened from done, say) asks the spec author for `message`, the change wanted;
+   * a loop task with an approved plan has the planner revise it, with or without `message`.
+   * Throws when the task is not a draft, or a single task with a spec has no message.
    */
   planTask(id: number, message?: string): Task {
     const task = this.requireTask(id);
@@ -668,9 +668,12 @@ export class Harness {
     if (task.workspace === 'base') this.assertFolderFree(task);
     const hasSpec = task.mode === 'single' && !!this.workflow.specFile(id);
     if (task.mode === 'loop' && this.workflow.hasPlan(id)) {
-      throw new Error(`task ${id} is already planned; put it in pending instead`);
-    }
-    if (hasSpec) {
+      // The planner revises the approved plan in its own conversation, then waits for approval.
+      const text = message?.trim() || 'The user wants to discuss the plan again.';
+      this.store.appendEvent(id, null, 'plan_reopened', { message: text });
+      this.store.appendEvent(id, null, 'plan_feedback', { message: text });
+      this.workflow.resetImplementerProgress(id);
+    } else if (hasSpec) {
       this.workflow.requestSpecRevision(id, message ?? '', 'queued');
     } else {
       this.workflow.resetImplementerProgress(id);
@@ -708,7 +711,11 @@ export class Harness {
   /** Legacy work already started keeps its execution eligibility. */
   private hasApprovedSpec(task: Task): boolean {
     return !!(
-      this.store.lastEvent(task.id, task.mode === 'loop' ? 'plan_approved' : 'criteria_approved') ||
+      (this.store.lastEvent(
+        task.id,
+        task.mode === 'loop' ? 'plan_approved' : 'criteria_approved',
+      ) &&
+        !this.store.planReopened(task.id)) ||
       (!task.deferred &&
         ((task.worktreePath && !this.workflow.isPlanningSession(task)) ||
           (!task.confirmPlan && task.status !== 'backlog')))

@@ -173,10 +173,12 @@ export function App() {
   const act = useCallback(
     (task: TaskView, action: TaskAction) => {
       if (action !== 'plan') return ACTIONS[action](task.id).then(load, showError);
-      // A task that already has a spec is planned against the change asked for.
-      const message = task.specFile ? window.prompt(t('planChangePrompt')) : undefined;
-      if (task.specFile && !message?.trim()) return Promise.resolve();
-      return api.planSpec(task.id, message ?? undefined).then(load, showError);
+      // A task that already has a spec is planned against the change asked for; a loop
+      // task with an approved plan may be discussed again without a specific change.
+      const asks = !!task.specFile || !!task.loop;
+      const message = asks ? window.prompt(t('planChangePrompt')) : undefined;
+      if (message === null || (task.specFile && !message?.trim())) return Promise.resolve();
+      return api.planSpec(task.id, message?.trim() || undefined).then(load, showError);
     },
     [load, showError, t],
   );

@@ -222,3 +222,58 @@ describe('a planner revising its plan', () => {
     expect(harness.activity(task.id)!.phase).toBe('planning');
   });
 });
+
+describe('reopening an approved plan from draft', () => {
+  beforeEach(() => {
+    scenario(
+      session('Plan: F1, F2.', proposal(['F1', 'F2'])),
+      session('F1 done', featureList(true, false)),
+      session('Dropped F2.', proposal(['F1'])),
+    );
+  });
+
+  /** A plan approved and built on, then taken back to draft and planned again. */
+  async function reopened(message?: string) {
+    const task = await createPlanned();
+    harness.approvePlan(task.id, VERIFY_OK);
+    await harness.waitForIdle();
+    harness.stopTask(task.id);
+    harness.toDraft(task.id);
+    harness.planTask(task.id, message);
+    return task;
+  }
+
+  it('is accepted instead of telling the user to put it in pending', async () => {
+    const task = await reopened();
+    expect(status(task.id)).toBe('queued');
+  });
+
+  it('sends the user message to the planner in its conversation', async () => {
+    const task = await reopened('Drop F2.');
+    await harness.waitForIdle();
+    const last = fakeRuns().at(-1)!;
+    expect([last.args.includes('--resume'), last.received[0]]).toEqual([
+      true,
+      expect.stringContaining('Drop F2.'),
+    ]);
+    expect(status(task.id)).toBe('awaiting_approval');
+  });
+
+  it('shows the new proposal for approval rather than building', async () => {
+    const task = await reopened();
+    await harness.waitForIdle();
+    const plan = harness.store.lastEvent(task.id, 'plan')!.data as { features: unknown[] };
+    expect([status(task.id), plan.features.length]).toEqual(['awaiting_approval', 1]);
+  });
+
+  it('accepts the revised list as the new baseline when approved again', async () => {
+    const task = await reopened();
+    await harness.waitForIdle();
+    const next = harness.approvePlan(task.id, VERIFY_OK);
+    expect(next.status).toBe('pending');
+    const baseline = harness.store.eventsOfKind(task.id, 'features').at(-1)!.data as {
+      features: { id: string }[];
+    };
+    expect(baseline.features.map((f) => f.id)).toEqual(['F1']);
+  });
+});

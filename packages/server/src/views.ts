@@ -149,7 +149,7 @@ function totalTokens(models: ModelTotals): number {
 
 /** Latest proposal while a loop task's plan is not approved yet. */
 function planSummary(taskId: number, store: Store): TaskView['plan'] {
-  if (store.lastEvent(taskId, 'plan_approved')) return null;
+  if (store.lastEvent(taskId, 'plan_approved') && !store.planReopened(taskId)) return null;
   const proposal = store.lastEvent(taskId, 'plan')?.data as PlanProposal | undefined;
   if (!proposal) return null;
   return {
@@ -165,7 +165,8 @@ function planSummary(taskId: number, store: Store): TaskView['plan'] {
  */
 export function planView(task: Task, store: Store): PlanView {
   const proposal = store.lastEvent(task.id, 'plan')?.data as PlanProposal | undefined;
-  const approved = store.lastEvent(task.id, 'plan_approved') !== undefined;
+  const approved =
+    store.lastEvent(task.id, 'plan_approved') !== undefined && !store.planReopened(task.id);
   const base = {
     reply: proposal?.reply ?? null,
     approved,

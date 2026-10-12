@@ -659,7 +659,9 @@ export class Workflow {
    * without approval), or a single task's acceptance criteria when it discusses them first.
    */
   private inPlanning(task: Task): boolean {
-    if (task.mode === 'loop') return this.snapshots(task.id).length === 0;
+    if (task.mode === 'loop') {
+      return this.snapshots(task.id).length === 0 || this.host.store.planReopened(task.id);
+    }
     return this.discussing(task);
   }
 
@@ -969,6 +971,17 @@ export class Workflow {
   /** A loop task's feature list was approved, so there is nothing left to plan. */
   hasPlan(taskId: number): boolean {
     return this.snapshots(taskId).length > 0;
+  }
+
+  /**
+   * The feature list the latest approval recorded, which later sessions may not drop
+   * features from; a plan reopened and approved again replaces the earlier baseline.
+   */
+  private baseline(taskId: number): FeatureSnapshot | undefined {
+    const store = this.host.store;
+    const approved = store.lastEvent(taskId, 'plan_approved')?.id ?? 0;
+    const events = store.eventsOfKinds(taskId, ['features'], approved);
+    return (events[0]?.data as FeatureSnapshot | undefined) ?? this.snapshots(taskId)[0];
   }
 
   private snapshots(taskId: number): FeatureSnapshot[] {
@@ -1787,8 +1800,8 @@ export class Workflow {
     }
     const { features } = plan;
     const snapshots = this.snapshots(task.id);
-    const baseline = snapshots[0];
-    if (!baseline && task.confirmPlan) {
+    const baseline = this.baseline(task.id);
+    if (this.inPlanning(task) && task.confirmPlan) {
       // Nothing is built until the user approves; the approval records the baseline.
       const proposal: PlanProposal = { ...plan, reply };
       this.host.store.appendEvent(task.id, null, 'plan', proposal);
