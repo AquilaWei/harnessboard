@@ -3,6 +3,19 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.16 - 2026-10-13
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- Plan approval descriptions show the task's configured agent instead of always naming Claude.
+- Token protection explanations describe usage reporting without naming a specific provider.
+- The Traditional Chinese Pending label is now 待執行 throughout the board.
+- Completed tasks can continue their original conversation after merging; the worktree is
+  recreated from the current base branch when needed. Tasks can still reopen in Draft to
+  discuss and approve specification changes.
+
 ## 0.1.15 - 2026-10-13
 
 Local test build; real-device acceptance is pending.
