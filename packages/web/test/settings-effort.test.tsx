@@ -174,11 +174,13 @@ describe('Settings: profile reasoning effort', () => {
 });
 
 describe('Settings: token spike protection', () => {
-  it('shows the default enabled rule and provider reporting limits', async () => {
+  it('shows the default enabled rule and usage reporting limits', async () => {
     api.agents.mockResolvedValue([]);
     await open();
     expect(container.textContent).toContain('Token spike protection');
-    expect(container.textContent).toContain('Gemini reports at turn end');
+    expect(container.textContent).toContain(
+      'Usage that has not been reported cannot be monitored.',
+    );
     expect(container.querySelector<HTMLInputElement>('input[value="100000"]')?.value).toBe(
       '100000',
     );
