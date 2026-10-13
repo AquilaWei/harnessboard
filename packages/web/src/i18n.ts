@@ -84,7 +84,7 @@ export const en = {
     limit: 'Token limit',
     hint: 'Counts input, output and cache reads/writes across all task roles. Exceeding the limit pauses only that task until you resume it.',
     monitoringLimit:
-      'Protection acts when usage is reported. Gemini reports at turn end; missing usage cannot be monitored. Already consumed tokens cannot be recovered.',
+      'Protection acts when usage is reported. Usage that has not been reported cannot be monitored. Already consumed tokens cannot be recovered.',
   },
   status: {
     discussing: 'Discussing spec',
@@ -721,8 +721,7 @@ export const zhTW: typeof en = {
     window: '滑動視窗（秒）',
     limit: 'Token 上限',
     hint: '計入所有角色的輸入、輸出、快取讀寫；超過上限時只暫停該任務，需手動繼續。',
-    monitoringLimit:
-      '收到用量回報後才會介入。Gemini 在一輪結束時回報；未回報用量時無法監控。已消耗的 tokens 無法撤銷。',
+    monitoringLimit: '收到用量回報後才會介入；尚未回報的用量無法監控。已消耗的 tokens 無法撤銷。',
   },
   status: {
     discussing: '討論規格中',
