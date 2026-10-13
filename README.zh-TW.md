@@ -1,6 +1,8 @@
 # Harnessboard
 
-新任務會自動在草稿中討論規格；按「規格完成」後才進待處理。預填驗收條件也需要確認。
+新任務會自動在草稿中討論規格；按「規格完成」後才進待執行。預填驗收條件也需要確認。
+
+完成任務後仍可在「聊天」接續原對話，包括已合併的任務。若要更改規格，按「重新開啟為草稿」，再按「討論規格」提出修改，重新確認後才會進入待執行。
 
 ![version](https://img.shields.io/badge/version-0.1.15-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
@@ -187,7 +189,7 @@ flowchart LR
 | `hb chat <id> "<訊息>"`            | 和任務的 agent 對話                      |
 | `hb merge <id>`                    | 把審過的任務合併進它的基底分支           |
 | `hb stop <id>` / `hb resume <id>`  | 停止任務／重新排入                       |
-| `hb discuss <id>` / `hb pend <id>` | 規劃草稿的規格／排入待處理，之後自動開始 |
+| `hb discuss <id>` / `hb pend <id>` | 規劃草稿的規格／排入待執行，之後自動開始 |
 | `hb open <id>`                     | 在 Claude Code 裡接手這個任務的對話      |
 | `hb delete <id>`                   | 刪除沒在執行的任務                       |
 

@@ -1218,7 +1218,6 @@ export class Harness {
         (s.contextTokens > 0 || this.config.agents[s.agentId]?.provider === 'codex'),
     );
     if (!session) return `task ${task.id} has no conversation to continue yet`;
-    if (!task.worktreePath) return `task ${task.id} was merged; its worktree is gone`;
     const window = session.contextWindow ?? this.workflow.contextWindow(session.agentId);
     if (
       contextPct(session.contextTokens, window) >= resolveThresholds(task.contextPolicy).hardPct
@@ -1250,7 +1249,8 @@ export class Harness {
   ): Promise<void> {
     let reason: ChatEnd['reason'] = 'error';
     try {
-      const ready = task.workspace === 'base' ? await this.startOnBase(task) : task;
+      // Merging removes the scratch worktree; recreate it from the current base for follow-up chat.
+      const ready = await this.ensureWorktree(task);
       const plan: SessionPlan = {
         role: 'implementer',
         agentId: session.agentId,

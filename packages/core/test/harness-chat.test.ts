@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createHistoricalTask } from './helpers.js';
 // Chatting with a task's agent from the board, with the fake agent CLI.
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -91,6 +92,20 @@ describe('a chat message', () => {
     await harness.waitForIdle();
     const run = fakeRuns()[1]!;
     expect([run.args.includes('--resume'), run.received]).toEqual([true, ['What does it print?']]);
+  });
+
+  it('continues a completed conversation after its worktree was removed', async () => {
+    const task = await finishedTask();
+    harness.completeTask(task.id);
+    const completed = harness.store.getTask(task.id)!;
+    execFileSync('git', ['worktree', 'remove', completed.worktreePath!], { cwd: repo });
+    execFileSync('git', ['branch', '-D', completed.branch!], { cwd: repo });
+    harness.store.updateTask(task.id, { worktreePath: null });
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]!.args).toContain('--resume');
+    expect(status(task.id)).toBe('done');
+    expect(harness.store.getTask(task.id)!.worktreePath).not.toBeNull();
   });
 
   it('lets the agent edit files', async () => {

@@ -2,6 +2,8 @@
 
 New tasks automatically discuss their spec in Draft. Confirm the spec to join Pending; prefilled criteria still require confirmation.
 
+Completed tasks can continue their original conversation through Chat, including after merging. To change the specification, reopen the task in Draft, discuss the changes, and approve the revised specification before execution.
+
 ![version](https://img.shields.io/badge/version-0.1.15-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
