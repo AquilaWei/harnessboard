@@ -26,6 +26,7 @@ side, and none of them touches your files until you say so.
 
 ## Why use it
 
+- **Token spike protection:** tasks pause and notify you when reported consumption exceeds 100,000 tokens within 60 seconds, including cache reads/writes. Change the rule in Settings; resume manually to restart monitoring. [Reporting limits and configuration](docs/configuration.md#token-spike-protection).
 - **Safe by default:** every task works in its own git branch and folder, so a bad result
   costs you nothing.
 - **Small contexts:** each implementer, tester and reviewer keeps its own conversation.

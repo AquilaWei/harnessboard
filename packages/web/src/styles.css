@@ -679,6 +679,7 @@ summary:focus-visible {
 }
 
 .status-chip.review,
+.status-chip.paused_safety,
 .status-chip.waiting_quota {
   background: var(--warning-soft);
   color: var(--warning-ink);
@@ -711,6 +712,7 @@ summary:focus-visible {
   background: var(--accent);
 }
 
+.status-dot.paused_safety,
 .status-dot.waiting_quota,
 .status-dot.review {
   background: var(--warning);

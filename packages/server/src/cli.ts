@@ -483,7 +483,7 @@ program
 
 program
   .command('resume')
-  .description('queue a stopped, failed or reviewed task again')
+  .description('resume a safety-paused, stopped, failed or reviewed task')
   .argument('<id>', 'task id', parseInteger)
   .action(async (id: number) => {
     const task = await client().queueTask(id);

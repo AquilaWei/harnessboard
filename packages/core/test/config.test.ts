@@ -292,3 +292,50 @@ describe('saveUserAgentEffort', () => {
     });
   });
 });
+
+describe('token spike configuration', () => {
+  it('enables a 100,000 token guard over 60 seconds for existing config files', () => {
+    expect(loadConfig({ env: {}, configFile: missing }).tokenSpike).toEqual({
+      enabled: true,
+      windowSeconds: 60,
+      maxTokens: 100_000,
+    });
+  });
+
+  it('loads a saved custom policy', () => {
+    const file = path.join(tempDir('spike-config'), 'config.json');
+    saveUserConfig(
+      { tokenSpike: { enabled: false, windowSeconds: 120, maxTokens: 200_000 } },
+      file,
+    );
+    expect(loadConfig({ env: {}, configFile: file }).tokenSpike).toEqual({
+      enabled: false,
+      windowSeconds: 120,
+      maxTokens: 200_000,
+    });
+  });
+
+  it('rejects a zero time window', () => {
+    expect(() =>
+      validate({
+        ...defaultConfig({}),
+        tokenSpike: { enabled: true, windowSeconds: 0, maxTokens: 1 },
+      }),
+    ).toThrow('tokenSpike');
+  });
+
+  it('rejects a fractional token limit', () => {
+    expect(() =>
+      validate({
+        ...defaultConfig({}),
+        tokenSpike: { enabled: true, windowSeconds: 60, maxTokens: 0.5 },
+      }),
+    ).toThrow('tokenSpike');
+  });
+
+  it('rejects an incomplete policy', () => {
+    const file = path.join(tempDir('spike-config'), 'config.json');
+    writeFileSync(file, JSON.stringify({ tokenSpike: { enabled: true } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow('tokenSpike');
+  });
+});

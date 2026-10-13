@@ -30,6 +30,12 @@ export type AgentEvent =
   | { kind: 'text'; text: string }
   | { kind: 'tool_use'; name: string; summary: string }
   | { kind: 'context'; tokens: number }
+  | {
+      /** A message snapshot, or cumulative conversation usage when callId is absent. */
+      kind: 'usage_update';
+      usage: RunUsage;
+      callId?: string;
+    }
   | { kind: 'quota'; quota: QuotaInfo }
   | { kind: 'compact'; preTokens: number; postTokens: number }
   | {

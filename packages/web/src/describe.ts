@@ -74,6 +74,14 @@ export function describeTask(task: TaskView): Description {
       return describeReview(task);
     case 'failed':
       return d('failed', 'problem', { reason: task.lastNotice ?? '' });
+    case 'paused_safety':
+      return task.safetyPause
+        ? d('tokenSpike', 'attention', {
+            tokens: task.safetyPause.observedTokens,
+            seconds: task.safetyPause.windowSeconds,
+            limit: task.safetyPause.maxTokens,
+          })
+        : d('pausedSafety', 'attention');
     case 'stopped':
       return d('stopped', 'attention');
     case 'done':

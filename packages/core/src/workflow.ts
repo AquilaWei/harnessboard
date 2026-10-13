@@ -1017,6 +1017,10 @@ export class Workflow {
       'workflow_end',
       { role: plan.role, reason: outcome.reason },
     );
+    if (outcome.reason === 'safety_pause') {
+      this.interrupted(task, outcome);
+      return;
+    }
     await this.finishSession(task, plan, outcome, signal);
     this.reviseAfterStep(task.id);
   }
@@ -1428,6 +1432,9 @@ export class Workflow {
         this.host.setStatus(task.id, 'waiting_quota', { resumeAt });
         return;
       }
+      case 'safety_pause':
+        this.host.setStatus(task.id, 'paused_safety', { resumeAt: null });
+        return;
       case 'stopped':
         this.host.setStatus(task.id, 'stopped');
         return;

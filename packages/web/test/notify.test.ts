@@ -68,3 +68,15 @@ describe('openTab', () => {
     expect(openTab(task(1, 'awaiting_permission'))).toBe('timeline');
   });
 });
+
+describe('safety pause notifications', () => {
+  it('notifies when a running task pauses for safety', () => {
+    expect(newlyWaiting(new Map([[1, 'running']]), [task(1, 'paused_safety')])).toEqual([
+      task(1, 'paused_safety'),
+    ]);
+  });
+
+  it('does not notify again while the task stays safety-paused', () => {
+    expect(newlyWaiting(new Map([[1, 'paused_safety']]), [task(1, 'paused_safety')])).toEqual([]);
+  });
+});

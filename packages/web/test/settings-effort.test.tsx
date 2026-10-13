@@ -26,6 +26,7 @@ vi.mock('qrcode', () => ({ default: { toDataURL: () => Promise.resolve('data:ima
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const settings = {
+  tokenSpike: { enabled: true, windowSeconds: 60, maxTokens: 100_000 },
   maxConcurrent: 1,
   quotaPauseUtilization: 0.95,
   defaultContextPolicy: { size: 'medium' },
@@ -170,4 +171,42 @@ describe('Settings: profile reasoning effort', () => {
     await open();
     expect(effortSelect()).toBeNull();
   });
+});
+
+describe('Settings: token spike protection', () => {
+  it('shows the default enabled rule and provider reporting limits', async () => {
+    api.agents.mockResolvedValue([]);
+    await open();
+    expect(container.textContent).toContain('Token spike protection');
+    expect(container.textContent).toContain('Gemini reports at turn end');
+    expect(container.querySelector<HTMLInputElement>('input[value="100000"]')?.value).toBe(
+      '100000',
+    );
+  });
+
+  it('saves the token spike policy with the other settings', async () => {
+    api.agents.mockResolvedValue([]);
+    await open();
+    await submit();
+    expect(api.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tokenSpike: { enabled: true, windowSeconds: 60, maxTokens: 100_000 },
+      }),
+    );
+  });
+});
+
+it('saves token spike protection as disabled when unchecked', async () => {
+  api.agents.mockResolvedValue([]);
+  await open();
+  const label = [...container.querySelectorAll('label')].find((item) =>
+    item.textContent?.includes('Pause tasks when reported consumption spikes'),
+  )!;
+  await act(async () => label.querySelector<HTMLInputElement>('input')!.click());
+  await submit();
+  expect(api.saveSettings).toHaveBeenCalledWith(
+    expect.objectContaining({
+      tokenSpike: { enabled: false, windowSeconds: 60, maxTokens: 100_000 },
+    }),
+  );
 });

@@ -12,12 +12,14 @@ const STATUS_TEXT = {
     awaiting_approval: 'Waiting for approval',
     review: 'Ready for review',
     failed: 'Failed',
+    paused_safety: 'Token spike detected. Task paused; resume manually.',
   },
   zhTW: {
     awaiting_permission: '等你允許',
     awaiting_approval: '等你確認',
     review: '待審核',
     failed: '失敗',
+    paused_safety: '偵測到 token 暴增，任務已暫停，請手動繼續。',
   },
 };
 

@@ -335,7 +335,24 @@ describe('Codex approval transport', () => {
           modelContextWindow: 200000,
         },
       }),
-    ).toEqual([{ kind: 'context', tokens: 70000 }]);
+    ).toEqual([
+      { kind: 'context', tokens: 70000 },
+      {
+        kind: 'usage_update',
+        usage: {
+          costUsd: null,
+          models: {
+            'test-model': {
+              input: 100000,
+              output: 10,
+              cacheRead: 800000,
+              cacheWrite: 0,
+              costUsd: null,
+            },
+          },
+        },
+      },
+    ]);
   });
 
   it('reports no context size when the usage update has no latest call', () => {
@@ -345,7 +362,23 @@ describe('Codex approval transport', () => {
         threadId: 'thread',
         tokenUsage: { total: { inputTokens: 900000, outputTokens: 10 } },
       }),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        kind: 'usage_update',
+        usage: {
+          costUsd: null,
+          models: {
+            'test-model': {
+              input: 900000,
+              output: 10,
+              cacheRead: 0,
+              cacheWrite: 0,
+              costUsd: null,
+            },
+          },
+        },
+      },
+    ]);
   });
 
   it('reports a startup RPC error as a failure', () => {

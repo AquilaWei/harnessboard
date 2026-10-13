@@ -184,6 +184,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
               {task.mode === 'loop' && task.sessionCount > 0 && !task.plan && (
                 <FeatureProgress loop={task.loop} />
               )}
+              <p className="hint">{t('safety.monitoringLimit')}</p>
               <div className="actions">
                 {s === 'review' && (
                   <>
@@ -250,9 +251,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                     {t(s === 'done' ? 'actions.reopenDraft' : 'actions.toDraft')}
                   </button>
                 )}
-                {(s === 'failed' || s === 'stopped') && (
+                {(s === 'failed' || s === 'stopped' || s === 'paused_safety') && (
                   <button type="button" className="btn primary" onClick={() => act('queue')}>
-                    {t('actions.retry')}
+                    {t(s === 'paused_safety' ? 'actions.resume' : 'actions.retry')}
                   </button>
                 )}
                 {(s === 'running' ||

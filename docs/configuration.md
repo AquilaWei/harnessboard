@@ -32,6 +32,47 @@ ends a turn early, so a runaway turn can not overflow the window. With compactio
 an agent that can not be compacted, the soft and hard thresholds apply within the turn.
 Emergency context handoffs and unavailable conversations can still require a fresh session.
 
+## Token spike protection
+
+Protection is enabled by default. Each task pauses as `paused_safety` when its reported
+consumption **exceeds 100,000 tokens in a sliding 60-second window**. Input, output, cache
+reads and cache writes all count, across workflow roles, chat and compaction. Other tasks
+keep running. The task's branch, files and pause evidence are preserved.
+
+Change **Settings → Token spike protection**, or set the complete policy in the user
+`config.json`:
+
+```json
+{
+  "tokenSpike": { "enabled": true, "windowSeconds": 60, "maxTokens": 100000 }
+}
+```
+
+`windowSeconds` and `maxTokens` must be positive safe integers. `PUT /api/settings` accepts
+this same `tokenSpike` object; `GET /api/settings` returns the effective policy. Changes
+apply to subsequent usage readings. Disabling protection does not resume a paused task.
+The rule is global; there are no per-task exemptions.
+
+The board shows the observed consumption, window and limit. Browser and paired-phone
+notifications use the existing notification preferences. Select **Resume**, or run
+`hb resume <id>`, to continue the pending workflow. Resume clears only that task's recent
+window and retains its conversation usage baseline; another spike pauses it again.
+Neither quota reset, queued chat nor a server restart automatically resumes safety pauses.
+The task API exposes `safetyPause` evidence while paused, and the event log retains each
+`safety_pause` record after resume.
+
+This is based on **reported consumption**, not context size or an account quota. Claude
+Code messages and Codex app-server updates allow checks during a run; duplicate messages
+and cumulative snapshots are not counted twice. Gemini reports only at turn end, so its
+pause can prevent the next run but cannot interrupt consumption earlier in that turn.
+Missing usage is unavailable, not zero. Delayed reports are counted when received; already
+consumed tokens cannot be recovered, and the threshold is not a guaranteed spending cap.
+A restart clears in-memory windows but preserves safety pauses and recorded conversation totals.
+
+Real-device acceptance still needs a live Claude/Codex spike and resume, plus browser and
+paired-phone notifications with their notification permissions enabled. Automated tests
+use fake agents and do not consume paid tokens.
+
 ## Usage estimates
 
 Codex task summaries estimate USD using a bundled price table checked on October 9, 2026

@@ -371,3 +371,25 @@ describe('sendBackKey', () => {
     expect(sendBackKey(task)).toBe('sendBack');
   });
 });
+
+describe('safety pause description', () => {
+  it('shows observed consumption and the configured limit', () => {
+    expect(
+      describeTask({
+        ...base,
+        status: 'paused_safety',
+        safetyPause: {
+          triggeredAt: 1,
+          observedTokens: 100_001,
+          windowSeconds: 60,
+          maxTokens: 100_000,
+          source: 'codex',
+        },
+      }),
+    ).toEqual({
+      key: 'tokenSpike',
+      tone: 'attention',
+      vars: { tokens: 100_001, seconds: 60, limit: 100_000 },
+    });
+  });
+});

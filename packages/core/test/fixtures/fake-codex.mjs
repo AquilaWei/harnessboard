@@ -57,6 +57,12 @@ rl.on('line', (line) => {
     send({ id: msg.id, result: { thread: { id: threadId }, model: 'test-model' } });
   } else if (msg.method === 'turn/start') {
     send({ id: msg.id, result: { turn: { id: turnId, status: 'inProgress' } } });
+    if (scenario.tokenUsage) {
+      send({
+        method: 'thread/tokenUsage/updated',
+        params: { threadId, tokenUsage: scenario.tokenUsage },
+      });
+    }
     next();
   } else if (msg.method === 'thread/compact/start') {
     send({ id: msg.id, result: {} });

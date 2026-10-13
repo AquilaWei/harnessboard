@@ -215,3 +215,17 @@ it('keeps an active spec discussion in the phone waiting tab', () => {
   const discussing = { ...task('running'), deferred: true };
   expect(groupByPhoneTab([discussing]).waiting).toEqual([discussing]);
 });
+
+describe('safety pause on the board', () => {
+  it('shows a safety-paused spec discussion in Needs you', () => {
+    expect(stageOfTask({ status: 'paused_safety', deferred: true })).toBe('attention');
+  });
+
+  it('offers explicit Resume for a safety-paused task', () => {
+    expect(primaryAction(task('paused_safety'))).toBe('resume');
+  });
+
+  it('keeps a safety-paused task in the phone waiting tab', () => {
+    expect(groupByPhoneTab([task('paused_safety')]).waiting).toEqual([task('paused_safety')]);
+  });
+});

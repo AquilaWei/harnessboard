@@ -11,9 +11,10 @@ import {
   isEffortId,
   resolveThresholds,
 } from '@harnessboard/shared';
-import type { AgentProfile, ContextPolicy } from '@harnessboard/shared';
+import type { AgentProfile, ContextPolicy, TokenSpikePolicy } from '@harnessboard/shared';
 
 export interface HarnessConfig {
+  tokenSpike: TokenSpikePolicy;
   /** Holds the database and task worktrees. */
   dataDir: string;
   /** Agent profiles by id. `claude` always exists and implements tasks by default. */
@@ -59,6 +60,7 @@ export interface HarnessConfig {
 /** Settings the web UI may change at runtime; they are saved to the user config file. */
 export type EditableSettings = Pick<
   HarnessConfig,
+  | 'tokenSpike'
   | 'maxConcurrent'
   | 'quotaPauseUtilization'
   | 'defaultContextPolicy'
@@ -69,6 +71,7 @@ export type EditableSettings = Pick<
   | 'androidAppFingerprints'
 >;
 export const EDITABLE_SETTINGS = [
+  'tokenSpike',
   'maxConcurrent',
   'quotaPauseUtilization',
   'defaultContextPolicy',
@@ -109,6 +112,7 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     defaultReviewer: null,
     port: 4317,
     maxConcurrent: 1,
+    tokenSpike: { enabled: true, windowSeconds: 60, maxTokens: 100_000 },
     quotaPauseUtilization: 0.95,
     fallbackContextWindow: 200_000,
     quotaRetryMinutes: 15,
@@ -235,6 +239,19 @@ function applyEnv(config: HarnessConfig, env: Env): void {
 
 /** Throws when a value is out of range; used for loaded config and runtime edits alike. */
 export function validate(config: HarnessConfig): void {
+  const spike = config.tokenSpike;
+  if (
+    !spike ||
+    typeof spike.enabled !== 'boolean' ||
+    !Number.isSafeInteger(spike.windowSeconds) ||
+    spike.windowSeconds <= 0 ||
+    !Number.isSafeInteger(spike.maxTokens) ||
+    spike.maxTokens <= 0
+  ) {
+    throw new Error(
+      'config tokenSpike requires enabled and positive integer windowSeconds/maxTokens',
+    );
+  }
   const positiveInts: (keyof HarnessConfig)[] = [
     'port',
     'maxConcurrent',

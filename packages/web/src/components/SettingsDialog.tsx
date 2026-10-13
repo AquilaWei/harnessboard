@@ -32,6 +32,7 @@ const lines = (text: string) =>
 /** Scheduler settings (saved on the server), agent profiles, and display (this browser). */
 export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props) {
   const { t, i18n } = useTranslation();
+  const [tokenSpike, setTokenSpike] = useState(settings.tokenSpike);
   const [maxConcurrent, setMaxConcurrent] = useState(settings.maxConcurrent);
   const [pausePct, setPausePct] = useState(Math.round(settings.quotaPauseUtilization * 100));
   const [size, setSize] = useState<TaskSize>(settings.defaultContextPolicy.size ?? 'medium');
@@ -58,6 +59,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
       onSaved(
         await api.saveSettings({
           maxConcurrent,
+          tokenSpike,
           quotaPauseUtilization: pausePct / 100,
           defaultContextPolicy: { ...settings.defaultContextPolicy, size },
           defaultReviewer: reviewer === '' ? null : reviewer,
@@ -128,6 +130,49 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           </label>
         </div>
 
+        <section className="detail-section">
+          <h3>{t('safety.title')}</h3>
+          <label className="field">
+            <span>
+              <input
+                type="checkbox"
+                checked={tokenSpike.enabled}
+                onChange={(e) => setTokenSpike({ ...tokenSpike, enabled: e.target.checked })}
+              />{' '}
+              {t('safety.enabled')}
+            </span>
+          </label>
+          <div className="row">
+            <label className="field">
+              <span>{t('safety.window')}</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                required
+                value={tokenSpike.windowSeconds}
+                onChange={(e) =>
+                  setTokenSpike({ ...tokenSpike, windowSeconds: Number(e.target.value) })
+                }
+              />
+            </label>
+            <label className="field">
+              <span>{t('safety.limit')}</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                required
+                value={tokenSpike.maxTokens}
+                onChange={(e) =>
+                  setTokenSpike({ ...tokenSpike, maxTokens: Number(e.target.value) })
+                }
+              />
+            </label>
+          </div>
+          <p className="hint">{t('safety.hint')}</p>
+          <p className="hint">{t('safety.monitoringLimit')}</p>
+        </section>
         <label className="field">
           <span>{t('settingsForm.globalRules')}</span>
           <textarea

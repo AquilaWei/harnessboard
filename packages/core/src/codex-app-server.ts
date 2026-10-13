@@ -129,7 +129,10 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
       // `total` is cumulative over the thread; `last` is the latest model call, i.e. the
       // current context size that the session's context thresholds are measured against.
       const current = fields(tokens.last).inputTokens;
-      if (typeof current === 'number') return [{ kind: 'context', tokens: current }];
+      return [
+        ...(typeof current === 'number' ? [{ kind: 'context' as const, tokens: current }] : []),
+        { kind: 'usage_update', usage },
+      ];
     } else if (method === 'item/started' || method === 'item/completed') {
       const item = fields(params.item);
       items.set(string(item.id), item);

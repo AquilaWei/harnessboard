@@ -252,6 +252,17 @@ class FakeSender implements PushSender {
 }
 
 describe('PushNotifier', () => {
+  it('pushes once per safety pause and again only after a resume', async () => {
+    const sender = new FakeSender();
+    const notifier = new PushNotifier(store, sender, () => keys);
+    await notifier.handle({ type: 'task', taskId: 1, status: 'paused_safety' });
+    await notifier.handle({ type: 'task', taskId: 1, status: 'paused_safety' });
+    expect(sender.sent).toHaveLength(2);
+    await notifier.handle({ type: 'task', taskId: 1, status: 'running' });
+    await notifier.handle({ type: 'task', taskId: 1, status: 'paused_safety' });
+    expect(sender.sent).toHaveLength(4);
+  });
+
   let store: Store;
   beforeEach(() => {
     store = new Store(':memory:');

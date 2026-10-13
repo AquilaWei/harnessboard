@@ -39,6 +39,7 @@ export function TaskCard({
         return;
       case 'start':
       case 'retry':
+      case 'resume':
         onAction('queue');
         return;
       case 'stop':

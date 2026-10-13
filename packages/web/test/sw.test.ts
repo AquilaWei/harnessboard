@@ -112,3 +112,19 @@ describe('sw.js', () => {
     expect(board.focus).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('safety pause push text', () => {
+  it('explains the safety pause in English', () => {
+    expect(
+      loadPushNotice().pushNotice({ taskId: 1, title: 'Task', status: 'paused_safety' }, 'en')
+        .options.body,
+    ).toBe('Token spike detected. Task paused; resume manually.');
+  });
+
+  it('explains the safety pause in Traditional Chinese', () => {
+    expect(
+      loadPushNotice().pushNotice({ taskId: 1, title: 'Task', status: 'paused_safety' }, 'zh-TW')
+        .options.body,
+    ).toBe('偵測到 token 暴增，任務已暫停，請手動繼續。');
+  });
+});

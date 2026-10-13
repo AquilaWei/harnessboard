@@ -19,6 +19,7 @@ const STAGE_OF: Record<TaskStatus, Stage> = {
   review: 'attention',
   failed: 'attention',
   stopped: 'attention',
+  paused_safety: 'attention',
   done: 'done',
 };
 
@@ -32,7 +33,11 @@ export function stageOf(status: TaskStatus): Stage {
  */
 export function stageOfTask(task: Pick<TaskView, 'status' | 'deferred'>): Stage {
   const stage = STAGE_OF[task.status];
-  return task.deferred && (stage === 'active' || stage === 'attention') ? 'draft' : stage;
+  return task.status !== 'paused_safety' &&
+    task.deferred &&
+    (stage === 'active' || stage === 'attention')
+    ? 'draft'
+    : stage;
 }
 
 /**
@@ -54,6 +59,7 @@ const PHONE_TAB_OF: Record<TaskStatus, PhoneTab> = {
   review: 'review',
   failed: 'waiting',
   stopped: 'waiting',
+  paused_safety: 'waiting',
   done: 'done',
 };
 
@@ -98,6 +104,7 @@ export type PrimaryAction =
   | 'stop'
   | 'review'
   | 'retry'
+  | 'resume'
   | 'approvePlan'
   | 'approveCriteria'
   | 'answerPermission';
@@ -118,6 +125,8 @@ export function primaryAction(task: TaskView): PrimaryAction | null {
       return task.mode === 'single' ? 'approveCriteria' : 'approvePlan';
     case 'awaiting_permission':
       return 'answerPermission';
+    case 'paused_safety':
+      return 'resume';
     case 'failed':
     case 'stopped':
       return 'retry';

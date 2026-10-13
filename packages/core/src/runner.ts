@@ -8,6 +8,7 @@ import type {
   Thresholds,
 } from '@harnessboard/shared';
 import type { AgentAdapter, PermissionReply, SessionSpec } from './agent.js';
+import { LiveUsage } from './live-usage.js';
 import { spawnLines } from './process.js';
 import { COMPACT_COMMAND, reportsDone, wrapUpPrompt } from './prompts.js';
 
@@ -25,12 +26,14 @@ export interface SessionOutcome {
   /** Window reported by the agent, when it got as far as a result. */
   contextWindow: number | null;
   detail: string | null;
-  /** The conversation's totals at its latest result, `/compact` included. */
+  /** Latest reported conversation usage, including partial readings when stopped. */
   usage: RunUsage | null;
 }
 
 export interface RunSessionOptions {
   adapter: AgentAdapter;
+  /** Previous conversation totals when resuming; used to retain partial usage on abort. */
+  initialUsage?: RunUsage | null;
   /** `spec.prompt` is the first message. */
   spec: SessionSpec;
   thresholds: Thresholds;
@@ -46,6 +49,8 @@ export interface RunSessionOptions {
   /** Aborting stops the session and kills the agent's process tree. */
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
+  /** Latest conversation usage, delivered before an event can cause a safety abort. */
+  onUsage?: (usage: RunUsage) => void;
   /**
    * Decides a tool use the agent asked about (`spec.askPermission`). The agent waits, with
    * its process running, until the promise settles; stopping the session ends the wait.
@@ -97,7 +102,7 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   let quota: QuotaInfo | null = null;
   let result: ResultEvent | null = null;
   // Totals are cumulative for the conversation, so the latest report replaces the earlier.
-  let usage: RunUsage | null = null;
+  const liveUsage = new LiveUsage(options.initialUsage);
   // Kept to explain an exit without a result; the CLI reports such failures on stderr.
   const stderrTail: string[] = [];
   let kill = () => {};
@@ -177,12 +182,23 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
     }
 
     function handle(event: AgentEvent): void {
-      if (event.kind === 'result' && event.usage) usage = event.usage;
+      if (stopped) return;
+      if (event.kind === 'usage_update') {
+        if (event.callId) liveUsage.call(event.callId, event.usage);
+        else liveUsage.snapshot(event.usage);
+      }
+      if (event.kind === 'result' && event.usage) liveUsage.snapshot(event.usage);
+      if ((event.kind === 'usage_update' || event.kind === 'result') && liveUsage.usage) {
+        options.onUsage?.(liveUsage.usage);
+      }
       if (compacting && event.kind === 'result') {
+        if (event.usage) options.onEvent({ kind: 'usage_update', usage: event.usage });
+        if (stopped) return;
         finishCompaction(event);
         return;
       }
       options.onEvent(event);
+      if (stopped) return; // A safety guard may abort synchronously on this event.
       if (event.kind === 'init' && event.sessionId) agentSessionId = event.sessionId;
       if (event.kind === 'quota') quota = event.quota;
       if (event.kind === 'context') checkBudget(event.tokens);
@@ -286,7 +302,7 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
       quota,
       contextWindow: final?.contextWindow ?? null,
       detail,
-      usage,
+      usage: liveUsage.usage,
     };
   }
 }

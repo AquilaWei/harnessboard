@@ -77,6 +77,15 @@ export const en = {
     attention: 'Nothing is waiting for you.',
     done: 'Finished tasks appear here.',
   },
+  safety: {
+    title: 'Token spike protection',
+    enabled: 'Pause tasks when reported consumption spikes',
+    window: 'Sliding window (seconds)',
+    limit: 'Token limit',
+    hint: 'Counts input, output and cache reads/writes across all task roles. Exceeding the limit pauses only that task until you resume it.',
+    monitoringLimit:
+      'Protection acts when usage is reported. Gemini reports at turn end; missing usage cannot be monitored. Already consumed tokens cannot be recovered.',
+  },
   status: {
     discussing: 'Discussing spec',
     specApproval: 'Waiting for spec confirmation',
@@ -90,6 +99,7 @@ export const en = {
     review: 'Ready for review',
     done: 'Done',
     stopped: 'Stopped',
+    paused_safety: 'Safety pause',
     failed: 'Failed',
   },
   describe: {
@@ -140,10 +150,14 @@ export const en = {
     noVerdict: '{{agent}} did not give a clear verdict. Check the review yourself.',
     failed: 'Stopped with a problem: {{reason}}',
     stopped: 'Stopped by you. Resume it when ready.',
+    tokenSpike:
+      'Safety pause: {{tokens}} tokens reported within {{seconds}}s exceeded the {{limit}} token limit. Resume manually to restart monitoring.',
+    pausedSafety: 'Paused for safety. Check the task before resuming.',
     done: 'Done.',
     merged: 'Done and merged into {{base}}.',
   },
   actions: {
+    resume: 'Resume',
     start: 'Start',
     plan: 'Plan the spec',
     pend: 'Put in pending',
@@ -418,6 +432,7 @@ export const en = {
     context_hard_limit: 'hit the context limit',
     quota: 'quota',
     stopped: 'stopped',
+    safety_pause: 'paused for token spike',
     error: 'error',
   },
   fields: {
@@ -700,6 +715,15 @@ export const zhTW: typeof en = {
     attention: '沒有等你處理的任務。',
     done: '完成的任務會出現在這裡。',
   },
+  safety: {
+    title: 'Token 暴增保護',
+    enabled: '消耗暴增時暫停任務',
+    window: '滑動視窗（秒）',
+    limit: 'Token 上限',
+    hint: '計入所有角色的輸入、輸出、快取讀寫；超過上限時只暫停該任務，需手動繼續。',
+    monitoringLimit:
+      '收到用量回報後才會介入。Gemini 在一輪結束時回報；未回報用量時無法監控。已消耗的 tokens 無法撤銷。',
+  },
   status: {
     discussing: '討論規格中',
     specApproval: '等待規格確認',
@@ -713,6 +737,7 @@ export const zhTW: typeof en = {
     review: '待審核',
     done: '完成',
     stopped: '已停止',
+    paused_safety: '安全暫停',
     failed: '失敗',
   },
   describe: {
@@ -759,10 +784,14 @@ export const zhTW: typeof en = {
     noVerdict: '{{agent}} 沒有給出明確結論，請自己看一下審查內容。',
     failed: '出了問題而停止：{{reason}}',
     stopped: '已由你停止，準備好再繼續。',
+    tokenSpike:
+      '安全暫停：{{seconds}} 秒內回報消耗 {{tokens}} tokens，超過 {{limit}} 上限。手動繼續後重新監控。',
+    pausedSafety: '已因安全保護暫停，請確認任務後手動繼續。',
     done: '已完成。',
     merged: '已完成，並合併到 {{base}}。',
   },
   actions: {
+    resume: '繼續',
     start: '開始',
     plan: '規劃規格',
     pend: '放入待處理',
@@ -1026,6 +1055,7 @@ export const zhTW: typeof en = {
     context_hard_limit: '達到上下文上限',
     quota: '額度',
     stopped: '停止',
+    safety_pause: '因 token 暴增暫停',
     error: '錯誤',
   },
   fields: {

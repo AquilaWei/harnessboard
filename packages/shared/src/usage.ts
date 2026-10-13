@@ -1,6 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { AgentRole } from './agents.js';
 
+/** Global guard for reported token consumption in a sliding time window. */
+export interface TokenSpikePolicy {
+  enabled: boolean;
+  windowSeconds: number;
+  maxTokens: number;
+}
+
+/** Persisted evidence explaining why a task requires explicit resume. */
+export interface SafetyPause {
+  triggeredAt: number;
+  windowSeconds: number;
+  observedTokens: number;
+  maxTokens: number;
+  source: string;
+}
+
 export interface TokenCounts {
   input: number;
   output: number;

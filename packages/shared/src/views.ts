@@ -15,7 +15,7 @@ import type { ReviewRecord, TaskActivity } from './review.js';
 import type { AgentProvider, TaskAgents } from './agents.js';
 import type { QuotaInfo } from './events.js';
 import type { PermissionRequest } from './permissions.js';
-import type { TaskUsage } from './usage.js';
+import type { SafetyPause, TokenSpikePolicy, TaskUsage } from './usage.js';
 
 /** Context usage of a task's latest session, as shown in the CLI and web UI. */
 export interface ContextView {
@@ -60,6 +60,8 @@ export interface TaskView extends Task {
   permissionRequests: PermissionRequest[];
   /** Tokens, estimated cost and time over all the task's sessions. */
   usage: TaskUsage;
+  /** Latest guard evidence while paused; absent for older API clients. */
+  safetyPause?: SafetyPause | null;
 }
 
 export interface TaskDetail extends TaskView {
@@ -131,6 +133,7 @@ export interface HarnessStatus {
 }
 
 export interface Settings {
+  tokenSpike: TokenSpikePolicy;
   maxConcurrent: number;
   quotaPauseUtilization: number;
   defaultContextPolicy: ContextPolicy;

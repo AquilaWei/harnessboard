@@ -6,7 +6,7 @@ import path from 'node:path';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Harness, defaultConfig } from '@harnessboard/core';
-import type { Task } from '@harnessboard/shared';
+import type { Settings, TaskDetail, Task } from '@harnessboard/shared';
 import { CLIENT_HEADER, access } from '../src/access.js';
 import { createApi } from '../src/api.js';
 import { Sessions } from '../src/session.js';
@@ -89,6 +89,55 @@ describe('localOnly', () => {
 });
 
 describe('settings API', () => {
+  it('returns the saved token spike policy', async () => {
+    const put = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: '1' },
+      body: JSON.stringify({
+        tokenSpike: { enabled: true, windowSeconds: 120, maxTokens: 200_000 },
+      }),
+    });
+    expect(put.status).toBe(200);
+    const res = await app.request('/api/settings', { headers: local });
+    expect(((await res.json()) as Settings).tokenSpike).toEqual({
+      enabled: true,
+      windowSeconds: 120,
+      maxTokens: 200_000,
+    });
+  });
+
+  it('rejects an invalid token spike policy without changing the current rule', async () => {
+    const put = await app.request('/api/settings', {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: '1' },
+      body: JSON.stringify({ tokenSpike: { enabled: true, windowSeconds: 0, maxTokens: 200_000 } }),
+    });
+    expect(put.status).toBe(400);
+    expect(harness.settings().tokenSpike).toEqual({
+      enabled: true,
+      windowSeconds: 60,
+      maxTokens: 100_000,
+    });
+  });
+
+  it('writes token spike settings to the user config file', async () => {
+    const dir = mkdtempSync(path.join(realpathSync.native(tmpdir()), 'hb-spike-settings-'));
+    const settingsFile = path.join(dir, 'config.json');
+    const saving = Harness.open({ ...defaultConfig({}), dataDir: dir }, { settingsFile });
+    const api = new Hono().route('/api', createApi(saving, new Sessions()));
+    await api.request('/api/settings', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tokenSpike: { enabled: false, windowSeconds: 60, maxTokens: 50_000 },
+      }),
+    });
+    saving.store.close();
+    expect(JSON.parse(readFileSync(settingsFile, 'utf8'))).toEqual({
+      tokenSpike: { enabled: false, windowSeconds: 60, maxTokens: 50_000 },
+    });
+  });
+
   it('returns the remote hosts that PUT /settings saved', async () => {
     const put = await app.request('/api/settings', {
       method: 'PUT',
@@ -724,5 +773,23 @@ describe('plan API', () => {
     expect(((await res.json()) as { error: string }).error).toMatch(
       /not waiting for plan approval/,
     );
+  });
+});
+
+describe('safety pause task API', () => {
+  it('exposes pause evidence while a task waits for manual resume', async () => {
+    const task = await harness.createTask({ prompt: 'Build it', repo });
+    const evidence = {
+      triggeredAt: 1,
+      observedTokens: 100_001,
+      windowSeconds: 60,
+      maxTokens: 100_000,
+      source: 'codex',
+    };
+    harness.store.updateTask(task.id, { status: 'paused_safety' });
+    harness.store.appendEvent(task.id, null, 'safety_pause', evidence);
+    const res = await app.request(`/api/tasks/${task.id}`, { headers: local });
+    const view = (await res.json()) as TaskDetail;
+    expect([view.status, view.safetyPause]).toEqual(['paused_safety', evidence]);
   });
 });

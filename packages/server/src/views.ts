@@ -34,6 +34,7 @@ import type {
   TimelineEntry,
   TokenCounts,
   UsageRecord,
+  SafetyPause,
 } from '@harnessboard/shared';
 import { readPlan } from '@harnessboard/core';
 import type { Harness, HarnessConfig, Store } from '@harnessboard/core';
@@ -49,6 +50,10 @@ export function taskView(task: Task, harness: Harness): TaskView {
   const latest = sessions.find((session) => session.id === active?.sessionId) ?? sessions.at(-1);
   return {
     ...task,
+    safetyPause:
+      task.status === 'paused_safety'
+        ? ((store.lastEvent(task.id, 'safety_pause')?.data as SafetyPause | undefined) ?? null)
+        : null,
     sessionCount: sessions.length,
     latestSessionId: latest?.id ?? null,
     context: latest ? contextView(task, latest, store, config) : null,

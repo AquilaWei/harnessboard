@@ -281,3 +281,59 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
     expect(adapter.buildArgs(readOnly).at(-1)).toBe('Bash(npm test)');
   });
 });
+
+describe('Claude reported consumption', () => {
+  it('reports message identity and all token categories for monitoring', () => {
+    expect(
+      parse({
+        type: 'assistant',
+        parent_tool_use_id: null,
+        message: {
+          id: 'message-1',
+          model: 'sonnet',
+          content: [],
+          usage: {
+            input_tokens: 1,
+            output_tokens: 2,
+            cache_read_input_tokens: 3,
+            cache_creation_input_tokens: 4,
+          },
+        },
+      }),
+    ).toEqual([
+      { kind: 'context', tokens: 8 },
+      {
+        kind: 'usage_update',
+        callId: 'main:message-1',
+        usage: {
+          costUsd: null,
+          models: { sonnet: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4, costUsd: null } },
+        },
+      },
+    ]);
+  });
+
+  it('counts sub-agent consumption without treating it as main-thread context', () => {
+    expect(
+      parse({
+        type: 'assistant',
+        parent_tool_use_id: 'tool-1',
+        message: {
+          id: 'message-1',
+          model: 'haiku',
+          content: [],
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      }),
+    ).toEqual([
+      {
+        kind: 'usage_update',
+        callId: 'tool-1:message-1',
+        usage: {
+          costUsd: null,
+          models: { haiku: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, costUsd: null } },
+        },
+      },
+    ]);
+  });
+});

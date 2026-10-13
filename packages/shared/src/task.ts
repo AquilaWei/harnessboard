@@ -9,6 +9,7 @@ export const TASK_STATUSES = [
   'running',
   'awaiting_permission',
   'waiting_quota',
+  'paused_safety',
   'awaiting_approval',
   'review',
   'done',
@@ -27,6 +28,7 @@ export const NOTIFY_STATUSES: ReadonlySet<TaskStatus> = new Set([
   'awaiting_approval',
   'review',
   'failed',
+  'paused_safety',
 ]);
 
 /**
@@ -245,7 +247,7 @@ export type MergeResult =
   ({ status: 'merged' } & MergeRecord) | ({ status: 'conflicts' } & MergeConflict);
 
 export type SessionEndReason =
-  'completed' | 'handoff' | 'context_hard_limit' | 'quota' | 'stopped' | 'error';
+  'completed' | 'handoff' | 'context_hard_limit' | 'quota' | 'stopped' | 'error' | 'safety_pause';
 
 export interface Session {
   id: string;

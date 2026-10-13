@@ -25,6 +25,7 @@ vi.mock('qrcode', () => ({ default: { toDataURL: () => Promise.resolve('data:ima
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const settings = {
+  tokenSpike: { enabled: true, windowSeconds: 60, maxTokens: 100_000 },
   maxConcurrent: 2,
   quotaPauseUtilization: 0.9,
   defaultContextPolicy: { size: 'medium' },

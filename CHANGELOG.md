@@ -3,6 +3,15 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Added
+
+- **Token spike protection:** tasks pause and notify you when reported consumption exceeds
+  100,000 tokens within 60 seconds, including cache reads and writes. The global rule is
+  adjustable in Settings. Work is preserved; manual resume restarts monitoring. Gemini
+  can be checked only at turn end because it does not stream consumption readings.
+
 ## 0.1.14 - 2026-10-12
 
 Local test build; real-device acceptance is pending.

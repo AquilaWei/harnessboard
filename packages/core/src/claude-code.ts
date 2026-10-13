@@ -180,7 +180,12 @@ interface ContentBlock {
 }
 
 function parseAssistant(msg: Record<string, unknown>): AgentEvent[] {
-  const message = (msg.message ?? {}) as { content?: ContentBlock[]; usage?: Usage };
+  const message = (msg.message ?? {}) as {
+    id?: string;
+    model?: string;
+    content?: ContentBlock[];
+    usage?: Usage;
+  };
   // Sub-agent turns report their own, separate context; only the main thread counts.
   const isMainThread = msg.parent_tool_use_id == null;
   const events: AgentEvent[] = [];
@@ -197,10 +202,30 @@ function parseAssistant(msg: Record<string, unknown>): AgentEvent[] {
   if (isMainThread && message.usage) {
     events.push({ kind: 'context', tokens: contextTokens(message.usage) });
   }
+  // Each message can be repeated as content blocks arrive; the guard deduplicates by id.
+  if (message.id && message.usage) {
+    events.push({
+      kind: 'usage_update',
+      callId: `${String(msg.parent_tool_use_id ?? 'main')}:${message.id}`,
+      usage: {
+        costUsd: null,
+        models: {
+          [message.model ?? 'unknown']: {
+            input: message.usage.input_tokens ?? 0,
+            output: message.usage.output_tokens ?? 0,
+            cacheRead: message.usage.cache_read_input_tokens ?? 0,
+            cacheWrite: message.usage.cache_creation_input_tokens ?? 0,
+            costUsd: null,
+          },
+        },
+      },
+    });
+  }
   return events;
 }
 
 interface Usage {
+  output_tokens?: number;
   input_tokens?: number;
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;

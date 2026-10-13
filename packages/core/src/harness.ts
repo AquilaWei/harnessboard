@@ -63,6 +63,7 @@ import type {
   WorktreeDiff,
 } from '@harnessboard/shared';
 import type { AgentAdapter, PermissionReply } from './agent.js';
+import { RunTokenCounter, TokenWatch, usageTokens } from './token-watch.js';
 import { matchingCodexRules } from './codex-app-server.js';
 import {
   DEFAULT_AGENT,
@@ -157,6 +158,7 @@ interface HeldReplies {
 }
 
 const STARTABLE: TaskStatus[] = [
+  'paused_safety',
   'backlog',
   'pending',
   'stopped',
@@ -192,6 +194,7 @@ const CHATTABLE: TaskStatus[] = ['stopped', 'failed', 'review', 'done'];
  * event loop, and subscribers receive {@link HarnessEvent}s instead of sharing state.
  */
 export class Harness {
+  private readonly tokenWatch = new TokenWatch();
   private readonly running = new Map<number, AbortController>();
   /** Merges in progress by task id, so no `base` task starts in the folder they change. */
   private readonly merging = new Map<number, { repo: string; base: string }>();
@@ -433,6 +436,7 @@ export class Harness {
     const androidAppFingerprints = [...this.config.androidAppFingerprints];
     return {
       maxConcurrent,
+      tokenSpike: { ...this.config.tokenSpike },
       quotaPauseUtilization,
       defaultContextPolicy,
       defaultReviewer,
@@ -454,6 +458,9 @@ export class Harness {
     if (unknown.length > 0) throw new Error(`unknown settings: ${unknown.join(', ')}`);
     validate({ ...this.config, ...patch });
     if (patch.reviewGuidelines) readGuidelines(patch.reviewGuidelines);
+    if (patch.tokenSpike && patch.tokenSpike.enabled !== this.config.tokenSpike.enabled) {
+      for (const task of this.store.listTasks()) this.tokenWatch.clear(task.id);
+    }
     Object.assign(this.config, patch);
     if (this.settingsFile) saveUserConfig(patch, this.settingsFile);
     this.tick(); // a higher concurrency limit may let queued tasks start now
@@ -470,6 +477,19 @@ export class Harness {
    */
   async start(): Promise<void> {
     for (const task of this.store.listTasks()) {
+      if (task.status === 'paused_safety') {
+        const unfinished = this.store
+          .listSessions(task.id)
+          .filter((session) => session.endedAt === null);
+        if (unfinished.length > 0) await this.endInterrupted(task);
+        for (const session of unfinished) this.store.endSession(session.id, 'safety_pause');
+        const chat = this.unansweredChat(task.id);
+        if (chat) {
+          await this.refreshInterruptedChat(task.id);
+          this.endChat(task.id, chat.sessionId, chat.message.returnTo, 'safety_pause');
+        }
+        continue;
+      }
       const interrupted = task.status === 'running' || task.status === 'awaiting_permission';
       if (interrupted) await this.endInterrupted(task);
       // A chat is the user's own conversation, not workflow work to pick up again.
@@ -629,6 +649,9 @@ export class Harness {
    */
   queueTask(id: number): Task {
     const task = this.requireTask(id);
+    if (task.status === 'paused_safety' && this.running.has(id)) {
+      throw new Error(`task ${id} is still stopping`);
+    }
     if (!STARTABLE.includes(task.status)) {
       throw new Error(`task ${id} is ${task.status} and cannot be queued`);
     }
@@ -639,10 +662,11 @@ export class Harness {
       this.store.updateTask(id, { confirmPlan: true, deferred: true });
     }
     if (task.workspace === 'base') this.assertFolderFree(task);
+    if (task.status === 'paused_safety') this.tokenWatch.clear(id);
     if (task.status === 'review') {
       this.workflow.sendBack(id);
       this.notice(id, 'sent back to work by you; review rounds start again');
-    } else {
+    } else if (task.status !== 'paused_safety') {
       this.workflow.resetImplementerProgress(id);
     }
     const queued = this.setStatus(id, 'queued', {
@@ -939,6 +963,7 @@ export class Harness {
     }
     await rm(this.evidenceDir(id), { recursive: true, force: true });
     this.store.deleteTask(id);
+    this.tokenWatch.clear(id);
     this.emit({ type: 'deleted', taskId: id });
   }
 
@@ -1249,6 +1274,7 @@ export class Harness {
       this.running.delete(task.id);
       this.activities.delete(task.id);
       const chat = this.unansweredChat(task.id);
+      if (this.requireTask(task.id).status === 'paused_safety') reason = 'safety_pause';
       if (chat) this.endChat(task.id, session.id, chat.message.returnTo, reason);
       if (this.timer) this.tick();
     }
@@ -1272,6 +1298,10 @@ export class Harness {
   ): void {
     this.store.appendEvent(taskId, sessionId, 'chat_end', { reason } satisfies ChatEnd);
     if (!this.store.getTask(taskId)) return;
+    if (reason === 'safety_pause') {
+      this.setStatus(taskId, 'paused_safety', { resumeAt: null });
+      return;
+    }
     this.setStatus(taskId, returnTo);
     // A spec change asked for during the chat would otherwise wait in review forever.
     this.workflow.reviseAfterStep(taskId);
@@ -1623,7 +1653,7 @@ export class Harness {
       }
     } catch (err) {
       this.notice(task.id, `task failed: ${(err as Error).message}`);
-      this.setStatus(task.id, 'failed');
+      if (this.requireTask(task.id).status !== 'paused_safety') this.setStatus(task.id, 'failed');
     } finally {
       this.dropPermissions(task.id);
       this.running.delete(task.id);
@@ -1723,8 +1753,44 @@ export class Harness {
     // A resumed turn may report no usage (e.g. `/compact`), so start from what is known.
     let tokens = plan.resume?.contextTokens ?? 0;
     const started = Date.now();
+    const previous = this.store
+      .eventsOfKinds(task.id, ['usage', 'usage_checkpoint'])
+      .findLast(
+        (event) => event.sessionId === sessionId && (event.data as UsageRecord).usage != null,
+      )?.data as Pick<UsageRecord, 'usage'> | undefined;
+    const counter = new RunTokenCounter(
+      provider === 'gemini' ? 0 : usageTokens(previous?.usage ?? null),
+    );
+    let safetyPause = false;
+    let latestUsage = previous?.usage ?? null;
+    const monitor = (event: AgentEvent) => {
+      if (safetyPause) return;
+      const usage = event.kind === 'usage_update' || event.kind === 'result' ? event.usage : null;
+      if (!usage) return;
+      const delta =
+        event.kind === 'usage_update' && event.callId
+          ? counter.call(event.callId, usageTokens(usage))
+          : counter.snapshot(usageTokens(usage));
+      const evidence = this.tokenWatch.check(task.id, delta, this.config.tokenSpike, provider);
+      if (!evidence) return;
+      safetyPause = true;
+      this.store.appendEvent(task.id, sessionId, 'usage_checkpoint', { usage: latestUsage });
+      this.store.appendEvent(task.id, sessionId, 'safety_pause', evidence);
+      this.notice(
+        task.id,
+        `Token spike: ${evidence.observedTokens} tokens in ${evidence.windowSeconds}s (limit ${evidence.maxTokens}); resume manually.`,
+      );
+      // Persist the pause before killing the process, so a crash cannot requeue this task.
+      this.setStatus(task.id, 'paused_safety', { resumeAt: null });
+      this.running.get(task.id)?.abort();
+      this.dropPermissions(task.id);
+    };
     const outcome = await runSession({
       adapter,
+      initialUsage: provider === 'gemini' ? null : (previous?.usage ?? null),
+      onUsage: (usage) => {
+        latestUsage = usage;
+      },
       spec: {
         cwd: task.worktreePath!,
         sessionId: plan.resume
@@ -1768,6 +1834,7 @@ export class Harness {
           this.store.updateSessionContext(sessionId, tokens, event.contextWindow);
         }
         this.recordAgentEvent(task.id, sessionId, provider, event);
+        monitor(event);
       },
       onPermissionRequest: (event) => this.askPermission(task.id, sessionId, provider, event),
       onNotice: (message) => this.notice(task.id, message, sessionId),
@@ -1781,7 +1848,7 @@ export class Harness {
       cumulative: provider !== 'gemini',
     };
     this.store.appendEvent(task.id, sessionId, 'usage', record);
-    return outcome;
+    return safetyPause ? { ...outcome, reason: 'safety_pause' } : outcome;
   }
 
   /**
