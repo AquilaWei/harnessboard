@@ -67,6 +67,7 @@ export function describeTask(task: TaskView): Description {
         });
       }
       return d(task.plan?.questions ? 'planReadyQuestions' : 'planReady', 'attention', {
+        agent: task.agents.implementer,
         total: task.plan?.total ?? 0,
         questions: task.plan?.questions ?? 0,
       });

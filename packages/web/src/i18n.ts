@@ -107,9 +107,9 @@ export const en = {
     pending: 'Planned. Starts by itself when quota allows.',
     permissionAsked: '{{agent}} wants to use {{tool}}: {{summary}}. Allow it or not?',
     queued: 'Waiting for a free slot.',
-    planReady: 'Claude planned {{total}} features. Review the plan, then approve it or reply.',
+    planReady: '{{agent}} planned {{total}} features. Review the plan, then approve it or reply.',
     planReadyQuestions:
-      'Claude planned {{total}} features and has {{questions}} questions for you. Review and reply, or approve.',
+      '{{agent}} planned {{total}} features and has {{questions}} questions for you. Review and reply, or approve.',
     revisingPlan: '{{agent}} is revising the plan with your feedback.',
     revisingPlanQueued: 'Your feedback is waiting for the planner.',
     discussing: '{{agent}} is reading the repository to propose acceptance criteria.',
@@ -745,9 +745,9 @@ export const zhTW: typeof en = {
     pending: '已規劃好，額度允許時會自動開始。',
     permissionAsked: '{{agent}} 想使用 {{tool}}：{{summary}}。要允許嗎？',
     queued: '等待空出執行位置。',
-    planReady: 'Claude 規劃了 {{total}} 項 feature。請檢查規格，確認開工或提出意見。',
+    planReady: '{{agent}} 規劃了 {{total}} 項 feature。請檢查規格，確認開工或提出意見。',
     planReadyQuestions:
-      'Claude 規劃了 {{total}} 項 feature，有 {{questions}} 個問題想問你。請回覆或確認開工。',
+      '{{agent}} 規劃了 {{total}} 項 feature，有 {{questions}} 個問題想問你。請回覆或確認開工。',
     revisingPlan: '{{agent}} 正在依照你的意見修改規劃。',
     revisingPlanQueued: '你的意見已送出，等待規劃者處理。',
     discussing: '{{agent}} 正在閱讀 repo，準備提出驗收標準。',

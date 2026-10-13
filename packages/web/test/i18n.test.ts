@@ -17,6 +17,13 @@ const keyPaths = (strings: object, prefix = ''): string[] =>
     .sort();
 
 describe('translations', () => {
+  it('uses the configured planner in approval descriptions in both languages', () => {
+    expect(en.describe.planReady).toContain('{{agent}}');
+    expect(en.describe.planReadyQuestions).toContain('{{agent}}');
+    expect(zhTW.describe.planReady).toContain('{{agent}}');
+    expect(zhTW.describe.planReadyQuestions).toContain('{{agent}}');
+  });
+
   it('have the same keys in English and zh-TW', () => {
     expect(keyPaths(zhTW)).toEqual(keyPaths(en));
   });

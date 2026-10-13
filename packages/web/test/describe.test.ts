@@ -124,7 +124,22 @@ describe('describeTask for plans', () => {
     expect(describeTask(task)).toEqual({
       key: 'planReadyQuestions',
       tone: 'attention',
-      vars: { total: 8, questions: 2 },
+      vars: { agent: 'claude', total: 8, questions: 2 },
+    });
+  });
+
+  it('names Codex when its loop plan waits for approval', () => {
+    const task = {
+      ...base,
+      mode: 'loop',
+      status: 'awaiting_approval',
+      agents: { ...base.agents, implementer: 'codex' },
+      plan: { total: 4, questions: 0, suggestedVerify: null },
+    } as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'planReady',
+      tone: 'attention',
+      vars: { agent: 'codex', total: 4, questions: 0 },
     });
   });
 
