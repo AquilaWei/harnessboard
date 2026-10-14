@@ -3,6 +3,23 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.17 - 2026-10-14
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- Compactable task conversations remain accessible beyond the wrap-up budget, so you can
+  ask about blocked development without being incorrectly told the conversation is full.
+- Paused loop tasks show their actual verified feature count instead of presenting a
+  previous step's approval as completion of the entire project.
+
+### Added
+
+- Task details let you update context wrap-up, hard and compaction thresholds during
+  development. Changes apply from the next chat or execution turn; active turns retain
+  their original budget.
+
 ## 0.1.16 - 2026-10-13
 
 Local test build; real-device acceptance is pending.
