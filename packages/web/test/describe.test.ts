@@ -20,6 +20,15 @@ const changes = { ...approve, round: 2, verdict: 'changes' };
 const loop = { total: 3, claimed: 1, verified: 1, lastVerify: null };
 
 describe('describeTask', () => {
+  it('does not describe an incomplete loop as fully approved by an earlier review', () => {
+    const task = { ...base, status: 'review', loop, lastReview: approve } as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'loopIncomplete',
+      tone: 'attention',
+      vars: { verified: 1, total: 3 },
+    });
+  });
+
   it('names the agent building the next loop feature', () => {
     const task = {
       ...base,
@@ -100,7 +109,12 @@ describe('describeTask', () => {
   });
 
   it('reports an approved loop task with its feature count', () => {
-    const task = { ...base, status: 'review', lastReview: approve, loop } as TaskView;
+    const task = {
+      ...base,
+      status: 'review',
+      lastReview: approve,
+      loop: { ...loop, verified: 3 },
+    } as TaskView;
     expect(describeTask(task).key).toBe('loopApproved');
   });
 

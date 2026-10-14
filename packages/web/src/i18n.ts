@@ -142,6 +142,8 @@ export const en = {
     waitingQuotaUnknown: 'Paused for quota; retries automatically.',
     answerHeld: 'Your answer is recorded; the agent goes on once quota is free again.',
     finished: 'Finished. Look over the changes and mark it done.',
+    loopIncomplete:
+      'Development paused with {{verified}}/{{total}} features verified. Check the latest reply for blockers before continuing.',
     loopFinished: 'All {{total}} features pass verification. Look over the changes.',
     approved: '{{agent}} approved the work. Look over the changes and mark it done.',
     loopApproved: 'All {{total}} features verified and approved by {{agent}}. Your call.',
@@ -556,6 +558,10 @@ export const en = {
       large: 'Large (wrap up at 50%)',
     },
     custom: 'Set the context budget myself',
+    taskCompact: 'Compact at % (0 disables)',
+    contextSave: 'Save context budget',
+    contextUpdateHint:
+      'Applies to the next conversation turn. The current turn keeps its original budget.',
     soft: 'Wrap-up at %',
     hard: 'Limit at %',
     permissions: 'Allowed without asking',
@@ -775,6 +781,8 @@ export const zhTW: typeof en = {
     waitingQuotaUnknown: '額度不足暫停中，會自動重試。',
     answerHeld: '已記下你的回覆；額度恢復後代理程式會繼續。',
     finished: '已完成，請檢查變更後標為完成。',
+    loopIncomplete:
+      '開發已暫停，目前 {{verified}}／{{total}} 項功能通過驗證。請先查看最新回覆並解除阻擋，再繼續開發。',
     loopFinished: '{{total}} 項 feature 都通過驗證，請檢查變更。',
     approved: '{{agent}} 已核可，請檢查變更後標為完成。',
     loopApproved: '{{total}} 項 feature 都已驗證並經 {{agent}} 核可，由你決定。',
@@ -1174,6 +1182,9 @@ export const zhTW: typeof en = {
     },
     custom: '自己設定上下文預算',
     soft: '收尾門檻 %',
+    taskCompact: '壓縮門檻 %（0 停用）',
+    contextSave: '儲存 context 門檻',
+    contextUpdateHint: '下次對話或執行輪次生效；目前正在執行的一輪沿用原設定。',
     hard: '上限 %',
     permissions: '不必詢問就允許',
     permissionsHint: '沒涵蓋到的工具不會被直接拒絕：任務會暫停問你，到時候也可以把規則加進來。',

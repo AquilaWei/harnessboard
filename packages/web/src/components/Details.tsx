@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useTranslation } from 'react-i18next';
 import type { TaskDetail } from '@harnessboard/shared';
+import { TaskContextEditor } from './TaskContextEditor';
 import { ContextMeter } from './Meter';
 import { TaskAgentsEditor } from './TaskAgentsEditor';
 import { ToolRules } from './ToolRules';
@@ -48,6 +49,7 @@ export function Details({ task, onSaved, onError }: Props) {
         <dt>{t('fields.skip')}</dt>
         <dd>{task.permission.skipPermissions ? `⚠ ${t('fields.skipOff')}` : t('fields.skipOn')}</dd>
       </dl>
+      <TaskContextEditor task={task} onSaved={onSaved} onError={onError} />
       {task.sessionCount > 0 && (
         <section className="detail-section">
           <h3>{t('fields.budget')}</h3>

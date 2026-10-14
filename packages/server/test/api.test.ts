@@ -793,3 +793,35 @@ describe('safety pause task API', () => {
     expect([view.status, view.safetyPause]).toEqual(['paused_safety', evidence]);
   });
 });
+
+describe('task context updates', () => {
+  it('persists a new budget while a task is in progress', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    harness.store.updateTask(task.id, { status: 'running' });
+    const response = await app.request(`/api/tasks/${task.id}/context`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ size: 'large', softPct: 55, hardPct: 75, compactPct: 35 }),
+    });
+    expect(response.status).toBe(200);
+    expect(harness.store.getTask(task.id)?.contextPolicy).toEqual({
+      size: 'large',
+      softPct: 55,
+      hardPct: 75,
+      compactPct: 35,
+    });
+    expect(harness.store.getTask(task.id)?.status).toBe('running');
+  });
+
+  it('rejects an invalid budget without overwriting the old budget', async () => {
+    const task = await harness.createTask({ prompt: 'x', repo });
+    const previous = task.contextPolicy;
+    const response = await app.request(`/api/tasks/${task.id}/context`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ softPct: 80, hardPct: 40 }),
+    });
+    expect(response.status).toBe(400);
+    expect(harness.store.getTask(task.id)?.contextPolicy).toEqual(previous);
+  });
+});

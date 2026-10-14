@@ -86,6 +86,16 @@ async function runQueued(): Promise<void> {
 describe('a chat message', () => {
   beforeEach(() => scenario(session('done'), session('It prints hi.')));
 
+  it('allows a compactable conversation above its small policy limit to answer a chat', async () => {
+    const task = await finishedTask();
+    harness.store.updateTask(task.id, { contextPolicy: { size: 'small' } });
+    const [first] = harness.store.listSessions(task.id);
+    harness.store.updateSessionContext(first!.id, 46_000, 100_000);
+    harness.chat(task.id, 'What is blocking development?');
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]!.received).toEqual(['What is blocking development?']);
+  });
+
   it('continues the task conversation with the message', async () => {
     const task = await finishedTask();
     harness.chat(task.id, 'What does it print?');

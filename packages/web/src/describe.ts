@@ -128,6 +128,12 @@ function describeRunning(task: TaskView): Description {
 
 function describeReview(task: TaskView): Description {
   const review = task.lastReview;
+  if (task.loop && task.loop.verified < task.loop.total && review?.verdict !== 'changes') {
+    return d('loopIncomplete', 'attention', {
+      verified: task.loop.verified,
+      total: task.loop.total,
+    });
+  }
   if (review?.verdict === 'approve') {
     return task.loop
       ? d('loopApproved', 'attention', { agent: review.agentId, total: task.loop.total })

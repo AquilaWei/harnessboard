@@ -209,6 +209,7 @@ export class Store {
         | 'agents'
         | 'confirmPlan'
         | 'deferred'
+        | 'contextPolicy'
         | 'queueOrder'
       >
     >,
@@ -228,6 +229,7 @@ export class Store {
       agents: 'agents',
       confirmPlan: 'confirm_plan',
       deferred: 'deferred',
+      contextPolicy: 'context_policy',
       queueOrder: 'queue_order',
     };
     // Objects are stored as JSON, like on insert; booleans as 0/1.

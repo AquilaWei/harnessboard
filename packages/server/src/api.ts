@@ -278,6 +278,11 @@ export function createApi(
     return c.json(harness.answerPermission(taskId(c), decision));
   });
 
+  app.put('/tasks/:id/context', async (c) => {
+    const body = await c.req.json<Parameters<Harness['setContextPolicy']>[1]>();
+    return c.json(harness.setContextPolicy(taskId(c), body));
+  });
+
   app.put('/tasks/:id/agents', async (c) => {
     const body = await c.req.json<Record<string, unknown>>();
     const update: AgentsUpdate = {};

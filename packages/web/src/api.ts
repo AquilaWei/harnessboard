@@ -211,6 +211,8 @@ export const api = {
   diff: (id: number) => request<WorktreeDiff>(`/tasks/${id}/diff`),
   timeline: (id: number) => request<TimelineEntry[]>(`/tasks/${id}/timeline`),
   notes: (id: number) => request<TaskNotes>(`/tasks/${id}/notes`),
+  setTaskContext: (id: number, policy: import('@harnessboard/shared').ContextPolicy) =>
+    send<unknown>('PUT', `/tasks/${id}/context`, policy),
   agents: () => request<AgentInfo[]>('/agents'),
   agentModels: (id: string) => request<ModelInfo[]>(`/agents/${encodeURIComponent(id)}/models`),
   detectAgents: () => request<DetectedAgent[]>('/agents/detect'),

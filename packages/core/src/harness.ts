@@ -911,6 +911,23 @@ export class Harness {
     return updated;
   }
 
+  /** Updates a task's context budget; an active turn uses it from the next session. */
+  setContextPolicy(id: number, policy: Task['contextPolicy']): Task {
+    this.requireTask(id);
+    if (!policy || typeof policy !== 'object' || Array.isArray(policy))
+      throw new Error('invalid context policy');
+    if (!['small', 'medium', 'large'].includes(policy.size ?? 'medium'))
+      throw new Error('invalid context size');
+    for (const value of [policy.softPct, policy.hardPct, policy.compactPct]) {
+      if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value)))
+        throw new Error('context thresholds must be finite numbers');
+    }
+    resolveThresholds(policy);
+    const updated = this.store.updateTask(id, { contextPolicy: policy });
+    this.emit({ type: 'task', taskId: id, status: updated.status });
+    return updated;
+  }
+
   /**
    * Turns auto-approve on or off for a task. Takes effect from the next tool the agent asks
    * about, also while it runs.
@@ -1219,9 +1236,17 @@ export class Harness {
     );
     if (!session) return `task ${task.id} has no conversation to continue yet`;
     const window = session.contextWindow ?? this.workflow.contextWindow(session.agentId);
-    if (
-      contextPct(session.contextTokens, window) >= resolveThresholds(task.contextPolicy).hardPct
-    ) {
+    const thresholds = resolveThresholds(task.contextPolicy);
+    const adapter = this.adapterFor(session.agentId);
+    const canCompact =
+      adapter.capabilities.midTurnInput ||
+      (adapter.capabilities.compaction === true && !!adapter.createConnection);
+    // Match the runner: compactable conversations can continue beyond the wrap-up budget.
+    const limit =
+      canCompact && thresholds.compactPct !== null
+        ? Math.max(thresholds.hardPct, 90)
+        : thresholds.hardPct;
+    if (contextPct(session.contextTokens, window) >= limit) {
       // hb open refuses a `base` task, so it is not suggested for one.
       const hint = task.workspace === 'base' ? '' : `; continue it with hb open ${task.id}`;
       return `the conversation of task ${task.id} is full${hint}`;

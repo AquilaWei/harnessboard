@@ -177,6 +177,8 @@ flowchart LR
 _Orange **Needs you** cards on the board are the steps where only you can move on: answering
 a question, approving the criteria, allowing a risky command, or reviewing._
 
+Task details let you change context wrap-up, hard and compaction thresholds while work is in progress. Changes apply from the next chat or execution turn; the current turn keeps its original budget. Compactable conversations remain available for questions beyond the wrap-up budget. Paused, incomplete loops show their verified progress rather than a previous step’s approval.
+
 Each role continues in its own conversation, compacted after completed turns at the context warning:
 
 ```mermaid
