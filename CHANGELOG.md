@@ -3,6 +3,17 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.18 - 2026-10-14
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- Conversations are compacted once they pass the compaction threshold again, even when
+  the same agent uses models with different context windows (for example a Codex
+  implementer and a reviewer on a larger model). Previously the share was measured against
+  the other model's window, so compaction and the safety limit could be skipped.
+
 ## 0.1.17 - 2026-10-14
 
 Local test build; real-device acceptance is pending.
