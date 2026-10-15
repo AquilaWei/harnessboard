@@ -23,7 +23,7 @@ export interface HarnessConfig {
   defaultReviewer: string | null;
   port: number;
   maxConcurrent: number;
-  /** 0–1; no new session starts while five-hour usage is at or above this. */
+  /** 0–1; at or above this five-hour usage no session starts and running ones stop. */
   quotaPauseUtilization: number;
   /** Used until the agent reports the real window for a model. */
   fallbackContextWindow: number;

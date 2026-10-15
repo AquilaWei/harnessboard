@@ -560,8 +560,9 @@ describe('a newer spec change request after an earlier answer was cut off', () =
 
 describe('quota checks for a spec change with agents of different providers', () => {
   const FUTURE_SEC = Math.floor(Date.now() / 1000) + 3600;
-  // The implementer's session uses up the Claude Code quota; the other profile is Codex's.
-  const quotaSpent = [[init(), rateLimit('allowed', 0.97, FUTURE_SEC), result('done')]];
+  // The implementer's session uses up the Claude Code quota as it ends, so it is not cut off;
+  // the other profile is Codex's.
+  const quotaSpent = [[init(), result('done'), rateLimit('allowed', 0.97, FUTURE_SEC)]];
 
   beforeEach(async () => {
     await harness.shutdown();

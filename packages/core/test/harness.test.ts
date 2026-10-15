@@ -507,6 +507,7 @@ describe('a tool the task does not allow', () => {
   });
 });
 
+// The spec discussion runs on past the pause level; a work session would be stopped instead.
 describe('answering a tool use while the quota is used up', () => {
   beforeEach(() => {
     scenario([
@@ -524,7 +525,7 @@ describe('answering a tool use while the quota is used up', () => {
       autoApprove: false,
       prompt: 'Run it',
       repo,
-      confirmPlan: false,
+      confirmPlan: true,
       queue: true,
     });
     await waitForStatus(task.id, 'awaiting_permission');
@@ -537,7 +538,7 @@ describe('answering a tool use while the quota is used up', () => {
       autoApprove: false,
       prompt: 'Run it',
       repo,
-      confirmPlan: false,
+      confirmPlan: true,
       queue: true,
     });
     await waitForStatus(task.id, 'awaiting_permission');
@@ -553,7 +554,7 @@ describe('answering a tool use while the quota is used up', () => {
       autoApprove: false,
       prompt: 'Run it',
       repo,
-      confirmPlan: false,
+      confirmPlan: true,
       queue: true,
     });
     await waitForStatus(task.id, 'awaiting_permission');
@@ -568,14 +569,14 @@ describe('answering a tool use while the quota is used up', () => {
       autoApprove: false,
       prompt: 'Run it',
       repo,
-      confirmPlan: false,
+      confirmPlan: true,
       queue: true,
     });
     await waitForStatus(task.id, 'awaiting_permission');
     harness.answerPermission(task.id, { requestId: 'r1', behavior: 'allow' });
     harness.tick(FUTURE_SEC * 1000 + 1);
     await harness.waitForIdle();
-    expect(harness.store.getTask(task.id)!.status).toBe('review');
+    expect(harness.store.getTask(task.id)!.status).toBe('awaiting_approval');
   });
 
   it('stops a task whose answer is held', async () => {
@@ -583,7 +584,7 @@ describe('answering a tool use while the quota is used up', () => {
       autoApprove: false,
       prompt: 'Run it',
       repo,
-      confirmPlan: false,
+      confirmPlan: true,
       queue: true,
     });
     await waitForStatus(task.id, 'awaiting_permission');

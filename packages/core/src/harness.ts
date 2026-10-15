@@ -84,7 +84,7 @@ import { probe } from './process.js';
 import { createAdapter } from './providers.js';
 import type { AdapterFactory } from './providers.js';
 import { reviewEvidence } from './review.js';
-import { runSession } from './runner.js';
+import { isQuotaLimited, runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
 import { dueForRetry, promotable, quotaBlocks, startable } from './scheduler.js';
 import { Store } from './store.js';
@@ -203,6 +203,8 @@ export class Harness {
   private readonly merging = new Map<number, { repo: string; base: string }>();
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
+  /** Running sessions the pause level stops, by task id, with the platform they use. */
+  private readonly quotaStops = new Map<number, { provider: AgentProvider; stop: () => void }>();
   private readonly adapters = new Map<string, AgentAdapter>();
   private quotaReadAt = 0;
   private readonly modelLists = new Map<string, { at: number; models: ModelInfo[] }>();
@@ -1619,6 +1621,18 @@ export class Harness {
   }
 
   /**
+   * Stops the platform's running sessions once its latest usage reaches the pause level.
+   * Past the limit itself the CLI ends them with the platform's own error and reset time.
+   */
+  private pauseOverQuota(provider: AgentProvider, now: number): void {
+    const quota = this.quotas.get(provider) ?? null;
+    if (isQuotaLimited(quota) || !this.quotaBlocked(provider, now)) return;
+    for (const session of this.quotaStops.values()) {
+      if (session.provider === provider) session.stop();
+    }
+  }
+
+  /**
    * Reads usage from the records of CLIs that keep it there instead of reporting it while
    * they run (Codex), so it shows and pauses sessions like Claude Code's. Usage the user ran
    * up outside Harnessboard counts too.
@@ -1643,6 +1657,7 @@ export class Harness {
       if (!quota) return null;
       this.quotas.set(provider, quota);
       this.emit({ type: 'quota', provider, quota });
+      this.pauseOverQuota(provider, Date.now());
       return quota;
     } catch {
       return null; // its records could not be read this time; the last reading stays
@@ -1826,6 +1841,22 @@ export class Harness {
       provider === 'gemini' ? 0 : usageTokens(previous?.usage ?? null),
     );
     let safetyPause = false;
+    let quotaPause = false;
+    let replied = false; // the agent gave its reply; usage reported after it stops the next one
+    // The sessions the pause level keeps from starting also stop when it is reached mid-run.
+    if (!chat && !this.workflow.isPlanningSession(task)) {
+      this.quotaStops.set(task.id, {
+        provider,
+        stop: () => {
+          if (quotaPause || safetyPause || replied) return;
+          quotaPause = true;
+          const used = Math.round((this.quotas.get(provider)?.fiveHourUtilization ?? 0) * 100);
+          const level = Math.round(this.config.quotaPauseUtilization * 100);
+          this.notice(task.id, `Paused for quota: ${provider} at ${used}% (pause level ${level}%)`);
+          this.running.get(task.id)?.abort();
+        },
+      });
+    }
     let latestUsage = previous?.usage ?? null;
     const monitor = (event: AgentEvent) => {
       if (safetyPause) return;
@@ -1897,6 +1928,7 @@ export class Harness {
         if (event.kind === 'result' && event.contextWindow) {
           this.store.updateSessionContext(sessionId, tokens, event.contextWindow);
         }
+        if (event.kind === 'result' && !event.isError) replied = true;
         this.recordAgentEvent(task.id, sessionId, provider, event);
         monitor(event);
       },
@@ -1904,6 +1936,7 @@ export class Harness {
       onNotice: (message) => this.notice(task.id, message, sessionId),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
+    this.quotaStops.delete(task.id);
     const record: UsageRecord = {
       role: plan.role,
       agentId: plan.agentId,
@@ -1913,6 +1946,9 @@ export class Harness {
     };
     this.store.appendEvent(task.id, sessionId, 'usage', record);
     if (safetyPause) return { ...outcome, reason: 'safety_pause' };
+    if (quotaPause && outcome.reason === 'stopped') {
+      return { ...outcome, reason: 'quota', quota: this.quotas.get(provider) ?? null };
+    }
     // Codex reports no usage while it runs, so its records say when the limit resets.
     if (outcome.reason === 'quota' && !outcome.quota) {
       return { ...outcome, quota: await this.readQuota(provider, adapter) };
@@ -2042,6 +2078,7 @@ export class Harness {
     }
     if (event.kind === 'quota') this.quotas.set(provider, event.quota);
     this.emit({ type: 'agent', taskId, sessionId, event });
+    if (event.kind === 'quota') this.pauseOverQuota(provider, Date.now());
   }
 
   private checkProfiles(agents: TaskAgents): void {

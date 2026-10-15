@@ -36,8 +36,8 @@ side, and none of them touches your files until you say so.
 - **Clear handoffs:** the implementer owns the code and its tests, testers run formal checks,
   reviewers inspect architecture and code rules; test ideas reach the implementer as notes.
   Writing stages require committed changes and valid commit messages.
-- **Quota-aware:** it watches your Claude subscription's usage, stops starting work near the
-  limit and continues after the reset.
+- **Quota-aware:** it watches your Claude and Codex usage, pauses work near the limit, even
+  in the middle of a session, and continues after the reset.
 - **No API key:** it drives the `claude` program you already signed in to.
 - **Your choice of model and effort:** pick each role's model and how deeply it reasons
   (for example Opus at high effort for the builder, a quick level for the reviewer).
