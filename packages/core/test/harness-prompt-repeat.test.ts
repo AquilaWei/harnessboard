@@ -232,6 +232,76 @@ describe('a tester', () => {
     await loopTask('qa');
     expect(prompts()[6]).not.toContain('tester-note-one');
   });
+
+  it('is told to leave the files alone with its first prompt', async () => {
+    await loopTask('qa');
+    expect(prompts()[2]).toContain('Do not write, change or commit any file');
+  });
+
+  it('is not told to leave the files alone again', async () => {
+    await loopTask('qa');
+    expect(prompts()[5]).not.toContain('Do not write, change or commit any file');
+  });
+
+  it('still gets its verdict line in a later round', async () => {
+    await loopTask('qa');
+    expect(prompts()[5]).toContain('Make the first line of your reply exactly `TESTS: PASS`');
+  });
+});
+
+describe('a tester in its second round with features still to come', () => {
+  it('is not told again not to request them', async () => {
+    process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+      turn('worker', 'planned', featureList(false, false, false), commitAll('docs: plan')),
+      turn('worker', 'F1 done', featureList(true, false, false), commitAll('feat: first')),
+      turn('tester', 'TESTS: PASS'),
+      turn('reviewer', 'VERDICT: APPROVE'),
+      turn('worker', 'F2 done', featureList(true, true, false), commitAll('feat: second')),
+      turn('tester', 'TESTS: PASS'),
+      turn('reviewer', 'VERDICT: APPROVE'),
+      turn('worker', 'F3 done', featureList(true, true, true), commitAll('feat: third')),
+      turn('tester', 'TESTS: PASS'),
+      turn('reviewer', 'VERDICT: APPROVE'),
+    ]);
+    await loopTask('qa');
+    expect(prompts()[5]).not.toContain('hold their open questions against this step');
+  });
+});
+
+describe('a reviewer resumed for its second round', () => {
+  beforeEach(() => {
+    process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+      turn('worker', 'planned', featureList(false, false), commitAll('docs: plan')),
+      turn('worker', 'F1 done', featureList(true, false), commitAll('feat: first')),
+      turn('reviewer', 'VERDICT: APPROVE'),
+      turn('worker', 'F2 done', featureList(true, true), commitAll('feat: second')),
+      turn('reviewer', 'VERDICT: APPROVE'),
+    ]);
+  });
+
+  it('is not told its test rule again', async () => {
+    await loopTask();
+    expect(prompts()[4]).not.toContain('A missing test the work needs');
+  });
+
+  it('is not told its review focus again', async () => {
+    await loopTask();
+    expect(prompts()[4]).not.toContain('Focus on architecture, logic and code rules');
+  });
+});
+
+describe('a reviewer whose conversation was compacted after its first round', () => {
+  it('is told its test rule again', async () => {
+    process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+      turn('worker', 'planned', featureList(false, false), commitAll('docs: plan')),
+      turn('worker', 'F1 done', featureList(true, false), commitAll('feat: first')),
+      turn('reviewer', 'VERDICT: APPROVE', compactBoundary(60_000, 8_000)),
+      turn('worker', 'F2 done', featureList(true, true), commitAll('feat: second')),
+      turn('reviewer', 'VERDICT: APPROVE'),
+    ]);
+    await loopTask();
+    expect(prompts()[4]).toContain('A missing test the work needs');
+  });
 });
 
 describe('a session resumed after the usage limit reset', () => {

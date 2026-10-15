@@ -47,6 +47,11 @@ export interface ReviewContext {
    * id only. `null` lists them all again, for a conversation that may have lost them.
    */
   known?: Feature[] | null;
+  /**
+   * The resumed conversation still has the role's rules from its first prompt word for word
+   * (not compacted since), so a follow-up leaves them out.
+   */
+  rulesKnown?: boolean;
 }
 
 /**
@@ -118,7 +123,7 @@ export function reviewPrompt(
 export function reviewFollowUpPrompt(
   request: ReviewRequest,
   reviewedHead: string,
-  { features = null, verify = null, known = null }: ReviewContext = {},
+  { features = null, verify = null, known = null, rulesKnown = false }: ReviewContext = {},
 ): string {
   return [
     'The implementer finished another step. This is review round ' +
@@ -133,21 +138,31 @@ export function reviewFollowUpPrompt(
       ? ['', `The harness ran \`${verify.command}\` after this step and it passed.`]
       : []),
     'Confirm each of your earlier findings is fixed, and look for problems the new changes add.',
-    'Focus on architecture, logic and code rules. Inspect tests statically; do not rerun tests, lint or builds.',
-    REVIEWER_TESTS,
+    ...(rulesKnown
+      ? []
+      : [
+          'Focus on architecture, logic and code rules. Inspect tests statically; do not rerun tests, lint or builds.',
+          REVIEWER_TESTS,
+        ]),
     '',
     `Make the first line of your reply exactly \`${VERDICT_APPROVE}\` or \`${VERDICT_CHANGES}\`.`,
     `After ${VERDICT_CHANGES}, list each required change with the file and what to do.`,
   ].join('\n');
 }
 
-/** A tester keeps its earlier tests and findings; only changed work needs a new examination. */
+/**
+ * A tester keeps its earlier tests and findings; only changed work needs a new examination.
+ * Its hands-off rule is left out while the conversation still has it (`rulesKnown`).
+ */
 export function testFollowUpPrompt(
   request: TestRequest,
   testedHead: string,
   verifyCommand: string | null,
-  features: Feature[] | null = null,
-  known: Feature[] | null = null,
+  {
+    features = null,
+    known = null,
+    rulesKnown = false,
+  }: Pick<ReviewContext, 'features' | 'known' | 'rulesKnown'> = {},
 ): string {
   return [
     `Continue testing this task in your own conversation (round ${request.round}).`,
@@ -155,7 +170,7 @@ export function testFollowUpPrompt(
     ...earlierWork(request),
     ...(features ? followUpScope(features, known) : []),
     'Recheck your earlier findings, regressions, and that every acceptance criterion has a test.',
-    TESTER_HANDS_OFF,
+    ...(rulesKnown ? [] : [TESTER_HANDS_OFF]),
     ...(verifyCommand ? [`Run \`${verifyCommand}\`.`] : []),
     `Make the first line of your reply exactly \`${TESTS_PASS}\` or \`${TESTS_FAIL}\`.`,
     'On failure, list each required fix with the file and what to do.',
@@ -274,7 +289,8 @@ function stepScope(features: Feature[]): string[] {
 
 /**
  * {@link stepScope} for a role that already has the list from an earlier round (`known`):
- * features that are new or changed since then are described, the rest named by id.
+ * features that are new or changed since then are described, the rest named by id, and the
+ * reminder not to request later features is shortened to one line.
  */
 function followUpScope(features: Feature[], known: Feature[] | null): string[] {
   if (!known) return stepScope(features);
@@ -292,16 +308,14 @@ function followUpScope(features: Feature[], known: Feature[] | null): string[] {
   const laterNew = later.filter(changed);
   const laterKnown = later.filter((f) => !changed(f));
   return [
-    'This task is built one feature at a time; this round covers the latest step.',
     'Features newly marked done, which must work and be tested:',
     ...(newlyDone.length > 0 ? newlyDone.map(line) : ['- (none)']),
     ...(doneBefore.length > 0 ? [`Done before, and must still work: ${ids(doneBefore)}.`] : []),
-    ...(later.length > 0
+    ...(laterKnown.length > 0 ? [`Still to come, not for this step: ${ids(laterKnown)}.`] : []),
+    ...(laterNew.length > 0
       ? [
-          'Features still to come are built in later steps. Do not request them, and do not',
-          'hold their open questions against this step:',
+          `${laterKnown.length > 0 ? 'Also still' : 'Still'} to come, not for this step:`,
           ...laterNew.map(line),
-          ...(laterKnown.length > 0 ? [`- ${ids(laterKnown)}, as listed before`] : []),
         ]
       : []),
   ];

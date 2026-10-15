@@ -476,6 +476,7 @@ export class Workflow {
               task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.features ?? null) : null,
             verify: task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.verify ?? null) : null,
             known: this.knownFeatures(task, earlier.session),
+            rulesKnown: this.knows(earlier.session, 'standing:reviewer'),
           },
         ),
         review: task.workspace === 'base' ? request : { ...request, since: earlier.head },
@@ -604,8 +605,11 @@ export class Workflow {
                 request,
                 task.workspace === 'base' ? request.since : report.head,
                 task.verifyCommand,
-                this.snapshots(task.id).at(-1)?.features,
-                this.knownFeatures(task, previous),
+                {
+                  features: this.snapshots(task.id).at(-1)?.features ?? null,
+                  known: this.knownFeatures(task, previous),
+                  rulesKnown: this.knows(previous, 'standing:tester'),
+                },
               )
             : prompt,
         contextKey,

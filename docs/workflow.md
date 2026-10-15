@@ -128,7 +128,8 @@ hb add "Add input validation to the signup form" --reviewer opus
 - **Persistent conversations:** the implementer, tester and reviewer each keep a separate
   session across stages and fixes. Follow-up checks receive changed scope; implementers receive new feedback.
   Updated requirements or review rules are sent again when they change.
-  Standing instructions (the commit rule, the notes section, a loop's steps) are given once
+  Standing instructions (the commit rule, the notes section, a loop's steps, the tester's
+  hands-off rule, the reviewer's focus and test rule) are given once
   per conversation and again after it is compacted; follow-up rounds name features already
   listed by id. The tester is never told to commit, since it changes no file. Completed turns at the context warning
   are compacted by adapters that support it; see [context budget](configuration.md#context-budget).

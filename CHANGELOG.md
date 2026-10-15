@@ -3,6 +3,15 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Changed
+
+- A tester or reviewer that goes on in its own conversation is no longer told its role rules
+  every round (the tester's rule not to change files, the reviewer's focus and test rule), nor
+  again not to request the features still to come. They are given in the first round, and
+  again after the conversation is compacted.
+
 ## 0.1.25 - 2026-10-15
 
 Local test build; real-device acceptance is pending.
