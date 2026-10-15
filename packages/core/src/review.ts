@@ -142,7 +142,8 @@ export function testFollowUpPrompt(
     ...earlierWork(request),
     ...(features ? stepScope(features) : []),
     'Recheck your earlier findings and cover regressions and missing acceptance criteria.',
-    'You may edit test files only. Commit any tests you add or change.',
+    `You may edit test files only: ${TEST_FILE_RULE}. ${SEPARATE_TESTS}`,
+    'Commit any tests you add or change.',
     ...(verifyCommand ? [`Run \`${verifyCommand}\`.`] : []),
     `Make the first line of your reply exactly \`${TESTS_PASS}\` or \`${TESTS_FAIL}\`.`,
     'On failure, list each required fix with the file and what to do.',
@@ -286,10 +287,28 @@ export function parseTestVerdict(reply: string): {
   return { verdict, findings: (verdict ? rest.join('\n') : reply).trim() };
 }
 
-/** True for a path the tester may change: a test directory or a `*.test.*` / `*_test.*` file. */
+/** The files {@link isTestPath} accepts, as the tester is told. */
+const TEST_FILE_RULE =
+  'test directories, `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`, `conftest.py`, ' +
+  'files named `test` or `tests` (such as a Rust `tests.rs` module), and ' +
+  '`*Test` / `*Tests` / `*Spec` classes in Java, Kotlin, Scala, C# or Swift';
+/** Tests written inside a source file would count as changing the implementation. */
+const SEPARATE_TESTS =
+  'Put new tests in one of those files, not inside a source file (no inline test modules).';
+
+/**
+ * True for a path the tester may change: a test directory or a file named the way its
+ * language marks tests, including test modules kept beside the code (`src/runtime/tests.rs`).
+ */
 export function isTestPath(file: string): boolean {
+  const name = file.slice(file.lastIndexOf('/') + 1);
   return (
-    /(^|\/)(tests?|__tests__|spec|specs)\//i.test(file) || /[._-](test|spec)\.[^/]+$/i.test(file)
+    /(^|\/)(tests?|__tests__|spec|specs)\//i.test(file) ||
+    /[._-](test|spec)\.[^.]+$/i.test(name) ||
+    /^tests?\.[^.]+$/.test(name) ||
+    /^(test_.+|conftest)\.py$/.test(name) ||
+    // A lower-case letter or digit before `Test` keeps `Contest.java` out.
+    /[a-z0-9](Tests?|Spec)\.(java|kt|scala|cs|swift)$/.test(name)
   );
 }
 
@@ -322,9 +341,9 @@ export function testPrompt(
     'Add or extend tests, then run the whole test suite' +
       (verifyCommand ? ` (\`${verifyCommand}\`)` : '') +
       ' and commit the tests you wrote.',
-    'You may change test files only (test directories, `*.test.*`, `*.spec.*`). Do not touch',
-    'the implementation or the docs (the implementer owns both): if a test shows a bug,',
-    'report it instead of fixing it.',
+    `You may change test files only: ${TEST_FILE_RULE}. ${SEPARATE_TESTS}`,
+    'Do not touch the implementation or the docs (the implementer owns both): if a test',
+    'shows a bug, report it instead of fixing it.',
     '',
     `Make the first line of your reply exactly \`${TESTS_PASS}\` or \`${TESTS_FAIL}\`.`,
     `Use ${TESTS_FAIL} when the suite fails or a criterion has no passing test. After it, list`,

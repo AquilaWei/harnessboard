@@ -223,6 +223,15 @@ describe('a tester that changes more than tests', () => {
   });
 });
 
+describe('a tester that adds tests to a test module beside the code', () => {
+  it('goes to a human when the tests pass', async () => {
+    scenario(implemented, session('TESTS: PASS', writeFile('src/runtime/tests.rs', 'ok')));
+    const task = await tested();
+    await runQueued();
+    expect(status(task.id)).toBe('review');
+  });
+});
+
 describe('changing the tester of a task', () => {
   it('is saved with its model', async () => {
     const task = await createHistoricalTask(harness, { prompt: 'x', repo, reviewer: null });
@@ -254,14 +263,32 @@ describe('parseTestVerdict', () => {
 });
 
 describe('isTestPath', () => {
-  it.each(['test/a.js', 'src/__tests__/a.ts', 'a.test.ts', 'pkg/b_test.go', 'x.spec.js'])(
-    'accepts %s',
-    (file) => expect(isTestPath(file)).toBe(true),
-  );
+  it.each([
+    'test/a.js',
+    'src/__tests__/a.ts',
+    'a.test.ts',
+    'pkg/b_test.go',
+    'x.spec.js',
+    'src/runtime/tests.rs',
+    'pkg/test.py',
+    'src/test_parser.py',
+    'conftest.py',
+    'src/FooTest.java',
+    'FooTests.cs',
+    'src/BarSpec.scala',
+    'app/FooTests.swift',
+    'src/FooTest.kt',
+  ])('accepts %s', (file) => expect(isTestPath(file)).toBe(true));
 
-  it.each(['src/greeting.js', 'latest.js', 'README.md', 'contest/a.js'])('rejects %s', (file) =>
-    expect(isTestPath(file)).toBe(false),
-  );
+  it.each([
+    'src/greeting.js',
+    'latest.js',
+    'README.md',
+    'contest/a.js',
+    'src/attestation.rs',
+    'src/Contest.java',
+    'docs/testing.md',
+  ])('rejects %s', (file) => expect(isTestPath(file)).toBe(false));
 });
 
 describe('loop implementer progress', () => {
