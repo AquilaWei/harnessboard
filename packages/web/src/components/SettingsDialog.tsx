@@ -9,7 +9,6 @@ import { DetectedAgents } from './DetectedAgents';
 import { EffortSelect } from './ModelPicker';
 import { PhoneAccess } from './PhoneAccess';
 import { LANGUAGES, setLanguage } from '../i18n';
-import { parseRules } from '../rules';
 import type { Language } from '../i18n';
 import { notificationPermission, notificationsEnabled, setNotifications } from '../notify';
 import { currentNotifyMode } from '../push';
@@ -45,8 +44,6 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   );
   const [size, setSize] = useState<TaskSize>(settings.defaultContextPolicy.size ?? 'medium');
   const [reviewer, setReviewer] = useState(settings.defaultReviewer ?? '');
-  const [globalRules, setGlobalRules] = useState(settings.allowedTools.join('\n'));
-  const parsedRules = parseRules(globalRules);
   const [guidelines, setGuidelines] = useState(settings.reviewGuidelines.join('\n'));
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [notify, setNotify] = useState(notificationsEnabled);
@@ -74,7 +71,6 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           },
           defaultContextPolicy: { ...settings.defaultContextPolicy, size },
           defaultReviewer: reviewer === '' ? null : reviewer,
-          allowedTools: parsedRules.rules,
           reviewGuidelines: lines(guidelines),
         }),
       );
@@ -190,25 +186,6 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           <p className="hint">{t('safety.hint')}</p>
           <p className="hint">{t('safety.monitoringLimit')}</p>
         </section>
-        <label className="field">
-          <span>{t('settingsForm.globalRules')}</span>
-          <textarea
-            rows={Math.max(2, parsedRules.rules.length + parsedRules.invalid.length)}
-            className="mono"
-            value={globalRules}
-            placeholder="Bash(make *)"
-            onChange={(e) => setGlobalRules(e.target.value)}
-            aria-invalid={parsedRules.invalid.length > 0}
-          />
-          {parsedRules.invalid.length > 0 ? (
-            <small className="hint warn-text">
-              {t('permission.invalid', { rules: parsedRules.invalid.join(', ') })}
-            </small>
-          ) : (
-            <small className="hint">{t('settingsForm.globalRulesHint')}</small>
-          )}
-        </label>
-
         <label className="field">
           <span>{t('settingsForm.reviewGuidelines')}</span>
           <textarea
@@ -331,7 +308,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           <button type="button" className="btn" onClick={onClose}>
             {t('form.cancel')}
           </button>
-          <button type="submit" className="btn primary" disabled={parsedRules.invalid.length > 0}>
+          <button type="submit" className="btn primary">
             {t('settingsForm.save')}
           </button>
         </div>

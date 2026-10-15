@@ -212,9 +212,10 @@ been tried against the real CLI yet. How to add another CLI is in [architecture.
 **Permissions:** tasks run with `--permission-mode acceptEdits` and a list of allowed tool
 rules such as `Bash(npm *)`:
 
-- **Presets** are checkboxes in the New task dialog (or `--preset`) and cover common needs: `git` (the default, so the agent can commit), `node`,
+- **Presets** cover common needs: `git` (the default, so the agent can commit), `node`,
   `python`, `gradle`, `docker`, `web` (`WebFetch`, `WebSearch`) and `files`. `docker` is
-  nearly unrestricted, because a container can mount any folder.
+  nearly unrestricted, because a container can mount any folder. A task created on the
+  board gets `git`; pick others with `--preset` in the terminal.
 - Add single rules with `--allow`. Entries that are not tool rules, such as a sentence, are
   rejected instead of being silently ignored.
 - **Dangerous things are asked, not refused:** with auto-approve (the default, see below)
@@ -228,9 +229,9 @@ rules such as `Bash(npm *)`:
   board, or `hb tools <id> RULE...`.
 - **For every task:** **Allow for all tasks** on a request (or `hb allow <id> --global`)
   adds the rule to `allowedTools` in your user config. Every task's sessions get these rules
-  on top of their own. Edit them under **Settings** or with `hb global-tools [RULE...]`.
-- **Auto-approve** (on by default; a checkbox when creating a task or under Details,
-  `--no-auto-approve`, or `hb auto <id> on|off`): tools the rules do not cover are allowed
+  on top of their own. Edit them with `hb global-tools [RULE...]` or in the config file.
+- **Auto-approve** (on by default; the only permission choice when creating a task on the
+  board, also under Details, `--no-auto-approve`, or `hb auto <id> on|off`): tools the rules do not cover are allowed
   without asking, except dangerous ones, which still ask and say why. Dangerous means
   wiping the system or your home directory (`rm -rf /`, `rm -rf ~`), writing to a disk
   (`mkfs`, `dd of=/dev/...`), shutting the machine down, writing to system paths (`/etc`,

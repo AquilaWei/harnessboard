@@ -2,10 +2,9 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DEFAULT_PRESET, PERMISSION_PRESETS, definedOnly, presetRules } from '@harnessboard/shared';
+import { definedOnly } from '@harnessboard/shared';
 import type { AgentInfo, Settings, TaskMode, TaskSize, TaskWorkspace } from '@harnessboard/shared';
 import { api } from '../api';
-import { parseRules } from '../rules';
 import { AgentFields } from './AgentFields';
 import type { AgentChoice } from './AgentFields';
 import { FolderField } from './FolderField';
@@ -71,8 +70,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   const [custom, setCustom] = useState(false);
   const [soft, setSoft] = useState(40);
   const [hard, setHard] = useState(50);
-  const [presets, setPresets] = useState<string[]>([DEFAULT_PRESET]);
-  const [allow, setAllow] = useState('');
   const [skip, setSkip] = useState(false);
   const [autoApprove, setAutoApprove] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,22 +78,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   useEffect(() => {
     api.agents().then(setAgents, (e: Error) => setError(e.message));
   }, []);
-
-  const extra = parseRules(allow);
-  const togglePreset = (id: string, on: boolean) =>
-    setPresets((current) => (on ? [...current, id] : current.filter((p) => p !== id)));
-
-  /**
-   * `undefined` for the untouched default, so the repository's `.harnessboard.json` rules
-   * still apply; otherwise the ticked presets plus the extra rules.
-   */
-  const allowedTools = (): string[] | undefined => {
-    const untouched =
-      presets.length === 1 && presets[0] === DEFAULT_PRESET && extra.rules.length === 0;
-    if (untouched) return undefined;
-    const ordered = PERMISSION_PRESETS.map((p) => p.id).filter((id) => presets.includes(id));
-    return [...new Set([...presetRules(ordered), ...extra.rules])];
-  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -133,7 +114,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           size,
           softPct: custom ? soft : undefined,
           hardPct: custom ? hard : undefined,
-          allowedTools: allowedTools(),
           skipPermissions: skip || undefined,
           autoApprove,
         }),
@@ -238,42 +218,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
 
         <fieldset className="presets">
           <legend>{t('form.permissions')}</legend>
-          <div className="preset-grid">
-            {PERMISSION_PRESETS.map((preset) => (
-              <label key={preset.id} className="check">
-                <input
-                  type="checkbox"
-                  checked={presets.includes(preset.id)}
-                  onChange={(e) => togglePreset(preset.id, e.target.checked)}
-                />
-                <span>
-                  {t(`presets.${preset.id}.label`)}
-                  <small className="hint mono">{preset.rules.join('  ')}</small>
-                  {preset.broad && presets.includes(preset.id) && (
-                    <span className="warn-text">⚠ {t(`presets.${preset.id}.warn`)}</span>
-                  )}
-                </span>
-              </label>
-            ))}
-          </div>
-          <label className="field">
-            <span>{t('form.allow')}</span>
-            <textarea
-              rows={2}
-              className="mono"
-              value={allow}
-              placeholder="Bash(make *)"
-              onChange={(e) => setAllow(e.target.value)}
-              aria-invalid={extra.invalid.length > 0}
-            />
-            {extra.invalid.length > 0 ? (
-              <small className="hint warn-text">
-                {t('permission.invalid', { rules: extra.invalid.join(', ') })}
-              </small>
-            ) : (
-              <small className="hint">{t('form.allowHint')}</small>
-            )}
-          </label>
           <label className="check">
             <input
               type="checkbox"
@@ -285,7 +229,6 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
               <small className="hint">{t('form.autoApproveHint')}</small>
             </span>
           </label>
-          <small className="hint">{t('form.permissionsHint')}</small>
         </fieldset>
 
         <AgentFields agents={agents} value={who} onChange={setWho} />
@@ -359,7 +302,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
           <button type="button" className="btn" onClick={onClose}>
             {t('form.cancel')}
           </button>
-          <button type="submit" className="btn primary" disabled={busy || extra.invalid.length > 0}>
+          <button type="submit" className="btn primary" disabled={busy}>
             {t('form.createDiscuss')}
           </button>
         </div>

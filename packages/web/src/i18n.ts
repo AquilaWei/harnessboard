@@ -564,11 +564,7 @@ export const en = {
       'Applies to the next conversation turn. The current turn keeps its original budget.',
     soft: 'Wrap-up at %',
     hard: 'Limit at %',
-    permissions: 'Allowed without asking',
-    permissionsHint:
-      'Anything not covered here is not refused: the task pauses and asks you, and you can add the rule then.',
-    allow: 'Other rules',
-    allowHint: 'One rule per line, e.g. Bash(make *) or WebSearch',
+    permissions: 'Tool permissions',
     autoApprove: 'Allow other tools, ask only for dangerous ones',
     autoApproveHint:
       'Still asks before wiping the system or home directory, writing to a disk, shutting down, changing system paths, and deleting recursively outside the worktree. A safety net, not a sandbox.',
@@ -623,9 +619,6 @@ export const en = {
     quotaPause: 'Pause {{name}} work at 5-hour quota %',
     defaultSize: 'Default task size',
     defaultReviewer: 'Default reviewer for new tasks',
-    globalRules: 'Tools every task may use without asking',
-    globalRulesHint:
-      'One rule per line, added to each task’s own rules. "Allow for all tasks" on a request adds here.',
     reviewGuidelines: 'Rules every reviewer checks the work against',
     reviewGuidelinesHint:
       'One file per line, for example ~/.claude/skills/coding-standards/SKILL.md. Each review quotes the files as they are then, for every agent.',
@@ -1186,10 +1179,7 @@ export const zhTW: typeof en = {
     contextSave: '儲存 context 門檻',
     contextUpdateHint: '下次對話或執行輪次生效；目前正在執行的一輪沿用原設定。',
     hard: '上限 %',
-    permissions: '不必詢問就允許',
-    permissionsHint: '沒涵蓋到的工具不會被直接拒絕：任務會暫停問你，到時候也可以把規則加進來。',
-    allow: '其他規則',
-    allowHint: '一行一條規則，例如 Bash(make *) 或 WebSearch',
+    permissions: '工具權限',
     autoApprove: '允許其他工具，只有危險的才詢問',
     autoApproveHint:
       '遇到毀掉系統或家目錄、寫入磁碟、關機、改動系統路徑、在 worktree 以外遞迴刪除時仍會詢問。這只是安全網，不等於沙盒。',
@@ -1242,9 +1232,6 @@ export const zhTW: typeof en = {
     quotaPause: '{{name}} 的 5 小時額度達到幾 % 時暫停工作',
     defaultSize: '預設任務大小',
     defaultReviewer: '新任務的預設審查者',
-    globalRules: '所有任務都不必詢問就允許的工具',
-    globalRulesHint:
-      '一行一條規則，會加在每個任務自己的規則之上。權限詢問按「所有任務都允許」時也會加到這裡。',
     reviewGuidelines: '審查者依循的規範檔',
     reviewGuidelinesHint:
       '一行一個檔案，例如 ~/.claude/skills/coding-standards/SKILL.md。每次審查都會引用檔案當下的內容，任何 agent 都適用。',
