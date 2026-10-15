@@ -48,6 +48,22 @@ export function continuationPrompt(
   ].join('\n');
 }
 
+/**
+ * Opens a chat in a new conversation: the user switched the implementer to another agent,
+ * which has no conversation of the task to continue.
+ */
+export function chatTakeoverPrompt(goal: string, message: string): string {
+  return [
+    'You are taking over a task that another agent worked on in this same worktree.',
+    'Check `git log` and `git status` to see the current state before changing anything.',
+    '',
+    `Original task:\n${goal}`,
+    '',
+    'The user wrote to you about it. Answer, and do only what the message asks:',
+    message,
+  ].join('\n');
+}
+
 /** Sent when resuming the same session after a quota pause. */
 export const QUOTA_RESUME_PROMPT =
   '[harness] The usage limit has reset. Continue the task from where you stopped.';

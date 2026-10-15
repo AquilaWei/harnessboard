@@ -50,6 +50,9 @@ is deprecated and does not prevent automatic discussion.
     far and may change files, under the task's tool rules and permission prompts. Slash
     commands such as `/compact` are sent as they are. The task goes back to its status when
     the reply ends.
+    - **After you switch the implementer to another agent**, that agent answers in a new
+      conversation, starting from the task and the worktree, and keeps it for the next
+      chat and its next workflow step.
     - **While the task is busy**, your message waits as _pending_ and is sent when the
       current step ends; the workflow then carries on. Cancel it until then.
     - To work in Claude Code itself, the tab also copies `hb open <id>`.

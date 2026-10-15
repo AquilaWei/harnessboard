@@ -46,6 +46,7 @@ import {
   SCOPE_CHANGED_PROMPT,
   SPEC_CHANGE_DUTY,
   SPEC_CHANGE_REJECTED_PROMPT,
+  chatTakeoverPrompt,
   continuationPrompt,
   criteriaApprovedPrompt,
   criteriaPrompt,
@@ -640,6 +641,11 @@ export class Workflow {
         session.endReason === 'completed' ||
         this.host.config.agents[session.agentId]?.provider !== 'claude-code')
     );
+  }
+
+  /** A chat's first message to an implementer that has no conversation of the task yet. */
+  chatTakeoverPrompt(task: Task, message: string): string {
+    return chatTakeoverPrompt(this.goal(task), message);
   }
 
   /** The task as the agents are given it: the request plus any agreed criteria and spec file. */

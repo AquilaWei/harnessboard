@@ -37,7 +37,10 @@ beforeEach(() => {
   const config = {
     ...defaultConfig({}),
     dataDir: path.join(dir, 'data'),
-    agents: { claude: { provider: 'claude-code' as const, command: FAKE_CLAUDE, model: null } },
+    agents: {
+      claude: { provider: 'claude-code' as const, command: FAKE_CLAUDE, model: null },
+      other: { provider: 'claude-code' as const, command: FAKE_CLAUDE, model: null },
+    },
     fallbackContextWindow: 100_000,
   };
   harness = Harness.open(config);
@@ -149,6 +152,72 @@ describe('a chat message', () => {
     harness.chat(task.id, 'Rename it');
     await harness.waitForIdle();
     expect(harness.store.listSessions(task.id)).toHaveLength(1);
+  });
+});
+
+describe('a chat after the implementer was switched to another agent', () => {
+  beforeEach(() => scenario(session('done'), session('It prints hi.'), session('Yes.')));
+
+  async function switchedTask() {
+    const task = await finishedTask();
+    harness.setAgents(task.id, { implementer: 'other' });
+    return task;
+  }
+
+  it('is answered by the new agent', async () => {
+    const task = await switchedTask();
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(harness.store.listSessions(task.id).map((s) => s.agentId)).toEqual(['claude', 'other']);
+  });
+
+  it("starts a new conversation instead of resuming the old agent's", async () => {
+    const task = await switchedTask();
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]!.args).not.toContain('--resume');
+  });
+
+  it('tells the new agent the task and the message', async () => {
+    const task = await switchedTask();
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]!.received[0]).toMatch(
+      /Original task:\nAdd a greeting[\s\S]*What does it print\?$/,
+    );
+  });
+
+  it('uses the model set for the new agent', async () => {
+    const task = await switchedTask();
+    harness.setAgents(task.id, { implementerModel: 'model-b' });
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]!.args).toContain('model-b');
+  });
+
+  it('returns the task to the status it had', async () => {
+    const task = await switchedTask();
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(status(task.id)).toBe('review');
+  });
+
+  it('is answered by the new agent when it was pending while the task was queued', async () => {
+    const task = await switchedTask();
+    harness.store.updateTask(task.id, { status: 'queued' });
+    harness.chat(task.id, 'What does it print?');
+    harness.tick();
+    await harness.waitForIdle();
+    expect(harness.store.listSessions(task.id).map((s) => s.agentId)).toEqual(['claude', 'other']);
+  });
+
+  it('is continued by the next chat', async () => {
+    const task = await switchedTask();
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    harness.chat(task.id, 'Is that all?');
+    await harness.waitForIdle();
+    expect(fakeRuns()[2]!.args).toContain('--resume');
   });
 });
 

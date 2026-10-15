@@ -189,6 +189,9 @@ const HOLDS_FOLDER: TaskStatus[] = [
 /** A task can be chatted with while nothing else is about to run in its conversation. */
 const CHATTABLE: TaskStatus[] = ['stopped', 'failed', 'review', 'done'];
 
+/** Where a chat goes: the conversation it continues, or a new one with this agent. */
+type ChatTarget = { kind: 'resume'; session: Session } | { kind: 'new'; agentId: string };
+
 /**
  * Owns task lifecycle and scheduling. Single-threaded: all state changes happen on the
  * event loop, and subscribers receive {@link HarnessEvent}s instead of sharing state.
@@ -1152,7 +1155,8 @@ export class Harness {
    * Writes `message` into the task's latest implementer conversation and runs the agent
    * until it replies, as if typed in that session: it may edit files, its tool rules and
    * permission prompts apply, and nothing moves on in the workflow. The task then returns
-   * to the status it had.
+   * to the status it had. After the user switched the implementer to another agent, that
+   * agent answers in a new conversation instead.
    * While the task is busy (running, queued, waiting for quota or approval) the message is
    * kept as pending instead and sent when the current step ends; see {@link pendingChat}.
    * Throws when the message is empty, or the task is idle and there is no conversation to
@@ -1224,8 +1228,12 @@ export class Harness {
     return true;
   }
 
-  /** The conversation a chat continues, or why there is none to continue. */
-  private chatTarget(task: Task): Session | string {
+  /**
+   * The conversation a chat continues, or why there is none to continue. Once the user has
+   * switched the implementer to another agent, that agent starts a new one instead, as its
+   * next workflow session would.
+   */
+  private chatTarget(task: Task): ChatTarget | string {
     const session = this.store.listSessions(task.id).findLast(
       (s) =>
         s.role === 'implementer' &&
@@ -1235,6 +1243,9 @@ export class Harness {
         (s.contextTokens > 0 || this.config.agents[s.agentId]?.provider === 'codex'),
     );
     if (!session) return `task ${task.id} has no conversation to continue yet`;
+    if (session.agentId !== task.agents.implementer) {
+      return { kind: 'new', agentId: task.agents.implementer };
+    }
     const window = session.contextWindow ?? this.workflow.contextWindow(session.agentId);
     const thresholds = resolveThresholds(task.contextPolicy);
     const adapter = this.adapterFor(session.agentId);
@@ -1251,10 +1262,12 @@ export class Harness {
       const hint = task.workspace === 'base' ? '' : `; continue it with hb open ${task.id}`;
       return `the conversation of task ${task.id} is full${hint}`;
     }
-    return session;
+    return { kind: 'resume', session };
   }
 
-  private startChat(task: Task, session: Session, text: string): Task {
+  private startChat(task: Task, target: ChatTarget, text: string): Task {
+    const session =
+      target.kind === 'resume' ? target.session : this.startChatSession(task, target.agentId);
     const chat: ChatMessage = { text, returnTo: task.status };
     this.store.appendEvent(task.id, session.id, 'chat_message', chat);
     const controller = new AbortController();
@@ -1262,13 +1275,23 @@ export class Harness {
     this.running.set(task.id, controller);
     this.setActivity(task.id, { phase: 'chatting', agentId: session.agentId });
     const running = this.setStatus(task.id, 'running');
-    void this.runChat(task, session, text, controller);
+    void this.runChat(task, session, target.kind === 'new', text, controller);
     return running;
+  }
+
+  /** Records the new implementer conversation a chat opens with the task's current agent. */
+  private startChatSession(task: Task, agentId: string): Session {
+    const id = randomUUID();
+    // CLIs that assign their own ids report them in `init`; see runOne.
+    const own = this.adapterFor(agentId).capabilities.sessionIds === 'harness' ? id : null;
+    this.store.startSession(id, task.id, 'implementer', agentId, own);
+    return this.store.listSessions(task.id).find((s) => s.id === id)!;
   }
 
   private async runChat(
     task: Task,
     session: Session,
+    isNew: boolean,
     text: string,
     controller: AbortController,
   ): Promise<void> {
@@ -1280,8 +1303,8 @@ export class Harness {
         role: 'implementer',
         agentId: session.agentId,
         access: 'edit',
-        resume: session,
-        prompt: text,
+        resume: isNew ? null : session,
+        prompt: isNew ? this.workflow.chatTakeoverPrompt(ready, text) : text,
       };
       const adapter = this.adapterFor(session.agentId);
       await adapter.ensureReady?.();
@@ -1300,6 +1323,8 @@ export class Harness {
       this.activities.delete(task.id);
       const chat = this.unansweredChat(task.id);
       if (this.requireTask(task.id).status === 'paused_safety') reason = 'safety_pause';
+      // A resumed conversation keeps how its own session ended; a new one ends with the chat.
+      if (isNew) this.store.endSession(session.id, reason);
       if (chat) this.endChat(task.id, session.id, chat.message.returnTo, reason);
       if (this.timer) this.tick();
     }
