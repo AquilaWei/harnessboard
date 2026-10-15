@@ -3,6 +3,17 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.23 - 2026-10-15
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- After a restart, a task waiting for Codex quota started at once and was refused, because
+  Codex's usage was not read yet. It is now read before any task starts.
+- A task refused by Codex for its usage limit retried after 15 minutes instead of at the
+  reset time Codex recorded. It now waits for that reset time.
+
 ## 0.1.22 - 2026-10-15
 
 Local test build; real-device acceptance is pending.
