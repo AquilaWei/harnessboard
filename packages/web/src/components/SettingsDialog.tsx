@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AgentInfo, ModelInfo, Settings, TaskSize } from '@harnessboard/shared';
+import { quotaPauseLevel } from '@harnessboard/shared';
+import type { AgentInfo, AgentProvider, ModelInfo, Settings, TaskSize } from '@harnessboard/shared';
 import { api } from '../api';
 import { DetectedAgents } from './DetectedAgents';
 import { EffortSelect } from './ModelPicker';
@@ -22,6 +23,9 @@ interface Props {
   onSaved: (settings: Settings) => void;
 }
 
+/** Platforms that report their usage; Gemini does not, so it has no pause level to set. */
+const QUOTA_PROVIDERS: AgentProvider[] = ['claude-code', 'codex'];
+
 /** A textarea's non-blank lines, trimmed: the server rejects surrounding spaces. */
 const lines = (text: string) =>
   text
@@ -34,7 +38,11 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   const { t, i18n } = useTranslation();
   const [tokenSpike, setTokenSpike] = useState(settings.tokenSpike);
   const [maxConcurrent, setMaxConcurrent] = useState(settings.maxConcurrent);
-  const [pausePct, setPausePct] = useState(Math.round(settings.quotaPauseUtilization * 100));
+  const [pausePcts, setPausePcts] = useState(() =>
+    Object.fromEntries(
+      QUOTA_PROVIDERS.map((p) => [p, Math.round(quotaPauseLevel(settings, p) * 100)]),
+    ),
+  );
   const [size, setSize] = useState<TaskSize>(settings.defaultContextPolicy.size ?? 'medium');
   const [reviewer, setReviewer] = useState(settings.defaultReviewer ?? '');
   const [globalRules, setGlobalRules] = useState(settings.allowedTools.join('\n'));
@@ -60,7 +68,10 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
         await api.saveSettings({
           maxConcurrent,
           tokenSpike,
-          quotaPauseUtilization: pausePct / 100,
+          quotaPauseByProvider: {
+            ...settings.quotaPauseByProvider,
+            ...Object.fromEntries(QUOTA_PROVIDERS.map((p) => [p, pausePcts[p]! / 100])),
+          },
           defaultContextPolicy: { ...settings.defaultContextPolicy, size },
           defaultReviewer: reviewer === '' ? null : reviewer,
           allowedTools: parsedRules.rules,
@@ -95,16 +106,22 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
               onChange={(e) => setMaxConcurrent(Number(e.target.value))}
             />
           </label>
-          <label className="field">
-            <span>{t('settingsForm.quotaPause')}</span>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={pausePct}
-              onChange={(e) => setPausePct(Number(e.target.value))}
-            />
-          </label>
+        </div>
+        <div className="row">
+          {QUOTA_PROVIDERS.map((provider) => (
+            <label key={provider} className="field">
+              <span>{t('settingsForm.quotaPause', { name: t(`providers.${provider}`) })}</span>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={pausePcts[provider]}
+                onChange={(e) =>
+                  setPausePcts((current) => ({ ...current, [provider]: Number(e.target.value) }))
+                }
+              />
+            </label>
+          ))}
         </div>
         <div className="row">
           <label className="field">

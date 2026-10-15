@@ -14,6 +14,7 @@ import {
   isModelId,
   isProfileId,
   presetRules,
+  quotaPauseLevel,
   resolveThresholds,
   roleEffort,
   roleModel,
@@ -443,6 +444,7 @@ export class Harness {
       maxConcurrent,
       tokenSpike: { ...this.config.tokenSpike },
       quotaPauseUtilization,
+      quotaPauseByProvider: { ...this.config.quotaPauseByProvider },
       defaultContextPolicy,
       defaultReviewer,
       allowedTools,
@@ -1617,7 +1619,7 @@ export class Harness {
 
   private quotaBlocked(provider: AgentProvider, now: number): boolean {
     const quota = this.quotas.get(provider) ?? null;
-    return quotaBlocks(quota, now, this.config.quotaPauseUtilization);
+    return quotaBlocks(quota, now, quotaPauseLevel(this.config, provider));
   }
 
   /**
@@ -1851,7 +1853,7 @@ export class Harness {
           if (quotaPause || safetyPause || replied) return;
           quotaPause = true;
           const used = Math.round((this.quotas.get(provider)?.fiveHourUtilization ?? 0) * 100);
-          const level = Math.round(this.config.quotaPauseUtilization * 100);
+          const level = Math.round(quotaPauseLevel(this.config, provider) * 100);
           this.notice(task.id, `Paused for quota: ${provider} at ${used}% (pause level ${level}%)`);
           this.running.get(task.id)?.abort();
         },

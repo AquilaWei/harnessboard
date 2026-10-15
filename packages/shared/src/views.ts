@@ -136,6 +136,8 @@ export interface Settings {
   tokenSpike: TokenSpikePolicy;
   maxConcurrent: number;
   quotaPauseUtilization: number;
+  /** Pause levels of single platforms; the others use `quotaPauseUtilization`. */
+  quotaPauseByProvider: Partial<Record<AgentProvider, number>>;
   defaultContextPolicy: ContextPolicy;
   /** Reviewer profile for new tasks; `null` for no review. */
   defaultReviewer: string | null;

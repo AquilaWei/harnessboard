@@ -339,3 +339,29 @@ describe('token spike configuration', () => {
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow('tokenSpike');
   });
 });
+
+describe('quota pause levels per platform', () => {
+  it('has none of its own by default', () => {
+    expect(loadConfig({ env: {}, configFile: missing }).quotaPauseByProvider).toEqual({});
+  });
+
+  it('reads a level of one platform', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ quotaPauseByProvider: { codex: 0.8 } }));
+    expect(loadConfig({ env: {}, configFile: file }).quotaPauseByProvider).toEqual({ codex: 0.8 });
+  });
+
+  it('rejects a level above 1', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ quotaPauseByProvider: { codex: 80 } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      /quotaPauseByProvider.codex must be in/,
+    );
+  });
+
+  it('rejects an unknown platform', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ quotaPauseByProvider: { openai: 0.8 } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(/unknown platform "openai"/);
+  });
+});

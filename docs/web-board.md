@@ -81,8 +81,8 @@ is deprecated and does not prevent automatic discussion.
   same conversation after the reset. A task that hits the limit waits until the reset time
   the platform gives, or `quotaRetryMinutes` when none is known.
 - **Settings:**
-  - Concurrency, quota pause level, default task size and default reviewer. These are saved
-    to your user config file.
+  - Concurrency, the quota pause level of each platform (Claude, Codex), default task size
+    and default reviewer. These are saved to your user config file.
   - The agent profiles and whether each CLI runs, with each profile's default **Reasoning
     effort** (see [configuration](configuration.md#config-files-agents-and-permissions)),
     saved with Save.

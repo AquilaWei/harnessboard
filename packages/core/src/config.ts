@@ -11,7 +11,12 @@ import {
   isEffortId,
   resolveThresholds,
 } from '@harnessboard/shared';
-import type { AgentProfile, ContextPolicy, TokenSpikePolicy } from '@harnessboard/shared';
+import type {
+  AgentProfile,
+  AgentProvider,
+  ContextPolicy,
+  TokenSpikePolicy,
+} from '@harnessboard/shared';
 
 export interface HarnessConfig {
   tokenSpike: TokenSpikePolicy;
@@ -25,6 +30,8 @@ export interface HarnessConfig {
   maxConcurrent: number;
   /** 0–1; at or above this five-hour usage no session starts and running ones stop. */
   quotaPauseUtilization: number;
+  /** The same per platform, for those that should pause at another level. */
+  quotaPauseByProvider: Partial<Record<AgentProvider, number>>;
   /** Used until the agent reports the real window for a model. */
   fallbackContextWindow: number;
   /** Retry interval when a quota error carries no reset time. */
@@ -63,6 +70,7 @@ export type EditableSettings = Pick<
   | 'tokenSpike'
   | 'maxConcurrent'
   | 'quotaPauseUtilization'
+  | 'quotaPauseByProvider'
   | 'defaultContextPolicy'
   | 'defaultReviewer'
   | 'allowedTools'
@@ -74,6 +82,7 @@ export const EDITABLE_SETTINGS = [
   'tokenSpike',
   'maxConcurrent',
   'quotaPauseUtilization',
+  'quotaPauseByProvider',
   'defaultContextPolicy',
   'defaultReviewer',
   'allowedTools',
@@ -114,6 +123,7 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     maxConcurrent: 1,
     tokenSpike: { enabled: true, windowSeconds: 60, maxTokens: 100_000 },
     quotaPauseUtilization: 0.95,
+    quotaPauseByProvider: {},
     fallbackContextWindow: 200_000,
     quotaRetryMinutes: 15,
     maxHandoffs: 20,
@@ -269,6 +279,20 @@ export function validate(config: HarnessConfig): void {
   }
   if (!(config.quotaPauseUtilization > 0 && config.quotaPauseUtilization <= 1)) {
     throw new Error('config quotaPauseUtilization must be in (0, 1]');
+  }
+  const byProvider = config.quotaPauseByProvider;
+  if (typeof byProvider !== 'object' || byProvider === null || Array.isArray(byProvider)) {
+    throw new Error('config quotaPauseByProvider must map platforms to pause levels');
+  }
+  for (const [provider, level] of Object.entries(byProvider)) {
+    if (!(AGENT_PROVIDERS as readonly string[]).includes(provider)) {
+      throw new Error(
+        `config quotaPauseByProvider has unknown platform "${provider}"; use ${AGENT_PROVIDERS.join(', ')}`,
+      );
+    }
+    if (!(typeof level === 'number' && level > 0 && level <= 1)) {
+      throw new Error(`config quotaPauseByProvider.${provider} must be in (0, 1]`);
+    }
   }
   resolveThresholds(config.defaultContextPolicy);
   if (!Array.isArray(config.allowedTools)) throw new Error('config allowedTools must be a list');

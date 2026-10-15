@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AGENT_PROVIDERS } from '@harnessboard/shared';
+import { AGENT_PROVIDERS, quotaPauseLevel } from '@harnessboard/shared';
 import type { AgentProvider, HarnessStatus, QuotaInfo, Settings } from '@harnessboard/shared';
 import { windowAt } from '../quota';
 import { QuotaMeter } from './Meter';
@@ -33,7 +33,6 @@ export function Header({
   const { t } = useTranslation();
   // One reading per platform that has reported its usage, in a fixed order.
   const providers = AGENT_PROVIDERS.filter((p) => status?.quotas[p]);
-  const pauseAt = settings?.quotaPauseUtilization ?? 0.95;
 
   return (
     <header className="header">
@@ -59,7 +58,7 @@ export function Header({
             provider={provider}
             quota={status!.quotas[provider]!}
             paused={status!.quotaPaused.includes(provider)}
-            pauseAt={pauseAt}
+            pauseAt={settings ? quotaPauseLevel(settings, provider) : 0.95}
           />
         ))}
       </div>

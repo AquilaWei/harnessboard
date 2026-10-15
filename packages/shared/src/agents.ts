@@ -4,6 +4,19 @@
 export const AGENT_PROVIDERS = ['claude-code', 'codex', 'gemini'] as const;
 export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 
+/** The five-hour usage (0–1) at which a platform's sessions pause. */
+export interface QuotaPauseLevels {
+  /** For every platform without its own level. */
+  quotaPauseUtilization: number;
+  /** Levels of single platforms, e.g. a lower one for a quota that runs out fast. */
+  quotaPauseByProvider: Partial<Record<AgentProvider, number>>;
+}
+
+/** The pause level of `provider`: its own, or the shared one when it has none. */
+export function quotaPauseLevel(levels: QuotaPauseLevels, provider: AgentProvider): number {
+  return levels.quotaPauseByProvider[provider] ?? levels.quotaPauseUtilization;
+}
+
 /** A named way to run an agent, e.g. `claude` or a second profile using another model. */
 export interface AgentProfile {
   provider: AgentProvider;

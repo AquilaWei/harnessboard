@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
-import { isEffortId, isModelId, roleAgent, roleEffort, roleModel } from '../src/agents.js';
+import {
+  isEffortId,
+  isModelId,
+  quotaPauseLevel,
+  roleAgent,
+  roleEffort,
+  roleModel,
+} from '../src/agents.js';
 import type { TaskAgents } from '../src/agents.js';
 
 describe('isModelId', () => {
@@ -110,5 +117,17 @@ describe('roleEffort', () => {
 
   it("does not give the reviewer the implementer's effort", () => {
     expect(roleEffort({ ...agents, implementerEffort: 'high' }, 'reviewer')).toBeNull();
+  });
+});
+
+describe('quotaPauseLevel', () => {
+  const levels = { quotaPauseUtilization: 0.9, quotaPauseByProvider: { codex: 0.8 } };
+
+  it("is the platform's own level when it has one", () => {
+    expect(quotaPauseLevel(levels, 'codex')).toBe(0.8);
+  });
+
+  it('is the shared level for a platform without its own', () => {
+    expect(quotaPauseLevel(levels, 'claude-code')).toBe(0.9);
   });
 });

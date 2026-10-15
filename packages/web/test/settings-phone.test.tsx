@@ -28,6 +28,7 @@ const settings = {
   tokenSpike: { enabled: true, windowSeconds: 60, maxTokens: 100_000 },
   maxConcurrent: 2,
   quotaPauseUtilization: 0.9,
+  quotaPauseByProvider: {},
   defaultContextPolicy: { size: 'medium' },
   defaultReviewer: null,
   allowedTools: [],

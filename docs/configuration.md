@@ -73,6 +73,26 @@ Real-device acceptance still needs a live Claude/Codex spike and resume, plus br
 paired-phone notifications with their notification permissions enabled. Automated tests
 use fake agents and do not consume paid tokens.
 
+## Quota pause level
+
+When a platform's 5-hour usage reaches its pause level, no session of that platform starts
+and the ones running stop; they continue in the same conversation after the reset. The
+spec discussion and chats with a task are not stopped. `quotaPauseUtilization` (0–1,
+default 0.95) applies to every platform; `quotaPauseByProvider` sets another level for
+single platforms (`claude-code`, `codex`). Change both under **Settings**, or in the user
+`config.json`:
+
+```json
+{
+  "quotaPauseUtilization": 0.9,
+  "quotaPauseByProvider": { "codex": 0.8 }
+}
+```
+
+Codex reports no usage while it runs; Harnessboard reads it from Codex's logs once a
+minute, so a fast-rising Codex quota can pass its level by a few points before the session
+stops. A lower level for Codex leaves room for that.
+
 ## Usage estimates
 
 Codex task summaries estimate USD using a bundled price table checked on October 9, 2026
