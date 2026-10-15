@@ -1773,7 +1773,9 @@ export class Harness {
     // A read-only session has nothing to commit or hand off, and a chat is the user's own
     // turn: neither wraps up.
     const wrapUp = !chat && plan.access === 'edit';
-    const window = this.workflow.contextWindow(plan.agentId);
+    // A resumed conversation keeps its own window: the agent's last known one may belong
+    // to another model (e.g. a reviewer with a larger window).
+    const window = plan.resume?.contextWindow ?? this.workflow.contextWindow(plan.agentId);
     const provider = adapter.provider;
     // A resumed turn may report no usage (e.g. `/compact`), so start from what is known.
     let tokens = plan.resume?.contextTokens ?? 0;

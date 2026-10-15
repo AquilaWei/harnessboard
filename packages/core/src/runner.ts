@@ -95,7 +95,8 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   const canCompact =
     streaming || (adapter.capabilities.compaction === true && !!adapter.createConnection);
   const compactPct = canCompact && options.compact ? thresholds.compactPct : null;
-  let lastPct = 0; // context use after the latest model call
+  let lastTokens = 0; // context size after the latest model call
+  let lastPct = 0; // lastTokens as a share of the window
   let compacting = false;
   let compacted = false; // the CLI reported the compaction asked for
   let reply: ResultEvent | null = null; // the agent's own result, kept while compacting
@@ -209,7 +210,11 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
       if (event.kind === 'permission_request') answer(event);
       if (event.kind === 'result') {
         result = event;
-        if (event.contextWindow) window = event.contextWindow;
+        if (event.contextWindow && event.contextWindow !== window) {
+          // The turn may have started with a guessed window; judge compaction by the real one.
+          window = event.contextWindow;
+          lastPct = contextPct(lastTokens, window);
+        }
         if (!startCompaction(event)) child.closeInput();
       }
     }
@@ -261,6 +266,7 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
 
     function checkBudget(tokens: number): void {
       const pct = contextPct(tokens, window);
+      lastTokens = tokens;
       lastPct = pct;
       // A session that is compacted after its turn is never asked to wrap up or cut off
       // mid-turn: the compaction keeps its context, so the work in progress is not lost.

@@ -214,3 +214,39 @@ describe('a task with compaction turned off', () => {
     expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`]);
   });
 });
+
+describe('a turn whose window turns out smaller than the one it started with', () => {
+  beforeEach(() =>
+    scenario([
+      [init(), assistantText('working', 35_000), result('finished', 100_000)],
+      [compactBoundary(35_000, 4_000), result('')],
+    ]),
+  );
+
+  it('is compacted against the window its result reports', async () => {
+    await harness.shutdown();
+    harness.store.close();
+    harness = Harness.open({ ...harness.config, fallbackContextWindow: 1_000_000 });
+    await create();
+    expect(fakeRuns()[0]!.received).toEqual([`Build it${ASK_FOR_NOTES}`, '/compact']);
+  });
+});
+
+describe('a resumed conversation after another session of the agent used a larger window', () => {
+  beforeEach(() =>
+    scenario(
+      [[init(), assistantText('working', 10_000), result('done', 100_000)]],
+      [[init(), assistantText('It prints hi.', 35_000), result('It prints hi.', 0)]],
+      [[compactBoundary(35_000, 4_000), result('')]],
+    ),
+  );
+
+  it("is compacted against the conversation's own window", async () => {
+    const task = await create();
+    harness.store.startSession('other', task.id, 'reviewer', 'claude', null);
+    harness.store.updateSessionContext('other', 0, 1_000_000);
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(fakeRuns()[1]!.received).toEqual(['What does it print?', '/compact']);
+  });
+});
