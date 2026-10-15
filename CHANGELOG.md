@@ -3,7 +3,9 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
-## Unreleased
+## 0.1.26 - 2026-10-15
+
+Local test build; real-device acceptance is pending.
 
 ### Changed
 
