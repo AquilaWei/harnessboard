@@ -1936,6 +1936,7 @@ export class Harness {
       },
       onPermissionRequest: (event) => this.askPermission(task.id, sessionId, provider, event),
       onNotice: (message) => this.notice(task.id, message, sessionId),
+      onCompacted: () => this.store.appendEvent(task.id, sessionId, 'compacted', {}),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
     this.quotaStops.delete(task.id);

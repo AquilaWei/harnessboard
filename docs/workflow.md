@@ -90,7 +90,10 @@ the implementer in their notes, and it decides whether to write them. Use `--tes
 **Notes between roles:** every role ends its reply with a `## Notes` section for the roles
 after it: what it did, the decisions it made, what it is unsure of and what to check next.
 Harnessboard records each one and keeps them in `.harnessboard/notes.md` in the task's
-worktree, oldest first. A resumed implementer receives only new reviewer/tester feedback; a fresh implementer can read the archive. Testers and reviewers consult history only when a specific ambiguity requires it. Only
+worktree, oldest first. A role that goes on in its own conversation receives only the notes
+the other roles wrote since its last turn, each once; a reviewer's or tester's notes are not
+repeated inside its list of required fixes. A fresh implementer can read the archive. Testers
+and reviewers consult history only when a specific ambiguity requires it. Only
 Harnessboard writes this file: it is rebuilt from its own records before every session, so
 no agent can change another's report, and git ignores it, so it never reaches a commit. Read
 it on the task's **Notes** tab. A role that writes no notes section is recorded with its
@@ -124,7 +127,10 @@ hb add "Add input validation to the signup form" --reviewer opus
   ones still to come are not held against it.
 - **Persistent conversations:** the implementer, tester and reviewer each keep a separate
   session across stages and fixes. Follow-up checks receive changed scope; implementers receive new feedback.
-  updated requirements or review rules are sent again when they change. Completed turns at the context warning
+  Updated requirements or review rules are sent again when they change.
+  Standing instructions (the commit rule, the notes section, a loop's steps) are given once
+  per conversation and again after it is compacted; follow-up rounds name features already
+  listed by id. The tester is never told to commit, since it changes no file. Completed turns at the context warning
   are compacted by adapters that support it; see [context budget](configuration.md#context-budget).
 - **Default reviewer:** `defaultReviewer` in the config (or the web settings) applies to
   new tasks. `--reviewer none` turns review off for one task.

@@ -57,6 +57,11 @@ export interface RunSessionOptions {
    */
   onPermissionRequest?: (event: PermissionRequestEvent) => Promise<PermissionReply>;
   onNotice: (message: string) => void;
+  /**
+   * The conversation was compacted, asked for or by the CLI itself; what it was told before
+   * may now be only in a summary.
+   */
+  onCompacted?: () => void;
   onStderr: (line: string) => void;
 }
 
@@ -199,6 +204,9 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
         return;
       }
       options.onEvent(event);
+      if (event.kind === 'compact' || (event.kind === 'result' && event.compacted)) {
+        options.onCompacted?.();
+      }
       if (stopped) return; // A safety guard may abort synchronously on this event.
       if (event.kind === 'init' && event.sessionId) agentSessionId = event.sessionId;
       if (event.kind === 'quota') quota = event.quota;
@@ -253,6 +261,7 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
       compacting = false;
       if (event.compacted) {
         compacted = true;
+        options.onCompacted?.();
         options.onNotice('conversation compacted');
       }
       if (!compacted) {

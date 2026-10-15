@@ -142,7 +142,8 @@ export function planRevisionPrompt(message: string): string {
 /**
  * Every later session of a loop task. `failedVerify` is the harness's own verify output
  * when it failed after the previous session; `note` is a handoff note when the previous
- * session ran out of context mid-feature.
+ * session ran out of context mid-feature. `resumed` is a conversation that already had the
+ * full steps and has not been compacted since; it gets a short reminder instead.
  */
 export function loopSessionPrompt(
   goal: string,
@@ -153,27 +154,35 @@ export function loopSessionPrompt(
   resumed = false,
   tester = false,
 ): string {
-  const lines = [
-    'You are continuing a long-running project in this worktree. Each turn implements',
-    'exactly one feature.',
-    '',
-    ...(resumed ? ['Continue the agreed goal in this same conversation.'] : [`Goal:\n${goal}`]),
-    '',
-    resumed
-      ? `1. Read \`${FEATURE_LIST_FILE}\` for the current feature status. Refer to progress or code when needed.`
-      : `1. Read \`${PROGRESS_FILE}\`, \`${FEATURE_LIST_FILE}\` and \`git log --oneline -20\`.`,
-    tester
-      ? "2. Write the tests the feature needs and run them as you go. The tester only runs them for formal stage verification; weigh the test ideas in its and the reviewer's notes."
-      : `2. Check any known regressions; run focused development tests as needed.`,
-    '3. Pick the first feature with "passes": false and implement it so its "steps" (the',
-    '   acceptance criteria) hold.',
-    tester
-      ? '4. Mark the feature as passing when your implementation and development checks are ready for formal testing.'
-      : `4. Run \`${verifyCommand}\`. Set "passes": true for that feature only if it succeeds.`,
-    '   Never remove features or change their descriptions or steps.',
-    `5. Update \`${PROGRESS_FILE}\` and commit.`,
-    '6. Stop after this one feature.',
-  ];
+  // A resumed conversation was given these steps with an earlier feature; it hears a reminder.
+  const lines = resumed
+    ? [
+        'Next feature, in this same conversation: pick the first feature with "passes": false in',
+        `\`${FEATURE_LIST_FILE}\` and build it the way you built the last one (${
+          tester
+            ? 'write and run its tests, mark it passing when it is ready for formal testing'
+            : `mark it passing only if \`${verifyCommand}\` succeeds`
+        }, update \`${PROGRESS_FILE}\`, commit, and stop after this one feature).`,
+      ]
+    : [
+        'You are continuing a long-running project in this worktree. Each turn implements',
+        'exactly one feature.',
+        '',
+        `Goal:\n${goal}`,
+        '',
+        `1. Read \`${PROGRESS_FILE}\`, \`${FEATURE_LIST_FILE}\` and \`git log --oneline -20\`.`,
+        tester
+          ? "2. Write the tests the feature needs and run them as you go. The tester only runs them for formal stage verification; weigh the test ideas in its and the reviewer's notes."
+          : `2. Check any known regressions; run focused development tests as needed.`,
+        '3. Pick the first feature with "passes": false and implement it so its "steps" (the',
+        '   acceptance criteria) hold.',
+        tester
+          ? '4. Mark the feature as passing when your implementation and development checks are ready for formal testing.'
+          : `4. Run \`${verifyCommand}\`. Set "passes": true for that feature only if it succeeds.`,
+        '   Never remove features or change their descriptions or steps.',
+        `5. Update \`${PROGRESS_FILE}\` and commit.`,
+        '6. Stop after this one feature.',
+      ];
   if (failedVerify) {
     const how = failedVerify.timedOut ? 'timed out' : `exited with code ${failedVerify.exitCode}`;
     lines.push(

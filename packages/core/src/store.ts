@@ -388,6 +388,14 @@ export class Store {
     return row ? toEvent(row) : undefined;
   }
 
+  /** Every event of one kind within a session, oldest first. */
+  sessionEvents(sessionId: string, kind: string): StoredEvent[] {
+    return this.db
+      .prepare('SELECT * FROM events WHERE session_id = ? AND kind = ? ORDER BY id')
+      .all(sessionId, kind)
+      .map(toEvent);
+  }
+
   /** All events of one kind for a task, oldest first. */
   eventsOfKind(taskId: number, kind: string): StoredEvent[] {
     return this.eventsOfKinds(taskId, [kind]);

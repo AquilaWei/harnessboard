@@ -40,6 +40,18 @@ export function parseNotes(reply: string): string {
   return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim();
 }
 
+/** One note as the notes file and the updates show it, numbered `n`. */
+function noteEntry(n: number, { note, at }: { note: RoleNote; at: number }): string[] {
+  const time = new Date(at).toISOString().slice(0, 16).replace('T', ' ');
+  const verdict = note.verdict ? ` · ${VERDICT_NAMES[note.verdict]}` : '';
+  return [
+    '',
+    `## ${n}. ${ROLE_NAMES[note.role]} (${note.agentId})${verdict} · ${time} UTC`,
+    '',
+    note.text || '(no notes)',
+  ];
+}
+
 /** The notes file's content for a task; `at` is when each note was recorded. */
 export function renderNotes(
   taskId: number,
@@ -52,17 +64,35 @@ export function renderNotes(
     'Each role on this task reports here, oldest first. The harness writes this file from',
     'its own records before every session, so edits to it are lost.',
   ];
-  notes.forEach(({ note, at }, i) => {
-    const time = new Date(at).toISOString().slice(0, 16).replace('T', ' ');
-    const verdict = note.verdict ? ` · ${VERDICT_NAMES[note.verdict]}` : '';
-    lines.push(
-      '',
-      `## ${i + 1}. ${ROLE_NAMES[note.role]} (${note.agentId})${verdict} · ${time} UTC`,
-      '',
-      note.text || '(no notes)',
-    );
-  });
+  notes.forEach((entry, i) => lines.push(...noteEntry(i + 1, entry)));
   return lines.join('\n') + '\n';
+}
+
+/**
+ * The notes added since a role's last turn, for a role that goes on in its own
+ * conversation: it already has the earlier ones, so only these are sent.
+ */
+export function renderNoteUpdates(notes: { note: RoleNote; at: number }[]): string {
+  return [
+    'New notes from the other roles since your last turn:',
+    ...notes.flatMap((entry, i) => noteEntry(i + 1, entry)),
+  ].join('\n');
+}
+
+/**
+ * `reply` without its notes section, which reaches the next role as a note of its own;
+ * the same section {@link parseNotes} reads.
+ */
+export function withoutNotes(reply: string): string {
+  const lines = reply.split('\n');
+  const start = lines.findIndex(
+    (line) => line.trim().toLowerCase() === NOTES_HEADING.toLowerCase(),
+  );
+  if (start === -1) return reply.trim();
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((line) => /^#{1,2}\s/.test(line));
+  const after = end === -1 ? [] : rest.slice(end);
+  return [...lines.slice(0, start), ...after].join('\n').trim();
 }
 
 /** What every workflow session is told about the notes file. */

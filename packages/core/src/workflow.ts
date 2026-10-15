@@ -15,6 +15,7 @@ import type {
   AgentRole,
   CommitSpan,
   CriteriaProposal,
+  Feature,
   FeatureSnapshot,
   MergeConflict,
   PlanProposal,
@@ -40,7 +41,14 @@ import type { HarnessConfig } from './config.js';
 import { checkCommits, COMMIT_RULE } from './commit-check.js';
 import { readGuidelines } from './guidelines.js';
 import { missingFeatures, readPlan, runVerify } from './loop.js';
-import { NOTES_FILE, notesPrompt, parseNotes, renderNotes, writeNotes } from './notes.js';
+import {
+  NOTES_FILE,
+  notesPrompt,
+  parseNotes,
+  renderNoteUpdates,
+  renderNotes,
+  writeNotes,
+} from './notes.js';
 import {
   QUOTA_RESUME_PROMPT,
   SCOPE_CHANGED_PROMPT,
@@ -119,6 +127,12 @@ export interface SessionPlan {
   commitBase?: string;
   /** Actual HEAD at this turn's start, independent of a retried commit check. */
   progressHead?: string;
+  /**
+   * What the prompt gave the conversation once for all later turns (`standing:<role>`, the
+   * role's standing instructions; `loopSteps`, a loop task's steps). Recorded with
+   * {@link Workflow.started}; see {@link Workflow.knows}.
+   */
+  told?: string[];
 }
 
 /** What a task's next session is for, in the order {@link Workflow} picks it. */
@@ -156,49 +170,83 @@ export class Workflow {
    */
   plan(task: Task): SessionPlan {
     const plan = this.nextSession(task);
-    // A resumed session was already told; the discussion is with the user, not other roles.
+    // The discussion is with the user, not other roles.
     if (!this.keepsNotes(plan)) return plan;
-    const hasNotes = this.notes(task.id).length > 0;
-    const writing = plan.access === 'edit' ? [COMMIT_RULE] : [];
+    const told = `standing:${plan.role}`;
+    // A conversation keeps what it was told until it is compacted, so it hears it only once.
+    const knows = this.knows(plan.resume, told);
+    const parts = [plan.prompt];
+    if (!knows) parts.push(...this.standing(task, plan));
     const blocked = this.host.store.lastEvent(task.id, 'commit_check');
     const correction = blocked?.data as
       { ok: boolean; role: AgentRole; detail: string } | undefined;
     if (correction && !correction.ok && correction.role === plan.role)
-      writing.push(correction.detail);
-    if (plan.role !== 'implementer') {
-      return {
-        ...plan,
-        prompt: [
-          plan.prompt,
-          ...writing,
-          notesPrompt(false),
-          ...(hasNotes
-            ? [
-                'Archived role notes are available in `.harnessboard/notes.md`. Consult them only when a specific ambiguity requires history; do not read them routinely.',
-              ]
-            : []),
-        ].join('\n\n'),
-      };
+      parts.push(correction.detail);
+    const previous = plan.resume
+      ? this.host.store.lastSessionEvent(plan.resume.id, 'workflow_run')
+      : undefined;
+    if (previous) {
+      const updates = this.newNotes(task.id, plan, previous.id);
+      if (updates.length > 0) parts.push(renderNoteUpdates(updates));
     }
+    if (!knows) parts.push(...this.notesInstructions(task.id, plan, previous === undefined));
+    return { ...plan, prompt: parts.join('\n\n'), told: [...(plan.told ?? []), told] };
+  }
+
+  /**
+   * The conversation `session` was told `item` (see {@link SessionPlan.told}) by an earlier
+   * turn and has not been compacted since, so it still has it word for word.
+   */
+  private knows(session: Session | null | undefined, item: string): boolean {
+    if (!session) return false;
+    const store = this.host.store;
+    const run = store
+      .sessionEvents(session.id, 'workflow_run')
+      .findLast((e) => ((e.data as { told?: string[] }).told ?? []).includes(item));
+    return (
+      run !== undefined && !store.sessionEvents(session.id, 'compacted').some((e) => e.id > run.id)
+    );
+  }
+
+  /** The rules a role works under for the whole conversation. */
+  private standing(task: Task, plan: SessionPlan): string[] {
+    // The tester changes no file, so it has nothing to commit.
+    const commits = plan.access === 'edit' && plan.role !== 'tester' ? [COMMIT_RULE] : [];
     const duty = plan.role === 'implementer' && this.specFile(task.id) ? [SPEC_CHANGE_DUTY] : [];
-    if (plan.resume) {
-      const previous = this.host.store.lastSessionEvent(plan.resume.id, 'workflow_run');
-      const notes = this.host.store
-        .eventsOfKinds(task.id, ['role_note'], previous?.id ?? 0)
-        .filter(
-          (event) => event.data && ['reviewer', 'tester'].includes((event.data as RoleNote).role),
-        )
-        .map((event) => ({ note: event.data as RoleNote, at: event.ts }));
-      const updates = notes.length > 0 ? [renderNotes(task.id, task.title, notes)] : [];
-      return {
-        ...plan,
-        prompt: [plan.prompt, ...writing, ...duty, ...updates, notesPrompt(false)].join('\n\n'),
-      };
-    }
-    return {
-      ...plan,
-      prompt: [plan.prompt, ...writing, ...duty, notesPrompt(hasNotes)].join('\n\n'),
-    };
+    return [...commits, ...duty];
+  }
+
+  /**
+   * The other roles' notes recorded since the conversation's last turn (`afterId`), leaving
+   * out any the prompt already quotes, such as a reviewer's findings.
+   */
+  private newNotes(
+    taskId: number,
+    plan: SessionPlan,
+    afterId: number,
+  ): { note: RoleNote; at: number }[] {
+    return this.host.store
+      .eventsOfKinds(taskId, ['role_note'], afterId)
+      .map((event) => ({ note: event.data as RoleNote, at: event.ts }))
+      .filter(({ note }) => note.role !== plan.role)
+      .filter(({ note }) => !(note.text.trim() && plan.prompt.includes(note.text.trim())));
+  }
+
+  /**
+   * How to report to the roles after it, and where the notes so far are. A new implementer
+   * reads them; other roles, and a conversation that continues, consult them only when needed.
+   */
+  private notesInstructions(taskId: number, plan: SessionPlan, fresh: boolean): string[] {
+    const hasNotes = this.notes(taskId).length > 0;
+    if (plan.role === 'implementer' && fresh) return [notesPrompt(hasNotes)];
+    return [
+      notesPrompt(false),
+      ...(hasNotes
+        ? [
+            'Archived role notes are available in `.harnessboard/notes.md`. Consult them only when a specific ambiguity requires history; do not read them routinely.',
+          ]
+        : []),
+    ];
   }
 
   /**
@@ -291,7 +339,7 @@ export class Workflow {
       own?.endReason === 'completed' &&
       this.canResume(task, own, this.activeAgent(task))
     ) {
-      const plan = this.continuation(task, null, true);
+      const plan = this.continuation(task, null, this.knows(own, 'loopSteps'));
       return { ...plan, resume: own };
     }
     // A session that never reached the model was never saved by the CLI, so it can't be resumed.
@@ -355,6 +403,7 @@ export class Workflow {
       contextKey: plan.contextKey ?? null,
       commitBase: plan.commitBase ?? null,
       progressHead: plan.progressHead ?? null,
+      told: plan.told ?? [],
     });
     for (const eventId of plan.delivers ?? []) {
       const delivery: SpecDelivery = { eventId };
@@ -426,6 +475,7 @@ export class Workflow {
             features:
               task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.features ?? null) : null,
             verify: task.mode === 'loop' ? (this.snapshots(task.id).at(-1)?.verify ?? null) : null,
+            known: this.knownFeatures(task, earlier.session),
           },
         ),
         review: task.workspace === 'base' ? request : { ...request, since: earlier.head },
@@ -555,12 +605,27 @@ export class Workflow {
                 task.workspace === 'base' ? request.since : report.head,
                 task.verifyCommand,
                 this.snapshots(task.id).at(-1)?.features,
+                this.knownFeatures(task, previous),
               )
             : prompt,
         contextKey,
       };
     }
     return { ...base, resume: null, prompt, contextKey };
+  }
+
+  /**
+   * The loop feature list as `session` was last given it, when the conversation still has it;
+   * a follow-up then names the unchanged features by id only.
+   */
+  private knownFeatures(task: Task, session: Session): Feature[] | null {
+    if (task.mode !== 'loop' || !this.knows(session, `standing:${session.role}`)) return null;
+    const run = this.host.store.lastSessionEvent(session.id, 'workflow_run')!;
+    const seen = this.host.store
+      .eventsOfKind(task.id, 'features')
+      .filter((e) => e.id < run.id)
+      .at(-1);
+    return (seen?.data as FeatureSnapshot | undefined)?.features ?? null;
   }
 
   private contextKey(context: unknown): string {
@@ -939,6 +1004,7 @@ export class Workflow {
     return this.implement(task, continuationPrompt(this.firstPrompt(task), null, revision));
   }
 
+  /** `resumed`: the conversation goes on and still has a loop step's full instructions. */
   private continuation(task: Task, note: string | null, resumed = false): SessionPlan {
     const feedback = this.openFeedback(task.id);
     if (task.mode === 'single') {
@@ -953,7 +1019,7 @@ export class Workflow {
     }
     const verify = this.snapshots(task.id).at(-1)?.verify;
     const failed = verify && !verify.ok ? verify : null;
-    return this.implement(
+    const plan = this.implement(
       task,
       loopSessionPrompt(
         this.goal(task),
@@ -965,6 +1031,7 @@ export class Workflow {
         task.agents.tester !== null,
       ),
     );
+    return resumed ? plan : { ...plan, told: ['loopSteps'] };
   }
 
   private handoffNote(task: Task): string | null {

@@ -11,6 +11,7 @@ import type {
   VerifyResult,
 } from '@harnessboard/shared';
 import type { Guideline } from './guidelines.js';
+import { withoutNotes } from './notes.js';
 import { git } from './worktree.js';
 
 export const VERDICT_APPROVE = 'VERDICT: APPROVE';
@@ -41,6 +42,11 @@ export interface ReviewContext {
   features?: Feature[] | null;
   /** The user's rules (`reviewGuidelines`), checked like the task's own requirements. */
   guidelines?: Guideline[];
+  /**
+   * The feature list as a resumed reviewer last saw it: unchanged features are then named by
+   * id only. `null` lists them all again, for a conversation that may have lost them.
+   */
+  known?: Feature[] | null;
 }
 
 /**
@@ -112,7 +118,7 @@ export function reviewPrompt(
 export function reviewFollowUpPrompt(
   request: ReviewRequest,
   reviewedHead: string,
-  { features = null, verify = null }: ReviewContext = {},
+  { features = null, verify = null, known = null }: ReviewContext = {},
 ): string {
   return [
     'The implementer finished another step. This is review round ' +
@@ -122,7 +128,7 @@ export function reviewFollowUpPrompt(
     `- \`git log --oneline ${reviewedHead}..HEAD\` and \`git diff ${reviewedHead}..HEAD\``,
     '- `git status` for anything left uncommitted',
     ...earlierWork(request),
-    ...(features ? ['', ...stepScope(features)] : []),
+    ...(features ? ['', ...followUpScope(features, known)] : []),
     ...(verify?.ok
       ? ['', `The harness ran \`${verify.command}\` after this step and it passed.`]
       : []),
@@ -141,12 +147,13 @@ export function testFollowUpPrompt(
   testedHead: string,
   verifyCommand: string | null,
   features: Feature[] | null = null,
+  known: Feature[] | null = null,
 ): string {
   return [
     `Continue testing this task in your own conversation (round ${request.round}).`,
     `Check \`git diff ${testedHead}..HEAD\` and \`git status\` for the latest changes.`,
     ...earlierWork(request),
-    ...(features ? stepScope(features) : []),
+    ...(features ? followUpScope(features, known) : []),
     'Recheck your earlier findings, regressions, and that every acceptance criterion has a test.',
     TESTER_HANDS_OFF,
     ...(verifyCommand ? [`Run \`${verifyCommand}\`.`] : []),
@@ -265,12 +272,47 @@ function stepScope(features: Feature[]): string[] {
   ];
 }
 
+/**
+ * {@link stepScope} for a role that already has the list from an earlier round (`known`):
+ * features that are new or changed since then are described, the rest named by id.
+ */
+function followUpScope(features: Feature[], known: Feature[] | null): string[] {
+  if (!known) return stepScope(features);
+  const before = new Map(known.map((f) => [f.id, f]));
+  const changed = (f: Feature) => {
+    const was = before.get(f.id);
+    return !was || was.passes !== f.passes || was.description !== f.description;
+  };
+  const line = (f: Feature) => `- ${f.id}: ${f.description}`;
+  const ids = (list: Feature[]) => list.map((f) => f.id).join(', ');
+  const done = features.filter((f) => f.passes);
+  const later = features.filter((f) => !f.passes);
+  const newlyDone = done.filter(changed);
+  const doneBefore = done.filter((f) => !changed(f));
+  const laterNew = later.filter(changed);
+  const laterKnown = later.filter((f) => !changed(f));
+  return [
+    'This task is built one feature at a time; this round covers the latest step.',
+    'Features newly marked done, which must work and be tested:',
+    ...(newlyDone.length > 0 ? newlyDone.map(line) : ['- (none)']),
+    ...(doneBefore.length > 0 ? [`Done before, and must still work: ${ids(doneBefore)}.`] : []),
+    ...(later.length > 0
+      ? [
+          'Features still to come are built in later steps. Do not request them, and do not',
+          'hold their open questions against this step:',
+          ...laterNew.map(line),
+          ...(laterKnown.length > 0 ? [`- ${ids(laterKnown)}, as listed before`] : []),
+        ]
+      : []),
+  ];
+}
+
 /** Section added to the implementer's next prompt when the reviewer asked for changes. */
 export function reviewFeedback(record: ReviewRecord): string {
   return [
     `A reviewer (${record.agentId}) checked your last step and requested changes.`,
     'Address every point before anything else, run the checks again, and commit:',
-    record.findings,
+    withoutNotes(record.findings),
   ].join('\n');
 }
 
@@ -346,6 +388,6 @@ export function testFeedback(report: TestReport): string {
     `A tester (${report.agentId}) checked your last step and reported failures.`,
     'Fix every one, adding the tests it names as missing, before anything else; run the',
     'tests again and commit:',
-    report.findings,
+    withoutNotes(report.findings),
   ].join('\n');
 }
