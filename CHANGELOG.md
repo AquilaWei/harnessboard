@@ -3,6 +3,17 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.19 - 2026-10-15
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- A tester that adds tests to a test file kept beside the code, such as a Rust
+  `src/runtime/tests.rs` module, a Python `test_*.py` file or a Java `FooTest.java` class,
+  no longer fails the task for changing more than tests. The tester is also told exactly
+  which files count as tests.
+
 ## 0.1.18 - 2026-10-14
 
 Local test build; real-device acceptance is pending.
