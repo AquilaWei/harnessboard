@@ -476,7 +476,8 @@ export class Harness {
    * A `base` task among them first gets the end its session never recorded, before any
    * other task can start, so the commits it made before the crash stay its work. A chat cut
    * off by the crash also rebuilds a review or test still waiting, so the chat's changes are
-   * not blamed on the reviewer or tester.
+   * not blamed on the reviewer or tester. Usage only the CLIs' own records hold is read
+   * before anything starts, so a used-up quota is not forgotten across a restart.
    */
   async start(): Promise<void> {
     for (const task of this.store.listTasks()) {
@@ -505,6 +506,8 @@ export class Harness {
       // A task that waited for permission asks again once its session resumes.
       if (interrupted) this.setStatus(task.id, 'queued');
     }
+    // Codex's usage is not in the store, so it is read before a queued task may go.
+    await this.readQuotas(Date.now());
     this.timer = setInterval(() => this.tick(), TICK_MS);
     this.tick();
   }
@@ -1625,15 +1628,24 @@ export class Harness {
     for (const provider of AGENT_PROVIDERS) {
       const agentId = this.profilesOf(provider)[0];
       const adapter = agentId ? this.adapterFor(agentId) : null;
-      if (!adapter?.readQuota) continue;
-      try {
-        const quota = await adapter.readQuota();
-        if (!quota) continue;
-        this.quotas.set(provider, quota);
-        this.emit({ type: 'quota', provider, quota });
-      } catch {
-        // Its records could not be read this time; the last reading stays until the next.
-      }
+      if (adapter) await this.readQuota(provider, adapter);
+    }
+  }
+
+  /** The provider's usage from its records, also shown on the board; `null` when unknown. */
+  private async readQuota(
+    provider: AgentProvider,
+    adapter: AgentAdapter,
+  ): Promise<QuotaInfo | null> {
+    if (!adapter.readQuota) return null;
+    try {
+      const quota = await adapter.readQuota();
+      if (!quota) return null;
+      this.quotas.set(provider, quota);
+      this.emit({ type: 'quota', provider, quota });
+      return quota;
+    } catch {
+      return null; // its records could not be read this time; the last reading stays
     }
   }
 
@@ -1900,7 +1912,12 @@ export class Harness {
       cumulative: provider !== 'gemini',
     };
     this.store.appendEvent(task.id, sessionId, 'usage', record);
-    return safetyPause ? { ...outcome, reason: 'safety_pause' } : outcome;
+    if (safetyPause) return { ...outcome, reason: 'safety_pause' };
+    // Codex reports no usage while it runs, so its records say when the limit resets.
+    if (outcome.reason === 'quota' && !outcome.quota) {
+      return { ...outcome, quota: await this.readQuota(provider, adapter) };
+    }
+    return outcome;
   }
 
   /**

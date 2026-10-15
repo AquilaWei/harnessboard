@@ -76,7 +76,9 @@ is deprecated and does not prevent automatic discussion.
   click one for both windows and the pause level. Each platform pauses on its own. Claude
   Code reports usage while it runs; Codex does not, so Harnessboard reads it every minute
   from the session logs Codex keeps under `~/.codex/sessions`, which also counts what you
-  used in Codex yourself.
+  used in Codex yourself. It is also read at startup, before any task starts. A task that
+  hits the limit waits until the reset time the platform gives, or `quotaRetryMinutes` when
+  none is known.
 - **Settings:**
   - Concurrency, quota pause level, default task size and default reviewer. These are saved
     to your user config file.

@@ -1432,8 +1432,11 @@ export class Workflow {
   private interrupted(task: Task, outcome: SessionOutcome): void {
     switch (outcome.reason) {
       case 'quota': {
+        // A reset already past is a stale record; retrying at once would only be refused again.
+        const now = Date.now();
+        const reset = outcome.quota?.resetsAt ?? null;
         const resumeAt =
-          outcome.quota?.resetsAt ?? Date.now() + this.host.config.quotaRetryMinutes * 60_000;
+          reset !== null && reset > now ? reset : now + this.host.config.quotaRetryMinutes * 60_000;
         this.host.setStatus(task.id, 'waiting_quota', { resumeAt });
         return;
       }
