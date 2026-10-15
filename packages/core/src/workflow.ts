@@ -65,7 +65,6 @@ import {
   taskGoal,
 } from './prompts.js';
 import {
-  isTestPath,
   parseTestVerdict,
   parseVerdict,
   reviewFeedback,
@@ -1540,10 +1539,14 @@ export class Workflow {
     }
     const dir = task.worktreePath!;
     const head = await headCommit(dir);
-    const stray = await this.nonTestChanges(dir, request);
+    const stray = await this.testerChanges(dir, request);
     if (stray.length > 0) {
-      record(null, `The tester changed files that are not tests: ${stray.join(', ')}`, head);
-      this.host.notice(task.id, 'tester changed more than tests; stopping for a human');
+      record(
+        null,
+        `The tester changed files, which only the implementer may: ${stray.join(', ')}`,
+        head,
+      );
+      this.host.notice(task.id, 'tester changed files; stopping for a human');
       this.host.setStatus(task.id, 'failed');
       return;
     }
@@ -1589,9 +1592,12 @@ export class Workflow {
     }
   }
 
-  /** Files the tester changed that are not tests; what was already changed at the request is not its doing. */
-  private async nonTestChanges(dir: string, request: TestRequest): Promise<string[]> {
-    return this.changesOutside(dir, request, isTestPath);
+  /**
+   * Files the tester changed or committed, tests included: it only runs the implementer's
+   * tests. What was already changed at the request is not its doing.
+   */
+  private async testerChanges(dir: string, request: TestRequest): Promise<string[]> {
+    return this.changesOutside(dir, request, () => false);
   }
 
   /** Files changed since the request that `allowed` does not accept. */

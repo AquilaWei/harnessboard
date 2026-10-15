@@ -147,7 +147,7 @@ export function loopSessionPrompt(
       ? `1. Read \`${FEATURE_LIST_FILE}\` for the current feature status. Refer to progress or code when needed.`
       : `1. Read \`${PROGRESS_FILE}\`, \`${FEATURE_LIST_FILE}\` and \`git log --oneline -20\`.`,
     tester
-      ? '2. Run focused development tests as needed. The tester owns formal stage verification.'
+      ? "2. Write the tests the feature needs and run them as you go. The tester only runs them for formal stage verification; weigh the test ideas in its and the reviewer's notes."
       : `2. Check any known regressions; run focused development tests as needed.`,
     '3. Pick the first feature with "passes": false and implement it so its "steps" (the',
     '   acceptance criteria) hold.',

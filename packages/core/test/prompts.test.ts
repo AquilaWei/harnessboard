@@ -152,6 +152,12 @@ describe('reviewPrompt', () => {
   it('does not mention later steps for a single task', () => {
     expect(reviewPrompt('goal', request)).not.toContain('later steps');
   });
+
+  it('hands the tests the reviewer wants to the implementer', () => {
+    expect(reviewPrompt('goal', request)).toContain(
+      'A missing test the work needs is a required change for the implementer',
+    );
+  });
 });
 
 describe('reviewPrompt for a base task with earlier unreviewed work', () => {

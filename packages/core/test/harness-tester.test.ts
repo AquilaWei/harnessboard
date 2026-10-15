@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { CreateTaskInput } from '@harnessboard/shared';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
-import { isTestPath, parseTestVerdict } from '../src/review.js';
+import { parseTestVerdict } from '../src/review.js';
 import {
   FAKE_CLAUDE,
   commitAll,
@@ -91,7 +91,7 @@ async function tested(extra: Partial<CreateTaskInput> = {}) {
 }
 
 const implemented = session('done', writeFile('hello.txt', 'hi'));
-const passing = session('TESTS: PASS\nall criteria covered', writeFile('hello.test.js', 'ok'));
+const passing = session('TESTS: PASS\nall criteria covered');
 
 describe('a finished step with a tester', () => {
   it('is queued for testing instead of going to review', async () => {
@@ -120,6 +120,13 @@ describe('a finished step with a tester', () => {
     await tested();
     await runQueued();
     expect(fakeRuns()[1]!.received[0]).toContain('Add a greeting');
+  });
+
+  it('tells the tester to leave every file to the implementer', async () => {
+    scenario(implemented, passing);
+    await tested();
+    await runQueued();
+    expect(fakeRuns()[1]!.received[0]).toContain('Do not write, change or commit any file');
   });
 
   it('goes to a human when the tests pass and there is no reviewer', async () => {
@@ -214,21 +221,26 @@ describe('a tester that reports failures', () => {
   });
 });
 
-describe('a tester that changes more than tests', () => {
-  it('stops the task', async () => {
+describe('a tester that changes files', () => {
+  it('stops the task when it changes the implementation', async () => {
     scenario(implemented, session('TESTS: PASS', writeFile('greeting.js', 'changed')));
     const task = await tested();
     await runQueued();
     expect(status(task.id)).toBe('failed');
   });
-});
 
-describe('a tester that adds tests to a test module beside the code', () => {
-  it('goes to a human when the tests pass', async () => {
+  it('stops the task when it adds a test', async () => {
+    scenario(implemented, session('TESTS: PASS', writeFile('hello.test.js', 'ok')));
+    const task = await tested();
+    await runQueued();
+    expect(status(task.id)).toBe('failed');
+  });
+
+  it('stops the task when it adds to a test module beside the code', async () => {
     scenario(implemented, session('TESTS: PASS', writeFile('src/runtime/tests.rs', 'ok')));
     const task = await tested();
     await runQueued();
-    expect(status(task.id)).toBe('review');
+    expect(status(task.id)).toBe('failed');
   });
 });
 
@@ -260,35 +272,6 @@ describe('parseTestVerdict', () => {
   it('gives no verdict when the first line is something else', () => {
     expect(parseTestVerdict('All good')).toEqual({ verdict: null, findings: 'All good' });
   });
-});
-
-describe('isTestPath', () => {
-  it.each([
-    'test/a.js',
-    'src/__tests__/a.ts',
-    'a.test.ts',
-    'pkg/b_test.go',
-    'x.spec.js',
-    'src/runtime/tests.rs',
-    'pkg/test.py',
-    'src/test_parser.py',
-    'conftest.py',
-    'src/FooTest.java',
-    'FooTests.cs',
-    'src/BarSpec.scala',
-    'app/FooTests.swift',
-    'src/FooTest.kt',
-  ])('accepts %s', (file) => expect(isTestPath(file)).toBe(true));
-
-  it.each([
-    'src/greeting.js',
-    'latest.js',
-    'README.md',
-    'contest/a.js',
-    'src/attestation.rs',
-    'src/Contest.java',
-    'docs/testing.md',
-  ])('rejects %s', (file) => expect(isTestPath(file)).toBe(false));
 });
 
 describe('loop implementer progress', () => {

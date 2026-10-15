@@ -33,7 +33,8 @@ side, and none of them touches your files until you say so.
   costs you nothing.
 - **Small contexts:** each implementer, tester and reviewer keeps its own conversation.
   Harnessboard compacts it after completed turns that reach the context warning, keeping useful context across features and fixes.
-- **Clear handoffs:** testers run formal checks, reviewers inspect architecture and code rules.
+- **Clear handoffs:** the implementer owns the code and its tests, testers run formal checks,
+  reviewers inspect architecture and code rules; test ideas reach the implementer as notes.
   Writing stages require committed changes and valid commit messages.
 - **Quota-aware:** it watches your Claude subscription's usage, stops starting work near the
   limit and continues after the reset.

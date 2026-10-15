@@ -58,6 +58,10 @@ function earlierWork(request: ReviewRequest | TestRequest): string[] {
   ];
 }
 
+/** How a reviewer hands test ideas to the implementer, who owns the tests. */
+const REVIEWER_TESTS =
+  'A missing test the work needs is a required change for the implementer; other test ideas go in your Notes for the implementer to decide on.';
+
 /** First message of a reviewer session. It runs read-only in the implementer's worktree. */
 export function reviewPrompt(
   goal: string,
@@ -68,6 +72,7 @@ export function reviewPrompt(
     'You are reviewing work another agent did in this repository. You cannot edit files;',
     'your job is to check architecture, implementation logic, edge cases and code rule compliance.',
     'Inspect test coverage statically. Formal verification belongs to the tester; do not rerun tests, lint or builds.',
+    REVIEWER_TESTS,
     '',
     `Task given to the implementer:\n${goal}`,
     '',
@@ -123,6 +128,7 @@ export function reviewFollowUpPrompt(
       : []),
     'Confirm each of your earlier findings is fixed, and look for problems the new changes add.',
     'Focus on architecture, logic and code rules. Inspect tests statically; do not rerun tests, lint or builds.',
+    REVIEWER_TESTS,
     '',
     `Make the first line of your reply exactly \`${VERDICT_APPROVE}\` or \`${VERDICT_CHANGES}\`.`,
     `After ${VERDICT_CHANGES}, list each required change with the file and what to do.`,
@@ -141,9 +147,8 @@ export function testFollowUpPrompt(
     `Check \`git diff ${testedHead}..HEAD\` and \`git status\` for the latest changes.`,
     ...earlierWork(request),
     ...(features ? stepScope(features) : []),
-    'Recheck your earlier findings and cover regressions and missing acceptance criteria.',
-    `You may edit test files only: ${TEST_FILE_RULE}. ${SEPARATE_TESTS}`,
-    'Commit any tests you add or change.',
+    'Recheck your earlier findings, regressions, and that every acceptance criterion has a test.',
+    TESTER_HANDS_OFF,
     ...(verifyCommand ? [`Run \`${verifyCommand}\`.`] : []),
     `Make the first line of your reply exactly \`${TESTS_PASS}\` or \`${TESTS_FAIL}\`.`,
     'On failure, list each required fix with the file and what to do.',
@@ -287,34 +292,20 @@ export function parseTestVerdict(reply: string): {
   return { verdict, findings: (verdict ? rest.join('\n') : reply).trim() };
 }
 
-/** The files {@link isTestPath} accepts, as the tester is told. */
-const TEST_FILE_RULE =
-  'test directories, `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`, `conftest.py`, ' +
-  'files named `test` or `tests` (such as a Rust `tests.rs` module), and ' +
-  '`*Test` / `*Tests` / `*Spec` classes in Java, Kotlin, Scala, C# or Swift';
-/** Tests written inside a source file would count as changing the implementation. */
-const SEPARATE_TESTS =
-  'Put new tests in one of those files, not inside a source file (no inline test modules).';
-
 /**
- * True for a path the tester may change: a test directory or a file named the way its
- * language marks tests, including test modules kept beside the code (`src/runtime/tests.rs`).
+ * The tester's limits, in every prompt it gets. Tests belong to the implementer, so the
+ * reports of both other roles reach it as handoffs, and it decides what to add.
  */
-export function isTestPath(file: string): boolean {
-  const name = file.slice(file.lastIndexOf('/') + 1);
-  return (
-    /(^|\/)(tests?|__tests__|spec|specs)\//i.test(file) ||
-    /[._-](test|spec)\.[^.]+$/i.test(name) ||
-    /^tests?\.[^.]+$/.test(name) ||
-    /^(test_.+|conftest)\.py$/.test(name) ||
-    // A lower-case letter or digit before `Test` keeps `Contest.java` out.
-    /[a-z0-9](Tests?|Spec)\.(java|kt|scala|cs|swift)$/.test(name)
-  );
-}
+const TESTER_HANDS_OFF = [
+  'Do not write, change or commit any file: the implementer owns the code, the tests and',
+  'the docs, and the task stops if you change one. Build outputs your test run leaves in',
+  'ignored folders are fine. Tests you think worth adding beyond the criteria go in your',
+  'Notes for the implementer to decide on.',
+].join('\n');
 
 /**
- * First message of a tester session. It edits test files only, in the implementer's
- * worktree, and ends with a verdict the harness reads.
+ * First message of a tester session. It runs the implementer's tests in the implementer's
+ * worktree without changing any file, and ends with a verdict the harness reads.
  */
 export function testPrompt(
   goal: string,
@@ -325,7 +316,7 @@ export function testPrompt(
 ): string {
   const lines = [
     'You are the tester for work another agent did in this repository. Decide whether it',
-    'works, by writing the tests it is missing and running them.',
+    'works, by running the tests the implementer wrote.',
     '',
     `Task given to the implementer:\n${goal}`,
     '',
@@ -335,19 +326,16 @@ export function testPrompt(
     ...earlierWork(request),
     '',
     ...(features ? stepScope(features) : []),
+    'Run the whole test suite' + (verifyCommand ? ` (\`${verifyCommand}\`)` : '') + '.',
     hasCriteria
-      ? 'Make sure every acceptance criterion is covered by a test that would fail without it.'
-      : 'Make sure the behaviour the task asked for is covered by tests that would fail without it.',
-    'Add or extend tests, then run the whole test suite' +
-      (verifyCommand ? ` (\`${verifyCommand}\`)` : '') +
-      ' and commit the tests you wrote.',
-    `You may change test files only: ${TEST_FILE_RULE}. ${SEPARATE_TESTS}`,
-    'Do not touch the implementation or the docs (the implementer owns both): if a test',
-    'shows a bug, report it instead of fixing it.',
+      ? 'Check that every acceptance criterion is covered by a test that would fail without it.'
+      : 'Check that the behaviour the task asked for is covered by tests that would fail without it.',
+    TESTER_HANDS_OFF,
     '',
     `Make the first line of your reply exactly \`${TESTS_PASS}\` or \`${TESTS_FAIL}\`.`,
-    `Use ${TESTS_FAIL} when the suite fails or a criterion has no passing test. After it, list`,
-    'each failure or bug with the test, the command to reproduce it and what is wrong.',
+    `Use ${TESTS_FAIL} when the suite fails or a criterion has no test. After it, list each`,
+    'failure with the test, the command to reproduce it and what is wrong, and each missing',
+    'test with the criterion it must cover.',
   ];
   return lines.join('\n');
 }
@@ -356,7 +344,8 @@ export function testPrompt(
 export function testFeedback(report: TestReport): string {
   return [
     `A tester (${report.agentId}) checked your last step and reported failures.`,
-    'Fix every one before anything else, run the tests again, and commit:',
+    'Fix every one, adding the tests it names as missing, before anything else; run the',
+    'tests again and commit:',
     report.findings,
   ].join('\n');
 }

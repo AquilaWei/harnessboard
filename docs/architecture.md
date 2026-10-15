@@ -76,13 +76,15 @@ The installers come from `electron-builder`. They take their version from
     session is never one the implementer resumes.
   - `implementer`: edits files and commits. For a task with a spec file it is also told to
     keep the README, changelog and docs in step (`DOCS_DUTY`), and the reviewer checks that.
-  - `tester`: optional, single and loop tasks. After an implementer step, one session with edit
-    access writes the missing tests, runs them and commits them, then answers
-    `TESTS: PASS` or `TESTS: FAIL`. Events: `test_request`, `test_report`. A failure is
+  - `tester`: optional, single and loop tasks. After an implementer step, one session runs
+    the implementer's tests and answers `TESTS: PASS` or `TESTS: FAIL`; a criterion with no
+    test is a failure. It has edit access only so builds and test runs can write their
+    outputs. Events: `test_request`, `test_report`. A failure is
     open feedback for the implementer like a review's `CHANGES` (`openFeedback`), counted
     against `maxReviewRounds`; a pass sends the step on to the reviewer. The harness checks
-    the files changed since the request (`changedPaths`) and stops the task if any is not a
-    test path (`isTestPath`).
+    the files changed since the request (`changedPaths`) and stops the task if there are any:
+    the implementer owns the tests, and test ideas reach it in the notes of the tester and
+    reviewer.
   - `reviewer`: checks the implementer's latest step. It runs read-only and must answer
     with `VERDICT: APPROVE` or `VERDICT: CHANGES`.
 
@@ -97,7 +99,7 @@ The installers come from `electron-builder`. They take their version from
   events are the record: `syncNotes` rewrites the file from them before every session, so an
   agent's edit to it never reaches the next role, and the directory is listed in the
   repository's `info/exclude`, so the file is never a change (the reviewer's unchanged-worktree
-  check and the tester's test-paths-only check do not see it). `GET /api/tasks/:id/notes`
+  check and the tester's unchanged-files check do not see it). `GET /api/tasks/:id/notes`
   renders the same notes for the web UI.
 
 The reviewer loop lives in `core/src/workflow.ts`:

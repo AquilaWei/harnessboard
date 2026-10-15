@@ -79,10 +79,12 @@ it. It may only change the spec file; anything else stops the task. Use
 approve; leave it at None for work without a UI.
 
 **Tester (optional):** add a **tester** and every finished implementer step goes to it
-before review. It writes the tests the step is missing, runs the suite, commits the tests and
-answers `TESTS: PASS` or `TESTS: FAIL`. A failure goes back to the implementer (up to the same
-two rounds as review, then to you); a pass goes on to the reviewer. It may only change test
-files; anything else stops the task. Use `--tester codex --tester-model <model>`, the
+before review. It runs the implementer's tests and the whole suite and answers `TESTS: PASS`
+or `TESTS: FAIL`; a criterion with no test is a failure. A failure goes back to the implementer
+(up to the same two rounds as review, then to you); a pass goes on to the reviewer. The tester
+changes no files, tests included: the implementer owns the code and the tests, and changing
+or committing a file stops the task. Tests the tester or the reviewer would like added go to
+the implementer in their notes, and it decides whether to write them. Use `--tester codex --tester-model <model>`, the
 **Tester** menu, or `hb models <id> --tester <agent|none>`. It applies to single and loop tasks. The tester owns formal stage verification; the implementer may still run focused tests while developing. When a loop has a tester, Harnessboard does not run the same verification command again.
 
 **Notes between roles:** every role ends its reply with a `## Notes` section for the roles
