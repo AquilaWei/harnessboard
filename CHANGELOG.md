@@ -3,6 +3,16 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.21 - 2026-10-15
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- The Codex usage on the board showed an old reading while a task's sessions ran. It came
+  from the session log with the latest start, but resumed sessions keep writing to the log
+  they started in, so it now comes from the log written last.
+
 ## 0.1.20 - 2026-10-15
 
 Local test build; real-device acceptance is pending.
