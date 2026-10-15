@@ -3,6 +3,27 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.24 - 2026-10-15
+
+Local test build; real-device acceptance is pending.
+
+### Added
+
+- Each platform can have its own quota pause level. Settings shows one for Claude and one
+  for Codex; in the config file, `quotaPauseByProvider` sets it, e.g. `{ "codex": 0.8 }`.
+
+### Changed
+
+- The New task dialog offers only "Allow other tools, ask only for dangerous ones" for
+  tool permissions, and Settings no longer lists the tools every task may use. Tools are
+  allowed by default and only dangerous ones ask; saved rules keep working.
+
+### Fixed
+
+- A session kept running after its platform's usage passed the pause level, until the quota
+  ran out. It now stops at the pause level and continues in the same conversation after the
+  reset.
+
 ## 0.1.23 - 2026-10-15
 
 Local test build; real-device acceptance is pending.
