@@ -3,6 +3,19 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.20 - 2026-10-15
+
+Local test build; real-device acceptance is pending.
+
+### Changed
+
+- The tester no longer writes tests. It runs the implementer's tests and fails a step when
+  the suite fails or an acceptance criterion has no test, naming the missing tests for the
+  implementer to add. Changing or committing any file, tests included, stops the task.
+- Tests the tester or the reviewer would like beyond that are handed to the implementer in
+  their notes, and the implementer decides whether to add them. A missing test the work
+  needs is still a required change in a review.
+
 ## 0.1.19 - 2026-10-15
 
 Local test build; real-device acceptance is pending.
