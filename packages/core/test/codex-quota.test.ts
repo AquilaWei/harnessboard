@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Codex usage, read from the session logs Codex keeps, since `codex exec --json` omits it.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AgentProfile, QuotaInfo } from '@harnessboard/shared';
@@ -54,23 +54,33 @@ describe('readCodexQuota', () => {
       },
     });
 
-  function log(home: string, day: string, name: string, lines: string[]): void {
+  /** Writes a session log last written at `writtenAt` (Unix seconds). */
+  function log(home: string, day: string, name: string, lines: string[], writtenAt = 1000): void {
     const dir = path.join(home, 'sessions', '2026', '10', day);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, name), lines.join('\n') + '\n');
+    const file = path.join(dir, name);
+    writeFileSync(file, lines.join('\n') + '\n');
+    utimesSync(file, writtenAt, writtenAt);
   }
 
-  it('reads the last reading of the newest log', () => {
+  it('reads the last reading of the latest written log', () => {
     const home = tempDir('codex-home');
-    log(home, '02', 'rollout-2026-10-02T10-00-00-a.jsonl', [tokenCount(5)]);
-    log(home, '03', 'rollout-2026-10-03T10-00-00-b.jsonl', [tokenCount(7), tokenCount(9)]);
+    log(home, '02', 'rollout-2026-10-02T10-00-00-a.jsonl', [tokenCount(5)], 1000);
+    log(home, '03', 'rollout-2026-10-03T10-00-00-b.jsonl', [tokenCount(7), tokenCount(9)], 2000);
     expect(readCodexQuota(home)?.fiveHourUtilization).toBe(0.09);
+  });
+
+  it('reads a resumed session that still writes to a log started on an earlier day', () => {
+    const home = tempDir('codex-home');
+    log(home, '02', 'rollout-2026-10-02T10-00-00-a.jsonl', [tokenCount(39)], 3000);
+    log(home, '03', 'rollout-2026-10-03T10-00-00-b.jsonl', [tokenCount(53)], 2000);
+    expect(readCodexQuota(home)?.fiveHourUtilization).toBe(0.39);
   });
 
   it('looks further back when the newest log has no reading', () => {
     const home = tempDir('codex-home');
-    log(home, '02', 'rollout-2026-10-02T10-00-00-a.jsonl', [tokenCount(5)]);
-    log(home, '03', 'rollout-2026-10-03T10-00-00-b.jsonl', ['{"type":"turn.started"}']);
+    log(home, '02', 'rollout-2026-10-02T10-00-00-a.jsonl', [tokenCount(5)], 1000);
+    log(home, '03', 'rollout-2026-10-03T10-00-00-b.jsonl', ['{"type":"turn.started"}'], 2000);
     expect(readCodexQuota(home)?.fiveHourUtilization).toBe(0.05);
   });
 

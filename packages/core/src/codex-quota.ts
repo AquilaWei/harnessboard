@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { QuotaInfo } from '@harnessboard/shared';
 
-/** How many of the newest session logs are searched for a usage reading. */
+/** How many of the most recently written session logs are searched for a usage reading. */
 const LOGS_SEARCHED = 20;
 const FIVE_HOURS_MIN = 300;
 const SEVEN_DAYS_MIN = 7 * 24 * 60;
@@ -84,23 +84,35 @@ function codexHomeDir(): string {
   return process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex');
 }
 
-/** The newest `limit` session logs: sessions/<year>/<month>/<day>/rollout-<time>-<id>.jsonl. */
+/**
+ * The `limit` most recently written session logs under
+ * sessions/<year>/<month>/<day>/rollout-<time>-<id>.jsonl. The path dates a session by when
+ * it started, but a resumed session keeps writing to its first log, so the write time decides.
+ */
 function newestLogs(dir: string, limit: number): string[] {
-  const found: string[] = [];
+  const found: { file: string; writtenAt: number }[] = [];
   const walk = (current: string, depth: number) => {
     let names: string[];
     try {
-      names = readdirSync(current).sort().reverse(); // dates and times sort as text
+      names = readdirSync(current);
     } catch {
       return;
     }
     for (const name of names) {
-      if (found.length >= limit) return;
       const next = path.join(current, name);
       if (depth < 3) walk(next, depth + 1);
-      else if (name.endsWith('.jsonl')) found.push(next);
+      else if (name.endsWith('.jsonl')) {
+        try {
+          found.push({ file: next, writtenAt: statSync(next).mtimeMs });
+        } catch {
+          // removed since it was listed
+        }
+      }
     }
   };
   walk(dir, 0);
-  return found;
+  return found
+    .sort((a, b) => b.writtenAt - a.writtenAt)
+    .slice(0, limit)
+    .map((f) => f.file);
 }
