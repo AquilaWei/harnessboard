@@ -3,6 +3,27 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.25 - 2026-10-15
+
+Local test build; real-device acceptance is pending.
+
+### Changed
+
+- Agents that go on in their own conversation are no longer sent the same text every turn.
+  The commit rule, the notes instructions and a loop's steps are given once, and again only
+  after the conversation is compacted. Resuming after the usage limit sends just the request
+  to continue.
+- Handoff notes reach each role once: a resumed implementer, tester or reviewer gets only the
+  notes written since its last turn, without the notes file's header, and a reviewer's notes
+  are no longer repeated inside its list of required changes.
+- Follow-up review and test rounds of a loop task describe only the features that are new or
+  newly done, and name the rest by id.
+
+### Fixed
+
+- The tester was told to commit its changes while also being told not to change any file. It
+  now gets only the instruction not to change files.
+
 ## 0.1.24 - 2026-10-15
 
 Local test build; real-device acceptance is pending.
