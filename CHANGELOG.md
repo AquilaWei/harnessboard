@@ -3,6 +3,20 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.27 - 2026-10-16
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- A single task whose acceptance criteria were discussed first can be chatted with once its
+  work is done, also after it is merged, and continued with `hb open`. Before, sending a
+  message answered "has no conversation to continue yet", because the agent had built the
+  task in the same conversation in which it discussed the criteria.
+- Merging a task makes a merge commit of one English line, `chore: merge task #N`, without the
+  task's title and branch. An agent resolving merge conflicts is given a commit message in the
+  same format.
+
 ## 0.1.26 - 2026-10-15
 
 Local test build; real-device acceptance is pending.
