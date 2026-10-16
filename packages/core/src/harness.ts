@@ -1186,6 +1186,20 @@ export class Harness {
   }
 
   /**
+   * The session `hb open` continues: the latest conversation the implementer worked in that
+   * the agent CLI saved, which is the spec session when one agent both discussed and built
+   * the task. Null before the implementer has started or for an unknown task.
+   */
+  implementerSessionId(taskId: number): string | null {
+    const task = this.store.getTask(taskId);
+    if (!task) return null;
+    return (
+      this.workflow.implementerConversations(task).findLast((s) => s.agentSessionId !== null)?.id ??
+      null
+    );
+  }
+
+  /**
    * Messages written while the task was busy that have not been sent or cancelled yet,
    * oldest first.
    */
@@ -1241,9 +1255,8 @@ export class Harness {
    * next workflow session would.
    */
   private chatTarget(task: Task): ChatTarget | string {
-    const session = this.store.listSessions(task.id).findLast(
+    const session = this.workflow.implementerConversations(task).findLast(
       (s) =>
-        s.role === 'implementer' &&
         s.agentSessionId !== null &&
         // Codex's exec fallback reports its thread id but no context size; zero does not mean
         // no conversation.

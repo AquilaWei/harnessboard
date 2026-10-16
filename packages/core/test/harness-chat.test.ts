@@ -18,6 +18,7 @@ import {
   makeRepo,
   result,
   tempDir,
+  writeFile,
   writeScenario,
 } from './helpers.js';
 
@@ -85,6 +86,57 @@ async function runQueued(): Promise<void> {
   harness.tick();
   await harness.waitForIdle();
 }
+
+/** A single task whose spec author also implemented it, in one conversation, now in review. */
+async function specAuthoredTask() {
+  const task = await createHistoricalTask(harness, { prompt: 'Add a greeting', repo, queue: true });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await runQueued();
+  await runQueued();
+  return task;
+}
+
+describe('a chat with a single task whose spec author also implemented it', () => {
+  const proposal = 'I read main.js.\n## Acceptance criteria\n- prints hi';
+  const specFile = [
+    [
+      init(),
+      assistantText('spec written', 10_000),
+      writeFile('docs/specs/001-add-a-greeting.md', '# Spec'),
+      result('spec written'),
+    ],
+  ];
+  beforeEach(() =>
+    scenario(session(proposal), specFile, session('done'), session('It prints hi.')),
+  );
+
+  it('continues the conversation the implementer worked in', async () => {
+    const task = await specAuthoredTask();
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    const run = fakeRuns()[3]!;
+    expect([run.args.includes('--resume'), run.received]).toEqual([true, ['What does it print?']]);
+  });
+
+  it('continues that conversation after the task was completed', async () => {
+    const task = await specAuthoredTask();
+    harness.completeTask(task.id);
+    harness.chat(task.id, 'What does it print?');
+    await harness.waitForIdle();
+    expect(status(task.id)).toBe('done');
+  });
+
+  it('has no implementer conversation while only the criteria were discussed', async () => {
+    const task = await createHistoricalTask(harness, {
+      prompt: 'Add a greeting',
+      repo,
+      queue: true,
+    });
+    await harness.waitForIdle();
+    expect(harness.implementerSessionId(task.id)).toBeNull();
+  });
+});
 
 describe('a chat message', () => {
   beforeEach(() => scenario(session('done'), session('It prints hi.')));

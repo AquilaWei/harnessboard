@@ -66,6 +66,12 @@ export interface TaskView extends Task {
 
 export interface TaskDetail extends TaskView {
   sessions: Session[];
+  /**
+   * The session `hb open` continues: the implementer's latest saved conversation, which is
+   * the spec session when one agent both discussed and built the task. Absent from older
+   * servers.
+   */
+  implementerSessionId?: string | null;
   /** Latest feature list of a loop task, as the harness last read it. */
   features: Feature[] | null;
 }

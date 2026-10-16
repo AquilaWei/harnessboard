@@ -348,6 +348,23 @@ export class Workflow {
     return this.continuation(task, task.mode === 'single' ? this.handoffNote(task) : null);
   }
 
+  /**
+   * The conversations the implementer worked in, oldest first, which the user continues in a
+   * chat or with `hb open`. When one agent both discussed the spec and implemented it, that
+   * is the spec session; one that only discussed the spec is not the implementer's.
+   */
+  implementerConversations(task: Task): Session[] {
+    const implemented = new Set(
+      this.host.store
+        .eventsOfKind(task.id, 'workflow_run')
+        .filter((e) => (e.data as { role: string }).role === 'implementer')
+        .map((e) => e.sessionId),
+    );
+    return this.host.store
+      .listSessions(task.id)
+      .filter((s) => s.role === 'implementer' || (s.role === 'spec' && implemented.has(s.id)));
+  }
+
   /** A resumed conversation keeps its original start time; scheduling follows its latest run. */
   private recentSessions(taskId: number): Session[] {
     const sessions = this.host.store.listSessions(taskId);

@@ -30,6 +30,22 @@ describe('opening a worktree task', () => {
   });
 });
 
+describe('opening a task whose spec author also implemented it', () => {
+  it('continues the spec session the implementer worked in', () => {
+    const spec: Session = { ...implementer, id: 's0', role: 'spec', agentSessionId: 'agent-s0' };
+    const target = openTarget({
+      id: 1,
+      status: 'review',
+      workspace: 'worktree',
+      baseRef: 'main',
+      worktreePath: '/data/wt/abc-1',
+      sessions: [spec],
+      implementerSessionId: 's0',
+    });
+    expect(target.agentSessionId).toBe('agent-s0');
+  });
+});
+
 describe('opening a base task', () => {
   // Done, so the harness lets another base task (task 2) hold the same folder meanwhile.
   it('is refused while another task may hold the repository folder', () => {

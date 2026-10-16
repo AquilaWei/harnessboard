@@ -243,6 +243,7 @@ export function createApi(
     return c.json({
       ...task,
       sessions: harness.store.listSessions(id),
+      implementerSessionId: harness.implementerSessionId(id),
       features: latestSnapshot(harness.store, id)?.features ?? null,
     });
   });
