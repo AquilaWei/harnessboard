@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   criteriaPrompt,
+  mergeConflictPrompt,
   parseCriteria,
   parseQuestions,
   parseSpecChange,
@@ -297,4 +298,12 @@ it('keeps the prescribed spec commit message English for a Chinese task', () => 
   expect(specFilePrompt('docs/specs/001-x.md', '新增登入功能', '- 登入成功', null)).toContain(
     'with the message `docs: add task specification`',
   );
+});
+
+describe('the merge conflict prompt', () => {
+  it('gives the merge commit a message in the commit format', () => {
+    expect(mergeConflictPrompt('Add a greeting', 'main', ['a.txt'])).toContain(
+      '`git commit -m "chore: merge main into this task"`',
+    );
+  });
 });

@@ -345,8 +345,9 @@ export function mergeConflictPrompt(goal: string, base: string, files: string[])
     ...files.map((file) => `- ${file}`),
     '',
     `Resolve every conflict so that both this task's changes and the changes on \`${base}\``,
-    'keep working, and run the checks you can. Then `git add` the files and `git commit` to',
-    'finish the merge. Do not abort the merge or rewrite history.',
+    'keep working, and run the checks you can. Then `git add` the files and finish the merge',
+    `with \`git commit -m "chore: merge ${base} into this task"\`. Do not abort the merge or`,
+    'rewrite history.',
     '',
     `The task this branch was made for:\n${goal}`,
   ].join('\n');

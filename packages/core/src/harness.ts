@@ -1444,8 +1444,9 @@ export class Harness {
       resolveCommit(repo, base),
       resolveCommit(repo, branch),
     ]);
-    // The subject stays fixed and English; the title is free text, so it goes in the body.
-    const message = `chore: merge task #${id}\n\n${task.title}\n\nBranch ${branch}`;
+    // One English line by the commit rules; the title is free text in any language, and the
+    // branch is in the `merged` event.
+    const message = `chore: merge task #${id}`;
     const commit = await commitTree(repo, merged.tree, [from, head], message);
     await advanceBranch(repo, base, from, commit);
     const record: MergeRecord = { base, branch, commit };
