@@ -3,6 +3,17 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.28 - 2026-10-16
+
+Local test build; real-device acceptance is pending.
+
+### Changed
+
+- A merge commit says what the task did: it reuses the task's main commit, such as
+  `fix: keep the nearer stop (task #27)`, instead of `chore: merge task #27`. The oldest feat
+  commit is used, then fix, perf or refactor; a task with only docs or chore commits keeps
+  `chore: merge task #N`.
+
 ## 0.1.27 - 2026-10-16
 
 Local test build; real-device acceptance is pending.
