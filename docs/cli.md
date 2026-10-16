@@ -72,8 +72,10 @@ hb models 12 --effort default      # back to the profile's or CLI's default
 
 **Merging a task** (`hb merge`, or **Merge into main** in the task panel of a task in
 review) merges its branch into the branch it started from with a merge commit,
-`chore: merge task #N` (one English line), keeping every commit of the task. The task is then done, and its
-worktree and branch are removed.
+keeping every commit of the task. The merge commit is one English line named after the
+task's oldest feat, fix, perf or refactor commit, such as `fix: keep the nearer stop (task #N)`,
+or `chore: merge task #N` when it has none. The task is then done, and its worktree and
+branch are removed.
 
 - Your own checkout only changes if it has that branch checked out. It is then
   fast-forwarded to the merge, and git refuses if your local changes would be overwritten.

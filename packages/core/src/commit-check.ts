@@ -50,3 +50,22 @@ function validMessage(message: string): boolean {
   const [blank, ...trailers] = rest;
   return blank === '' && trailers.length > 0 && trailers.every((line) => TRAILER.test(line));
 }
+
+// What a merge is named after, most telling first; docs and chore commits rarely say what a task did.
+const MERGE_TYPES = ['feat', 'fix', 'perf', 'refactor'];
+
+/**
+ * Subject of the merge commit for task `taskId`, given its commits' subjects (newest first, as
+ * `git log` lists them): the oldest commit of the most telling type names the merge, so the
+ * base's history says what the task did, e.g. `fix: keep the nearer stop (task #27)`. Falls back
+ * to `chore: merge task #N` when no commit follows the convention with such a type.
+ */
+export function mergeMessage(taskId: number, subjects: string[]): string {
+  const suffix = ` (task #${taskId})`;
+  const valid = subjects.filter((s) => SUBJECT.test(s + suffix)).reverse();
+  for (const type of MERGE_TYPES) {
+    const subject = valid.find((s) => s.startsWith(`${type}: `));
+    if (subject) return subject + suffix;
+  }
+  return `chore: merge task #${taskId}`;
+}

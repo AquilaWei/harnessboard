@@ -92,10 +92,10 @@ describe('merging a reviewed task', () => {
     expect(git(repo, 'log', '-1', '--format=%P').split(' ')).toHaveLength(2);
   });
 
-  it('words the merge commit as one English line with the task number, not its title', async () => {
+  it('names the merge commit after the task commit, in one line with the task number', async () => {
     const { task } = await reviewedTask();
     await harness.mergeTask(task.id);
-    expect(git(repo, 'log', '-1', '--format=%B')).toBe('chore: merge task #1');
+    expect(git(repo, 'log', '-1', '--format=%B')).toBe('fix: update hello.txt (task #1)');
   });
 
   it('updates the checked-out base so its files show the work', async () => {

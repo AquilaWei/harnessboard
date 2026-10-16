@@ -76,6 +76,7 @@ import {
   saveUserConfig,
   validate,
 } from './config.js';
+import { mergeMessage } from './commit-check.js';
 import type { EditableSettings, HarnessConfig } from './config.js';
 import { resolveRepository } from './folders.js';
 import { readGuidelines } from './guidelines.js';
@@ -1378,8 +1379,8 @@ export class Harness {
   }
 
   /**
-   * Merges a reviewed task's branch into its base branch with a merge commit (`chore: merge task
-   * #N`, the title in the body), then marks the task done, removes its worktree and deletes the merged
+   * Merges a reviewed task's branch into its base branch with a merge commit named after the
+   * task's commits (see {@link mergeMessage}), then marks the task done, removes its worktree and deletes the merged
    * branch. The merge is made without a worktree; the user's own checkout only changes when
    * it has the base branch checked out, and is then fast-forwarded, which git refuses when
    * local changes would be overwritten.
@@ -1444,9 +1445,13 @@ export class Harness {
       resolveCommit(repo, base),
       resolveCommit(repo, branch),
     ]);
-    // One English line by the commit rules; the title is free text in any language, and the
+    // Named after the task's own commits, since the title is free text in any language; the
     // branch is in the `merged` event.
-    const message = `chore: merge task #${id}`;
+    const commits = await commitRange(repo, { from, to: head });
+    const message = mergeMessage(
+      id,
+      commits.map((c) => c.subject),
+    );
     const commit = await commitTree(repo, merged.tree, [from, head], message);
     await advanceBranch(repo, base, from, commit);
     const record: MergeRecord = { base, branch, commit };

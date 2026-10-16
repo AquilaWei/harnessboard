@@ -2,7 +2,7 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { checkCommits } from '../src/commit-check.js';
+import { checkCommits, mergeMessage } from '../src/commit-check.js';
 import { git, headCommit } from '../src/worktree.js';
 import { makeRepo } from './helpers.js';
 
@@ -105,4 +105,28 @@ it('rejects an invalid message left in rewritten history', async () => {
 it('reports a starting commit that can no longer be found', async () => {
   const repo = makeRepo();
   expect(await checkCommits(repo, '0'.repeat(40))).toContain('starting history');
+});
+
+it('names a merge after the oldest feat commit when the task has one', () => {
+  const subjects = ['fix: handle an empty list', 'feat: add search', 'feat: show results'];
+  expect(mergeMessage(7, subjects)).toBe('feat: show results (task #7)');
+});
+
+it('names a merge after a fix commit rather than the docs and version commits around it', () => {
+  const subjects = [
+    'docs: record the fix',
+    'chore: bump version to 0.2.1',
+    'fix: keep the nearer stop',
+  ];
+  expect(mergeMessage(27, subjects)).toBe('fix: keep the nearer stop (task #27)');
+});
+
+it('names a merge by its task number when only docs and chore commits are merged', () => {
+  const subjects = ['chore: bump version to 0.2.1', 'docs: add task specification'];
+  expect(mergeMessage(3, subjects)).toBe('chore: merge task #3');
+});
+
+it('skips a commit whose subject breaks the convention when naming a merge', () => {
+  const subjects = ['fix: 修正公車站', 'fix: keep the nearer stop'];
+  expect(mergeMessage(27, subjects)).toBe('fix: keep the nearer stop (task #27)');
 });
