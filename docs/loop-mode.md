@@ -20,6 +20,8 @@ hb loop "A CLI calculator with add, subtract, multiply and divide"
      `hb open <id>` opens the same session in Claude Code.
    - **approve** (`hb approve <id> --verify "<command>"`): you confirm or change the verify
      command, and the task joins Pending. Building starts when quota and a slot allow.
+     A plan reopened and approved again keeps its verified progress for the features it
+     still marks as passing.
 3. **One feature per turn:** the implementer keeps the same conversation from planning
    through later features and review fixes. It checks the feature list, builds the next
    open feature to its acceptance criteria, runs development tests as needed, marks it as passing

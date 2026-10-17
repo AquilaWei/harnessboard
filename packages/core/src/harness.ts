@@ -1047,8 +1047,13 @@ export class Harness {
     });
     const approval: PlanApproval = { verifyCommand: command, features };
     this.store.appendEvent(id, null, 'plan_approved', approval);
-    // The approved list is the baseline later sessions may not drop features from.
-    const baseline: FeatureSnapshot = { features, verify: null, verifiedPassing: 0 };
+    // The approved list is the baseline later sessions may not drop features from. A plan
+    // approved again keeps its verified count, capped at the features still marked passing:
+    // only a count is recorded, not which features were verified.
+    const previous = this.store.lastEvent(id, 'features')?.data as FeatureSnapshot | undefined;
+    const stillPassing = features.filter((f) => f.passes).length;
+    const verifiedPassing = Math.min(previous?.verifiedPassing ?? 0, stillPassing);
+    const baseline: FeatureSnapshot = { features, verify: null, verifiedPassing };
     this.store.appendEvent(id, null, 'features', baseline);
     this.notice(id, `plan approved: ${features.length} features, verify with ${command}`);
     this.putAtPendingEnd(task);

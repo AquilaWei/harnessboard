@@ -276,4 +276,40 @@ describe('reopening an approved plan from draft', () => {
     };
     expect(baseline.features.map((f) => f.id)).toEqual(['F1']);
   });
+
+  it('drops the verified count of features the new plan no longer marks as passing', async () => {
+    const task = await reopened();
+    await harness.waitForIdle();
+    harness.approvePlan(task.id, VERIFY_OK);
+    const baseline = harness.store.eventsOfKind(task.id, 'features').at(-1)!.data as {
+      verifiedPassing: number;
+    };
+    expect(baseline.verifiedPassing).toBe(0);
+  });
+});
+
+describe('approving a reopened plan that keeps finished features', () => {
+  beforeEach(() => {
+    scenario(
+      session('Plan: F1, F2.', proposal(['F1', 'F2'])),
+      session('F1 done', featureList(true, false)),
+      session('Added F3.', featureList(true, false, false)),
+    );
+  });
+
+  it('keeps the features verified before as verified', async () => {
+    const task = await createPlanned();
+    harness.approvePlan(task.id, VERIFY_OK);
+    await harness.waitForIdle();
+    harness.stopTask(task.id);
+    harness.toDraft(task.id);
+    harness.planTask(task.id);
+    await harness.waitForIdle();
+    harness.approvePlan(task.id, VERIFY_OK);
+    const baseline = harness.store.eventsOfKind(task.id, 'features').at(-1)!.data as {
+      features: unknown[];
+      verifiedPassing: number;
+    };
+    expect([baseline.features.length, baseline.verifiedPassing]).toEqual([3, 1]);
+  });
 });
