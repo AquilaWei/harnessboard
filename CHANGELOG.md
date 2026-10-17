@@ -3,6 +3,21 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.29 - 2026-10-17
+
+Local test build; real-device acceptance is pending.
+
+### Fixed
+
+- Codex usage on the board is the latest reading. Before, a resumed Codex session that last
+  wrote a record without usage could make the board show an hour-old reading, such as 42%
+  instead of 97%.
+- A Codex task that hits the usage limit waits for the reset of the used-up window. When the
+  reading shows neither window used up, it retries at the sooner reset instead of the
+  seven-day one, which could leave a task waiting six days instead of two hours.
+- Approving a reopened loop plan keeps the verified progress of the features still marked
+  as passing. Before, the board showed 0 verified until the tester passed again.
+
 ## 0.1.28 - 2026-10-16
 
 Local test build; real-device acceptance is pending.
