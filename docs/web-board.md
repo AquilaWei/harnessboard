@@ -79,7 +79,9 @@ is deprecated and does not prevent automatic discussion.
   used in Codex yourself. It is also read at startup, before any task starts. A running
   session also stops as soon as its platform reaches the pause level, and continues in the
   same conversation after the reset. A task that hits the limit waits until the reset time
-  the platform gives, or `quotaRetryMinutes` when none is known.
+  the platform gives, or `quotaRetryMinutes` when none is known. For Codex this is the reset
+  of the used-up window; when the latest reading shows neither window used up, the sooner
+  reset is tried first.
 - **Settings:**
   - Concurrency, the quota pause level of each platform (Claude, Codex), default task size
     and default reviewer. These are saved to your user config file.

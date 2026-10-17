@@ -25,8 +25,18 @@ describe('parseCodexRateLimits', () => {
       sevenDayUtilization: 0.4,
       fiveHourResetsAt: 1_791_075_016_000,
       sevenDayResetsAt: 1_791_661_816_000,
-      resetsAt: 1_791_661_816_000,
+      resetsAt: 1_791_075_016_000,
     });
+  });
+
+  it('waits for a used-up window even when it resets later', () => {
+    const used = { ...limits, secondary: { ...limits.secondary, used_percent: 100.0 } };
+    expect(parseCodexRateLimits(used)?.resetsAt).toBe(1_791_661_816_000);
+  });
+
+  it('takes the sooner reset when no window is used up, though the other is fuller', () => {
+    const fuller = { ...limits, secondary: { ...limits.secondary, used_percent: 90.0 } };
+    expect(parseCodexRateLimits(fuller)?.resetsAt).toBe(1_791_075_016_000);
   });
 
   it('tells the windows apart by their length, not their order', () => {
@@ -75,6 +85,31 @@ describe('readCodexQuota', () => {
     log(home, '02', 'rollout-2026-10-02T10-00-00-a.jsonl', [tokenCount(39)], 3000);
     log(home, '03', 'rollout-2026-10-03T10-00-00-b.jsonl', [tokenCount(53)], 2000);
     expect(readCodexQuota(home)?.fiveHourUtilization).toBe(0.39);
+  });
+
+  it('prefers a newer reading in another log to an older one in the latest written log', () => {
+    const home = tempDir('codex-home');
+    const at = (time: string, line: string) =>
+      JSON.stringify({ timestamp: `2026-10-17T${time}Z`, ...JSON.parse(line) });
+    const noWindows = JSON.stringify({
+      timestamp: '2026-10-17T17:16:54Z',
+      payload: { type: 'token_count', rate_limits: { primary: null, secondary: null } },
+    });
+    log(
+      home,
+      '13',
+      'rollout-2026-10-13T18-49-35-a.jsonl',
+      [at('16:24:07', tokenCount(42)), noWindows],
+      Date.parse('2026-10-17T17:16:54Z') / 1000,
+    );
+    log(
+      home,
+      '17',
+      'rollout-2026-10-17T12-28-39-b.jsonl',
+      [at('17:16:52', tokenCount(97))],
+      Date.parse('2026-10-17T17:16:52Z') / 1000,
+    );
+    expect(readCodexQuota(home)?.fiveHourUtilization).toBe(0.97);
   });
 
   it('looks further back when the newest log has no reading', () => {

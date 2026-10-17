@@ -36,10 +36,13 @@ export function parseCodexRateLimits(limits: RateLimits): QuotaInfo | null {
   if (!fiveHour && !sevenDay) return null;
   const utilization = (w: RateWindow | null) => (w ? w.used_percent! / 100 : null);
   const resets = (w: RateWindow | null) => (w?.resets_at ? w.resets_at * 1000 : null);
-  // The fuller window is the one that refuses requests first.
-  const limiting = [fiveHour, sevenDay]
-    .filter((w) => w !== null)
-    .sort((a, b) => b.used_percent! - a.used_percent!)[0]!;
+  // A used-up window is the one refusing requests. Without one the reading may predate the
+  // refusal, so the sooner reset is taken: retrying too early costs one refused request,
+  // waiting for the seven-day reset can cost days.
+  const known = [fiveHour, sevenDay].filter((w) => w !== null);
+  const limiting =
+    known.find((w) => w.used_percent! >= 100) ??
+    known.sort((a, b) => (a.resets_at ?? Infinity) - (b.resets_at ?? Infinity))[0]!;
   return {
     status: limits.rate_limit_reached_type ? 'rejected' : 'allowed',
     fiveHourUtilization: utilization(fiveHour),
@@ -56,25 +59,45 @@ export function parseCodexRateLimits(limits: RateLimits): QuotaInfo | null {
  * but every session log records it after each model call, including the user's own
  * sessions outside Harnessboard. These logs are Codex's own files, not a documented
  * interface: `null` when none is found or none can be read.
+ *
+ * The newest reading wins by its own time, not by its log's: a log last written with a record
+ * that has no usage windows can hold a reading older than another log's.
  */
 export function readCodexQuota(codexHome = codexHomeDir()): QuotaInfo | null {
-  for (const file of newestLogs(path.join(codexHome, 'sessions'), LOGS_SEARCHED)) {
-    let lines: string[];
+  let newest: { quota: QuotaInfo; at: number } | null = null;
+  for (const log of newestLogs(path.join(codexHome, 'sessions'), LOGS_SEARCHED)) {
+    // A log last written before the newest reading so far cannot hold a newer one.
+    if (newest && log.writtenAt <= newest.at) break;
+    const reading = lastReading(log.file, log.writtenAt);
+    if (reading && (!newest || reading.at > newest.at)) newest = reading;
+  }
+  return newest?.quota ?? null;
+}
+
+/**
+ * The last usage reading in one session log and when it was recorded; a record without a
+ * time counts as written when its log was last written. `null` when the log has none.
+ */
+function lastReading(file: string, writtenAt: number): { quota: QuotaInfo; at: number } | null {
+  let lines: string[];
+  try {
+    lines = readFileSync(file, 'utf8').split('\n');
+  } catch {
+    return null; // removed while being read
+  }
+  for (const line of lines.reverse()) {
+    if (!line.includes('"rate_limits"')) continue;
     try {
-      lines = readFileSync(file, 'utf8').split('\n');
+      const record = JSON.parse(line) as {
+        timestamp?: string;
+        payload?: { rate_limits?: RateLimits };
+      };
+      const limits = record.payload?.rate_limits;
+      const quota = limits ? parseCodexRateLimits(limits) : null;
+      const at = record.timestamp ? Date.parse(record.timestamp) : NaN;
+      if (quota) return { quota, at: Number.isNaN(at) ? writtenAt : at };
     } catch {
-      continue; // removed while being read
-    }
-    for (const line of lines.reverse()) {
-      if (!line.includes('"rate_limits"')) continue;
-      try {
-        const limits = (JSON.parse(line) as { payload?: { rate_limits?: RateLimits } }).payload
-          ?.rate_limits;
-        const quota = limits ? parseCodexRateLimits(limits) : null;
-        if (quota) return quota;
-      } catch {
-        // a line cut off while Codex was writing it; older ones may still do
-      }
+      // a line cut off while Codex was writing it; older ones may still do
     }
   }
   return null;
@@ -89,7 +112,7 @@ function codexHomeDir(): string {
  * sessions/<year>/<month>/<day>/rollout-<time>-<id>.jsonl. The path dates a session by when
  * it started, but a resumed session keeps writing to its first log, so the write time decides.
  */
-function newestLogs(dir: string, limit: number): string[] {
+function newestLogs(dir: string, limit: number): { file: string; writtenAt: number }[] {
   const found: { file: string; writtenAt: number }[] = [];
   const walk = (current: string, depth: number) => {
     let names: string[];
@@ -111,8 +134,5 @@ function newestLogs(dir: string, limit: number): string[] {
     }
   };
   walk(dir, 0);
-  return found
-    .sort((a, b) => b.writtenAt - a.writtenAt)
-    .slice(0, limit)
-    .map((f) => f.file);
+  return found.sort((a, b) => b.writtenAt - a.writtenAt).slice(0, limit);
 }
