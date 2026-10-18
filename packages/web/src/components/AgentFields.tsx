@@ -8,6 +8,8 @@ export interface AgentChoice {
   implementer: string;
   implementerModel: string | null;
   implementerEffort: string | null;
+  /** Implements while the implementer is out of quota; `null` waits for the quota. */
+  implementerFallback: string | null;
   reviewer: string | null;
   reviewerModel: string | null;
   reviewerEffort: string | null;
@@ -110,7 +112,15 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
             value={value.implementer}
             disabled={lockAgents}
             onChange={(e) =>
-              set({ implementer: e.target.value, implementerModel: null, implementerEffort: null })
+              set({
+                implementer: e.target.value,
+                implementerModel: null,
+                implementerEffort: null,
+                // An agent can not stand in for itself.
+                ...(e.target.value === value.implementerFallback
+                  ? { implementerFallback: null }
+                  : {}),
+              })
             }
           >
             {options}
@@ -127,6 +137,25 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
           }
         />
       </div>
+      {/* Only takes effect from the next session, so it may change while one is open. */}
+      <label className="field">
+        <span>{t('form.fallback')}</span>
+        <select
+          value={value.implementerFallback ?? ''}
+          onChange={(e) => set({ implementerFallback: e.target.value || null })}
+        >
+          <option value="">{t('form.fallbackNone')}</option>
+          {agents
+            .filter((a) => a.id !== value.implementer)
+            .map((a) => (
+              <option key={a.id} value={a.id} disabled={!a.ok}>
+                {a.id} · {a.profile.provider}
+                {a.ok ? '' : ` ${t('form.agentMissing')}`}
+              </option>
+            ))}
+        </select>
+      </label>
+      <small className="hint">{t('form.fallbackHint')}</small>
       <div className="row">
         <label className="field">
           <span>{t('form.tester')}</span>

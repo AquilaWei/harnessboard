@@ -22,6 +22,7 @@ Every `hb` command and flag, and how merging, working on the base branch and del
 | `--reviewer <agent>` on `add` / `loop`                                                | Have another agent review each step (below)                          |
 | `--model <m>` / `--reviewer-model <m>` on `add` / `loop`; `hb models <id>`            | Choose models per task; show or change them                          |
 | `--effort <level>` / `--reviewer-effort <level>` on `add` / `loop`                    | Choose how deeply each role reasons (below)                          |
+| `--fallback <agent\|none>` on `add` / `loop`; `hb models <id> --fallback <agent>`     | Implement with another agent while the implementer is out of quota   |
 | `hb agents` / `hb agents --models <profile>`                                          | List agent profiles, and agent CLIs found without one / their models |
 | `hb ls` / `hb show <id>`                                                              | List tasks / show sessions, context, tokens, estimated cost and time |
 | `hb logs <id> [-f]`                                                                   | Print or follow the log                                              |

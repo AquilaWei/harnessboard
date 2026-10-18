@@ -93,6 +93,28 @@ Codex reports no usage while it runs; Harnessboard reads it from Codex's logs on
 minute, so a fast-rising Codex quota can pass its level by a few points before the session
 stops. A lower level for Codex leaves room for that.
 
+## Fallback implementer
+
+A task can name a second agent that implements while the implementer's platform is out of
+quota (past its pause level, or refused outright). Harnessboard then starts the next session
+with that agent instead of waiting for the reset; it reads the commits, `feature_list.json`,
+`progress.md` and the notes and goes on from there. The conversation does not carry over, and
+the fallback runs with its own profile's model and effort. Once the implementer has quota
+again, it takes over at the next session. When both are out of quota, the task waits until
+whichever has quota first. Only the implementer is replaced; the spec author, designer,
+tester and reviewer wait for their quota as before.
+
+New tasks get `defaultImplementerFallback` (set it under **Settings**, or in the user
+`config.json`); the New task dialog, `--fallback <agent>` on `hb add` / `hb loop` and
+`hb models <id> --fallback <agent>` change it per task, and `none` turns it off. A default
+that is the task's own implementer is left out.
+
+```json
+{
+  "defaultImplementerFallback": "codex"
+}
+```
+
 ## Usage estimates
 
 Codex task summaries estimate USD using a bundled price table checked on October 9, 2026

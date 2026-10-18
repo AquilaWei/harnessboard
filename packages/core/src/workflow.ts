@@ -154,6 +154,10 @@ export interface WorkflowHost {
   notice(taskId: number, message: string, sessionId?: string | null): void;
   /** Reports what a running task is doing, for display only. */
   setActivity(taskId: number, activity: TaskActivity): void;
+  /** The agent profile's platform is out of quota now. */
+  quotaBlocked(agentId: string): boolean;
+  /** When the agent's platform has quota again, as far as is known; `null` when unknown. */
+  quotaFreeAt(agentId: string): number | null;
 }
 
 /**
@@ -302,7 +306,7 @@ export class Workflow {
         return this.implement(
           task,
           mergeConflictPrompt(this.goal(task), base, files),
-          own && this.canResume(task, own, task.agents.implementer) ? own : null,
+          own && this.canResume(task, own, this.implementerFor(task)) ? own : null,
         );
       }
       case 'specFile':
@@ -694,13 +698,24 @@ export class Workflow {
       const agentId = roleAgent(task.agents, 'spec')!;
       return { role: 'spec', agentId, access: 'readOnly', resume, prompt };
     }
-    const agentId = task.agents.implementer;
+    const agentId = this.implementerFor(task);
     return { role: 'implementer', agentId, access: 'edit', resume, prompt };
   }
 
   /** The agent that works on the task when no review is pending. */
   private activeAgent(task: Task): string {
-    return roleAgent(task.agents, this.discussing(task) ? 'spec' : 'implementer')!;
+    return this.discussing(task) ? roleAgent(task.agents, 'spec')! : this.implementerFor(task);
+  }
+
+  /**
+   * Who implements the next session: the fallback while the implementer is out of quota and
+   * it is not, the implementer otherwise (also when both are out, so the task waits as before).
+   */
+  private implementerFor(task: Task): string {
+    const { implementer, implementerFallback: fallback } = task.agents;
+    return fallback && this.host.quotaBlocked(implementer) && !this.host.quotaBlocked(fallback)
+      ? fallback
+      : implementer;
   }
 
   /**
@@ -981,7 +996,7 @@ export class Workflow {
    * changes approved before it starts are in those criteria, so they count as delivered.
    */
   private startAfterDiscussion(task: Task, last: Session): SessionPlan {
-    const resumable = this.canResume(task, last, task.agents.implementer);
+    const resumable = this.canResume(task, last, this.implementerFor(task));
     const plan = resumable
       ? this.implement(
           task,
@@ -1169,9 +1184,30 @@ export class Workflow {
       case 'context_hard_limit':
         this.handOff(task, outcome);
         return;
-      default:
-        this.interrupted(task, outcome);
+      case 'quota': {
+        if (plan.role !== 'implementer' || !task.agents.implementerFallback) break;
+        if (this.switchImplementer(task, plan.agentId)) return;
+        // Both are out of quota, and whichever has some first goes on.
+        const { implementer, implementerFallback: fallback } = task.agents;
+        const other = plan.agentId === implementer ? fallback : implementer;
+        this.interrupted(task, outcome, this.host.quotaFreeAt(other));
+        return;
+      }
     }
+    this.interrupted(task, outcome);
+  }
+
+  /**
+   * Queues the task for another implementer when `agentId` ran out of quota and the other
+   * still has some; the new one starts its own session from the work committed so far.
+   */
+  private switchImplementer(task: Task, agentId: string): boolean {
+    const next = this.implementerFor(task);
+    if (next === agentId || this.host.quotaBlocked(next)) return false;
+    this.host.store.appendEvent(task.id, null, 'agent_switch', { from: agentId, to: next });
+    this.host.notice(task.id, `${agentId} is out of quota; ${next} goes on implementing`);
+    this.host.setStatus(task.id, 'queued', { resumeAt: null });
+    return true;
   }
 
   private async checkHandoff(task: Task, plan: SessionPlan): Promise<boolean> {
@@ -1486,7 +1522,7 @@ export class Workflow {
       })
       .join('\n\n');
     const plan =
-      work && this.canResume(task, work, task.agents.implementer)
+      work && this.canResume(task, work, this.implementerFor(task))
         ? this.implement(task, told, work)
         : this.implement(task, continuationPrompt(this.goal(task), null, told));
     return { ...plan, delivers: events.map((e) => e.id) };
@@ -1516,13 +1552,17 @@ export class Workflow {
     this.host.notice(task.id, `spec revised in ${file}`);
   }
 
-  /** Quota, stop and error end a session the same way for every role. */
-  private interrupted(task: Task, outcome: SessionOutcome): void {
+  /**
+   * Quota, stop and error end a session the same way for every role. `sooner` is another
+   * time the task may go on after a quota stop, when that comes before the session's reset.
+   */
+  private interrupted(task: Task, outcome: SessionOutcome, sooner: number | null = null): void {
     switch (outcome.reason) {
       case 'quota': {
         // A reset already past is a stale record; retrying at once would only be refused again.
         const now = Date.now();
-        const reset = outcome.quota?.resetsAt ?? null;
+        const own = outcome.quota?.resetsAt ?? null;
+        const reset = own !== null && sooner !== null ? Math.min(own, sooner) : (own ?? sooner);
         const resumeAt =
           reset !== null && reset > now ? reset : now + this.host.config.quotaRetryMinutes * 60_000;
         this.host.setStatus(task.id, 'waiting_quota', { resumeAt });

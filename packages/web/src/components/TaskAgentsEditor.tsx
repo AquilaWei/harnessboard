@@ -32,6 +32,7 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
       implementer: a.implementer,
       implementerModel: a.implementerModel ?? null,
       implementerEffort: a.implementerEffort ?? null,
+      implementerFallback: a.implementerFallback ?? null,
       reviewer: a.reviewer,
       reviewerModel: a.reviewerModel ?? null,
       reviewerEffort: a.reviewerEffort ?? null,
@@ -77,6 +78,9 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
         </span>
         <span className="mono">
           {a.implementer} · {model(a.implementerModel, a.implementerEffort)}
+        </span>
+        <span className="mono">
+          {t('fields.fallback')}: {a.implementerFallback ?? t('fields.none')}
         </span>
         <span className="mono">
           {t('fields.tester')}:{' '}

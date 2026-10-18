@@ -288,6 +288,8 @@ export function createApi(
     const body = await c.req.json<Record<string, unknown>>();
     const update: AgentsUpdate = {};
     if (typeof body.implementer === 'string') update.implementer = body.implementer;
+    if (typeof body.implementerFallback === 'string' || body.implementerFallback === null)
+      update.implementerFallback = body.implementerFallback;
     if (typeof body.reviewer === 'string' || body.reviewer === null)
       update.reviewer = body.reviewer;
     if (typeof body.spec === 'string' || body.spec === null) update.spec = body.spec;

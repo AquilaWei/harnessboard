@@ -88,7 +88,7 @@ import type { AdapterFactory } from './providers.js';
 import { reviewEvidence } from './review.js';
 import { isQuotaLimited, runSession } from './runner.js';
 import type { SessionOutcome } from './runner.js';
-import { dueForRetry, promotable, quotaBlocks, startable } from './scheduler.js';
+import { dueForRetry, promotable, quotaBlocks, quotaFreeAt, startable } from './scheduler.js';
 import { Store } from './store.js';
 import { riskOf } from './risk.js';
 import { Workflow } from './workflow.js';
@@ -235,6 +235,11 @@ export class Harness {
       setStatus: (id, status, extra) => this.setStatus(id, status, extra),
       notice: (taskId, message, sessionId) => this.notice(taskId, message, sessionId),
       setActivity: (taskId, activity) => this.setActivity(taskId, activity),
+      quotaBlocked: (agentId) => this.agentBlocked(agentId, Date.now()),
+      quotaFreeAt: (agentId) => {
+        const provider = this.config.agents[agentId]?.provider;
+        return provider ? quotaFreeAt(this.quotas.get(provider) ?? null) : null;
+      },
     });
     // Restore the last known quotas so a restart does not forget a nearly used-up window.
     for (const provider of AGENT_PROVIDERS) {
@@ -435,8 +440,13 @@ export class Harness {
   }
 
   settings(): EditableSettings {
-    const { maxConcurrent, quotaPauseUtilization, defaultContextPolicy, defaultReviewer } =
-      this.config;
+    const {
+      maxConcurrent,
+      quotaPauseUtilization,
+      defaultContextPolicy,
+      defaultReviewer,
+      defaultImplementerFallback,
+    } = this.config;
     const allowedTools = [...this.config.allowedTools];
     const reviewGuidelines = [...this.config.reviewGuidelines];
     const remoteHosts = [...this.config.remoteHosts];
@@ -448,6 +458,7 @@ export class Harness {
       quotaPauseByProvider: { ...this.config.quotaPauseByProvider },
       defaultContextPolicy,
       defaultReviewer,
+      defaultImplementerFallback,
       allowedTools,
       reviewGuidelines,
       remoteHosts,
@@ -608,8 +619,17 @@ export class Harness {
     const confirmPlan = true;
     const allowedTools = input.allowedTools ?? project.allowedTools ?? DEFAULT_ALLOWED_TOOLS;
     assertToolRules(allowedTools);
+    const implementer = input.implementer ?? DEFAULT_AGENT;
+    // The default stands in only for another agent; a task it implements has no fallback.
+    const defaultFallback = this.config.defaultImplementerFallback;
     const agents: TaskAgents = {
-      implementer: input.implementer ?? DEFAULT_AGENT,
+      implementer,
+      implementerFallback:
+        input.implementerFallback !== undefined
+          ? input.implementerFallback
+          : defaultFallback === implementer
+            ? null
+            : defaultFallback,
       reviewer: input.reviewer === undefined ? this.config.defaultReviewer : input.reviewer,
       maxReviewRounds: DEFAULT_REVIEW_ROUNDS,
       implementerModel: modelOrNull(input.implementerModel),
@@ -902,6 +922,9 @@ export class Harness {
     }
     const agents: TaskAgents = { ...task.agents };
     if (update.implementer !== undefined) agents.implementer = update.implementer;
+    if (update.implementerFallback !== undefined) {
+      agents.implementerFallback = update.implementerFallback;
+    }
     if (update.reviewer !== undefined) agents.reviewer = update.reviewer;
     if (update.spec !== undefined) agents.spec = update.spec;
     if (update.tester !== undefined) agents.tester = update.tester;
@@ -1588,6 +1611,16 @@ export class Harness {
     for (const task of dueForRetry(this.store.listTasks(), now)) {
       this.setStatus(task.id, 'queued', { resumeAt: null });
     }
+    // A task with a fallback goes on as soon as either agent has quota, not at one's reset.
+    for (const task of this.store.listTasks()) {
+      if (
+        task.status === 'waiting_quota' &&
+        task.agents.implementerFallback &&
+        !this.nextSessionBlocked(task, now)
+      ) {
+        this.setStatus(task.id, 'queued', { resumeAt: null });
+      }
+    }
     this.promotePending(now);
     // Like a message written to an idle task, these do not wait for a free slot.
     for (const task of this.store.listTasks()) {
@@ -1637,7 +1670,12 @@ export class Harness {
 
   private nextSessionBlocked(task: Task, now: number): boolean {
     if (this.workflow.isPlanningSession(task)) return false;
-    const profile = this.config.agents[this.workflow.nextAgentId(task)];
+    return this.agentBlocked(this.workflow.nextAgentId(task), now);
+  }
+
+  /** The agent profile's platform is out of quota; never for an unknown profile. */
+  private agentBlocked(agentId: string, now: number): boolean {
+    const profile = this.config.agents[agentId];
     return profile !== undefined && this.quotaBlocked(profile.provider, now);
   }
 
@@ -1688,6 +1726,24 @@ export class Harness {
     } catch {
       return null; // its records could not be read this time; the last reading stays
     }
+  }
+
+  /**
+   * Records a refusal that came without usage figures, so the platform counts as out of
+   * quota (and a fallback implementer takes over) until the retry interval has passed.
+   */
+  private refusedQuota(provider: AgentProvider): QuotaInfo {
+    const quota: QuotaInfo = {
+      status: 'rejected',
+      fiveHourUtilization: null,
+      sevenDayUtilization: null,
+      fiveHourResetsAt: null,
+      sevenDayResetsAt: null,
+      resetsAt: Date.now() + this.config.quotaRetryMinutes * 60_000,
+    };
+    this.quotas.set(provider, quota);
+    this.emit({ type: 'quota', provider, quota });
+    return quota;
   }
 
   /** Where the git output for a reviewer without `readOnlyGit` is written (`reviewEvidence`). */
@@ -1906,6 +1962,11 @@ export class Harness {
       this.running.get(task.id)?.abort();
       this.dropPermissions(task.id);
     };
+    // The implementer's model and effort are its platform's; a fallback runs with its own.
+    const agents =
+      plan.role === 'implementer' && plan.agentId !== task.agents.implementer
+        ? { ...task.agents, implementerModel: null, implementerEffort: null }
+        : task.agents;
     const outcome = await runSession({
       adapter,
       initialUsage: provider === 'gemini' ? null : (previous?.usage ?? null),
@@ -1921,8 +1982,8 @@ export class Harness {
             : null,
         resume: plan.resume !== null,
         prompt: plan.prompt,
-        model: roleModel(task.agents, plan.role) ?? this.config.agents[plan.agentId]!.model,
-        effort: sessionEffort(task.agents, plan.role, this.config.agents[plan.agentId]!),
+        model: roleModel(agents, plan.role) ?? this.config.agents[plan.agentId]!.model,
+        effort: sessionEffort(agents, plan.role, this.config.agents[plan.agentId]!),
         access: plan.access,
         // A read-only session may run the task's own check, but nothing that edits.
         allowedTools:
@@ -1978,7 +2039,8 @@ export class Harness {
     }
     // Codex reports no usage while it runs, so its records say when the limit resets.
     if (outcome.reason === 'quota' && !outcome.quota) {
-      return { ...outcome, quota: await this.readQuota(provider, adapter) };
+      const quota = (await this.readQuota(provider, adapter)) ?? this.refusedQuota(provider);
+      return { ...outcome, quota };
     }
     return outcome;
   }
@@ -2109,8 +2171,12 @@ export class Harness {
   }
 
   private checkProfiles(agents: TaskAgents): void {
+    if (agents.implementerFallback === agents.implementer) {
+      throw new Error('the implementer fallback must be another agent than the implementer');
+    }
     for (const id of [
       agents.implementer,
+      agents.implementerFallback ?? null,
       agents.reviewer,
       agents.spec ?? null,
       agents.tester ?? null,

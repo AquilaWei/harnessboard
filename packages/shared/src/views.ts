@@ -147,6 +147,8 @@ export interface Settings {
   defaultContextPolicy: ContextPolicy;
   /** Reviewer profile for new tasks; `null` for no review. */
   defaultReviewer: string | null;
+  /** Implementer fallback for new tasks; `null` lets them wait for the quota. */
+  defaultImplementerFallback: string | null;
   /** Tool rules every task may use without asking, on top of its own. */
   allowedTools: string[];
   /** Files with the rules every reviewer checks the work against; `~` is the home folder. */
@@ -215,6 +217,11 @@ export interface CreateTaskInput {
   /** Reasoning efforts for this task only; omitted or `null` uses the CLI's default. */
   implementerEffort?: string | null;
   reviewerEffort?: string | null;
+  /**
+   * Implements while the implementer is out of quota; omitted uses the configured default,
+   * `null` waits for the quota instead.
+   */
+  implementerFallback?: string | null;
   /** Writes the acceptance criteria; omitted or `null` lets the implementer do it. */
   spec?: string | null;
   specModel?: string | null;
@@ -290,6 +297,7 @@ export type AgentsUpdate = Partial<
     | 'reviewer'
     | 'implementerModel'
     | 'implementerEffort'
+    | 'implementerFallback'
     | 'reviewerModel'
     | 'reviewerEffort'
     | 'spec'

@@ -44,6 +44,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
   );
   const [size, setSize] = useState<TaskSize>(settings.defaultContextPolicy.size ?? 'medium');
   const [reviewer, setReviewer] = useState(settings.defaultReviewer ?? '');
+  const [fallback, setFallback] = useState(settings.defaultImplementerFallback ?? '');
   const [guidelines, setGuidelines] = useState(settings.reviewGuidelines.join('\n'));
   const [theme, setTheme] = useState<Theme>(savedTheme);
   const [notify, setNotify] = useState(notificationsEnabled);
@@ -71,6 +72,7 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
           },
           defaultContextPolicy: { ...settings.defaultContextPolicy, size },
           defaultReviewer: reviewer === '' ? null : reviewer,
+          defaultImplementerFallback: fallback === '' ? null : fallback,
           reviewGuidelines: lines(guidelines),
         }),
       );
@@ -134,6 +136,17 @@ export function SettingsDialog({ settings, configFile, onClose, onSaved }: Props
             <span>{t('settingsForm.defaultReviewer')}</span>
             <select value={reviewer} onChange={(e) => setReviewer(e.target.value)}>
               <option value="">{t('form.reviewerNone')}</option>
+              {(agents ?? []).map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>{t('settingsForm.defaultFallback')}</span>
+            <select value={fallback} onChange={(e) => setFallback(e.target.value)}>
+              <option value="">{t('form.fallbackNone')}</option>
               {(agents ?? []).map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.id}

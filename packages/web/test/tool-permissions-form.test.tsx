@@ -34,6 +34,7 @@ const settings = {
   quotaPauseByProvider: {},
   defaultContextPolicy: { size: 'medium' },
   defaultReviewer: null,
+  defaultImplementerFallback: null,
   allowedTools: ['Bash(make *)'],
   reviewGuidelines: [],
   remoteHosts: [],

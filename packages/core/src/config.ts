@@ -26,6 +26,8 @@ export interface HarnessConfig {
   agents: Record<string, AgentProfile>;
   /** Profile id that reviews new tasks' work; `null` for no review. */
   defaultReviewer: string | null;
+  /** Profile id that implements new tasks while their implementer is out of quota. */
+  defaultImplementerFallback: string | null;
   port: number;
   maxConcurrent: number;
   /** 0–1; at or above this five-hour usage no session starts and running ones stop. */
@@ -73,6 +75,7 @@ export type EditableSettings = Pick<
   | 'quotaPauseByProvider'
   | 'defaultContextPolicy'
   | 'defaultReviewer'
+  | 'defaultImplementerFallback'
   | 'allowedTools'
   | 'reviewGuidelines'
   | 'remoteHosts'
@@ -85,6 +88,7 @@ export const EDITABLE_SETTINGS = [
   'quotaPauseByProvider',
   'defaultContextPolicy',
   'defaultReviewer',
+  'defaultImplementerFallback',
   'allowedTools',
   'reviewGuidelines',
   'remoteHosts',
@@ -119,6 +123,7 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     dataDir: env[`${ENV_PREFIX}HOME`] ?? paths.data,
     agents: defaultAgents(),
     defaultReviewer: null,
+    defaultImplementerFallback: null,
     port: 4317,
     maxConcurrent: 1,
     tokenSpike: { enabled: true, windowSeconds: 60, maxTokens: 100_000 },
@@ -349,6 +354,10 @@ export function validate(config: HarnessConfig): void {
   }
   if (config.defaultReviewer !== null && !config.agents[config.defaultReviewer]) {
     throw new Error(`config defaultReviewer "${config.defaultReviewer}" is not an agent profile`);
+  }
+  const fallback = config.defaultImplementerFallback;
+  if (fallback !== null && !config.agents[fallback]) {
+    throw new Error(`config defaultImplementerFallback "${fallback}" is not an agent profile`);
   }
 }
 

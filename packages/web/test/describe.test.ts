@@ -43,6 +43,21 @@ describe('describeTask', () => {
     });
   });
 
+  it('names the fallback working while the implementer is out of quota', () => {
+    const task = {
+      ...base,
+      status: 'running',
+      agents: { ...base.agents, implementerFallback: 'codex' },
+      activity: { phase: 'implementing', agentId: 'codex' },
+      loop,
+    } as TaskView;
+    expect(describeTask(task)).toEqual({
+      key: 'standingIn',
+      tone: 'working',
+      vars: { agent: 'codex', implementer: 'claude' },
+    });
+  });
+
   it('says the implementer is addressing requested changes', () => {
     const task = {
       ...base,

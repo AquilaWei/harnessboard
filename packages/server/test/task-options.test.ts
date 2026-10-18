@@ -48,6 +48,18 @@ describe('task options', () => {
     });
   });
 
+  it('pass --fallback on as the implementer fallback', () => {
+    expect(parse('--fallback', 'codex', '-C', '/repo').implementerFallback).toBe('codex');
+  });
+
+  it('turn --fallback none into no fallback', () => {
+    expect(parse('--fallback', 'none', '-C', '/repo').implementerFallback).toBeNull();
+  });
+
+  it('leave the fallback to the server without --fallback', () => {
+    expect(parse('-C', '/repo')).not.toHaveProperty('implementerFallback');
+  });
+
   it('leave the designer to the server without --designer', () => {
     expect(parse('-C', '/repo')).not.toHaveProperty('designer');
   });
@@ -86,6 +98,10 @@ describe('hb models options', () => {
 
   it('set only the reviewer effort with --reviewer-effort', () => {
     expect(parseModels('--reviewer-effort', 'max')).toEqual({ reviewerEffort: 'max' });
+  });
+
+  it('turn --fallback none into no implementer fallback', () => {
+    expect(parseModels('--fallback', 'none')).toEqual({ implementerFallback: null });
   });
 
   it('send nothing without options', () => {

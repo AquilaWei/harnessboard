@@ -14,6 +14,12 @@ export function quotaBlocks(quota: QuotaInfo | null, now: number, pauseAt: numbe
   return (quota.fiveHourUtilization ?? 0) >= pauseAt;
 }
 
+/** When the window that {@link quotaBlocks} waits for resets; `null` when unknown. */
+export function quotaFreeAt(quota: QuotaInfo | null): number | null {
+  if (!quota) return null;
+  return isQuotaLimited(quota) ? quota.resetsAt : (quota.fiveHourResetsAt ?? quota.resetsAt);
+}
+
 function hasPassed(time: number | null, now: number): boolean {
   return time !== null && time <= now;
 }

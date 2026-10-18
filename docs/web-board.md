@@ -81,10 +81,13 @@ is deprecated and does not prevent automatic discussion.
   same conversation after the reset. A task that hits the limit waits until the reset time
   the platform gives, or `quotaRetryMinutes` when none is known. For Codex this is the reset
   of the used-up window; when the latest reading shows neither window used up, the sooner
-  reset is tried first.
+  reset is tried first. A task with a fallback implementer goes on with it instead, and the
+  card names the agent standing in (see
+  [configuration](configuration.md#fallback-implementer)).
 - **Settings:**
   - Concurrency, the quota pause level of each platform (Claude, Codex), default task size
-    and default reviewer. These are saved to your user config file.
+    default reviewer and default fallback implementer. These are saved to your user config
+    file.
   - The agent profiles and whether each CLI runs, with each profile's default **Reasoning
     effort** (see [configuration](configuration.md#config-files-agents-and-permissions)),
     saved with Save.

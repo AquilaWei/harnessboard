@@ -641,6 +641,14 @@ describe('reviewed tasks', () => {
     expect(agents.implementerEffort).toBe('high');
   });
 
+  it('sets the implementer fallback of a task', async () => {
+    const created = await post('/api/tasks', { prompt: 'x', repo }, { [CLIENT_HEADER]: 'test' });
+    const { id } = (await created.json()) as { id: number };
+    const res = await putAgents(id, { implementerFallback: 'checker' });
+    const { agents } = (await res.json()) as Task;
+    expect(agents.implementerFallback).toBe('checker');
+  });
+
   it('changes only the reviewer effort', async () => {
     const created = await post(
       '/api/tasks',

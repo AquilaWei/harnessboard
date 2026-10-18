@@ -109,6 +109,9 @@ function describeRunning(task: TaskView): Description {
     case 'testing':
       return d('testing', 'working', { agent });
     case 'implementing':
+      if (agent !== task.agents.implementer && agent === task.agents.implementerFallback) {
+        return d('standingIn', 'working', { agent, implementer: task.agents.implementer });
+      }
       if (task.lastReview?.verdict === 'changes') {
         return d('fixingReview', 'working', { agent, reviewer: task.lastReview.agentId });
       }

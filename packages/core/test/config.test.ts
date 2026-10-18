@@ -140,6 +140,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow(/defaultReviewer "ghost"/);
   });
 
+  it('rejects a default implementer fallback that is not a profile', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ defaultImplementerFallback: 'ghost' }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      /defaultImplementerFallback "ghost"/,
+    );
+  });
+
   it('rejects review guidelines that are not a list of paths', () => {
     const file = path.join(tempDir('cfg'), 'config.json');
     writeFileSync(file, JSON.stringify({ reviewGuidelines: '~/rules.md' }));

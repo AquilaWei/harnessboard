@@ -21,6 +21,7 @@ vi.mock('../src/api', () => ({ api }));
 
 const settings = {
   defaultReviewer: null,
+  defaultImplementerFallback: null,
   defaultContextPolicy: { size: 'medium' },
 } as unknown as Settings;
 

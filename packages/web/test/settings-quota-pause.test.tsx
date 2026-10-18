@@ -32,6 +32,7 @@ const settings = {
   quotaPauseByProvider: { codex: 0.8 },
   defaultContextPolicy: { size: 'medium' },
   defaultReviewer: null,
+  defaultImplementerFallback: null,
   allowedTools: [],
   reviewGuidelines: [],
   remoteHosts: [],

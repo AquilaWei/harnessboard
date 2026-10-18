@@ -42,6 +42,7 @@ export interface AddOptions {
   reviewer?: string;
   model?: string;
   effort?: string;
+  fallback?: string;
   reviewerModel?: string;
   reviewerEffort?: string;
   spec?: string;
@@ -98,6 +99,10 @@ export function withTaskOptions(command: Command): Command {
       'reasoning effort for the implementer, e.g. low, medium, high (see hb agents --models)',
     )
     .option(
+      '--fallback <agent>',
+      'agent profile that implements while the implementer is out of quota, or "none"',
+    )
+    .option(
       '--spec <agent>',
       'agent profile that writes the acceptance criteria (default: implementer)',
     )
@@ -147,6 +152,7 @@ export function taskInput(prompt: string, o: AddOptions, loop: LoopInput = {}): 
     reviewer: o.reviewer === 'none' ? null : o.reviewer,
     implementerModel: o.model,
     implementerEffort: o.effort,
+    implementerFallback: o.fallback === 'none' ? null : o.fallback,
     reviewerModel: o.reviewerModel,
     reviewerEffort: o.reviewerEffort,
     queue: o.queue,
@@ -157,6 +163,7 @@ export function taskInput(prompt: string, o: AddOptions, loop: LoopInput = {}): 
 export interface ModelsOptions {
   model?: string;
   effort?: string;
+  fallback?: string;
   spec?: string;
   specModel?: string;
   specEffort?: string;
@@ -176,6 +183,7 @@ export function withAgentOptions(command: Command): Command {
   return command
     .option('--model <model>', 'implementer model, or "default" for the profile model')
     .option('--effort <level>', 'implementer reasoning effort, or "default" for the CLI default')
+    .option('--fallback <agent>', 'implementer while the implementer is out of quota, or "none"')
     .option(
       '--spec <agent>',
       'spec author profile, or "implementer" to let the implementer write it',
@@ -204,6 +212,7 @@ export function agentsUpdate(o: ModelsOptions): AgentsUpdate {
   return definedOnly({
     implementerModel: orDefault(o.model),
     implementerEffort: orDefault(o.effort),
+    implementerFallback: orNull(o.fallback, 'none'),
     spec: orNull(o.spec, 'implementer'),
     specModel: orDefault(o.specModel),
     specEffort: orDefault(o.specEffort),
