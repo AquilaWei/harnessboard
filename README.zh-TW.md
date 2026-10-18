@@ -4,7 +4,7 @@
 
 完成任務後仍可在「聊天」接續原對話，包括已合併的任務。若要更改規格，按「重新開啟為草稿」，再按「討論規格」提出修改，重新確認後才會進入待執行。
 
-![version](https://img.shields.io/badge/version-0.1.29-blue)
+![version](https://img.shields.io/badge/version-0.1.30-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -82,7 +82,7 @@ pnpm build               # 約一分鐘
 
 ```bash
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # 會印出版本，例如 0.1.29
+hb --version             # 會印出版本，例如 0.1.30
 ```
 
 <details>

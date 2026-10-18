@@ -3,6 +3,21 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.30 - 2026-10-18
+
+Local test build; real-device acceptance is pending.
+
+### Added
+
+- A task can name a fallback implementer, such as Codex for a Claude task. When the
+  implementer's quota reaches its pause level or runs out, the fallback goes on with the
+  work in a new session instead of the task waiting for the reset, and the card says who is
+  standing in. Once the implementer has quota again, it takes over at the next session.
+  When both are out of quota, the task waits until whichever has quota first.
+- Set the default for new tasks under **Settings**; change it per task in the New task
+  dialog, the task's agents, `--fallback <agent>` on `hb add` / `hb loop`, or
+  `hb models <id> --fallback <agent>`.
+
 ## 0.1.29 - 2026-10-17
 
 Local test build; real-device acceptance is pending.
