@@ -43,6 +43,8 @@ export interface AddOptions {
   model?: string;
   effort?: string;
   fallback?: string;
+  fallbackModel?: string;
+  fallbackEffort?: string;
   reviewerModel?: string;
   reviewerEffort?: string;
   spec?: string;
@@ -102,6 +104,8 @@ export function withTaskOptions(command: Command): Command {
       '--fallback <agent>',
       'agent profile that implements while the implementer is out of quota, or "none"',
     )
+    .option('--fallback-model <model>', 'model for the fallback')
+    .option('--fallback-effort <level>', 'reasoning effort for the fallback')
     .option(
       '--spec <agent>',
       'agent profile that writes the acceptance criteria (default: implementer)',
@@ -153,6 +157,8 @@ export function taskInput(prompt: string, o: AddOptions, loop: LoopInput = {}): 
     implementerModel: o.model,
     implementerEffort: o.effort,
     implementerFallback: o.fallback === 'none' ? null : o.fallback,
+    implementerFallbackModel: o.fallbackModel,
+    implementerFallbackEffort: o.fallbackEffort,
     reviewerModel: o.reviewerModel,
     reviewerEffort: o.reviewerEffort,
     queue: o.queue,
@@ -164,6 +170,8 @@ export interface ModelsOptions {
   model?: string;
   effort?: string;
   fallback?: string;
+  fallbackModel?: string;
+  fallbackEffort?: string;
   spec?: string;
   specModel?: string;
   specEffort?: string;
@@ -184,6 +192,8 @@ export function withAgentOptions(command: Command): Command {
     .option('--model <model>', 'implementer model, or "default" for the profile model')
     .option('--effort <level>', 'implementer reasoning effort, or "default" for the CLI default')
     .option('--fallback <agent>', 'implementer while the implementer is out of quota, or "none"')
+    .option('--fallback-model <model>', 'fallback model, or "default" for the profile model')
+    .option('--fallback-effort <level>', 'fallback reasoning effort, or "default"')
     .option(
       '--spec <agent>',
       'spec author profile, or "implementer" to let the implementer write it',
@@ -213,6 +223,8 @@ export function agentsUpdate(o: ModelsOptions): AgentsUpdate {
     implementerModel: orDefault(o.model),
     implementerEffort: orDefault(o.effort),
     implementerFallback: orNull(o.fallback, 'none'),
+    implementerFallbackModel: orDefault(o.fallbackModel),
+    implementerFallbackEffort: orDefault(o.fallbackEffort),
     spec: orNull(o.spec, 'implementer'),
     specModel: orDefault(o.specModel),
     specEffort: orDefault(o.specEffort),

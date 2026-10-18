@@ -62,8 +62,7 @@ export function formatTaskAgents(a: TaskAgents): string[] {
     `spec         ${a.spec ?? t('sameAsImplementer')}  ${spec}`,
     `designer     ${a.designer ?? '-'}  ${a.designer ? shown(a.designerModel, a.designerEffort) : ''}`,
     `implementer  ${a.implementer}  ${shown(a.implementerModel, a.implementerEffort)}`,
-    // Runs with its own profile's model and effort while the implementer is out of quota.
-    `fallback     ${a.implementerFallback ?? '-'}`,
+    `fallback     ${a.implementerFallback ?? '-'}  ${a.implementerFallback ? shown(a.implementerFallbackModel, a.implementerFallbackEffort) : ''}`,
     `tester       ${a.tester ?? '-'}  ${a.tester ? shown(a.testerModel, a.testerEffort) : ''}`,
     `reviewer     ${a.reviewer ?? '-'}  ${a.reviewer ? shown(a.reviewerModel, a.reviewerEffort) : ''}`,
   ];

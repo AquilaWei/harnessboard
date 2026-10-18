@@ -298,11 +298,13 @@ export function createApi(
       update.designer = body.designer;
     for (const key of [
       'implementerModel',
+      'implementerFallbackModel',
       'reviewerModel',
       'specModel',
       'testerModel',
       'designerModel',
       'implementerEffort',
+      'implementerFallbackEffort',
       'reviewerEffort',
       'specEffort',
       'testerEffort',

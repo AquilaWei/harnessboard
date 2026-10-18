@@ -98,8 +98,11 @@ stops. A lower level for Codex leaves room for that.
 A task can name a second agent that implements while the implementer's platform is out of
 quota (past its pause level, or refused outright). Harnessboard then starts the next session
 with that agent instead of waiting for the reset; it reads the commits, `feature_list.json`,
-`progress.md` and the notes and goes on from there. The conversation does not carry over, and
-the fallback runs with its own profile's model and effort. Once the implementer has quota
+`progress.md` and the notes and goes on from there. The conversation does not carry over.
+The fallback runs with the model and reasoning effort chosen for it in the task (the
+**Stand-in model** next to the fallback in the New task dialog and the task's agents,
+`--fallback-model` / `--fallback-effort`), or its profile's when none is chosen; switching
+the fallback to another agent clears them. Once the implementer has quota
 again, it takes over at the next session. When both are out of quota, the task waits until
 whichever has quota first. Only the implementer is replaced; the spec author, designer,
 tester and reviewer wait for their quota as before.

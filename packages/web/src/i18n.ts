@@ -547,6 +547,7 @@ export const en = {
     implementerModel: 'Implementer model',
     fallback: 'When the implementer is out of quota',
     fallbackNone: 'Wait for its quota',
+    fallbackModel: 'Stand-in model',
     fallbackHint:
       'This agent goes on with the work until the implementer has quota again, then hands it back.',
     reviewerModel: 'Reviewer model',
@@ -1170,6 +1171,7 @@ export const zhTW: typeof en = {
     implementerModel: '執行者模型',
     fallback: '執行者額度用完時',
     fallbackNone: '等額度恢復',
+    fallbackModel: '替補模型',
     fallbackHint: '由這個 agent 接著做，等執行者額度恢復後再交還。',
     reviewerModel: '審查者模型',
     reviewerHint: '每完成一步，先由另一個 agent 檢查，再交給你。',

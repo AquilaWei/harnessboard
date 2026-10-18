@@ -189,6 +189,20 @@ describe('a fallback session', () => {
     const runs = path.join(dir, 'codex-runs.jsonl');
     expect(existsSync(runs) && readFileSync(runs, 'utf8')).not.toMatch(/claude-opus-test|max/);
   });
+
+  it('runs with the model and effort chosen for the fallback', async () => {
+    open();
+    claudeSessions(refused());
+    codexScenario({ text: 'done' });
+    const { id } = await task({
+      implementerFallbackModel: 'gpt-fallback-test',
+      implementerFallbackEffort: 'xhigh',
+    });
+    await ranBy(id, ['claude', 'codex']);
+    await harness.waitForIdle([id]);
+    const runs = readFileSync(path.join(dir, 'codex-runs.jsonl'), 'utf8');
+    expect([runs.includes('"gpt-fallback-test"'), runs.includes('"xhigh"')]).toEqual([true, true]);
+  });
 });
 
 describe('creating a task', () => {
@@ -235,5 +249,33 @@ describe('changing a task’s fallback', () => {
     const created = await task({ implementerFallback: null, queue: false });
     const updated = harness.setAgents(created.id, { implementerFallback: 'codex' });
     expect(updated.agents.implementerFallback).toBe('codex');
+  });
+
+  it('saves its model and effort', async () => {
+    open();
+    const created = await task({ queue: false });
+    const updated = harness.setAgents(created.id, {
+      implementerFallbackModel: 'gpt-fallback-test',
+      implementerFallbackEffort: 'high',
+    });
+    expect([
+      updated.agents.implementerFallbackModel,
+      updated.agents.implementerFallbackEffort,
+    ]).toEqual(['gpt-fallback-test', 'high']);
+  });
+
+  it('drops the model and effort of the agent it replaces', async () => {
+    open();
+    const created = await task({
+      implementerFallbackModel: 'gpt-fallback-test',
+      implementerFallbackEffort: 'high',
+      queue: false,
+    });
+    harness.setAgents(created.id, { implementerFallback: null });
+    const updated = harness.setAgents(created.id, { implementerFallback: 'codex' });
+    expect([
+      updated.agents.implementerFallbackModel,
+      updated.agents.implementerFallbackEffort,
+    ]).toEqual([null, null]);
   });
 });

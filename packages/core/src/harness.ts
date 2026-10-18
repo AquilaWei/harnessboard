@@ -130,6 +130,7 @@ const DEFAULT_REVIEW_ROUNDS = 2;
 /** Each role's model field with the effort field that belongs to it. */
 const ROLE_MODEL_EFFORT = [
   ['implementerModel', 'implementerEffort'],
+  ['implementerFallbackModel', 'implementerFallbackEffort'],
   ['reviewerModel', 'reviewerEffort'],
   ['specModel', 'specEffort'],
   ['testerModel', 'testerEffort'],
@@ -634,6 +635,8 @@ export class Harness {
       maxReviewRounds: DEFAULT_REVIEW_ROUNDS,
       implementerModel: modelOrNull(input.implementerModel),
       implementerEffort: effortOrNull(input.implementerEffort),
+      implementerFallbackModel: modelOrNull(input.implementerFallbackModel),
+      implementerFallbackEffort: effortOrNull(input.implementerFallbackEffort),
       reviewerModel: modelOrNull(input.reviewerModel),
       reviewerEffort: effortOrNull(input.reviewerEffort),
       spec: input.spec ?? null,
@@ -922,8 +925,14 @@ export class Harness {
     }
     const agents: TaskAgents = { ...task.agents };
     if (update.implementer !== undefined) agents.implementer = update.implementer;
-    if (update.implementerFallback !== undefined) {
+    if (
+      update.implementerFallback !== undefined &&
+      update.implementerFallback !== (agents.implementerFallback ?? null)
+    ) {
       agents.implementerFallback = update.implementerFallback;
+      // Its model and effort were another platform's ids; an update may set new ones.
+      agents.implementerFallbackModel = null;
+      agents.implementerFallbackEffort = null;
     }
     if (update.reviewer !== undefined) agents.reviewer = update.reviewer;
     if (update.spec !== undefined) agents.spec = update.spec;
@@ -1965,7 +1974,11 @@ export class Harness {
     // The implementer's model and effort are its platform's; a fallback runs with its own.
     const agents =
       plan.role === 'implementer' && plan.agentId !== task.agents.implementer
-        ? { ...task.agents, implementerModel: null, implementerEffort: null }
+        ? {
+            ...task.agents,
+            implementerModel: task.agents.implementerFallbackModel ?? null,
+            implementerEffort: task.agents.implementerFallbackEffort ?? null,
+          }
         : task.agents;
     const outcome = await runSession({
       adapter,

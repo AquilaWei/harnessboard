@@ -56,6 +56,12 @@ describe('task options', () => {
     expect(parse('--fallback', 'none', '-C', '/repo').implementerFallback).toBeNull();
   });
 
+  it('pass --fallback-model and --fallback-effort on', () => {
+    expect(
+      parse('--fallback-model', 'gpt-5.5', '--fallback-effort', 'high', '-C', '/repo'),
+    ).toMatchObject({ implementerFallbackModel: 'gpt-5.5', implementerFallbackEffort: 'high' });
+  });
+
   it('leave the fallback to the server without --fallback', () => {
     expect(parse('-C', '/repo')).not.toHaveProperty('implementerFallback');
   });
@@ -102,6 +108,16 @@ describe('hb models options', () => {
 
   it('turn --fallback none into no implementer fallback', () => {
     expect(parseModels('--fallback', 'none')).toEqual({ implementerFallback: null });
+  });
+
+  it('clear the fallback model with --fallback-model default', () => {
+    expect(parseModels('--fallback-model', 'default')).toEqual({
+      implementerFallbackModel: null,
+    });
+  });
+
+  it('set only the fallback effort with --fallback-effort', () => {
+    expect(parseModels('--fallback-effort', 'low')).toEqual({ implementerFallbackEffort: 'low' });
   });
 
   it('send nothing without options', () => {

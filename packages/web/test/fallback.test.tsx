@@ -110,6 +110,35 @@ describe('NewTaskDialog implementer fallback', () => {
     expect(ids).toEqual(['', 'codex']);
   });
 
+  it('offers a model for the fallback', async () => {
+    await openDialog();
+    expect(select('Stand-in model')).toBeTruthy();
+  });
+
+  it('sends the model and effort chosen for the fallback', async () => {
+    api.agentModels.mockResolvedValue([
+      {
+        id: 'gpt-5.5',
+        name: 'GPT-5.5',
+        description: null,
+        note: null,
+        more: false,
+        efforts: [{ id: 'xhigh', name: 'xhigh', note: null }],
+        defaultEffort: null,
+      },
+    ]);
+    await openDialog();
+    act(() => choose(select('Stand-in model'), 'gpt-5.5'));
+    // The effort select sits right after the model it belongs to.
+    const effort = select('Stand-in model').closest('label')!.nextElementSibling!;
+    act(() => choose(effort.querySelector('select')!, 'xhigh'));
+    await submit();
+    expect(api.createTask.mock.calls[0]![0]).toMatchObject({
+      implementerFallbackModel: 'gpt-5.5',
+      implementerFallbackEffort: 'xhigh',
+    });
+  });
+
   it('drops the fallback when it becomes the implementer', async () => {
     await openDialog();
     act(() => choose(select('Implementer'), 'codex'));
@@ -126,7 +155,21 @@ describe('TaskAgentsEditor implementer fallback', () => {
   it('shows the fallback of a task', async () => {
     await render({ ...task, agents: { ...task.agents, implementerFallback: 'codex' } });
     const lines = [...container.querySelectorAll('.tool-rules .mono')].map((s) => s.textContent);
-    expect(lines).toContain('Out of quota: codex');
+    expect(lines).toContain('Out of quota: codex · profile default');
+  });
+
+  it('shows the fallback model and effort', async () => {
+    await render({
+      ...task,
+      agents: {
+        ...task.agents,
+        implementerFallback: 'codex',
+        implementerFallbackModel: 'gpt-5.5',
+        implementerFallbackEffort: 'high',
+      },
+    });
+    const lines = [...container.querySelectorAll('.tool-rules .mono')].map((s) => s.textContent);
+    expect(lines).toContain('Out of quota: codex · gpt-5.5 · High');
   });
 
   it('saves the chosen fallback while a session is open', async () => {

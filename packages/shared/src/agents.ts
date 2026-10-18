@@ -115,11 +115,15 @@ export interface TaskAgents {
   /** Reasoning effort for the implementer; absent or `null` uses the CLI's default. */
   implementerEffort?: string | null;
   /**
-   * Agent that implements while the implementer's platform is out of quota, with its
-   * profile's own model and effort; the implementer takes over again at the next session
-   * once its quota is back. Absent or `null` waits for the quota instead.
+   * Agent that implements while the implementer's platform is out of quota; the
+   * implementer takes over again at the next session once its quota is back. Absent or
+   * `null` waits for the quota instead.
    */
   implementerFallback?: string | null;
+  /** Model for the fallback; absent or `null` uses the profile's model. */
+  implementerFallbackModel?: string | null;
+  /** Reasoning effort for the fallback; absent or `null` uses the profile's or CLI's default. */
+  implementerFallbackEffort?: string | null;
   /** Model for the reviewer; absent or `null` uses the profile's model. */
   reviewerModel?: string | null;
   /** Reasoning effort for the reviewer; absent or `null` uses the CLI's default. */

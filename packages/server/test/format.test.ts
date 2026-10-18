@@ -130,7 +130,7 @@ describe('formatTaskAgents', () => {
       'spec         (the implementer)  opus  high',
       'designer     -  ',
       'implementer  claude  opus  high',
-      'fallback     -',
+      'fallback     -  ',
       'tester       -  ',
       'reviewer     codex  gpt-5.5  low',
     ]);
@@ -144,7 +144,20 @@ describe('formatTaskAgents', () => {
         reviewer: null,
         maxReviewRounds: 3,
       })[3],
-    ).toBe('fallback     codex');
+    ).toBe('fallback     codex  (default)  (default effort)');
+  });
+
+  it('shows the fallback model and effort', () => {
+    expect(
+      formatTaskAgents({
+        implementer: 'claude',
+        implementerFallback: 'codex',
+        implementerFallbackModel: 'gpt-5.5',
+        implementerFallbackEffort: 'xhigh',
+        reviewer: null,
+        maxReviewRounds: 3,
+      })[3],
+    ).toBe('fallback     codex  gpt-5.5  xhigh');
   });
 
   it('shows the default-effort label for a role without an effort', () => {

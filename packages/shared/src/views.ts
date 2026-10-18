@@ -222,6 +222,9 @@ export interface CreateTaskInput {
    * `null` waits for the quota instead.
    */
   implementerFallback?: string | null;
+  /** Model and reasoning effort of the fallback; omitted or `null` uses its profile's. */
+  implementerFallbackModel?: string | null;
+  implementerFallbackEffort?: string | null;
   /** Writes the acceptance criteria; omitted or `null` lets the implementer do it. */
   spec?: string | null;
   specModel?: string | null;
@@ -298,6 +301,8 @@ export type AgentsUpdate = Partial<
     | 'implementerModel'
     | 'implementerEffort'
     | 'implementerFallback'
+    | 'implementerFallbackModel'
+    | 'implementerFallbackEffort'
     | 'reviewerModel'
     | 'reviewerEffort'
     | 'spec'

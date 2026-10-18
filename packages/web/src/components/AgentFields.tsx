@@ -10,6 +10,8 @@ export interface AgentChoice {
   implementerEffort: string | null;
   /** Implements while the implementer is out of quota; `null` waits for the quota. */
   implementerFallback: string | null;
+  implementerFallbackModel: string | null;
+  implementerFallbackEffort: string | null;
   reviewer: string | null;
   reviewerModel: string | null;
   reviewerEffort: string | null;
@@ -118,7 +120,11 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
                 implementerEffort: null,
                 // An agent can not stand in for itself.
                 ...(e.target.value === value.implementerFallback
-                  ? { implementerFallback: null }
+                  ? {
+                      implementerFallback: null,
+                      implementerFallbackModel: null,
+                      implementerFallbackEffort: null,
+                    }
                   : {}),
               })
             }
@@ -138,23 +144,43 @@ export function AgentFields({ agents, value, onChange, lockAgents = false }: Pro
         />
       </div>
       {/* Only takes effect from the next session, so it may change while one is open. */}
-      <label className="field">
-        <span>{t('form.fallback')}</span>
-        <select
-          value={value.implementerFallback ?? ''}
-          onChange={(e) => set({ implementerFallback: e.target.value || null })}
-        >
-          <option value="">{t('form.fallbackNone')}</option>
-          {agents
-            .filter((a) => a.id !== value.implementer)
-            .map((a) => (
-              <option key={a.id} value={a.id} disabled={!a.ok}>
-                {a.id} · {a.profile.provider}
-                {a.ok ? '' : ` ${t('form.agentMissing')}`}
-              </option>
-            ))}
-        </select>
-      </label>
+      <div className="row">
+        <label className="field">
+          <span>{t('form.fallback')}</span>
+          <select
+            value={value.implementerFallback ?? ''}
+            onChange={(e) =>
+              set({
+                implementerFallback: e.target.value || null,
+                implementerFallbackModel: null,
+                implementerFallbackEffort: null,
+              })
+            }
+          >
+            <option value="">{t('form.fallbackNone')}</option>
+            {agents
+              .filter((a) => a.id !== value.implementer)
+              .map((a) => (
+                <option key={a.id} value={a.id} disabled={!a.ok}>
+                  {a.id} · {a.profile.provider}
+                  {a.ok ? '' : ` ${t('form.agentMissing')}`}
+                </option>
+              ))}
+          </select>
+        </label>
+        {value.implementerFallback && (
+          <ModelPicker
+            key={`fallback-${value.implementerFallback}`}
+            label={t('form.fallbackModel')}
+            agent={byId(value.implementerFallback)}
+            value={value.implementerFallbackModel}
+            effort={value.implementerFallbackEffort}
+            onChange={(implementerFallbackModel, implementerFallbackEffort) =>
+              set({ implementerFallbackModel, implementerFallbackEffort })
+            }
+          />
+        )}
+      </div>
       <small className="hint">{t('form.fallbackHint')}</small>
       <div className="row">
         <label className="field">
