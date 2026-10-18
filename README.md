@@ -4,7 +4,7 @@ New tasks automatically discuss their spec in Draft. Confirm the spec to join Pe
 
 Completed tasks can continue their original conversation through Chat, including after merging. To change the specification, reopen the task in Draft, discuss the changes, and approve the revised specification before execution.
 
-![version](https://img.shields.io/badge/version-0.1.30-blue)
+![version](https://img.shields.io/badge/version-0.1.31-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -91,7 +91,7 @@ Then give the command a short name (put the line in your shell's startup file to
 
 ```bash
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # prints the version, for example 0.1.30
+hb --version             # prints the version, for example 0.1.31
 ```
 
 <details>

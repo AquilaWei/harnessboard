@@ -3,6 +3,17 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.1.31 - 2026-10-18
+
+Local test build; real-device acceptance is pending.
+
+### Added
+
+- The fallback implementer can have its own model and reasoning effort: pick them next to
+  the fallback in the New task dialog or the task's agents, or use `--fallback-model` and
+  `--fallback-effort` on `hb add`, `hb loop` and `hb models`. Without a choice it uses its
+  profile's model and effort, as before.
+
 ## 0.1.30 - 2026-10-18
 
 Local test build; real-device acceptance is pending.
