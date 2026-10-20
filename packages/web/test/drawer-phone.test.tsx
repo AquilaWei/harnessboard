@@ -181,3 +181,28 @@ it('keeps handoff history available for legacy tasks', async () => {
   container.innerHTML = html;
   expect(container.querySelector('[role="tablist"]')?.textContent).toContain('Notes');
 });
+
+it('shows the PM completion report while waiting for user review', async () => {
+  const html = await drawerHtml(
+    task({
+      workflow: 'pm',
+      status: 'review',
+      pmAcceptance: {
+        head: 'head',
+        summary: 'Ready for user verification',
+        architecture: 'Architecture inspected',
+        functionality: 'Features verified',
+        verification: 'Test evidence checked',
+      },
+    }),
+  );
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  const report = container.querySelector<HTMLDetailsElement>('.status-review');
+  expect(report?.open).toBe(true);
+  expect(report?.textContent).toContain('Ready for user verification');
+  expect(report?.textContent).toContain('Architecture inspected');
+  expect(report?.textContent).toContain('Features verified');
+  expect(report?.textContent).toContain('Test evidence checked');
+  expect(container.querySelector('.actions')?.textContent).toContain('Mark done');
+});

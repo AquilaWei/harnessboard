@@ -480,7 +480,7 @@ export class PmWorkflow {
     };
     this.host.store.appendEvent(this.task.id, this.pmSessionId, 'pm_acceptance', acceptance);
     this.accepted = true;
-    this.host.status(this.task.id, 'done');
+    this.host.status(this.task.id, 'review');
     return acceptance;
   }
 
@@ -546,7 +546,7 @@ export class PmWorkflow {
             'On wait, propose_spec or ask_user, end your turn immediately. Do not poll. Worker events wake you, including permissions.',
             'After implementation, inspect actual diff and surrounding code for architecture, functionality, edge cases and scope compliance. Read exact test evidence as needed; delegate missing verification rather than trusting a summary.',
             'Do not routinely reread all documents or history. Request only missing context. Fixes go to the original worker. Accept only the current clean HEAD with concrete architecture, functionality and verification findings.',
-            'Publishing and merging require existing user authorization. Escalate material scope changes with propose_spec before further work.',
+            'Use accept to submit your completion report for user review. The user decides when to mark the task done. Publishing and merging require existing user authorization. Escalate material scope changes with propose_spec before further work.',
           ]
         : ['Continue as PM. Only changes since your previous turn follow.']),
       ...(Object.keys(changed).length || removed.length

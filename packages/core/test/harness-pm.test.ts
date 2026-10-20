@@ -77,7 +77,7 @@ it('creates a PM task and waits for explicit specification approval', async () =
   expect(pmWork(harness.store, task.id)).toEqual([]);
 });
 
-it('dispatches only after approval and completes after PM acceptance', async () => {
+it('dispatches after approval and waits for user confirmation after PM acceptance', async () => {
   process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
     spec(),
     turn('pm-thread', dispatch(), tool('wait')),
@@ -92,7 +92,7 @@ it('dispatches only after approval and completes after PM acceptance', async () 
   await harness.waitForIdle();
   harness.approveCriteria(task.id);
   await harness.waitForIdle();
-  expect(harness.store.getTask(task.id)?.status).toBe('done');
+  expect(harness.store.getTask(task.id)?.status).toBe('review');
   expect(pmWork(harness.store, task.id)[0]).toMatchObject({
     status: 'completed',
     execution: 'managed',
@@ -101,6 +101,8 @@ it('dispatches only after approval and completes after PM acceptance', async () 
     summary: 'Greeting complete.',
   });
   expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual(['pm', 'worker']);
+  harness.completeTask(task.id);
+  expect(harness.store.getTask(task.id)?.status).toBe('done');
 });
 
 it('rejects an attempted dispatch before approval without starting a worker', async () => {
@@ -182,7 +184,7 @@ it('resumes the same worker for PM-requested fixes', async () => {
   await harness.waitForIdle();
   harness.approveCriteria(task.id);
   await harness.waitForIdle();
-  expect(harness.store.getTask(task.id)?.status).toBe('done');
+  expect(harness.store.getTask(task.id)?.status).toBe('review');
   expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual(['pm', 'worker']);
   const runs = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
     .trim()
@@ -214,7 +216,7 @@ it('wakes the PM to grant a worker permission once without a deadlock', async ()
   await harness.waitForIdle();
   harness.approveCriteria(task.id);
   await harness.waitForIdle();
-  expect(harness.store.getTask(task.id)?.status).toBe('done');
+  expect(harness.store.getTask(task.id)?.status).toBe('review');
   expect(harness.store.lastEvent(task.id, 'permission_decision')?.data).toMatchObject({
     actor: 'pm',
     behavior: 'allow',

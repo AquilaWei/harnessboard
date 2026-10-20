@@ -178,6 +178,20 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                 <span className="card-id">#{task.id}</span>
               </div>
               <Description task={task} />
+              {s === 'review' && task.workflow === 'pm' && task.pmAcceptance && (
+                <details className="status-review" open>
+                  <summary>{t('pm.accepted')}</summary>
+                  <Markdown
+                    className="reply"
+                    text={[
+                      task.pmAcceptance.summary,
+                      task.pmAcceptance.architecture,
+                      task.pmAcceptance.functionality,
+                      task.pmAcceptance.verification,
+                    ].join('\n\n')}
+                  />
+                </details>
+              )}
               {review && (
                 <details className="status-review" open>
                   <summary>{t('timeline.reviewFindings', { agent: review.agentId })}</summary>

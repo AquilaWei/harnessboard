@@ -5,6 +5,10 @@ are test versions that have not been accepted on real machines yet.
 
 ## Unreleased
 
+### Fixed
+
+- PM completion now submits its report for user review instead of moving directly to Done.
+
 ### Changed
 
 - Remove the legacy handoff tab from PM tasks; keep historical notes for legacy workflows.

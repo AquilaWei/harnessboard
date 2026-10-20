@@ -227,3 +227,41 @@ it('releases its task slot when an escalated question outlives the last worker',
   expect(store.getTask(task.id)?.status).toBe('awaiting_approval');
   expect(pmWork(store, task.id)[0]?.status).toBe('completed');
 }, 3000);
+
+it('reports PM acceptance for user review without marking the task done', async () => {
+  const { headCommit } = await import('../src/worktree.js');
+  const head = await headCommit(task.worktreePath!);
+  store.appendEvent(task.id, null, 'pm_work', {
+    ...input,
+    id: 'completed-work',
+    parentSessionId: 'old-pm',
+    sessionId: 'worker-session',
+    model: null,
+    effort: null,
+    status: 'completed',
+    summary: 'Implemented',
+    evidence: 'Tests pass',
+    since: head,
+    head,
+    execution: 'managed',
+  });
+  host.run = vi.fn(async () => {
+    await engine.call('accept', {
+      head,
+      summary: 'Greeting implemented',
+      architecture: 'Architecture checked',
+      functionality: 'Greeting works',
+      verification: 'Tests pass',
+    });
+    return outcome;
+  });
+  await engine.run();
+  expect(store.getTask(task.id)?.status).toBe('review');
+  expect(store.lastEvent(task.id, 'pm_acceptance')?.data).toEqual({
+    head,
+    summary: 'Greeting implemented',
+    architecture: 'Architecture checked',
+    functionality: 'Greeting works',
+    verification: 'Tests pass',
+  });
+});

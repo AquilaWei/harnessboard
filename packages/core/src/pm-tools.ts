@@ -81,7 +81,7 @@ export const PM_TOOLS = [
   {
     name: 'accept',
     description:
-      'Finish after inspecting actual code, architecture, functionality and verification evidence. Requires no unfinished children and current clean HEAD.',
+      'Submit a completion report and wait for user review after inspecting actual code, architecture, functionality and verification evidence. This does not mark the task done. Requires no unfinished children and current clean HEAD.',
     inputSchema: fields(
       {
         head: string,

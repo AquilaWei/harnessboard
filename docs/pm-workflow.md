@@ -17,7 +17,9 @@ flowchart LR
     D --> W[Worker: implement, test, commit]
     W --> R[PM: inspect code and verification evidence]
     R -->|required fixes| W
-    R -->|accepted| F[Done]
+    R -->|report| V[User review]
+    V -->|confirmed| F[Done]
+    V -->|changes requested| P
     W -->|permission or execution question| P
 ```
 
@@ -100,7 +102,9 @@ be completed or explicitly cancelled, no pending permissions, a completed implem
 job and a clean current HEAD. It records architecture, functionality and verification
 findings against that commit.
 
-An accepted task becomes **Done**. Worktree changes are merged only when you choose
+PM acceptance submits a completion report and moves the task to **Review**. The report
+shows the summary, architecture, functionality and verification findings. The user checks
+the result and chooses **Mark done** (or merges the changes) to complete it. Worktree changes are merged only when you choose
 **Merge** or run `hb merge`; PM acceptance does not authorize publication. A merge conflict
 returns to the PM for worker fixes and another acceptance pass.
 
