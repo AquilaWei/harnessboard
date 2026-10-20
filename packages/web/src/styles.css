@@ -1827,3 +1827,22 @@ th {
     min-height: 44px;
   }
 }
+
+.agent-usage-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.agent-usage {
+  width: 100%;
+}
+.agent-usage td {
+  vertical-align: top;
+}
+.agent-usage td:not(:first-child) {
+  min-width: 6rem;
+}
+.agent-usage details {
+  min-width: 9rem;
+  max-width: 24rem;
+  overflow-wrap: anywhere;
+}

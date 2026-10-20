@@ -1,0 +1,80 @@
+// SPDX-License-Identifier: Apache-2.0
+import { useTranslation } from 'react-i18next';
+import { formatCost, formatDuration } from '@harnessboard/shared';
+import type { TaskUsage, TaskView } from '@harnessboard/shared';
+import { formatTokens } from '../live';
+import { Markdown } from './Markdown';
+
+/** PM totals and individual delegated jobs share a compact, comparable usage table. */
+export function PmAgentUsage({ task }: { task: TaskView }) {
+  const { t } = useTranslation();
+  const rows = [
+    {
+      id: 'pm',
+      agentId: task.pm?.agentId,
+      model: task.pm?.model,
+      usage: task.pmUsage,
+      status: task.status,
+      work: null,
+    },
+    ...(task.work ?? []).map((work) => ({ ...work, work })),
+  ];
+  const tokens = (usage?: TaskUsage) => {
+    const counts = usage?.tokens;
+    return counts
+      ? formatTokens(counts.input + counts.output + counts.cacheRead + counts.cacheWrite)
+      : t('usage.notRecorded');
+  };
+  return (
+    <div className="agent-usage-scroll">
+      <table className="usage-models agent-usage">
+        <thead>
+          <tr>
+            {['agent', 'model', 'status', 'tokens', 'cost', 'agentTime'].map((key) => (
+              <th key={key} scope="col">
+                {t(`usage.${key}`)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ id, agentId, model, status, usage, work }) => (
+            <tr key={id}>
+              <td>
+                {work ? agentId : `PM · ${agentId ?? '-'}`}
+                {work && (
+                  <details>
+                    <summary>{t('usage.details')}</summary>
+                    <p>{work.goal}</p>
+                    <p>{work.scope}</p>
+                    {work.summary && <Markdown text={work.summary} />}
+                    {work.head && <small className="mono">{work.head}</small>}
+                  </details>
+                )}
+              </td>
+              <td>
+                {Object.keys(usage?.byModel ?? {}).join(', ') || model || t('pm.profileDefault')}
+              </td>
+              <td>
+                {t(
+                  status === 'completed' || status === 'cancelled'
+                    ? `usage.${status}`
+                    : `status.${status}`,
+                )}
+              </td>
+              <td>{tokens(usage)}</td>
+              <td>
+                {usage?.costUsd != null ? `~${formatCost(usage.costUsd)}` : t('usage.notRecorded')}
+              </td>
+              <td>
+                {usage && usage.runs > 0
+                  ? t('usage.runs', { time: formatDuration(usage.agentMs), count: usage.runs })
+                  : t('usage.notRecorded')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

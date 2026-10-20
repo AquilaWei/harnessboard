@@ -3,6 +3,13 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Changed
+
+- Show PM and delegated agents in a compact table with individual models, status,
+  tokens, estimated cost and execution time; collapse full worker instructions.
+
 ## 0.2.2 - 2026-10-20
 
 Local test release; interactive model-menu acceptance is pending.

@@ -294,6 +294,11 @@ export const en = {
   },
   usage: {
     title: 'Usage',
+    agent: 'Agent',
+    status: 'Status',
+    details: 'Task details',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
     tokens: 'Tokens',
     tokensShort: '{{tokens}} tokens',
     tokenParts:
@@ -951,6 +956,11 @@ export const zhTW: typeof en = {
   },
   usage: {
     title: '用量',
+    agent: 'Agent',
+    status: '狀態',
+    details: '任務詳情',
+    completed: '已完成',
+    cancelled: '已取消',
     tokens: 'Tokens',
     tokensShort: '{{tokens}} tokens',
     tokenParts:

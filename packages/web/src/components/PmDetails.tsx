@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { AgentInfo, PmConfig, TaskView } from '@harnessboard/shared';
 import { api } from '../api';
 import { Markdown } from './Markdown';
-import { UsageSummary } from './UsageSummary';
+import { PmAgentUsage } from './PmAgentUsage';
 import { PmFields } from './PmFields';
 
 export function PmDetails({
@@ -47,22 +47,8 @@ export function PmDetails({
     <section>
       {task.workflow === 'pm' && (
         <>
-          <p>
-            PM: {task.pm?.agentId} · {task.pm?.model ?? t('pm.profileDefault')}
-          </p>
-          {task.pmUsage && <UsageSummary usage={task.pmUsage} />}
+          <PmAgentUsage task={task} />
           {task.pmQuestion && <Markdown text={task.pmQuestion.message} />}
-          {task.work?.map((work) => (
-            <details key={work.id}>
-              <summary>
-                {work.agentId} · {work.status} · {work.goal}
-              </summary>
-              <p>{work.scope}</p>
-              {work.usage && <UsageSummary usage={work.usage} />}
-              <Markdown text={work.summary ?? ''} />
-              <small className="mono">{work.head}</small>
-            </details>
-          ))}
           {task.pmAcceptance && (
             <details>
               <summary>{t('pm.accepted')}</summary>
