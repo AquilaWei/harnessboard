@@ -3,6 +3,14 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## 0.2.0 - 2026-10-19
+
+### Changed
+
+- Establish the current development workflow as the baseline before introducing PM-led
+  task orchestration. This version retains the existing role-based workflow; the PM
+  workflow is not included. No local installers were built for this baseline.
+
 ## 0.1.31 - 2026-10-18
 
 Local test build; real-device acceptance is pending.
