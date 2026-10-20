@@ -3,6 +3,13 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Changed
+
+- Simplify PM task details with compact totals and a full-width agent table; collapse
+  token/pricing details and remove duplicate model totals, mode and review messages.
+
 ## 0.2.3 - 2026-10-20
 
 Local test release; interactive desktop acceptance is pending.

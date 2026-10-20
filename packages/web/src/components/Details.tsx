@@ -19,15 +19,27 @@ export function Details({ task, onSaved, onError }: Props) {
   const { t } = useTranslation();
   return (
     <>
-      {task.sessionCount > 0 && <UsageSummary usage={task.usage} />}
+      {task.sessionCount > 0 && (
+        <UsageSummary usage={task.usage} compact={task.workflow === 'pm'} />
+      )}
+      {task.workflow === 'pm' && (
+        <section className="detail-section">
+          <h3>{t('fields.agents')}</h3>
+          <PmDetails task={task} onSaved={onSaved} onError={onError} />
+        </section>
+      )}
       <dl className="facts">
-        <dt>{t('fields.mode')}</dt>
-        <dd>{task.workflow === 'pm' ? 'PM' : t(`form.modes.${task.mode}`)}</dd>
-        <dt>{t('fields.agents')}</dt>
-        <dd>
-          {task.workflow !== 'pm' && <PmDetails task={task} onSaved={onSaved} onError={onError} />}
-          <TaskAgentsEditor task={task} onSaved={onSaved} onError={onError} />
-        </dd>
+        {task.workflow !== 'pm' && (
+          <>
+            <dt>{t('fields.mode')}</dt>
+            <dd>{t(`form.modes.${task.mode}`)}</dd>
+            <dt>{t('fields.agents')}</dt>
+            <dd>
+              <PmDetails task={task} onSaved={onSaved} onError={onError} />
+              <TaskAgentsEditor task={task} onSaved={onSaved} onError={onError} />
+            </dd>
+          </>
+        )}
         {task.verifyCommand && (
           <>
             <dt>{t('fields.verify')}</dt>

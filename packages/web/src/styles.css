@@ -1846,3 +1846,10 @@ th {
   max-width: 24rem;
   overflow-wrap: anywhere;
 }
+
+.agent-usage-secondary {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 12px;
+  margin-top: 4px;
+}

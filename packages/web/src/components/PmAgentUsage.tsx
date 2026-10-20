@@ -30,7 +30,7 @@ export function PmAgentUsage({ task }: { task: TaskView }) {
       <table className="usage-models agent-usage">
         <thead>
           <tr>
-            {['agent', 'model', 'status', 'tokens', 'cost', 'agentTime'].map((key) => (
+            {['agent', 'status', 'tokens', 'cost', 'agentTime'].map((key) => (
               <th key={key} scope="col">
                 {t(`usage.${key}`)}
               </th>
@@ -42,6 +42,9 @@ export function PmAgentUsage({ task }: { task: TaskView }) {
             <tr key={id}>
               <td>
                 {work ? agentId : `PM · ${agentId ?? '-'}`}
+                <small className="agent-usage-secondary">
+                  {Object.keys(usage?.byModel ?? {}).join(', ') || model || t('pm.profileDefault')}
+                </small>
                 {work && (
                   <details>
                     <summary>{t('usage.details')}</summary>
@@ -51,9 +54,6 @@ export function PmAgentUsage({ task }: { task: TaskView }) {
                     {work.head && <small className="mono">{work.head}</small>}
                   </details>
                 )}
-              </td>
-              <td>
-                {Object.keys(usage?.byModel ?? {}).join(', ') || model || t('pm.profileDefault')}
               </td>
               <td>
                 {t(
@@ -67,9 +67,16 @@ export function PmAgentUsage({ task }: { task: TaskView }) {
                 {usage?.costUsd != null ? `~${formatCost(usage.costUsd)}` : t('usage.notRecorded')}
               </td>
               <td>
-                {usage && usage.runs > 0
-                  ? t('usage.runs', { time: formatDuration(usage.agentMs), count: usage.runs })
-                  : t('usage.notRecorded')}
+                {usage && usage.runs > 0 ? (
+                  <>
+                    {formatDuration(usage.agentMs)}
+                    <small className="agent-usage-secondary">
+                      {t('usage.runCount', { count: usage.runs })}
+                    </small>
+                  </>
+                ) : (
+                  t('usage.notRecorded')
+                )}
               </td>
             </tr>
           ))}

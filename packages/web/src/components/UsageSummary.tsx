@@ -19,7 +19,7 @@ export function UsageLine({ usage }: { usage: TaskUsage }) {
 }
 
 /** Tokens, estimated cost and time over all the task's sessions, with a row per model. */
-export function UsageSummary({ usage }: { usage: TaskUsage }) {
+export function UsageSummary({ usage, compact = false }: { usage: TaskUsage; compact?: boolean }) {
   const { t } = useTranslation();
   const models = Object.entries(usage.byModel);
   return (
@@ -29,30 +29,53 @@ export function UsageSummary({ usage }: { usage: TaskUsage }) {
         <dt>{t('usage.tokens')}</dt>
         <dd>
           {usage.tokens
-            ? t('usage.tokenParts', {
-                total: formatTokens(total(usage.tokens)),
-                input: formatTokens(usage.tokens.input),
-                output: formatTokens(usage.tokens.output),
-                cacheRead: formatTokens(usage.tokens.cacheRead),
-                cacheWrite: formatTokens(usage.tokens.cacheWrite),
-              })
+            ? compact
+              ? formatTokens(total(usage.tokens))
+              : t('usage.tokenParts', {
+                  total: formatTokens(total(usage.tokens)),
+                  input: formatTokens(usage.tokens.input),
+                  output: formatTokens(usage.tokens.output),
+                  cacheRead: formatTokens(usage.tokens.cacheRead),
+                  cacheWrite: formatTokens(usage.tokens.cacheWrite),
+                })
             : t('usage.notRecorded')}
         </dd>
         <dt>{t('usage.cost')}</dt>
         <dd>
           {usage.costUsd !== null ? `~${formatCost(usage.costUsd)}` : t('usage.notRecorded')}
-          <span className="hint"> {t('usage.costHint')}</span>
+          {!compact && <span className="hint"> {t('usage.costHint')}</span>}
         </dd>
-        <dt>{t('usage.agentTime')}</dt>
-        <dd>
-          {usage.runs > 0
-            ? t('usage.runs', { time: formatDuration(usage.agentMs), count: usage.runs })
-            : t('usage.notRecorded')}
-        </dd>
+        {!compact && (
+          <>
+            <dt>{t('usage.agentTime')}</dt>
+            <dd>
+              {usage.runs > 0
+                ? t('usage.runs', { time: formatDuration(usage.agentMs), count: usage.runs })
+                : t('usage.notRecorded')}
+            </dd>
+          </>
+        )}
         <dt>{t('usage.elapsed')}</dt>
         <dd>{usage.elapsedMs !== null ? formatDuration(usage.elapsedMs) : '-'}</dd>
       </dl>
-      {models.length > 1 && (
+      {compact && (
+        <details>
+          <summary>{t('usage.breakdown')}</summary>
+          <p>
+            {usage.tokens
+              ? t('usage.tokenParts', {
+                  total: formatTokens(total(usage.tokens)),
+                  input: formatTokens(usage.tokens.input),
+                  output: formatTokens(usage.tokens.output),
+                  cacheRead: formatTokens(usage.tokens.cacheRead),
+                  cacheWrite: formatTokens(usage.tokens.cacheWrite),
+                })
+              : t('usage.notRecorded')}
+          </p>
+          <p className="hint">{t('usage.costHint')}</p>
+        </details>
+      )}
+      {!compact && models.length > 1 && (
         <table className="usage-models">
           <thead>
             <tr>

@@ -45,24 +45,19 @@ export function PmDetails({
   };
   return (
     <section>
-      {task.workflow === 'pm' && (
-        <>
-          <PmAgentUsage task={task} />
-          {task.pmQuestion && <Markdown text={task.pmQuestion.message} />}
-          {task.pmAcceptance && (
-            <details>
-              <summary>{t('pm.accepted')}</summary>
-              <Markdown
-                text={[
-                  task.pmAcceptance.summary,
-                  task.pmAcceptance.architecture,
-                  task.pmAcceptance.functionality,
-                  task.pmAcceptance.verification,
-                ].join('\n\n')}
-              />
-            </details>
-          )}
-        </>
+      {task.workflow === 'pm' && <PmAgentUsage task={task} />}
+      {task.workflow === 'pm' && task.status !== 'review' && task.pmAcceptance && (
+        <details>
+          <summary>{t('pm.accepted')}</summary>
+          <Markdown
+            text={[
+              task.pmAcceptance.summary,
+              task.pmAcceptance.architecture,
+              task.pmAcceptance.functionality,
+              task.pmAcceptance.verification,
+            ].join('\n\n')}
+          />
+        </details>
       )}
       {idle && !choice && (
         <button className="btn small" onClick={edit}>

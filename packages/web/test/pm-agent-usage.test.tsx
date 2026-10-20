@@ -52,3 +52,35 @@ it('separates PM and worker usage and keeps the full instruction collapsed', asy
     await act(async () => root.unmount());
   }
 });
+
+it('keeps PM totals compact without repeating the model table', async () => {
+  const { UsageSummary } = await import('../src/components/UsageSummary');
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        <UsageSummary
+          compact
+          usage={{
+            tokens: { input: 100, output: 200, cacheRead: 0, cacheWrite: 0 },
+            costUsd: 0.41,
+            agentMs: 30000,
+            elapsedMs: 60000,
+            runs: 2,
+            byModel: {
+              first: { input: 100, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0.1 },
+              second: { input: 0, output: 200, cacheRead: 0, cacheWrite: 0, costUsd: 0.31 },
+            },
+          }}
+        />,
+      ),
+    );
+    expect(container.querySelector('table')).toBeNull();
+    expect(container.querySelectorAll('dt')).toHaveLength(3);
+    expect(container.querySelector('details')?.open).toBe(false);
+    expect(container.querySelector('details')?.textContent).toContain('cache read');
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

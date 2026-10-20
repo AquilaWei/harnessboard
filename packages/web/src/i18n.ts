@@ -294,6 +294,9 @@ export const en = {
   },
   usage: {
     title: 'Usage',
+    breakdown: 'Token breakdown and pricing',
+    runCount_one: '{{count}} run',
+    runCount_other: '{{count}} runs',
     agent: 'Agent',
     status: 'Status',
     details: 'Task details',
@@ -956,6 +959,9 @@ export const zhTW: typeof en = {
   },
   usage: {
     title: '用量',
+    breakdown: 'Token 明細與計價說明',
+    runCount_one: '{{count}} 次執行',
+    runCount_other: '{{count}} 次執行',
     agent: 'Agent',
     status: '狀態',
     details: '任務詳情',
