@@ -22,6 +22,11 @@ flowchart LR
 Choose a PM profile/model and the worker model pool in **New task**. The PM currently
 requires a local Claude Code or Codex profile. Workers can use any configured provider,
 including Gemini and Docker profiles. No additional model API credentials are introduced.
+Under **Available workers**, enable a profile, choose a model from its platform menu,
+and click **Add model**. Repeat to allow multiple models; remove individual entries to
+narrow the pool. The profile default is initially included. Custom model IDs remain
+available when the platform does not list a model. These controls are also available
+when editing a stopped task's PM configuration.
 Only configured, explicitly permitted worker models can be dispatched.
 
 ```bash

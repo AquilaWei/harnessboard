@@ -15,6 +15,8 @@ interface Props {
   /** Called with both, since a model that does not offer the chosen effort resets it. */
   onChange: (model: string | null, effort: string | null) => void;
   label: string;
+  /** Worker pools select models only; effort is decided when dispatching work. */
+  hideEffort?: boolean;
 }
 
 const CUSTOM = '__custom';
@@ -41,7 +43,7 @@ function effortLabel(effort: EffortInfo): string {
  * The profile's model, one of the models its platform offers, or any id typed by hand; and
  * next to it the reasoning efforts the chosen model offers, when it offers any.
  */
-export function ModelPicker({ agent, value, effort, onChange, label }: Props) {
+export function ModelPicker({ agent, value, effort, onChange, label, hideEffort = false }: Props) {
   const { t } = useTranslation();
   const [models, setModels] = useState<ModelInfo[] | null>(null);
   const [customChosen, setCustomChosen] = useState(false);
@@ -128,7 +130,7 @@ export function ModelPicker({ agent, value, effort, onChange, label }: Props) {
         {invalid && <small className="hint warn-text">{t('models.invalid')}</small>}
         {selected && !custom && <small className="hint mono">{selected.id}</small>}
       </label>
-      {efforts.length > 0 && (
+      {!hideEffort && efforts.length > 0 && (
         <label className="field">
           <span>{t('models.effort')}</span>
           <EffortSelect

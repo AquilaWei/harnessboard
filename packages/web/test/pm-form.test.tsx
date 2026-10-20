@@ -33,7 +33,10 @@ beforeEach(async () => {
     { id: 'codex', profile: { provider: 'codex' }, ok: true },
     { id: 'gemini', profile: { provider: 'gemini' }, ok: true },
   ]);
-  api.agentModels.mockResolvedValue([]);
+  api.agentModels.mockResolvedValue([
+    { id: 'gpt-5.5', name: 'GPT 5.5', efforts: [] },
+    { id: 'gpt-5.4', name: 'GPT 5.4', efforts: [] },
+  ]);
   api.createTask.mockResolvedValue({ id: 1 });
   await act(async () =>
     root.render(<NewTaskDialog settings={settings} onClose={() => {}} onCreated={() => {}} />),
@@ -52,10 +55,19 @@ it('sends the explicitly selected cross-platform worker model pool', async () =>
     .find((label) => label.textContent?.includes('codex'))!
     .querySelector<HTMLInputElement>('input')!;
   await act(async () => codex.click());
-  const models = [...container.querySelectorAll('input')].filter(
-    (input) => input.placeholder === 'Profile default',
-  );
-  act(() => type(models[1]!, 'gpt-5.5, gpt-5.4'));
+  const worker = codex.closest('div')!;
+  const models = worker.querySelector('select')!;
+  await act(async () => {
+    models.value = 'gpt-5.5';
+    models.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const add = [...worker.querySelectorAll('button')].find((b) => b.textContent === 'Add model')!;
+  await act(async () => add.click());
+  await act(async () => {
+    models.value = 'gpt-5.4';
+    models.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(async () => add.click());
   await act(async () => container.querySelector('form')!.requestSubmit());
   expect(api.createTask.mock.calls[0]![0]).toMatchObject({
     workflow: 'pm',

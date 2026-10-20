@@ -396,7 +396,10 @@ export const en = {
     workers: 'Available workers',
     workerHint:
       'The PM reuses one worker by default; at most two run, with one writer. Only local Claude Code or Codex can be PM.',
-    workerModels: 'Additional permitted models (comma-separated)',
+    workerModels: 'Model to add',
+    addModel: 'Add model',
+    removeModel: 'Remove',
+    removeWorkerModel: 'Remove {{model}}',
     profileDefault: 'Profile default',
     intro:
       'Agree the direction and acceptance criteria with the PM once. It then delegates, resolves permissions and reviews the result.',
@@ -1043,7 +1046,10 @@ export const zhTW: typeof en = {
     workers: '可用執行者',
     workerHint:
       '預設延續同一位執行者；最多兩個並行、一個寫入者。PM 目前支援本地 Claude Code 或 Codex。',
-    workerModels: '額外允許的模型（以逗號分隔）',
+    workerModels: '選擇要加入的模型',
+    addModel: '加入模型',
+    removeModel: '移除',
+    removeWorkerModel: '移除 {{model}}',
     profileDefault: '平台預設模型',
     intro: '先與 PM 確認一次方向與驗收標準，之後由 PM 自主派工、判斷權限並驗收。',
     accepted: 'PM 驗收結果',

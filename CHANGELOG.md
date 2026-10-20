@@ -3,6 +3,13 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Added
+
+- Choose permitted worker models from a platform model menu, add multiple models, and
+  remove individual entries in new tasks and stopped task PM settings.
+
 ## 0.2.1 - 2026-10-20
 
 Test release; real-model and desktop end-to-end acceptance is pending.
