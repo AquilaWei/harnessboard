@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { PmDetails } from './PmDetails';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentInfo, TaskView } from '@harnessboard/shared';
@@ -64,6 +65,8 @@ export function TaskAgentsEditor({ task, onSaved, onError }: Props) {
       setBusy(false);
     }
   };
+
+  if (task.workflow === 'pm') return <PmDetails task={task} onSaved={onSaved} onError={onError} />;
 
   if (!choice) {
     return (

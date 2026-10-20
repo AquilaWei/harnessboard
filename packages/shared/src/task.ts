@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { PmConfig } from './pm.js';
 import type { AgentRole, TaskAgents } from './agents.js';
 import type { PlanQuestion } from './loop.js';
 
@@ -82,6 +83,9 @@ export interface PermissionPolicy {
 }
 
 export interface Task {
+  /** Missing on in-memory legacy callers; persisted tasks always have a workflow. */
+  workflow?: 'legacy' | 'pm';
+  pm?: PmConfig | null;
   id: number;
   title: string;
   prompt: string;

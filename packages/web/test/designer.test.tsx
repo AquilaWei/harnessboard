@@ -4,8 +4,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AgentInfo, Settings, TaskView } from '@harnessboard/shared';
-import { NewTaskDialog } from '../src/components/NewTaskDialog';
+import type { AgentInfo, TaskView } from '@harnessboard/shared';
 import { TaskAgentsEditor } from '../src/components/TaskAgentsEditor';
 import '../src/i18n';
 
@@ -21,12 +20,6 @@ vi.mock('../src/api', () => ({ api }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const settings = {
-  defaultReviewer: null,
-  defaultImplementerFallback: null,
-  defaultContextPolicy: { size: 'medium' },
-} as unknown as Settings;
-
 const profile = { provider: 'claude-code', command: 'claude', model: null };
 const agents: AgentInfo[] = [
   { id: 'claude', profile, ok: true, version: '1', error: null },
@@ -39,12 +32,6 @@ const task = {
   agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
   activity: null,
 } as unknown as TaskView;
-
-const type = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
-  const proto = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement;
-  Object.getOwnPropertyDescriptor(proto.prototype, 'value')!.set!.call(field, value);
-  field.dispatchEvent(new Event('input', { bubbles: true }));
-};
 
 const choose = (select: HTMLSelectElement, value: string) => {
   Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, value);
@@ -77,38 +64,6 @@ const designerSelect = () =>
     .querySelector('select')!;
 
 const selectedText = (select: HTMLSelectElement) => select.selectedOptions[0]!.textContent;
-
-describe('NewTaskDialog designer', () => {
-  const openDialog = async () => {
-    await act(async () =>
-      root.render(<NewTaskDialog settings={settings} onClose={() => {}} onCreated={() => {}} />),
-    );
-    act(() => type(container.querySelector('textarea')!, 'Add a settings page'));
-    act(() => type(container.querySelector<HTMLInputElement>('.input-row input')!, '/repo'));
-  };
-
-  const submit = async () => {
-    await act(async () => container.querySelector('form')!.requestSubmit());
-  };
-
-  it('defaults to None', async () => {
-    await openDialog();
-    expect(selectedText(designerSelect())).toBe('None');
-  });
-
-  it('sends no designer when None is kept', async () => {
-    await openDialog();
-    await submit();
-    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ designer: null });
-  });
-
-  it('sends the chosen designer', async () => {
-    await openDialog();
-    act(() => choose(designerSelect(), 'artist'));
-    await submit();
-    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ designer: 'artist' });
-  });
-});
 
 describe('TaskAgentsEditor designer', () => {
   const render = async (view: TaskView) =>

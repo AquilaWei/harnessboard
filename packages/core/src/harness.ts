@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+import { PmWorkflow, pmQuestion, validatePm } from './pm.js';
+import type { PmSessionPlan } from './pm.js';
+import type { PmConfig } from '@harnessboard/shared';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
@@ -206,8 +209,8 @@ export class Harness {
   private readonly merging = new Map<number, { repo: string; base: string }>();
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
-  /** Running sessions the pause level stops, by task id, with the platform they use. */
-  private readonly quotaStops = new Map<number, { provider: AgentProvider; stop: () => void }>();
+  /** Running sessions the pause level stops, by session id, with the platform they use. */
+  private readonly quotaStops = new Map<string, { provider: AgentProvider; stop: () => void }>();
   private readonly adapters = new Map<string, AgentAdapter>();
   private quotaReadAt = 0;
   private readonly modelLists = new Map<string, { at: number; models: ModelInfo[] }>();
@@ -218,6 +221,7 @@ export class Harness {
   private readonly held = new Map<number, HeldReplies>();
   private timer: NodeJS.Timeout | null = null;
   private readonly workflow: Workflow;
+  private readonly pms = new Map<number, PmWorkflow>();
   private readonly settingsFile: string | null;
   private readonly adapterFactory: AdapterFactory;
   private readonly detectCommands: Record<AgentProvider, string>;
@@ -600,6 +604,18 @@ export class Harness {
     if (workspace !== 'worktree' && workspace !== 'base') {
       throw new Error(`unknown workspace ${String(workspace)}; use worktree or base`);
     }
+    const workflow = input.workflow ?? 'pm';
+    if (workflow !== 'pm' && workflow !== 'legacy') throw new Error('Unknown workflow');
+    const pm: PmConfig | null =
+      workflow === 'pm'
+        ? (input.pm ?? {
+            agentId: input.implementer ?? DEFAULT_AGENT,
+            model: modelOrNull(input.implementerModel),
+            effort: effortOrNull(input.implementerEffort),
+            workers: [{ agentId: input.implementer ?? DEFAULT_AGENT, models: [null] }],
+          })
+        : null;
+    if (pm) validatePm(this.config, pm);
     const repoPath = await resolveRepository(input.repo);
     const project = loadProjectConfig(repoPath);
     const contextPolicy = {
@@ -613,14 +629,14 @@ export class Harness {
       }),
     };
     resolveThresholds(contextPolicy);
-    const mode = input.mode ?? 'single';
+    const mode = workflow === 'pm' ? 'single' : (input.mode ?? 'single');
     const verifyCommand = input.verifyCommand?.trim() || project.verifyCommand || null;
     const acceptance = optionalText(input.acceptance, 'acceptance')?.trim() || null;
     // Every new task agrees its spec before implementation, even with supplied criteria.
     const confirmPlan = true;
     const allowedTools = input.allowedTools ?? project.allowedTools ?? DEFAULT_ALLOWED_TOOLS;
     assertToolRules(allowedTools);
-    const implementer = input.implementer ?? DEFAULT_AGENT;
+    const implementer = pm?.agentId ?? input.implementer ?? DEFAULT_AGENT;
     // The default stands in only for another agent; a task it implements has no fallback.
     const defaultFallback = this.config.defaultImplementerFallback;
     const agents: TaskAgents = {
@@ -649,15 +665,25 @@ export class Harness {
       designerModel: modelOrNull(input.designerModel),
       designerEffort: effortOrNull(input.designerEffort),
     };
+    if (workflow === 'pm') {
+      agents.reviewer = null;
+      agents.spec = null;
+      agents.tester = null;
+      agents.designer = null;
+      agents.implementerFallback = null;
+    }
     this.checkProfiles(agents);
     const task = this.store.createTask({
+      workflow,
+      pm,
       title: input.title ?? firstLine(input.prompt),
       prompt: input.prompt,
       repoPath,
       baseRef: input.baseRef ?? project.baseRef ?? (await currentRef(repoPath)),
       workspace,
       mode,
-      verifyCommand: mode === 'loop' || agents.tester ? verifyCommand : null,
+      verifyCommand:
+        workflow === 'pm' ? verifyCommand : mode === 'loop' || agents.tester ? verifyCommand : null,
       acceptance,
       confirmPlan,
       contextPolicy,
@@ -667,8 +693,8 @@ export class Harness {
           (mode === 'loop' || agents.tester) && verifyCommand
             ? withTool(allowedTools, `Bash(${verifyCommand})`)
             : allowedTools,
-        skipPermissions: input.skipPermissions ?? false,
-        autoApprove: input.autoApprove ?? true,
+        skipPermissions: workflow === 'pm' ? false : (input.skipPermissions ?? false),
+        autoApprove: workflow === 'pm' ? false : (input.autoApprove ?? true),
       },
       agents,
     });
@@ -724,6 +750,23 @@ export class Harness {
       throw new Error(`task ${id} is ${task.status}; only a draft can be planned`);
     }
     if (task.workspace === 'base') this.assertFolderFree(task);
+    if (task.workflow === 'pm') {
+      if (message?.trim() || this.store.lastEvent(id, 'criteria_approved')) {
+        const text =
+          message?.trim() || 'Discuss the specification again before further implementation.';
+        this.store.appendEvent(id, null, 'pm_user', { text });
+        this.store.appendEvent(id, null, 'pm_answered', { discussing: true });
+        this.store.appendEvent(id, null, 'criteria', {
+          criteria: task.acceptance,
+          reply: text,
+          questions: [],
+        });
+      }
+      this.store.updateTask(id, { deferred: true, confirmPlan: true });
+      const queued = this.setStatus(id, 'queued', { resumeAt: null });
+      this.tick();
+      return queued;
+    }
     const hasSpec = task.mode === 'single' && !!this.workflow.specFile(id);
     if (task.mode === 'loop' && this.workflow.hasPlan(id)) {
       // The planner revises the approved plan in its own conversation, then waits for approval.
@@ -904,6 +947,55 @@ export class Harness {
     return task;
   }
 
+  /** Converts an idle legacy task without rewriting its history or resuming old approvals. */
+  convertToPm(id: number, pm: PmConfig): Task {
+    const task = this.requireTask(id);
+    if (task.workflow === 'pm') throw new Error('Task already uses PM workflow');
+    if (
+      !['stopped', 'failed', 'backlog', 'review'].includes(task.status) ||
+      this.running.has(id) ||
+      this.permissionRequests(id).length
+    )
+      throw new Error('Stop the task and resolve pending permissions before conversion');
+    validatePm(this.config, pm);
+    this.store.appendEvent(id, null, 'pm_converted', {
+      acceptance: task.acceptance,
+      specFile: this.specFile(id),
+      recentNotes: this.store
+        .eventsOfKind(id, 'role_note')
+        .slice(-3)
+        .map((e) => e.data),
+    });
+    if (task.acceptance && this.hasApprovedSpec(task))
+      this.store.appendEvent(id, null, 'criteria_approved', { criteria: task.acceptance });
+    this.store.updateTask(id, {
+      workflow: 'pm',
+      mode: 'single',
+      pm,
+      agents: { ...task.agents, implementer: pm.agentId },
+      permission: { ...task.permission, skipPermissions: false, autoApprove: false },
+    });
+    return this.setStatus(id, 'stopped');
+  }
+
+  /** Updates the PM and allowed worker models only while all sessions are stopped. */
+  setPm(id: number, pm: PmConfig): Task {
+    const task = this.requireTask(id);
+    if (
+      task.workflow !== 'pm' ||
+      this.running.has(id) ||
+      !['stopped', 'failed', 'backlog', 'review', 'done'].includes(task.status)
+    )
+      throw new Error('Stop the PM task before changing its models');
+    validatePm(this.config, pm);
+    const next = this.store.updateTask(id, {
+      pm,
+      agents: { ...task.agents, implementer: pm.agentId },
+    });
+    this.emit({ type: 'task', taskId: id, status: next.status });
+    return next;
+  }
+
   /**
    * Changes who works on a task and with which models and efforts; fields left out stay as
    * they are. A role whose model changes loses its effort unless the update sets one too,
@@ -913,6 +1005,7 @@ export class Harness {
    * a model or effort id is invalid; nothing changes then.
    */
   setAgents(id: number, update: AgentsUpdate): Task {
+    if (this.requireTask(id).workflow === 'pm') throw new Error('Use PM settings for this task');
     const task = this.requireTask(id);
     const swapsAgent =
       (update.implementer !== undefined && update.implementer !== task.agents.implementer) ||
@@ -976,6 +1069,8 @@ export class Harness {
    * about, also while it runs.
    */
   setAutoApprove(id: number, on: boolean): Task {
+    if (this.requireTask(id).workflow === 'pm' && on)
+      throw new Error('PM tasks route unlisted permissions to the PM');
     const task = this.requireTask(id);
     const updated = this.store.updateTask(id, {
       permission: { ...task.permission, autoApprove: on },
@@ -1038,6 +1133,13 @@ export class Harness {
       throw new Error(`task ${id} is ${task.status}, not waiting for plan approval`);
     }
     if (!message.trim()) throw new Error('feedback is empty');
+    if (task.workflow === 'pm') {
+      this.store.appendEvent(id, null, 'pm_user', { text: message.trim() });
+      this.store.appendEvent(id, null, 'pm_answered', { feedback: true });
+      const next = this.setStatus(id, 'queued');
+      this.tick();
+      return next;
+    }
     const change = this.workflow.specChange(id);
     if (change) {
       // A reply to a proposed spec change goes to the spec author, who proposes it again.
@@ -1101,6 +1203,8 @@ export class Harness {
    */
   approveCriteria(id: number, criteria?: string): Task {
     const task = this.requireTask(id);
+    if (task.workflow === 'pm' && pmQuestion(this.store, id)?.kind !== 'spec')
+      throw new Error('No PM specification is waiting for approval');
     if (task.status === 'awaiting_approval' && this.workflow.specChange(id)) {
       return this.approveSpecChange(id, criteria);
     }
@@ -1108,11 +1212,13 @@ export class Harness {
       throw new Error(`task ${id} is not waiting for its acceptance criteria to be approved`);
     }
     const agreed =
-      optionalText(criteria, 'criteria')?.trim() || this.workflow.criteriaProposal(task)?.criteria;
+      optionalText(criteria, 'criteria')?.trim() || this.criteriaProposal(task)?.criteria;
     if (!agreed) throw new Error('write the acceptance criteria to approve');
     this.store.updateTask(id, { acceptance: agreed });
     const approval: CriteriaApproval = { criteria: agreed };
     this.store.appendEvent(id, null, 'criteria_approved', approval);
+    if (task.workflow === 'pm')
+      this.store.appendEvent(id, null, 'pm_answered', { approved: agreed });
     this.notice(id, 'acceptance criteria approved');
     this.putAtPendingEnd(task);
     const next = this.setStatus(id, 'pending', { deferred: false });
@@ -1122,6 +1228,10 @@ export class Harness {
 
   /** Latest proposed criteria of a single task, until they are approved. */
   criteriaProposal(task: Task): CriteriaProposal | null {
+    if (task.workflow === 'pm')
+      return pmQuestion(this.store, task.id)?.kind === 'spec'
+        ? ((this.store.lastEvent(task.id, 'criteria')?.data as CriteriaProposal) ?? null)
+        : null;
     return this.workflow.criteriaProposal(task);
   }
 
@@ -1134,6 +1244,8 @@ export class Harness {
    * task holds the folder.
    */
   requestSpecRevision(id: number, message: string): Task {
+    if (this.requireTask(id).workflow === 'pm')
+      return this.chat(id, `The user requests a specification revision: ${message}`);
     const task = this.requireTask(id);
     if (task.mode !== 'single' || !this.workflow.specFile(id)) {
       throw new Error(`task ${id} has no spec file to change`);
@@ -1212,6 +1324,20 @@ export class Harness {
     const task = this.requireTask(id);
     const text = optionalText(message, 'message')?.trim();
     if (!text) throw new Error('message is empty');
+    if (task.workflow === 'pm') {
+      this.store.appendEvent(id, null, 'pm_user', { text });
+      if (pmQuestion(this.store, id)?.kind === 'spec') return this.planFeedback(id, text);
+      this.store.appendEvent(id, null, 'pm_answered', { text });
+      const pm = this.pms.get(id);
+      if (pm) {
+        pm.notify();
+        return task;
+      }
+      if (task.workspace === 'base') this.assertFolderFree(task);
+      const next = this.setStatus(id, 'queued');
+      this.tick();
+      return next;
+    }
     if (this.running.has(id) || !CHATTABLE.includes(task.status)) {
       this.store.appendEvent(id, null, 'chat_queued', { text } satisfies ChatQueued);
       this.emit({ type: 'task', taskId: id, status: task.status });
@@ -1229,6 +1355,12 @@ export class Harness {
    * the task. Null before the implementer has started or for an unknown task.
    */
   implementerSessionId(taskId: number): string | null {
+    if (this.store.getTask(taskId)?.workflow === 'pm')
+      return (
+        this.store
+          .listSessions(taskId)
+          .findLast((s) => s.role === 'pm' && s.agentSessionId !== null)?.id ?? null
+      );
     const task = this.store.getTask(taskId);
     if (!task) return null;
     return (
@@ -1378,6 +1510,7 @@ export class Harness {
     } finally {
       this.dropPermissions(task.id);
       this.running.delete(task.id);
+      this.pms.delete(task.id);
       this.activities.delete(task.id);
       const chat = this.unansweredChat(task.id);
       if (this.requireTask(task.id).status === 'paused_safety') reason = 'safety_pause';
@@ -1432,7 +1565,10 @@ export class Harness {
    */
   async mergeTask(id: number): Promise<MergeResult> {
     const task = this.requireTask(id);
-    if (task.status !== 'review') throw new Error(`task ${id} is ${task.status}, not review`);
+    if (task.status !== 'review' && !(task.workflow === 'pm' && task.status === 'done'))
+      throw new Error(`task ${id} is ${task.status}, not review`);
+    if (task.workflow === 'pm' && this.running.has(id))
+      throw new Error('PM is still finishing; retry after it stops');
     if (task.workspace === 'base') {
       throw new Error(
         `task ${id} works directly on ${task.baseRef}, so there is nothing to merge; mark it done`,
@@ -1508,6 +1644,10 @@ export class Harness {
     // awaited before queueing, so the agent finds the conflict markers.
     await startMerge(dir, task.baseRef);
     this.store.appendEvent(task.id, null, 'merge_conflict', conflict);
+    if (task.workflow === 'pm')
+      this.store.appendEvent(task.id, null, 'pm_merge_conflict', {
+        message: `The user requested merging into ${task.baseRef}. Resolve conflicts in ${files.join(', ')} using a worker, verify and review the result again.`,
+      });
     this.notice(
       task.id,
       `merging ${task.baseRef} conflicts in ${files.length} files; agent resolves`,
@@ -1620,6 +1760,14 @@ export class Harness {
     for (const task of dueForRetry(this.store.listTasks(), now)) {
       this.setStatus(task.id, 'queued', { resumeAt: null });
     }
+    for (const task of this.store.listTasks()) {
+      if (
+        task.workflow === 'pm' &&
+        task.status === 'waiting_quota' &&
+        !this.agentBlocked(task.pm!.agentId, now)
+      )
+        this.setStatus(task.id, 'queued', { resumeAt: null });
+    }
     // A task with a fallback goes on as soon as either agent has quota, not at one's reset.
     for (const task of this.store.listTasks()) {
       if (
@@ -1678,6 +1826,11 @@ export class Harness {
   }
 
   private nextSessionBlocked(task: Task, now: number): boolean {
+    if (task.workflow === 'pm')
+      return (
+        !!this.store.lastEvent(task.id, 'criteria_approved') &&
+        this.agentBlocked(task.pm!.agentId, now)
+      );
     if (this.workflow.isPlanningSession(task)) return false;
     return this.agentBlocked(this.workflow.nextAgentId(task), now);
   }
@@ -1772,6 +1925,54 @@ export class Harness {
     try {
       const ready = await this.ensureWorktree(task);
       try {
+        if (ready.workflow === 'pm') {
+          const pm = new PmWorkflow(
+            {
+              store: this.store,
+              config: this.config,
+              run: async (current, plan, sessionId, signal) => {
+                const adapter = this.adapterFor(plan.agentId);
+                await adapter.ensureReady?.();
+                this.setActivity(task.id, {
+                  phase: plan.role === 'pm' ? 'managing' : 'working',
+                  agentId: plan.agentId,
+                });
+                this.store.appendEvent(task.id, sessionId, 'workflow_run', { role: plan.role });
+                try {
+                  const outcome = await this.runOne(current, sessionId, plan, adapter, signal);
+                  if (outcome.reason === 'quota' && signal.aborted)
+                    this.setStatus(task.id, 'waiting_quota');
+                  return outcome;
+                } finally {
+                  this.dropSessionPermissions(task.id, sessionId);
+                }
+              },
+              status: (id, status) => {
+                this.setStatus(id, status);
+              },
+              blocked: (agentId) => this.agentBlocked(agentId, Date.now()),
+              permissions: (id) => this.permissionRequests(id),
+              answer: (id, requestId, behavior, reason) => {
+                const pending = this.permissions.get(id)?.get(requestId);
+                if (!pending) throw new Error('Permission request is expired or not pending');
+                this.settlePermission(id, pending, {
+                  behavior,
+                  rules: [],
+                  message: reason,
+                  auto: false,
+                  actor: 'pm',
+                });
+              },
+              notice: (id, message) => this.notice(id, message),
+            },
+            ready,
+            controller.signal,
+          );
+          this.pms.set(task.id, pm);
+          this.setStatus(task.id, 'running');
+          await pm.run();
+          return;
+        }
         await this.workflow.reviseSpecFile(ready);
         let plan = this.workflow.plan(ready);
         await this.workflow.syncNotes(ready);
@@ -1825,6 +2026,7 @@ export class Harness {
     } finally {
       this.dropPermissions(task.id);
       this.running.delete(task.id);
+      this.pms.delete(task.id);
       this.activities.delete(task.id);
       if (this.timer) this.tick();
     }
@@ -1936,7 +2138,7 @@ export class Harness {
     let replied = false; // the agent gave its reply; usage reported after it stops the next one
     // The sessions the pause level keeps from starting also stop when it is reached mid-run.
     if (!chat && !this.workflow.isPlanningSession(task)) {
-      this.quotaStops.set(task.id, {
+      this.quotaStops.set(sessionId, {
         provider,
         stop: () => {
           if (quotaPause || safetyPause || replied) return;
@@ -1988,6 +2190,7 @@ export class Harness {
       },
       spec: {
         cwd: task.worktreePath!,
+        ...(task.workflow === 'pm' ? { managedWorker: true } : {}),
         sessionId: plan.resume
           ? plan.resume.agentSessionId
           : adapter.capabilities.sessionIds === 'harness'
@@ -1995,15 +2198,26 @@ export class Harness {
             : null,
         resume: plan.resume !== null,
         prompt: plan.prompt,
-        model: roleModel(agents, plan.role) ?? this.config.agents[plan.agentId]!.model,
-        effort: sessionEffort(agents, plan.role, this.config.agents[plan.agentId]!),
+        model:
+          task.workflow === 'pm'
+            ? ((plan as PmSessionPlan).pmModel ?? this.config.agents[plan.agentId]!.model)
+            : (roleModel(agents, plan.role) ?? this.config.agents[plan.agentId]!.model),
+        effort:
+          task.workflow === 'pm'
+            ? ((plan as PmSessionPlan).pmEffort ?? this.config.agents[plan.agentId]!.effort ?? null)
+            : sessionEffort(agents, plan.role, this.config.agents[plan.agentId]!),
+        ...((plan as PmSessionPlan).mcpServers
+          ? { mcpServers: (plan as PmSessionPlan).mcpServers! }
+          : {}),
         access: plan.access,
         // A read-only session may run the task's own check, but nothing that edits.
         allowedTools:
           plan.access === 'readOnly'
-            ? task.verifyCommand && plan.role !== 'reviewer'
-              ? [`Bash(${task.verifyCommand})`]
-              : []
+            ? plan.role === 'pm'
+              ? ['mcp__harnessboard__*']
+              : task.verifyCommand && plan.role !== 'reviewer'
+                ? [`Bash(${task.verifyCommand})`]
+                : []
             : [...new Set([...task.permission.allowedTools, ...this.config.allowedTools])],
         skipPermissions: task.permission.skipPermissions,
         // Read-only sessions must not change anything, so they are never offered more tools.
@@ -2037,7 +2251,7 @@ export class Harness {
       onCompacted: () => this.store.appendEvent(task.id, sessionId, 'compacted', {}),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
-    this.quotaStops.delete(task.id);
+    this.quotaStops.delete(sessionId);
     const record: UsageRecord = {
       role: plan.role,
       agentId: plan.agentId,
@@ -2072,11 +2286,12 @@ export class Harness {
     const { requestId, toolName, summary, suggestedRules } = event;
     const task = this.requireTask(taskId);
     const auto = task.permission.autoApprove === true;
-    const risk = auto
-      ? typeof event.input.approvalRisk === 'string'
-        ? event.input.approvalRisk
-        : riskOf(toolName, event.input, task.worktreePath!)
-      : null;
+    const risk =
+      auto || task.workflow === 'pm'
+        ? typeof event.input.approvalRisk === 'string'
+          ? event.input.approvalRisk
+          : riskOf(toolName, event.input, task.worktreePath!)
+        : null;
     const request: PermissionRequest = {
       requestId,
       sessionId,
@@ -2093,7 +2308,7 @@ export class Harness {
         ? typeof event.input.approvalRisk !== 'string' &&
           matchingCodexRules(String(event.input.command ?? ''), allowed).length > 0
         : suggestedRules.length > 0 && suggestedRules.every((rule) => allowed.includes(rule));
-    if (covered || (auto && risk === null)) {
+    if (covered || (auto && risk === null && task.workflow !== 'pm')) {
       this.recordDecision(taskId, request, {
         behavior: 'allow',
         rules: [],
@@ -2107,7 +2322,8 @@ export class Harness {
       if (!waiting) this.permissions.set(taskId, (waiting = new Map()));
       waiting.set(requestId, { request, provider, resolve });
       this.store.appendEvent(taskId, sessionId, 'permission_request', request);
-      this.setStatus(taskId, 'awaiting_permission');
+      if (task.workflow !== 'pm') this.setStatus(taskId, 'awaiting_permission');
+      this.pms.get(taskId)?.notify();
     });
   }
 
@@ -2155,6 +2371,29 @@ export class Harness {
     const record: PermissionDecisionRecord = { requestId, toolName, summary, ...outcome };
     this.store.appendEvent(taskId, request.sessionId, 'permission_decision', record);
     this.emit({ type: 'task', taskId, status: this.requireTask(taskId).status });
+  }
+
+  /** A finished or cancelled child cannot leave a live approval behind. */
+  private dropSessionPermissions(taskId: number, sessionId: string): void {
+    const waiting = this.permissions.get(taskId);
+    for (const [id, pending] of waiting ?? []) {
+      if (pending.request.sessionId !== sessionId) continue;
+      waiting!.delete(id);
+      this.recordDecision(taskId, pending.request, {
+        behavior: 'deny',
+        rules: [],
+        message: 'The agent session ended.',
+        auto: true,
+      });
+      pending.resolve({ behavior: 'deny', message: 'The agent session ended.' });
+    }
+    const held = this.held.get(taskId);
+    if (held) {
+      for (const reply of held.replies.filter((r) => r.pending.request.sessionId === sessionId))
+        reply.pending.resolve({ behavior: 'deny', message: 'The agent session ended.' });
+      held.replies = held.replies.filter((r) => r.pending.request.sessionId !== sessionId);
+      if (!held.replies.length) this.held.delete(taskId);
+    }
   }
 
   /** Denies whatever a task still waits on, e.g. when it is stopped; the agent is ending. */

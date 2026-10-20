@@ -1,8 +1,8 @@
 # Harnessboard
 
-New tasks automatically discuss their spec in Draft. Confirm the spec to join Pending; prefilled criteria still require confirmation.
-
-Completed tasks can continue their original conversation through Chat, including after merging. To change the specification, reopen the task in Draft, discuss the changes, and approve the revised specification before execution.
+New tasks start with one PM: agree the direction and specification once, then let it
+coordinate workers, decide permissions and review architecture and functionality.
+Existing tasks keep their original workflow. [PM workflow and limits](docs/pm-workflow.md).
 
 ![version](https://img.shields.io/badge/version-0.2.0-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
@@ -31,11 +31,10 @@ side, and none of them touches your files until you say so.
 - **Token spike protection:** tasks pause and notify you when reported consumption exceeds 100,000 tokens within 60 seconds, including cache reads/writes. Change the rule in Settings; resume manually to restart monitoring. [Reporting limits and configuration](docs/configuration.md#token-spike-protection).
 - **Safe by default:** every task works in its own git branch and folder, so a bad result
   costs you nothing.
-- **Small contexts:** each implementer, tester and reviewer keeps its own conversation.
-  Harnessboard compacts it after completed turns that reach the context warning, keeping useful context across features and fixes.
-- **Clear handoffs:** the implementer owns the code and its tests, testers run formal checks,
-  reviewers inspect architecture and code rules; test ideas reach the implementer as notes.
-  Writing stages require committed changes and valid commit messages.
+- **Small contexts:** PM and workers retain their conversations. Unchanged specifications
+  and rules are not resent; fixes reuse the worker's context.
+- **One PM:** the PM communicates with you, delegates code and tests, judges permissions,
+  and inspects architecture, functionality and verification evidence before acceptance.
 - **Quota-aware:** it watches your Claude and Codex usage, pauses work near the limit, even
   in the middle of a session, and continues after the reset.
 - **No API key:** it drives the `claude` program you already signed in to.
@@ -141,7 +140,7 @@ hb ls                    # one line per task: number, state, context used, title
 hb logs 1 -f             # follow what the agent does (Ctrl+C to stop following)
 ```
 
-**5. Review the result** when `hb ls` shows `review` (the board puts it under **Needs you**):
+**5. Inspect the accepted result** when the PM marks the task `done`:
 
 ```bash
 hb diff 1                # exactly what the agent changed
@@ -167,29 +166,19 @@ The task's folder and branch are removed after the merge, and the task moves to 
 
 ```mermaid
 flowchart LR
-  A[Draft] --> B[Agree what 'done' means]
-  B --> C[Agent builds in its own branch]
-  C --> D{Review}
-  D -- changes needed --> C
-  D -- looks good --> E[You merge]
-  E --> F[Done]
+  U[Agree direction with PM] --> A[Approve specification once]
+  A --> W[PM delegates implementation and tests]
+  W --> R[PM reviews architecture and functionality]
+  R -->|fixes| W
+  R -->|accepted| D[Done]
+  D --> M[You choose whether to merge]
 ```
 
-_Orange **Needs you** cards on the board are the steps where only you can move on: answering
-a question, approving the criteria, allowing a risky command, or reviewing._
-
-Task details let you change context wrap-up, hard and compaction thresholds while work is in progress. Changes apply from the next chat or execution turn; the current turn keeps its original budget. Compactable conversations remain available for questions beyond the wrap-up budget. Paused, incomplete loops show their verified progress rather than a previous step’s approval.
-
-Each role continues in its own conversation, compacted after completed turns at the context warning:
-
-```mermaid
-flowchart LR
-  S1[Role's session] --> H[Finish stage and commit changes]
-  H --> W{Context warning reached?}
-  W -->|Yes| C[Compact conversation]
-  W -->|No| S2
-  C --> S2[Next stage in the same session]
-```
+The PM asks you when scope, authorization or an execution problem cannot be resolved.
+It normally reuses one worker; at most two run, with one writer. Same-platform and
+cross-platform workers use managed CLI sessions. PM currently supports local Claude Code
+and Codex; Gemini and Docker profiles are worker options. See [PM workflow](docs/pm-workflow.md)
+for configuration, permissions, context reuse and legacy task conversion.
 
 ## Everyday commands
 

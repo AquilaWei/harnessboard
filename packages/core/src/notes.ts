@@ -14,6 +14,8 @@ export const NOTES_FILE = '.harnessboard/notes.md';
 export const NOTES_HEADING = '## Notes';
 
 const ROLE_NAMES: Record<AgentRole, string> = {
+  pm: 'PM',
+  worker: 'Worker',
   spec: 'Spec author',
   designer: 'Designer',
   implementer: 'Implementer',

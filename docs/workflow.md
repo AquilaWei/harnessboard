@@ -1,4 +1,7 @@
-# Task workflow: criteria, roles and review
+# Legacy task workflow: criteria, roles and review
+
+New tasks now use [PM-led orchestration](pm-workflow.md). This page describes existing
+legacy tasks, `hb add --legacy` and `hb loop`.
 
 New tasks automatically discuss their specification in Draft. Only explicit spec
 approval moves them to Pending, where normal quota and slot scheduling applies.

@@ -42,6 +42,27 @@ message is how it stops cleanly; after 10 s the app kills it.
 The installers come from `electron-builder`. They take their version from
 `packages/server/package.json`, through `scripts/dist.mjs`.
 
+## PM orchestration
+
+New tasks use `PmWorkflow` (`core/src/pm.ts`), while existing tasks keep `Workflow`.
+The `workflow` discriminator and PM/model pool are added by an append-only SQLite
+migration; child snapshots and decisions are durable events. `Harness` still owns
+worktrees, session execution, quotas, cancellation and token protection.
+
+`pm-tools.ts` serves a short-lived, loopback MCP dispatcher through a generated stdio
+bridge. Each PM run receives an independent capability with no task selector. Workers
+receive no bridge configuration. Claude Code and Codex adapters inject it for PM sessions;
+Docker/Gemini profiles currently serve as workers only. Closing the bridge revokes access.
+The bridge uses Electron's Node mode when launched by the desktop utility process.
+
+Dispatch is asynchronous. The PM yields its turn while workers run, and child events wake
+it. Per-task limits allow two workers and one writer. Native delegation is disabled until
+its permissions, results, cancellation and accounting can satisfy the same contract.
+Task totals contain managed sessions once; PM/child views filter those same usage records.
+
+See [PM-led tasks](pm-workflow.md) for interfaces, permissions, context behavior,
+acceptance and migration. The role-based sections below document legacy tasks.
+
 ## Agents, profiles and roles
 
 - **Provider:** an agent CLI Harnessboard knows how to drive. Today there are two,

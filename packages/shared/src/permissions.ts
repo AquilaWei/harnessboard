@@ -108,6 +108,7 @@ export interface PermissionDecision {
 
 /** What was decided, as kept in the task's history. */
 export interface PermissionDecisionRecord {
+  actor?: 'pm' | 'user';
   requestId: string;
   toolName: string;
   summary: string;

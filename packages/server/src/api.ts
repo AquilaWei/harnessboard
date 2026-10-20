@@ -330,6 +330,11 @@ export function createApi(
     return c.json(harness.setAllowedTools(taskId(c), rules));
   });
 
+  app.put('/tasks/:id/pm', async (c) => c.json(harness.setPm(taskId(c), await c.req.json())));
+  app.post('/tasks/:id/pm/convert', async (c) =>
+    c.json(harness.convertToPm(taskId(c), await c.req.json())),
+  );
+
   app.post('/tasks/:id/queue', (c) => c.json(harness.queueTask(taskId(c))));
   app.post('/tasks/:id/plan', async (c) => {
     const body = await c.req.json<{ message?: string }>().catch(() => ({}) as { message?: string });

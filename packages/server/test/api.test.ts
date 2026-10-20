@@ -61,7 +61,14 @@ const post = (url: string, body?: unknown, headers: Record<string, string> = {})
   app.request(url, {
     method: 'POST',
     headers: { ...local, 'content-type': 'application/json', ...headers },
-    body: body === undefined ? null : JSON.stringify(body),
+    body:
+      body === undefined
+        ? null
+        : JSON.stringify(
+            url === '/api/tasks' && body && typeof body === 'object'
+              ? { workflow: 'legacy', ...body }
+              : body,
+          ),
   });
 
 const putAgents = (id: number, body: unknown) =>
@@ -190,7 +197,7 @@ describe('version API', () => {
 
 describe('tasks API', () => {
   it('shows the resumed implementer context after a newer reviewer session', async () => {
-    const task = await harness.createTask({ prompt: 'Fix it', repo });
+    const task = await harness.createTask({ workflow: 'legacy', prompt: 'Fix it', repo });
     harness.store.startSession('worker', task.id, 'implementer', 'claude', 'worker', 1000);
     harness.store.startSession('reviewer', task.id, 'reviewer', 'checker', 'reviewer', 2000);
     harness.store.updateSessionContext('worker', 1234, 100000);
@@ -534,6 +541,7 @@ describe('loop progress', () => {
 
   async function loopTaskWithSnapshot(): Promise<number> {
     const task = await harness.createTask({
+      workflow: 'legacy',
       prompt: 'Build it',
       repo,
       mode: 'loop',
@@ -716,7 +724,12 @@ describe('reviewed tasks', () => {
   });
 
   it('lists review steps in the timeline', async () => {
-    const task = await harness.createTask({ prompt: 'Build it', repo, reviewer: 'checker' });
+    const task = await harness.createTask({
+      workflow: 'legacy',
+      prompt: 'Build it',
+      repo,
+      reviewer: 'checker',
+    });
     const request = { round: 1, since: 'a', head: 'b', status: '' };
     const review = {
       round: 1,
@@ -735,7 +748,12 @@ describe('reviewed tasks', () => {
   });
 
   it('shows the latest review on the task', async () => {
-    const task = await harness.createTask({ prompt: 'Build it', repo, reviewer: 'checker' });
+    const task = await harness.createTask({
+      workflow: 'legacy',
+      prompt: 'Build it',
+      repo,
+      reviewer: 'checker',
+    });
     const review = { round: 1, agentId: 'checker', verdict: 'approve', findings: '', head: 'b' };
     harness.store.appendEvent(task.id, null, 'review', review);
     const res = await app.request(`/api/tasks/${task.id}`, { headers: local });
@@ -777,7 +795,12 @@ describe('folders API', () => {
 
 describe('plan API', () => {
   it('shows no features before the planner has run', async () => {
-    const task = await harness.createTask({ prompt: 'Build it', repo, mode: 'loop' });
+    const task = await harness.createTask({
+      workflow: 'legacy',
+      prompt: 'Build it',
+      repo,
+      mode: 'loop',
+    });
     const res = await app.request(`/api/tasks/${task.id}/plan`, { headers: local });
     expect(await res.json()).toEqual({
       features: null,
@@ -790,7 +813,12 @@ describe('plan API', () => {
   });
 
   it('refuses feedback while the plan is not waiting for approval', async () => {
-    const task = await harness.createTask({ prompt: 'Build it', repo, mode: 'loop' });
+    const task = await harness.createTask({
+      workflow: 'legacy',
+      prompt: 'Build it',
+      repo,
+      mode: 'loop',
+    });
     const res = await post(
       `/api/tasks/${task.id}/plan/feedback`,
       { message: 'more tests' },
@@ -804,7 +832,7 @@ describe('plan API', () => {
 
 describe('safety pause task API', () => {
   it('exposes pause evidence while a task waits for manual resume', async () => {
-    const task = await harness.createTask({ prompt: 'Build it', repo });
+    const task = await harness.createTask({ workflow: 'legacy', prompt: 'Build it', repo });
     const evidence = {
       triggeredAt: 1,
       observedTokens: 100_001,
@@ -822,7 +850,7 @@ describe('safety pause task API', () => {
 
 describe('task context updates', () => {
   it('persists a new budget while a task is in progress', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await harness.createTask({ workflow: 'legacy', prompt: 'x', repo });
     harness.store.updateTask(task.id, { status: 'running' });
     const response = await app.request(`/api/tasks/${task.id}/context`, {
       method: 'PUT',
@@ -840,7 +868,7 @@ describe('task context updates', () => {
   });
 
   it('rejects an invalid budget without overwriting the old budget', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await harness.createTask({ workflow: 'legacy', prompt: 'x', repo });
     const previous = task.contextPolicy;
     const response = await app.request(`/api/tasks/${task.id}/context`, {
       method: 'PUT',
@@ -849,5 +877,58 @@ describe('task context updates', () => {
     });
     expect(response.status).toBe(400);
     expect(harness.store.getTask(task.id)?.contextPolicy).toEqual(previous);
+  });
+});
+
+describe('PM workflow API', () => {
+  it('defaults HTTP task creation to a PM with an explicit worker pool', async () => {
+    const response = await app.request('/api/tasks', {
+      method: 'POST',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ prompt: 'Add greeting', repo }),
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      workflow: 'pm',
+      pm: { agentId: 'claude', workers: [{ agentId: 'claude', models: [null] }] },
+      permission: { autoApprove: false, skipPermissions: false },
+    });
+  });
+
+  it('rejects changing PM configuration while the task is queued', async () => {
+    const task = await harness.createTask({ workflow: 'pm', prompt: 'Add greeting', repo });
+    const response = await app.request(`/api/tasks/${task.id}/pm`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify(task.pm),
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('converts an idle legacy task without approving its draft criteria', async () => {
+    const task = await harness.createTask({
+      workflow: 'legacy',
+      prompt: 'Add greeting',
+      repo,
+      acceptance: '- hello',
+    });
+    harness.stopTask(task.id);
+    const response = await post(
+      `/api/tasks/${task.id}/pm/convert`,
+      {
+        agentId: 'claude',
+        model: null,
+        effort: null,
+        workers: [{ agentId: 'checker', models: ['opus'] }],
+      },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      workflow: 'pm',
+      status: 'stopped',
+      acceptance: '- hello',
+    });
+    expect(harness.store.lastEvent(task.id, 'criteria_approved')).toBeUndefined();
   });
 });

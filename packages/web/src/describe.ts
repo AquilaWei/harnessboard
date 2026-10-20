@@ -95,6 +95,10 @@ function describeRunning(task: TaskView): Description {
   if (!activity) return d('starting', 'working');
   const agent = activity.agentId ?? '';
   switch (activity.phase) {
+    case 'managing':
+      return d('managing', 'working', { agent });
+    case 'working':
+      return d('implementing', 'working', { agent });
     case 'planning':
       // An earlier proposal exists: this session is revising it with the user's feedback.
       if (task.specRevisionPending) return d('revisingSpec', 'working', { agent });

@@ -215,7 +215,7 @@ export async function createHistoricalTask(
       input: import('@harnessboard/shared').CreateTaskInput,
     ): Promise<import('@harnessboard/shared').Task>;
   };
-  const task = await factory.createDraft(input);
+  const task = await factory.createDraft({ ...input, workflow: 'legacy' });
   harness.store.updateTask(task.id, {
     confirmPlan: input.confirmPlan ?? (input.mode === 'loop' || !input.acceptance),
   });

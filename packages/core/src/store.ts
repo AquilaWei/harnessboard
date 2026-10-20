@@ -21,6 +21,8 @@ import type {
 } from '@harnessboard/shared';
 
 export interface NewTask {
+  workflow?: Task['workflow'];
+  pm?: Task['pm'];
   title: string;
   prompt: string;
   repoPath: string;
@@ -106,6 +108,8 @@ const MIGRATIONS = [
   // A task planned in Draft: once its spec is approved it waits as `pending`, not `queued`.
   `ALTER TABLE tasks ADD COLUMN deferred INTEGER NOT NULL DEFAULT 0;`,
   `ALTER TABLE tasks ADD COLUMN queue_order REAL;`,
+  `ALTER TABLE tasks ADD COLUMN workflow TEXT NOT NULL DEFAULT 'legacy';
+   ALTER TABLE tasks ADD COLUMN pm TEXT;`,
 ];
 
 /** A device's Web Push subscription, with the device it reaches. */
@@ -179,7 +183,11 @@ export class Store {
         now,
         now,
       );
-    return this.getTask(Number(result.lastInsertRowid))!;
+    return this.updateTask(
+      Number(result.lastInsertRowid),
+      { workflow: input.workflow ?? 'legacy', pm: input.pm ?? null },
+      now,
+    );
   }
 
   getTask(id: number): Task | undefined {
@@ -196,6 +204,9 @@ export class Store {
     fields: Partial<
       Pick<
         Task,
+        | 'mode'
+        | 'workflow'
+        | 'pm'
         | 'status'
         | 'branch'
         | 'worktreePath'
@@ -216,6 +227,9 @@ export class Store {
     now = Date.now(),
   ): Task {
     const columns: Record<string, string> = {
+      mode: 'mode',
+      workflow: 'workflow',
+      pm: 'pm',
       status: 'status',
       branch: 'branch',
       worktreePath: 'worktree_path',
@@ -576,6 +590,8 @@ type Row = Record<string, unknown>;
 
 function toTask(row: Row): Task {
   return {
+    workflow: row.workflow as 'legacy' | 'pm',
+    pm: row.pm == null ? null : JSON.parse(String(row.pm)),
     id: Number(row.id),
     title: String(row.title),
     prompt: String(row.prompt),

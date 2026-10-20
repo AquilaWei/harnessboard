@@ -91,6 +91,30 @@ async function emit(lines) {
       log();
       process.exit(line.__exit);
     }
+    if (line.__pm) {
+      const index = process.argv.indexOf('--mcp-config');
+      const config = JSON.parse(process.argv[index + 1]).mcpServers.harnessboard;
+      const call = async (name, args = {}) => {
+        const response = await fetch(config.env.HB_PM_ENDPOINT, {
+          method: 'POST',
+          headers: { authorization: 'Bearer ' + config.env.HB_PM_CAPABILITY },
+          body: JSON.stringify({ method: 'tools/call', params: { name, arguments: args } }),
+        });
+        const result = await response.json();
+        if (result.isError) throw new Error(result.content[0].text);
+        return JSON.parse(result.content[0].text);
+      };
+      const args = { ...(line.__pm.arguments ?? {}) };
+      if (args.id === '$work') args.id = (await call('work_status'))[0].id;
+      if (args.requestId === '$permission')
+        args.requestId = JSON.parse(
+          received.at(-1).split('Pending permissions:\n')[1].split('\n\n')[0],
+        )[0].requestId;
+      if (args.head === '$head')
+        args.head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+      await call(line.__pm.name, args);
+      continue;
+    }
     if (line.__write) {
       mkdirSync(dirname(line.__write.path), { recursive: true });
       writeFileSync(line.__write.path, line.__write.content);

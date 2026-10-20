@@ -3,6 +3,21 @@
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
+## Unreleased
+
+### Added
+
+- New tasks use a PM conversation to agree the specification, coordinate permitted
+  same-platform or cross-platform workers, decide one-time permissions, and review
+  architecture, functionality and verification evidence before completion.
+- Reuse PM/worker conversations and send changed specifications and rules instead of
+  repeating them. Child summaries are bounded; full evidence remains available.
+- Show PM/worker results and usage, configure their model pool, and convert stopped
+  legacy tasks while preserving history. Existing tasks retain their original workflow.
+- Limit each task to two workers and one writer. Native subagents remain disabled until
+  their lifecycle and usage can be tracked. PM currently requires local Claude Code or
+  Codex; Gemini and Docker profiles can be workers. Real-model acceptance is pending.
+
 ## 0.2.0 - 2026-10-19
 
 ### Changed

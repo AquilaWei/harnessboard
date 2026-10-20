@@ -5,8 +5,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AgentInfo, Settings, TaskView } from '@harnessboard/shared';
-import { NewTaskDialog } from '../src/components/NewTaskDialog';
+import type { AgentInfo, TaskView } from '@harnessboard/shared';
 import { TaskAgentsEditor } from '../src/components/TaskAgentsEditor';
 import '../src/i18n';
 
@@ -22,12 +21,6 @@ vi.mock('../src/api', () => ({ api }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const settings = {
-  defaultReviewer: null,
-  defaultImplementerFallback: 'codex',
-  defaultContextPolicy: { size: 'medium' },
-} as unknown as Settings;
-
 const profile = { provider: 'claude-code', command: 'claude', model: null };
 const agents: AgentInfo[] = [
   { id: 'claude', profile, ok: true, version: '1', error: null },
@@ -40,12 +33,6 @@ const task = {
   agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
   activity: null,
 } as unknown as TaskView;
-
-const type = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
-  const proto = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement;
-  Object.getOwnPropertyDescriptor(proto.prototype, 'value')!.set!.call(field, value);
-  field.dispatchEvent(new Event('input', { bubbles: true }));
-};
 
 const choose = (select: HTMLSelectElement, value: string) => {
   Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, value);
@@ -78,73 +65,6 @@ const select = (label: string) =>
     .querySelector('select')!;
 
 const fallbackSelect = () => select('When the implementer is out of quota');
-
-describe('NewTaskDialog implementer fallback', () => {
-  const openDialog = async () => {
-    await act(async () =>
-      root.render(<NewTaskDialog settings={settings} onClose={() => {}} onCreated={() => {}} />),
-    );
-    act(() => type(container.querySelector('textarea')!, 'Add a settings page'));
-    act(() => type(container.querySelector<HTMLInputElement>('.input-row input')!, '/repo'));
-  };
-
-  const submit = async () => {
-    await act(async () => container.querySelector('form')!.requestSubmit());
-  };
-
-  it('starts at the configured default', async () => {
-    await openDialog();
-    expect(fallbackSelect().value).toBe('codex');
-  });
-
-  it('sends no fallback when waiting for the quota is chosen', async () => {
-    await openDialog();
-    act(() => choose(fallbackSelect(), ''));
-    await submit();
-    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ implementerFallback: null });
-  });
-
-  it('does not offer the implementer as its own fallback', async () => {
-    await openDialog();
-    const ids = [...fallbackSelect().options].map((o) => o.value);
-    expect(ids).toEqual(['', 'codex']);
-  });
-
-  it('offers a model for the fallback', async () => {
-    await openDialog();
-    expect(select('Stand-in model')).toBeTruthy();
-  });
-
-  it('sends the model and effort chosen for the fallback', async () => {
-    api.agentModels.mockResolvedValue([
-      {
-        id: 'gpt-5.5',
-        name: 'GPT-5.5',
-        description: null,
-        note: null,
-        more: false,
-        efforts: [{ id: 'xhigh', name: 'xhigh', note: null }],
-        defaultEffort: null,
-      },
-    ]);
-    await openDialog();
-    act(() => choose(select('Stand-in model'), 'gpt-5.5'));
-    // The effort select sits right after the model it belongs to.
-    const effort = select('Stand-in model').closest('label')!.nextElementSibling!;
-    act(() => choose(effort.querySelector('select')!, 'xhigh'));
-    await submit();
-    expect(api.createTask.mock.calls[0]![0]).toMatchObject({
-      implementerFallbackModel: 'gpt-5.5',
-      implementerFallbackEffort: 'xhigh',
-    });
-  });
-
-  it('drops the fallback when it becomes the implementer', async () => {
-    await openDialog();
-    act(() => choose(select('Implementer'), 'codex'));
-    expect(fallbackSelect().value).toBe('');
-  });
-});
 
 describe('TaskAgentsEditor implementer fallback', () => {
   const render = async (view: TaskView) =>

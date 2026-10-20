@@ -88,12 +88,13 @@ const status = (id: number) => harness.store.getTask(id)!.status;
 
 describe('creating a single task', () => {
   it('discusses criteria first when none are given', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo });
+    const task = await harness.createTask({ workflow: 'legacy', prompt: 'x', repo });
     expect([task.confirmPlan, task.acceptance]).toEqual([true, null]);
   });
 
   it('discusses supplied criteria before approval', async () => {
     const task = await harness.createTask({
+      workflow: 'legacy',
       prompt: 'x',
       repo,
       acceptance: ' - prints hi ',
@@ -102,7 +103,12 @@ describe('creating a single task', () => {
   });
 
   it('requires discussion even when creation requests skipping it', async () => {
-    const task = await harness.createTask({ prompt: 'x', repo, confirmPlan: false });
+    const task = await harness.createTask({
+      workflow: 'legacy',
+      prompt: 'x',
+      repo,
+      confirmPlan: false,
+    });
     expect(task.confirmPlan).toBe(true);
   });
 });

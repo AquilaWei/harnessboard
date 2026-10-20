@@ -42,7 +42,7 @@ export function ChatPanel({ task, onSent, onError }: Props) {
   }, [entries?.length]);
 
   const replying = task.status === 'running' || task.status === 'awaiting_permission';
-  const busy = !CHATTABLE.includes(task.status);
+  const busy = task.workflow === 'pm' ? false : !CHATTABLE.includes(task.status);
   const canSend = busy || task.latestSessionId !== null;
   const hasPending = entries?.some((e) => e.kind === 'pending') ?? false;
 
@@ -91,6 +91,7 @@ export function ChatPanel({ task, onSent, onError }: Props) {
   return (
     <div className="chat">
       {entries?.length === 0 && <p className="hint">{t('chat.empty')}</p>}
+      {task.workflow === 'pm' && task.pmQuestion && <Markdown text={task.pmQuestion.message} />}
       <ol className="chat-log">
         {entries?.map((entry, i) => (
           <ChatLine key={i} entry={entry} />

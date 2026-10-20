@@ -48,7 +48,7 @@ export class CodexAdapter implements AgentAdapter {
       throw new Error('resuming a Codex session needs its thread id');
     const readOnly = spec.access === 'readOnly';
     const skip = !readOnly && spec.skipPermissions;
-    return [
+    const args = [
       'app-server',
       '--listen',
       'stdio://',
@@ -59,6 +59,17 @@ export class CodexAdapter implements AgentAdapter {
       '-c',
       'approvals_reviewer="user"',
     ];
+    if (spec.mcpServers) {
+      for (const [name, server] of Object.entries(spec.mcpServers)) {
+        const prefix = `mcp_servers.${name}`;
+        args.push('-c', `${prefix}.command=${JSON.stringify(server.command)}`);
+        args.push('-c', `${prefix}.args=${JSON.stringify(server.args)}`);
+        for (const [key, value] of Object.entries(server.env))
+          args.push('-c', `${prefix}.env.${key}=${JSON.stringify(value)}`);
+      }
+    }
+    if (spec.mcpServers || spec.managedWorker) args.push('-c', 'features.multi_agent=false');
+    return args;
   }
 
   createConnection(spec: SessionSpec, write: (data: string) => void) {

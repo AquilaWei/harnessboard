@@ -53,6 +53,11 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       spec.resume ? '--resume' : '--session-id',
       spec.sessionId,
     ];
+    if (spec.mcpServers) {
+      args.push('--mcp-config', JSON.stringify({ mcpServers: spec.mcpServers }));
+      args.push('--strict-mcp-config');
+    }
+    if (spec.mcpServers || spec.managedWorker) args.push('--disallowedTools', 'Agent', 'Task');
     if (spec.model) args.push('--model', spec.model);
     if (spec.effort) args.push('--effort', spec.effort);
     if (spec.access === 'readOnly') {

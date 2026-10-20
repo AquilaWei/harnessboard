@@ -199,6 +199,10 @@ function send<T>(method: string, path: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
+  setPm: (id: number, pm: import('@harnessboard/shared').PmConfig) =>
+    send<TaskView>('PUT', `/tasks/${id}/pm`, pm),
+  convertToPm: (id: number, pm: import('@harnessboard/shared').PmConfig) =>
+    send<TaskView>('POST', `/tasks/${id}/pm/convert`, pm),
   status: () => request<HarnessStatus>('/status'),
   version: () => request<VersionInfo>('/version'),
   tasks: () => request<TaskView[]>('/tasks'),

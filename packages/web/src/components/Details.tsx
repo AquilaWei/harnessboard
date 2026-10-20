@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { PmDetails } from './PmDetails';
 import { useTranslation } from 'react-i18next';
 import type { TaskDetail } from '@harnessboard/shared';
 import { TaskContextEditor } from './TaskContextEditor';
@@ -21,9 +22,10 @@ export function Details({ task, onSaved, onError }: Props) {
       {task.sessionCount > 0 && <UsageSummary usage={task.usage} />}
       <dl className="facts">
         <dt>{t('fields.mode')}</dt>
-        <dd>{t(`form.modes.${task.mode}`)}</dd>
+        <dd>{task.workflow === 'pm' ? 'PM' : t(`form.modes.${task.mode}`)}</dd>
         <dt>{t('fields.agents')}</dt>
         <dd>
+          {task.workflow !== 'pm' && <PmDetails task={task} onSaved={onSaved} onError={onError} />}
           <TaskAgentsEditor task={task} onSaved={onSaved} onError={onError} />
         </dd>
         {task.verifyCommand && (

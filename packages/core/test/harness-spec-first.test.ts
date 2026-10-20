@@ -43,6 +43,7 @@ afterEach(async () => {
 });
 it('automatically discusses a new task in Draft even with bypass flags and supplied criteria', async () => {
   const task = await harness.createTask({
+    workflow: 'legacy',
     prompt: 'Add a greeting',
     repo,
     acceptance: '- initial idea',
@@ -57,25 +58,25 @@ it('automatically discusses a new task in Draft even with bypass flags and suppl
   });
 });
 it('only moves an initial discussion to Pending after explicit approval', async () => {
-  const task = await harness.createTask({ prompt: 'Add a greeting', repo });
+  const task = await harness.createTask({ workflow: 'legacy', prompt: 'Add a greeting', repo });
   await harness.waitForIdle();
   expect(harness.approveCriteria(task.id)).toMatchObject({ status: 'pending', deferred: false });
 });
 it('refuses to put a stopped unapproved discussion in Pending', async () => {
-  const task = await harness.createTask({ prompt: 'Add a greeting', repo });
+  const task = await harness.createTask({ workflow: 'legacy', prompt: 'Add a greeting', repo });
   await harness.waitForIdle();
   harness.store.updateTask(task.id, { status: 'stopped' });
   expect(() => harness.pendTask(task.id)).toThrow(/spec approval/);
 });
 it('refuses to directly queue an unapproved draft', async () => {
-  const task = await harness.createTask({ prompt: 'Add a greeting', repo });
+  const task = await harness.createTask({ workflow: 'legacy', prompt: 'Add a greeting', repo });
   await harness.waitForIdle();
   harness.store.updateTask(task.id, { status: 'stopped' });
   harness.toDraft(task.id);
   expect(() => harness.queueTask(task.id)).toThrow(/spec approval/);
 });
 it('keeps a retried unapproved discussion in Draft', async () => {
-  const task = await harness.createTask({ prompt: 'Add a greeting', repo });
+  const task = await harness.createTask({ workflow: 'legacy', prompt: 'Add a greeting', repo });
   await harness.waitForIdle();
   harness.store.updateTask(task.id, { status: 'stopped' });
   harness.queueTask(task.id);

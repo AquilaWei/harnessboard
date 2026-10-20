@@ -22,3 +22,4 @@ export * from './store.js';
 export * from './tailscale.js';
 export * from './workflow.js';
 export * from './worktree.js';
+export * from './pm.js';

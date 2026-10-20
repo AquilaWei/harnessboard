@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { PmConfig, PmWork, PmQuestion, PmAcceptance } from './pm.js';
 import type {
   ContextPolicy,
   CriteriaProposal,
@@ -29,6 +30,10 @@ export interface ContextView {
 
 /** A task plus the derived fields list views need. */
 export interface TaskView extends Task {
+  work?: PmWork[];
+  pmQuestion?: PmQuestion | null;
+  pmAcceptance?: PmAcceptance | null;
+  pmUsage?: TaskUsage;
   sessionCount: number;
   latestSessionId: string | null;
   context: ContextView | null;
@@ -196,6 +201,8 @@ export interface PushPayload {
 
 /** Body of `POST /api/tasks`. */
 export interface CreateTaskInput {
+  workflow?: 'legacy' | 'pm';
+  pm?: PmConfig;
   prompt: string;
   /** Any directory inside the target repository. */
   repo: string;

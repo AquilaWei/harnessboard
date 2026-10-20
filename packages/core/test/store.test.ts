@@ -135,6 +135,7 @@ describe('Store', () => {
     const { id } = first.createTask({ ...newTask, mode: 'loop', verifyCommand: 'npm test' });
     first.close();
     const db = new DatabaseSync(file);
+    db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `DROP TABLE devices; DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
        ALTER TABLE tasks DROP COLUMN confirm_plan; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
@@ -159,6 +160,7 @@ describe('Store', () => {
     const { id } = first.createTask(newTask);
     first.close();
     const db = new DatabaseSync(file);
+    db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN acceptance;
        ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
@@ -174,6 +176,7 @@ describe('Store', () => {
     const { id } = first.createTask(newTask);
     first.close();
     const db = new DatabaseSync(file);
+    db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
        ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 9;`,
@@ -211,6 +214,7 @@ describe('Store', () => {
     const { id } = first.createTask({ ...newTask, workspace: 'base' });
     first.close();
     const db = new DatabaseSync(file);
+    db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order;
        PRAGMA user_version = 10;`,
@@ -261,6 +265,7 @@ describe('Store devices', () => {
     store.addDevice('Pixel', 'raw-device-token', 1000);
     store.close();
     const db = new DatabaseSync(file);
+    db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     const rows = JSON.stringify(db.prepare('SELECT * FROM devices').all());
     db.close();
     expect(rows).not.toContain('raw-device-token');
@@ -378,6 +383,7 @@ describe('Store devices', () => {
     first.addDevice('Pixel', 'token-one', 1000);
     first.close();
     const db = new DatabaseSync(file);
+    db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `ALTER TABLE devices DROP COLUMN credential_id; ALTER TABLE devices DROP COLUMN public_key;
        ALTER TABLE devices DROP COLUMN sign_count; ALTER TABLE devices DROP COLUMN verified_at;
@@ -449,6 +455,7 @@ describe('Store devices', () => {
     first.addDevice('Pixel', 'token-one', 1000);
     first.close();
     const db = new DatabaseSync(file);
+    db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `ALTER TABLE devices DROP COLUMN push_subscription; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
        ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order;
@@ -465,6 +472,7 @@ describe('Store devices', () => {
     const { id } = first.createTask(newTask);
     first.close();
     const db = new DatabaseSync(file);
+    db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
        ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 6;`,

@@ -106,6 +106,7 @@ const status = (id: number) => harness.store.getTask(id)!.status;
 describe('creating a loop task', () => {
   it('requires approval even when creation requests skipping it without a verify command', async () => {
     const task = await harness.createTask({
+      workflow: 'legacy',
       prompt: 'Build a thing',
       repo,
       mode: 'loop',

@@ -26,6 +26,11 @@ export interface LoopInput {
 
 /** The parsed options of {@link withTaskOptions}. */
 export interface AddOptions {
+  legacy?: boolean;
+  pm?: string;
+  pmModel?: string;
+  pmEffort?: string;
+  worker?: string[];
   repo: string;
   criteria?: string;
   title?: string;
@@ -62,6 +67,11 @@ export interface AddOptions {
 /** Options shared by `add` and `loop`. */
 export function withTaskOptions(command: Command): Command {
   return command
+    .option('--legacy', 'use the retained fixed-role workflow')
+    .option('--pm <profile>', 'PM profile (default: claude)')
+    .option('--pm-model <model>', 'PM model')
+    .option('--pm-effort <level>', 'PM reasoning effort')
+    .option('--worker <profile:model...>', 'permitted workers; omit :model for profile default')
     .option('-C, --repo <dir>', 'repository to work in', process.cwd())
     .option('--title <title>', 'short title (defaults to the first line of the prompt)')
     .option('--criteria <text>', 'acceptance criteria: what must hold for the work to be done')
@@ -131,6 +141,23 @@ export function withTaskOptions(command: Command): Command {
 export function taskInput(prompt: string, o: AddOptions, loop: LoopInput = {}): CreateTaskInput {
   return definedOnly({
     prompt,
+    workflow: o.legacy || loop.mode === 'loop' ? ('legacy' as const) : ('pm' as const),
+    ...(o.pm || o.pmModel || o.pmEffort || o.worker
+      ? {
+          pm: {
+            agentId: o.pm ?? 'claude',
+            model: o.pmModel ?? o.model ?? null,
+            effort: o.pmEffort ?? o.effort ?? null,
+            workers: (o.worker ?? [o.pm ?? 'claude']).map((entry) => {
+              const at = entry.indexOf(':');
+              return {
+                agentId: at < 0 ? entry : entry.slice(0, at),
+                models: [at < 0 ? null : entry.slice(at + 1)],
+              };
+            }),
+          },
+        }
+      : {}),
     ...loop,
     acceptance: o.criteria,
     repo: o.repo,

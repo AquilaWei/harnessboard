@@ -140,6 +140,23 @@ program
   });
 
 program
+  .command('pm')
+  .description('show, configure or convert an idle task to PM workflow')
+  .argument('<id>', 'task id', parseInteger)
+  .option('--convert', 'convert an idle legacy task')
+  .option('--config <json>', 'PM configuration: agentId, model, effort, workers')
+  .action(async (id: number, options: { convert?: boolean; config?: string }) => {
+    const api = client();
+    if (!options.config) {
+      console.log(JSON.stringify((await api.getTask(id)).pm ?? null, null, 2));
+      return;
+    }
+    const pm = JSON.parse(options.config);
+    const task = options.convert ? await api.convertToPm(id, pm) : await api.setPm(id, pm);
+    console.log(t('taskStatus', { id, status: task.status }));
+  });
+
+program
   .command('spec')
   .description(
     "ask the spec author to change a single task's spec after work started; you approve the change",

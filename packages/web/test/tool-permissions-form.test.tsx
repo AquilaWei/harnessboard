@@ -85,27 +85,10 @@ describe('NewTaskDialog tool permissions', () => {
     );
   };
 
-  /** The fieldset under the "Tool permissions" legend. */
-  const permissions = () =>
-    [...container.querySelectorAll('fieldset')].find(
-      (set) => set.querySelector('legend')?.textContent === 'Tool permissions',
-    )!;
-
-  it('offers a single choice', async () => {
+  it('routes permissions through the PM without a bypass checkbox', async () => {
     await openDialog();
-    expect(permissions().querySelectorAll('input')).toHaveLength(1);
-  });
-
-  it('lets the user ask before dangerous tools only', async () => {
-    await openDialog();
-    expect(permissions().querySelector('label')!.textContent).toContain(
-      'Allow other tools, ask only for dangerous ones',
-    );
-  });
-
-  it('has no field for tool rules', async () => {
-    await openDialog();
-    expect(permissions().querySelector('textarea')).toBeNull();
+    expect(container.textContent).toContain('PM');
+    expect(container.textContent).not.toContain('Allow other tools');
   });
 
   it('sends no tool rules with the task', async () => {

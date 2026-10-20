@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import { pmWork, pmQuestion } from '@harnessboard/core';
+import type { PmAcceptance } from '@harnessboard/shared';
 import {
   contextPct,
   estimateCodexCost,
@@ -50,6 +52,31 @@ export function taskView(task: Task, harness: Harness): TaskView {
   const latest = sessions.find((session) => session.id === active?.sessionId) ?? sessions.at(-1);
   return {
     ...task,
+    ...(task.workflow === 'pm'
+      ? {
+          work: pmWork(store, task.id).map((work) => ({
+            ...work,
+            usage: taskUsage(
+              task.id,
+              store,
+              sessions.filter((s) => s.id === work.sessionId),
+              harness.activity(task.id) !== null,
+              Date.now(),
+              true,
+            ),
+          })),
+          pmUsage: taskUsage(
+            task.id,
+            store,
+            sessions.filter((s) => s.role === 'pm'),
+            harness.activity(task.id) !== null,
+            Date.now(),
+            true,
+          ),
+          pmQuestion: pmQuestion(store, task.id),
+          pmAcceptance: (store.lastEvent(task.id, 'pm_acceptance')?.data as PmAcceptance) ?? null,
+        }
+      : {}),
     safetyPause:
       task.status === 'paused_safety'
         ? ((store.lastEvent(task.id, 'safety_pause')?.data as SafetyPause | undefined) ?? null)
@@ -89,8 +116,11 @@ export function taskUsage(
   sessions: Session[],
   running: boolean,
   now = Date.now(),
+  onlySessions = false,
 ): TaskUsage {
-  const records = store.eventsOfKind(taskId, 'usage');
+  const records = store
+    .eventsOfKind(taskId, 'usage')
+    .filter((event) => !onlySessions || sessions.some((session) => session.id === event.sessionId));
   const latest = new Map<string, ModelTotals>();
   const banked: ModelTotals = {};
   let agentMs = 0;
@@ -300,6 +330,17 @@ function timelineEvent(
  * as the message they were sent in.
  */
 export function chatTranscript(taskId: number, store: Store): ChatEntry[] {
+  if (store.getTask(taskId)?.workflow === 'pm') {
+    return store.eventsOfKinds(taskId, ['pm_user', 'pm_reply']).flatMap<ChatEntry>((event) => {
+      const text = (event.data as { text: string }).text;
+      return event.kind === 'pm_user'
+        ? [{ kind: 'user' as const, ts: event.ts, text }]
+        : [
+            { kind: 'agent' as const, ts: event.ts, text },
+            { kind: 'end' as const, ts: event.ts, reason: 'completed' as const },
+          ];
+    });
+  }
   const first = store.eventsOfKinds(taskId, ['chat_message', 'chat_queued'])[0];
   if (!first) return [];
   const entries: ChatEntry[] = [];

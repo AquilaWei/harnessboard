@@ -4,7 +4,16 @@ import type { AgentEvent, AgentProvider, ModelInfo, QuotaInfo } from '@harnessbo
 /** Tools a session may use: `edit` implements, `readOnly` only inspects (reviewers). */
 export type SessionAccess = 'edit' | 'readOnly';
 
+/** Ephemeral, task-scoped stdio tool bridge; never persisted in agent output. */
+export interface SessionMcpServer {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
 export interface SessionSpec {
+  managedWorker?: boolean;
+  mcpServers?: Record<string, SessionMcpServer>;
   cwd: string;
   /**
    * Session to create (when the adapter lets the harness choose ids) or to resume.

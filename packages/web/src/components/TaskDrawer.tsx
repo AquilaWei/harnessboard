@@ -51,17 +51,25 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   const [commits, setCommits] = useState<CommitInfo[] | null>(null);
   const [tab, setTab] = useState<DrawerTab>(initialTab);
   const lastId = useRef(0);
+  const openedTask = useRef<number | null>(null);
 
   const loadTask = useCallback(
     () =>
       Promise.all([api.task(taskId), api.timeline(taskId)]).then(
         ([detail, steps]) => {
           setTask(detail);
+          if (
+            detail?.workflow === 'pm' &&
+            initialTab === 'timeline' &&
+            openedTask.current !== taskId
+          )
+            setTab('chat');
+          openedTask.current = taskId;
           setTimeline(steps);
         },
         (e: Error) => onError(e.message),
       ),
-    [taskId, onError],
+    [taskId, onError, initialTab],
   );
 
   // Fetches only events after the last one seen, so the log grows in order without gaps.
@@ -136,7 +144,12 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
     'details',
   ];
   // Where a proposal waiting for approval is read and approved.
-  const proposalTab: DrawerTab = task?.mode === 'loop' ? 'features' : 'criteria';
+  const proposalTab: DrawerTab =
+    task?.pmQuestion?.kind === 'question'
+      ? 'chat'
+      : task?.mode === 'loop'
+        ? 'features'
+        : 'criteria';
   // Why a task in Review stopped, so it is read before deciding.
   const review = task ? openReview(task) : null;
 
@@ -186,7 +199,8 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
               )}
               <p className="hint">{t('safety.monitoringLimit')}</p>
               <div className="actions">
-                {s === 'review' && (
+                {(s === 'review' ||
+                  (task.workflow === 'pm' && s === 'done' && task.branch && task.worktreePath)) && (
                   <>
                     {task.branch && (
                       <button
@@ -198,13 +212,15 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                         {merging ? t('merge.merging') : t('merge.action', { base: task.baseRef })}
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className={`btn ${task.branch ? '' : 'primary'}`}
-                      onClick={() => act('complete')}
-                    >
-                      {t(task.branch ? 'actions.markDoneOnly' : 'actions.markDone')}
-                    </button>
+                    {s === 'review' && (
+                      <button
+                        type="button"
+                        className={`btn ${task.branch ? '' : 'primary'}`}
+                        onClick={() => act('complete')}
+                      >
+                        {t(task.branch ? 'actions.markDoneOnly' : 'actions.markDone')}
+                      </button>
+                    )}
                     {tab !== 'changes' && (
                       <button type="button" className="btn" onClick={() => setTab('changes')}>
                         {t('tabs.changes')}

@@ -134,8 +134,16 @@ const select = (row: string, label: string) => {
     );
   return field(field(container, row)!.closest('.row')!, label)?.querySelector('select') ?? null;
 };
-const modelSelect = () => select('Implementer', 'Implementer model')!;
-const effortSelect = () => select('Implementer', 'Reasoning effort');
+const pmSelect = (label: string) =>
+  [...container.querySelectorAll('label.field')]
+    .find((field) => field.querySelector('span')?.textContent === label)
+    ?.querySelector('select') ?? null;
+const modelSelect = () => pmSelect('PM model') ?? select('Implementer', 'Implementer model')!;
+const effortSelect = () =>
+  pmSelect('Reasoning effort') ??
+  (container.textContent?.includes('PM profile')
+    ? null
+    : select('Implementer', 'Reasoning effort'));
 const optionTexts = (s: HTMLSelectElement) => [...s.options].map((o) => o.textContent);
 
 const openDialog = async () => {
@@ -196,8 +204,7 @@ describe('effort selector', () => {
     act(() => choose(effortSelect()!, 'high'));
     await submit();
     expect(api.createTask.mock.calls[0]![0]).toMatchObject({
-      implementerModel: 'opus',
-      implementerEffort: 'high',
+      pm: { model: 'opus', effort: 'high' },
     });
   });
 
@@ -207,7 +214,7 @@ describe('effort selector', () => {
     act(() => choose(effortSelect()!, 'high'));
     act(() => choose(effortSelect()!, ''));
     await submit();
-    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ implementerEffort: null });
+    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ pm: { effort: null } });
   });
 
   it('clears the effort when a model without efforts is chosen', async () => {
@@ -216,7 +223,7 @@ describe('effort selector', () => {
     act(() => choose(effortSelect()!, 'high'));
     act(() => choose(modelSelect(), 'haiku'));
     await submit();
-    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ implementerEffort: null });
+    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ pm: { effort: null } });
   });
 
   it('resets the effort when the new model does not offer it', async () => {
@@ -225,7 +232,7 @@ describe('effort selector', () => {
     act(() => choose(effortSelect()!, 'high'));
     act(() => choose(modelSelect(), 'mini'));
     await submit();
-    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ implementerEffort: null });
+    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ pm: { effort: null } });
   });
 
   it('keeps the effort when the new model offers it too', async () => {
@@ -242,7 +249,7 @@ describe('effort selector', () => {
     act(() => choose(effortSelect()!, 'high'));
     act(() => choose(modelSelect(), '__custom'));
     await submit();
-    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ implementerEffort: null });
+    expect(api.createTask.mock.calls[0]![0]).toMatchObject({ pm: { effort: null } });
   });
 });
 

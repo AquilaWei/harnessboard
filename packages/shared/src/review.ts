@@ -114,7 +114,9 @@ export type TaskPhase =
   | 'testing'
   | 'verifying'
   | 'reviewing'
-  | 'chatting';
+  | 'chatting'
+  | 'managing'
+  | 'working';
 
 export interface TaskActivity {
   phase: TaskPhase;
