@@ -23,6 +23,7 @@ vi.mock('../src/api', () => ({
     events: () => Promise.resolve([]),
   },
 }));
+vi.mock('../src/components/ChatPanel', () => ({ ChatPanel: () => null }));
 vi.mock('../src/live', () => ({ useLiveEvents: () => {}, useThrottled: (fn: () => void) => fn }));
 
 // Read from disk: Vitest replaces imported CSS with an empty string. A path, not a URL:
@@ -165,4 +166,18 @@ describe.skipIf(!browser)('task panel on a 375×667 phone', () => {
       .evaluate((el) => window.innerHeight - el.getBoundingClientRect().top);
     expect(visible).toBeGreaterThanOrEqual(200);
   });
+});
+
+it('hides the legacy handoff tab for PM tasks', async () => {
+  const html = await drawerHtml(task({ workflow: 'pm', latestSessionId: 's1' }));
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain('Notes');
+});
+
+it('keeps handoff history available for legacy tasks', async () => {
+  const html = await drawerHtml(task({ latestSessionId: 's1' }));
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  expect(container.querySelector('[role="tablist"]')?.textContent).toContain('Notes');
 });

@@ -60,7 +60,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
           setTask(detail);
           if (
             detail?.workflow === 'pm' &&
-            initialTab === 'timeline' &&
+            (initialTab === 'timeline' || initialTab === 'notes') &&
             openedTask.current !== taskId
           )
             setTab('chat');
@@ -136,7 +136,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
     'timeline',
     ...(task?.mode === 'loop' ? (['features'] as const) : []),
     ...(hasCriteria ? (['criteria'] as const) : []),
-    ...(task?.latestSessionId ? (['notes'] as const) : []),
+    ...(task?.latestSessionId && task.workflow !== 'pm' ? (['notes'] as const) : []),
     // A chat continues the task's conversation, so there must be one.
     ...(task?.latestSessionId ? (['chat'] as const) : []),
     'changes',
@@ -315,7 +315,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
         </div>
         <div className="drawer-body">
           {tab === 'timeline' && <Timeline entries={timeline} />}
-          {tab === 'notes' && task && (
+          {tab === 'notes' && task && task.workflow !== 'pm' && (
             <NotesView taskId={taskId} version={task.updatedAt} onError={onError} />
           )}
           {tab === 'chat' && task && (

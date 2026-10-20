@@ -7,6 +7,8 @@ are test versions that have not been accepted on real machines yet.
 
 ### Changed
 
+- Remove the legacy handoff tab from PM tasks; keep historical notes for legacy workflows.
+
 - Show PM and delegated agents in a compact table with individual models, status,
   tokens, estimated cost and execution time; collapse full worker instructions.
 

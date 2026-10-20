@@ -5,6 +5,10 @@ scope and acceptance criteria with you, then delegates implementation and verifi
 judges permission requests, and reviews the architecture and functionality. Existing
 tasks keep their fixed-role workflow.
 
+PM tasks do not show the legacy Handoffs tab: delegation summaries and PM acceptance
+carry the results forward. Inspect individual worker results under Details. Historical
+role notes remain available on legacy tasks.
+
 ```mermaid
 flowchart LR
     U[User] <--> P[PM: direction and specification]
