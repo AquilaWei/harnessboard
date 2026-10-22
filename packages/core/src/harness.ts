@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { PmWorkflow, pmQuestion, validatePm } from './pm.js';
 import type { PmSessionPlan } from './pm.js';
-import type { PmConfig } from '@harnessboard/shared';
+import type { TaskOperations, PmConfig } from '@harnessboard/shared';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
@@ -1557,7 +1558,7 @@ export class Harness {
    * When the base has conflicting changes, nothing on the base changes: the base is merged
    * into the task's worktree instead, its agent is queued to resolve the conflicts and
    * commit, and the task comes back for review (and another merge) afterwards.
-   * Throws when the task is not in review, has uncommitted changes or nothing to merge, its
+   * Throws when the shared operation eligibility rejects it, it has uncommitted changes or nothing to merge, its
    * base is not a local branch, git refuses, or a `base` task works on that base in the
    * repository folder (the merge would move its files underneath its agent). A `base` task
    * has nothing to merge: its commits are on the base already, and {@link completeTask}
@@ -1565,24 +1566,10 @@ export class Harness {
    */
   async mergeTask(id: number): Promise<MergeResult> {
     const task = this.requireTask(id);
-    if (task.status !== 'review' && !(task.workflow === 'pm' && task.status === 'done'))
-      throw new Error(`task ${id} is ${task.status}, not review`);
-    if (task.workflow === 'pm' && this.running.has(id))
-      throw new Error('PM is still finishing; retry after it stops');
-    if (task.workspace === 'base') {
-      throw new Error(
-        `task ${id} works directly on ${task.baseRef}, so there is nothing to merge; mark it done`,
-      );
-    }
+    const operation = this.taskOperations(id).merge;
+    if (!operation.enabled) throw new Error(operation.reason ?? 'Merge is unavailable');
     const { repoPath: repo, baseRef: base, branch, worktreePath: dir } = task;
     if (!branch || !dir) throw new Error(`task ${id} has no branch to merge`);
-    const holder = this.folderHolder(repo, id);
-    if (holder?.baseRef === base) {
-      throw new Error(
-        `task ${holder.id} works directly on ${base} in ${repo} (${holder.status}); ` +
-          `finish or stop it before merging task ${id}`,
-      );
-    }
     // Registered before the first await, so no `base` task can start while git works.
     this.merging.set(id, { repo, base });
     try {
@@ -1662,14 +1649,77 @@ export class Harness {
     return (this.store.lastEvent(taskId, 'merged')?.data as MergeRecord | undefined) ?? null;
   }
 
-  /** Marks a reviewed task as done. */
-  completeTask(id: number): Task {
+  /** A historical report remains visible, but only its exact commit is accepted. */
+  pmAcceptanceCurrent(id: number): boolean {
     const task = this.requireTask(id);
-    if (!COMPLETABLE.includes(task.status)) {
-      throw new Error(
-        `task ${id} is ${task.status}; only a task in review, failed or stopped can be marked done`,
+    const report = this.store.lastEvent(id, 'pm_acceptance')?.data as { head: string } | undefined;
+    if (!report || !task.worktreePath) return false;
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], {
+      cwd: task.worktreePath,
+      encoding: 'utf8',
+      timeout: 1000,
+    });
+    return head.status === 0 && head.stdout.trim() === report.head;
+  }
+
+  /** Keeps user operations independent from PM conversation state; execution rechecks git. */
+  taskOperations(id: number): TaskOperations {
+    const task = this.requireTask(id);
+    const pm = task.workflow === 'pm';
+    const approved = this.store.lastEvent(id, 'criteria_approved');
+    const proposed = this.store.lastEvent(id, 'criteria');
+    const specPending = pm && (!approved || approved.id < (proposed?.id ?? 0));
+    const busy =
+      this.running.has(id) ||
+      this.merging.has(id) ||
+      ['running', 'queued', 'pending', 'awaiting_permission', 'waiting_quota'].includes(
+        task.status,
       );
-    }
+    const common = specPending
+      ? 'Specification must be approved first'
+      : busy
+        ? `task ${id} is running or queued; wait for it to stop`
+        : null;
+    const holder = this.folderHolder(task.repoPath, id);
+    const mergeReason =
+      (!pm && task.status !== 'review' ? `task ${id} is ${task.status}, not review` : null) ??
+      common ??
+      (task.workspace === 'base'
+        ? `task ${id} works directly on ${task.baseRef}, so there is nothing to merge; mark it done`
+        : !task.branch || !task.worktreePath
+          ? `task ${id} has no branch to merge`
+          : !existsSync(task.worktreePath)
+            ? `task ${id} worktree is missing`
+            : holder?.baseRef === task.baseRef
+              ? `task ${holder.id} works directly on ${task.baseRef} in ${task.repoPath} (${holder.status}); finish or stop it before merging task ${id}`
+              : null);
+    const completeReason =
+      common ??
+      (!(COMPLETABLE.includes(task.status) || (pm && task.status === 'awaiting_approval'))
+        ? `task ${id} is ${task.status}; only a task in review, failed or stopped can be marked done`
+        : null);
+    return {
+      merge: {
+        visible:
+          task.workspace !== 'base' &&
+          !!task.branch &&
+          !!task.worktreePath &&
+          (pm || task.status === 'review'),
+        enabled: !mergeReason,
+        reason: mergeReason,
+      },
+      complete: {
+        visible: task.status !== 'done' && (pm || COMPLETABLE.includes(task.status)),
+        enabled: !completeReason,
+        reason: completeReason,
+      },
+    };
+  }
+
+  /** Closes a task after user verification, including an idle PM awaiting confirmation. */
+  completeTask(id: number): Task {
+    const operation = this.taskOperations(id).complete;
+    if (!operation.enabled) throw new Error(operation.reason ?? 'Closing is unavailable');
     return this.setStatus(id, 'done');
   }
 

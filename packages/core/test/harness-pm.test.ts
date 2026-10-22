@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -103,6 +104,9 @@ it('dispatches after approval and waits for user confirmation after PM acceptanc
   expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual(['pm', 'worker']);
   harness.completeTask(task.id);
   expect(harness.store.getTask(task.id)?.status).toBe('done');
+  expect(harness.taskOperations(task.id).merge).toMatchObject({ visible: true, enabled: true });
+  await expect(harness.mergeTask(task.id)).resolves.toMatchObject({ status: 'merged' });
+  expect(harness.taskOperations(task.id).merge.visible).toBe(false);
 });
 
 it('rejects an attempted dispatch before approval without starting a worker', async () => {
@@ -242,4 +246,89 @@ it('reopens specification discussion in the PM conversation without dispatching'
     .split('\n')
     .map((line) => JSON.parse(line));
   expect(runs[1].received[0]).toContain('Discuss a different greeting first.');
+});
+
+it('rejects closing an idle PM task before specification approval', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    turn('pm-thread', tool('ask_user', { message: 'Please verify the result.' })),
+  ]);
+  const task = await harness.createTask({ prompt: 'Check greeting', repo });
+  await harness.waitForIdle();
+  expect(harness.store.getTask(task.id)?.status).toBe('awaiting_approval');
+  expect(() => harness.completeTask(task.id)).toThrow('Specification');
+});
+
+it('keeps merge available while an approved PM waits for confirmation and after closing', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    turn('pm-thread', tool('ask_user', { message: 'Please verify.' })),
+  ]);
+  const task = await harness.createTask({ prompt: 'Check greeting', repo });
+  await harness.waitForIdle();
+  harness.store.appendEvent(task.id, null, 'criteria_approved', { criteria: 'Greeting works' });
+  await expect(harness.mergeTask(task.id)).rejects.toThrow('already has every commit');
+  harness.completeTask(task.id);
+  await expect(harness.mergeTask(task.id)).rejects.toThrow('already has every commit');
+});
+
+it('disables PM operations while queued and rejects both APIs', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec()]);
+  const task = await harness.createTask({ prompt: 'Check greeting', repo });
+  await harness.waitForIdle();
+  harness.store.appendEvent(task.id, null, 'criteria_approved', { criteria: 'Greeting works' });
+  harness.store.updateTask(task.id, { status: 'queued' });
+  expect(harness.taskOperations(task.id).merge).toMatchObject({ visible: true, enabled: false });
+  expect(harness.taskOperations(task.id).complete).toMatchObject({ visible: true, enabled: false });
+  await expect(harness.mergeTask(task.id)).rejects.toThrow('running or queued');
+  expect(() => harness.completeTask(task.id)).toThrow('running or queued');
+});
+
+it('preserves report validity across conversation and detects a later commit', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    turn('pm-thread', tool('ask_user', { message: 'Please verify.' })),
+    turn('pm-thread', tool('ask_user', { message: 'Anything else?' })),
+  ]);
+  const task = await harness.createTask({ prompt: 'Check greeting', repo });
+  await harness.waitForIdle();
+  const cwd = harness.store.getTask(task.id)!.worktreePath!;
+  const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' }).trim();
+  harness.store.appendEvent(task.id, null, 'criteria_approved', { criteria: 'Greeting works' });
+  harness.store.appendEvent(task.id, null, 'pm_acceptance', { head, summary: 'Verified' });
+  expect(harness.pmAcceptanceCurrent(task.id)).toBe(true);
+  harness.chat(task.id, 'Explain the result');
+  await harness.waitForIdle();
+  expect(harness.pmAcceptanceCurrent(task.id)).toBe(true);
+  expect(harness.taskOperations(task.id).merge.enabled).toBe(true);
+  execFileSync(
+    'git',
+    [
+      '-c',
+      'user.name=Test',
+      '-c',
+      'user.email=test@example.com',
+      'commit',
+      '--allow-empty',
+      '-m',
+      'New work',
+    ],
+    { cwd },
+  );
+  expect(harness.pmAcceptanceCurrent(task.id)).toBe(false);
+  expect(harness.store.lastEvent(task.id, 'pm_acceptance')?.data).toEqual({
+    head,
+    summary: 'Verified',
+  });
+});
+
+it('disables merge when the PM worktree is missing', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec()]);
+  const task = await harness.createTask({ prompt: 'Check greeting', repo });
+  await harness.waitForIdle();
+  harness.store.appendEvent(task.id, null, 'criteria_approved', { criteria: 'Greeting works' });
+  harness.store.updateTask(task.id, { worktreePath: path.join(dir, 'missing') });
+  expect(harness.taskOperations(task.id).merge).toEqual({
+    visible: true,
+    enabled: false,
+    reason: 'task 1 worktree is missing',
+  });
+  await expect(harness.mergeTask(task.id)).rejects.toThrow('worktree is missing');
 });

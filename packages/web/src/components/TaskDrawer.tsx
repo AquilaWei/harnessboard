@@ -181,6 +181,10 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
               {s === 'review' && task.workflow === 'pm' && task.pmAcceptance && (
                 <details className="status-review" open>
                   <summary>{t('pm.accepted')}</summary>
+                  <p>
+                    <code>{task.pmAcceptance.head}</code>
+                  </p>
+                  {!task.pmAcceptanceCurrent && <p>{t('pm.reaccept')}</p>}
                   <Markdown
                     className="reply"
                     text={[
@@ -213,43 +217,55 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
               )}
               <p className="hint">{t('safety.monitoringLimit')}</p>
               <div className="actions">
-                {(s === 'review' ||
-                  (task.workflow === 'pm' && s === 'done' && task.branch && task.worktreePath)) && (
-                  <>
-                    {task.branch && (
-                      <button
-                        type="button"
-                        className="btn primary"
-                        disabled={merging}
-                        onClick={() => void merge()}
-                      >
-                        {merging ? t('merge.merging') : t('merge.action', { base: task.baseRef })}
-                      </button>
-                    )}
-                    {s === 'review' && (
-                      <button
-                        type="button"
-                        className={`btn ${task.branch ? '' : 'primary'}`}
-                        onClick={() => act('complete')}
-                      >
-                        {t(task.branch ? 'actions.markDoneOnly' : 'actions.markDone')}
-                      </button>
-                    )}
-                    {tab !== 'changes' && (
-                      <button type="button" className="btn" onClick={() => setTab('changes')}>
-                        {t('tabs.changes')}
-                      </button>
-                    )}
-                    <button type="button" className="btn" onClick={() => act('queue')}>
-                      {t(`actions.${sendBackKey(task)}`)}
-                    </button>
-                  </>
-                )}
-                {s === 'awaiting_approval' && tab !== proposalTab && (
-                  <button type="button" className="btn primary" onClick={() => setTab(proposalTab)}>
-                    {t(task.mode === 'loop' ? 'actions.approvePlan' : 'actions.approveCriteria')}
+                {task.operations?.merge.visible && (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={merging || !task.operations.merge.enabled}
+                    title={task.operations.merge.reason ?? undefined}
+                    onClick={() => void merge()}
+                  >
+                    {merging ? t('merge.merging') : t('merge.action', { base: task.baseRef })}
                   </button>
                 )}
+                {task.operations?.complete.visible && (
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={!task.operations.complete.enabled}
+                    title={task.operations.complete.reason ?? undefined}
+                    onClick={() => act('complete')}
+                  >
+                    {t(task.branch ? 'actions.markDoneOnly' : 'actions.markDone')}
+                  </button>
+                )}
+                {task.operations?.merge.visible && task.operations.merge.reason && (
+                  <p className="hint">{task.operations.merge.reason}</p>
+                )}
+                {task.operations?.complete.visible && task.operations.complete.reason && (
+                  <p className="hint">{task.operations.complete.reason}</p>
+                )}
+                {s === 'review' && tab !== 'changes' && (
+                  <button type="button" className="btn" onClick={() => setTab('changes')}>
+                    {t('tabs.changes')}
+                  </button>
+                )}
+                {s === 'review' && (
+                  <button type="button" className="btn" onClick={() => act('queue')}>
+                    {t(`actions.${sendBackKey(task)}`)}
+                  </button>
+                )}
+                {s === 'awaiting_approval' &&
+                  (task.workflow !== 'pm' || task.pmQuestion?.kind === 'spec') &&
+                  tab !== proposalTab && (
+                    <button
+                      type="button"
+                      className="btn primary"
+                      onClick={() => setTab(proposalTab)}
+                    >
+                      {t(task.mode === 'loop' ? 'actions.approvePlan' : 'actions.approveCriteria')}
+                    </button>
+                  )}
                 {s === 'backlog' && (
                   <>
                     <button type="button" className="btn primary" onClick={() => act('plan')}>

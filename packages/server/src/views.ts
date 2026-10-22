@@ -52,6 +52,7 @@ export function taskView(task: Task, harness: Harness): TaskView {
   const latest = sessions.find((session) => session.id === active?.sessionId) ?? sessions.at(-1);
   return {
     ...task,
+    operations: harness.taskOperations(task.id),
     ...(task.workflow === 'pm'
       ? {
           work: pmWork(store, task.id).map((work) => ({
@@ -73,6 +74,7 @@ export function taskView(task: Task, harness: Harness): TaskView {
             Date.now(),
             true,
           ),
+          pmAcceptanceCurrent: harness.pmAcceptanceCurrent(task.id),
           pmQuestion: pmQuestion(store, task.id),
           pmAcceptance: (store.lastEvent(task.id, 'pm_acceptance')?.data as PmAcceptance) ?? null,
         }

@@ -1,9 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- 修正 PM 問答後 Merge 與結案入口消失；執行中保留入口並顯示停用原因，未批准規格禁止合併與結案。
+- 驗收報告保留對應提交，HEAD 改變時提示重新驗收。
+
 All notable changes are listed here. Versions follow `MAJOR.MINOR.PATCH`; 0.0.x releases
 are test versions that have not been accepted on real machines yet.
 
-## Unreleased
+## 0.2.4 - 2026-10-20
+
+Local test release; interactive desktop acceptance is pending.
+
+### Fixed
+
+- Allow users to close an idle PM task while it is waiting for confirmation, without another model run.
 
 ### Changed
 

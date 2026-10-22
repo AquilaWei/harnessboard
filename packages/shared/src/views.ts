@@ -30,6 +30,8 @@ export interface ContextView {
 
 /** A task plus the derived fields list views need. */
 export interface TaskView extends Task {
+  operations?: TaskOperations;
+  pmAcceptanceCurrent?: boolean;
   work?: PmWork[];
   pmQuestion?: PmQuestion | null;
   pmAcceptance?: PmAcceptance | null;
@@ -323,3 +325,14 @@ export type AgentsUpdate = Partial<
     | 'designerEffort'
   >
 >;
+
+/** Core eligibility shared by presentation and execution; git is rechecked on merge. */
+export interface TaskOperations {
+  merge: TaskOperation;
+  complete: TaskOperation;
+}
+export interface TaskOperation {
+  visible: boolean;
+  enabled: boolean;
+  reason: string | null;
+}

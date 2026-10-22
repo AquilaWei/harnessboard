@@ -49,6 +49,10 @@ export function PmDetails({
       {task.workflow === 'pm' && task.status !== 'review' && task.pmAcceptance && (
         <details>
           <summary>{t('pm.accepted')}</summary>
+          <p>
+            <code>{task.pmAcceptance.head}</code>
+          </p>
+          {!task.pmAcceptanceCurrent && <p>{t('pm.reaccept')}</p>}
           <Markdown
             text={[
               task.pmAcceptance.summary,

@@ -412,6 +412,7 @@ export const en = {
     intro:
       'Agree the direction and acceptance criteria with the PM once. It then delegates, resolves permissions and reviews the result.',
     accepted: 'PM acceptance',
+    reaccept: 'HEAD has changed or is unavailable. Reacceptance is required.',
     convert: 'Convert this idle task to PM workflow',
   },
   timeline: {
@@ -1069,6 +1070,7 @@ export const zhTW: typeof en = {
     profileDefault: '平台預設模型',
     intro: '先與 PM 確認一次方向與驗收標準，之後由 PM 自主派工、判斷權限並驗收。',
     accepted: 'PM 驗收結果',
+    reaccept: '目前 HEAD 已改變或無法讀取，需要重新驗收。',
     convert: '將此閒置任務轉為 PM 流程',
   },
   timeline: {

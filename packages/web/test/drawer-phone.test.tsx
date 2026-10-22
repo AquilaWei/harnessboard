@@ -64,6 +64,10 @@ const task = (fields: Partial<TaskDetail>) =>
     plan: null,
     criteria: null,
     merge: null,
+    operations: {
+      merge: { visible: false, enabled: false, reason: null },
+      complete: { visible: true, enabled: true, reason: null },
+    },
     permissionRequests: [],
     usage: { runs: 1, agentMs: 0, elapsedMs: null, tokens: null, costUsd: null, byModel: {} },
     sessionCount: 1,
@@ -205,4 +209,30 @@ it('shows the PM completion report while waiting for user review', async () => {
   expect(report?.textContent).toContain('Features verified');
   expect(report?.textContent).toContain('Test evidence checked');
   expect(container.querySelector('.actions')?.textContent).toContain('Mark done');
+});
+
+it('offers completion for an idle PM task waiting for user confirmation', async () => {
+  const html = await drawerHtml(task({ workflow: 'pm', status: 'awaiting_approval' }));
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  expect(container.querySelector('.actions')?.textContent).toContain('Mark done');
+});
+
+it('keeps PM operations visible while waiting for an ordinary answer', async () => {
+  const html = await drawerHtml(
+    task({
+      workflow: 'pm',
+      status: 'awaiting_approval',
+      branch: 'task/1',
+      baseRef: 'main',
+      pmQuestion: { kind: 'question', message: 'Anything else?' },
+      operations: {
+        merge: { visible: true, enabled: true, reason: null },
+        complete: { visible: true, enabled: false, reason: 'Wait for PM' },
+      },
+    }),
+  );
+  expect(html).toContain('Merge');
+  expect(html).toContain('Wait for PM');
+  expect(html).not.toContain('Approve criteria');
 });
