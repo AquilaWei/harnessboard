@@ -3,7 +3,7 @@
 新任務由一個 PM 與你確認方向和規格，首次核可後自主調度執行者、判斷權限，並審查架構與功能。
 既有任務保留原流程。[PM 流程與目前限制](docs/pm-workflow.md)。
 
-![version](https://img.shields.io/badge/version-0.2.4-blue)
+![version](https://img.shields.io/badge/version-0.2.5-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -80,7 +80,7 @@ pnpm build               # 約一分鐘
 
 ```bash
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # 會印出版本，例如 0.2.4
+hb --version             # 會印出版本，例如 0.2.5
 ```
 
 <details>

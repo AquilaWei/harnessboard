@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.5 - 2026-10-22
+
+Local test release; interactive desktop acceptance is pending.
+
+### Fixed
 
 - 修正 PM 問答後 Merge 與結案入口消失；執行中保留入口並顯示停用原因，未批准規格禁止合併與結案。
 - 驗收報告保留對應提交，HEAD 改變時提示重新驗收。
