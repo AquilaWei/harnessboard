@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { PmConfig, Task } from '@harnessboard/shared';
+import { git } from '../src/worktree.js';
 import { Store } from '../src/store.js';
 import { PmWorkflow, pmWork, validatePm } from '../src/pm.js';
 import type { PmHost } from '../src/pm.js';
@@ -264,4 +265,31 @@ it('reports PM acceptance for user review without marking the task done', async 
     functionality: 'Greeting works',
     verification: 'Tests pass',
   });
+});
+
+it('runs PM permission decisions while an orphan branch has no HEAD', async () => {
+  await git(task.worktreePath!, ['checkout', '--orphan', 'fresh-history']);
+  await pmTurn(async () => {
+    await engine.call('permission', {
+      requestId: 'pending-first-commit',
+      behavior: 'allow',
+      reason: 'Approved new history.',
+    });
+  });
+  expect(host.answer).toHaveBeenCalled();
+});
+
+it('runs a worker from an unborn branch through its first commit', async () => {
+  await git(task.worktreePath!, ['checkout', '--orphan', 'fresh-history']);
+  host.run = async (_task, plan) => {
+    if (plan.role === 'pm') {
+      await engine.call('dispatch', input);
+      await engine.call('ask_user', { message: 'Review the new history.' });
+    } else {
+      await git(task.worktreePath!, ['commit', '-m', 'chore: start fresh history']);
+    }
+    return outcome;
+  };
+  await engine.run();
+  expect(pmWork(store, task.id)[0]).toMatchObject({ status: 'completed', since: null });
 });

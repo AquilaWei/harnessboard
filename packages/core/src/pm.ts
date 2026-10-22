@@ -19,7 +19,7 @@ import type { Store } from './store.js';
 import type { SessionMcpServer } from './agent.js';
 import { COMMIT_RULE, checkCommits } from './commit-check.js';
 import { readGuidelines } from './guidelines.js';
-import { headCommit, porcelainStatus } from './worktree.js';
+import { headCommit, optionalHeadCommit, porcelainStatus } from './worktree.js';
 import { pmTools } from './pm-tools.js';
 
 export interface PmSessionPlan extends SessionPlan {
@@ -361,8 +361,9 @@ export class PmWorkflow {
       (w) => w.id !== work.id && w.access === 'edit' && active(w),
     );
     const observation = this.host.store.lastEvent(this.task.id, 'pm_work')?.id ?? 0;
-    const since = work.since ?? (await headCommit(this.task.worktreePath!));
-    const headBefore = await headCommit(this.task.worktreePath!);
+    // A resumed worker must retain a null starting HEAD so its root commit is checked too.
+    const since = work.sessionId ? work.since : await optionalHeadCommit(this.task.worktreePath!);
+    const headBefore = await optionalHeadCommit(this.task.worktreePath!);
     const statusBefore = await porcelainStatus(this.task.worktreePath!);
     work = { ...work, sessionId: id, since, status: 'running', summary: null };
     this.record(work);
@@ -414,7 +415,7 @@ export class PmWorkflow {
       signal,
     );
     this.host.store.endSession(id, outcome.reason);
-    const head = await headCommit(this.task.worktreePath!);
+    const head = await optionalHeadCommit(this.task.worktreePath!);
     let failure =
       outcome.reason === 'completed'
         ? null
@@ -567,7 +568,7 @@ export class PmWorkflow {
       hash,
       fingerprints,
     });
-    const start = await headCommit(this.task.worktreePath!);
+    const start = await optionalHeadCommit(this.task.worktreePath!);
     const status = await porcelainStatus(this.task.worktreePath!);
     this.current = true;
     const outcome = await this.host.run(
@@ -594,7 +595,7 @@ export class PmWorkflow {
       !store
         .eventsOfKinds(this.task.id, ['pm_work'], marker)
         .some((event) => (event.data as PmWork).access === 'edit') &&
-      ((await headCommit(this.task.worktreePath!)) !== start ||
+      ((await optionalHeadCommit(this.task.worktreePath!)) !== start ||
         (await porcelainStatus(this.task.worktreePath!)) !== status)
     )
       throw new Error('PM changed the worktree');

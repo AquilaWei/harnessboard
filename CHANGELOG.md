@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- PM 與 Worker 支援尚無第一筆提交的分支，建立 orphan 歷史時不再因讀取 HEAD 而中斷權限核准；第一筆提交仍檢查提交規範。
+
 ## 0.2.5 - 2026-10-22
 
 Local test release; interactive desktop acceptance is pending.

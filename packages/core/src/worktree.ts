@@ -128,6 +128,20 @@ export async function headCommit(dir: string): Promise<string> {
   return (await git(dir, ['rev-parse', 'HEAD'])).trim();
 }
 
+/**
+ * Observes HEAD during work, including the interval before an orphan branch's first
+ * commit. Only an unborn local branch returns null; invalid repositories and broken
+ * HEAD references still fail so callers cannot mistake Git errors for an empty history.
+ */
+export async function optionalHeadCommit(dir: string): Promise<string | null> {
+  const result = await gitExit(dir, ['rev-parse', '--verify', '--quiet', 'HEAD']);
+  if (result.code === 0) return result.stdout.trim();
+  const branch = (await git(dir, ['symbolic-ref', 'HEAD'])).trim();
+  const ref = await gitExit(dir, ['show-ref', '--verify', '--quiet', branch]);
+  if (result.code === 1 && branch.startsWith('refs/heads/') && ref.code === 1) return null;
+  return headCommit(dir);
+}
+
 /** `git status --porcelain` output; empty when the worktree is clean. */
 export async function porcelainStatus(dir: string): Promise<string> {
   return git(dir, ['status', '--porcelain']);

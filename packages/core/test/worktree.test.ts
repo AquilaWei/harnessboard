@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { addWorktree, commitDiff, commitLog } from '../src/worktree.js';
+import { addWorktree, commitDiff, commitLog, git, optionalHeadCommit } from '../src/worktree.js';
 import { makeRepo, tempDir } from './helpers.js';
 
 let worktree: string;
@@ -47,4 +47,13 @@ describe('commitDiff', () => {
     const shown = await commitDiff(worktree, only!.hash);
     expect([shown.startsWith('feat: add a'), shown.includes('+++ b/a.txt')]).toEqual([true, true]);
   });
+});
+
+it('returns no HEAD for an unborn branch', async () => {
+  await git(worktree, ['checkout', '--orphan', 'fresh']);
+  expect(await optionalHeadCommit(worktree)).toBeNull();
+});
+
+it('does not treat a non-repository as an unborn branch', async () => {
+  await expect(optionalHeadCommit(tempDir('not-a-repo'))).rejects.toThrow('not a git repository');
 });

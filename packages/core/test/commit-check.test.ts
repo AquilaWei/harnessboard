@@ -130,3 +130,17 @@ it('skips a commit whose subject breaks the convention when naming a merge', () 
   const subjects = ['fix: 修正公車站', 'fix: keep the nearer stop'];
   expect(mergeMessage(27, subjects)).toBe('fix: keep the nearer stop (task #27)');
 });
+
+it('checks the root commit when the stage began without HEAD', async () => {
+  const repo = makeRepo();
+  await git(repo, ['checkout', '--orphan', 'fresh']);
+  await git(repo, ['commit', '-m', 'bad message']);
+  expect(await checkCommits(repo, null)).toContain('Invalid commit');
+});
+
+it('allows a clean unborn branch without requiring an empty commit', async () => {
+  const repo = makeRepo();
+  await git(repo, ['checkout', '--orphan', 'fresh']);
+  await git(repo, ['rm', '-rf', '.']);
+  expect(await checkCommits(repo, null)).toBeNull();
+});
