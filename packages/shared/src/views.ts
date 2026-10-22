@@ -36,6 +36,14 @@ export interface TaskView extends Task {
   pmQuestion?: PmQuestion | null;
   pmAcceptance?: PmAcceptance | null;
   pmUsage?: TaskUsage;
+  /** PM activity is distinct from task status while it supervises running children. */
+  pmState?: {
+    model?: string | null;
+    provider: string;
+    status: string;
+    activity: string | null;
+    updatedAt: number | null;
+  };
   sessionCount: number;
   latestSessionId: string | null;
   context: ContextView | null;

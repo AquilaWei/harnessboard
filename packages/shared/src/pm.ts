@@ -15,11 +15,27 @@ export interface PmWorkerProfile {
 }
 
 export type WorkStatus =
-  'queued' | 'running' | 'awaiting_permission' | 'completed' | 'failed' | 'stopped' | 'cancelled';
+  | 'queued'
+  | 'running'
+  | 'awaiting_permission'
+  | 'awaiting_children'
+  | 'awaiting_pm'
+  | 'completed'
+  | 'failed'
+  | 'stopped'
+  | 'cancelled';
 
 /** Latest durable snapshot of a delegated job; transcripts stay in session events. */
 export interface PmWork {
   usage?: TaskUsage;
+  /** Missing on historical snapshots: the PM is the parent. */
+  parentWorkId?: string | null;
+  sessionIds?: string[];
+  provider?: string;
+  reportedModel?: string | null;
+  activity?: string | null;
+  updatedAt?: number;
+  observedHead?: string | null;
   id: string;
   parentSessionId: string;
   sessionId: string | null;

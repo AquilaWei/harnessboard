@@ -195,7 +195,7 @@ it('resumes the same worker for PM-requested fixes', async () => {
     .split('\n')
     .map((line) => JSON.parse(line));
   expect(runs).toHaveLength(6);
-  const correction = runs.find((run) => run.received[0] === 'Use a capital H.');
+  const correction = runs.find((run) => run.received[0].startsWith('Use a capital H.'));
   expect(correction.args).toContain('worker-thread');
   expect(pmWork(harness.store, task.id)).toHaveLength(1);
 });

@@ -46,6 +46,23 @@ const SUMMARY_CHARS = 600;
 export function taskView(task: Task, harness: Harness): TaskView {
   const { store, config } = harness;
   const sessions = store.listSessions(task.id);
+  const pmTurnSession = store.lastEvent(task.id, 'pm_turn')?.sessionId;
+  const pmSession =
+    sessions.find((s) => s.id === pmTurnSession && s.agentId === task.pm?.agentId) ??
+    sessions.findLast((s) => s.role === 'pm' && s.agentId === task.pm?.agentId);
+  const works = task.workflow === 'pm' ? pmWork(store, task.id) : [];
+  const permissions = harness.permissionRequests(task.id);
+  const activityFor = (sessionId: string | null | undefined) => {
+    const progress = sessionId ? store.lastSessionEvent(sessionId, 'pm_progress') : null;
+    const tool = sessionId ? store.lastSessionEvent(sessionId, 'tool_use') : null;
+    const event = (progress?.id ?? 0) > (tool?.id ?? 0) ? progress : tool;
+    const data = event?.data as { message?: string; name?: string; summary?: string } | undefined;
+    return {
+      activity:
+        data?.message ?? (data?.name ? `${data.name}: ${data.summary ?? ''}`.slice(0, 300) : null),
+      updatedAt: event?.ts ?? undefined,
+    };
+  };
   const workflow = store.lastEvent(task.id, 'workflow_run');
   const chat = store.lastEvent(task.id, 'chat_message');
   const active = (chat?.id ?? 0) > (workflow?.id ?? 0) ? chat : workflow;
@@ -55,17 +72,66 @@ export function taskView(task: Task, harness: Harness): TaskView {
     operations: harness.taskOperations(task.id),
     ...(task.workflow === 'pm'
       ? {
-          work: pmWork(store, task.id).map((work) => ({
+          work: works.map((work) => ({
             ...work,
+            provider: config.agents[work.agentId]?.provider ?? work.agentId,
+            reportedModel: work.sessionId
+              ? ((
+                  store.lastSessionEvent(work.sessionId, 'init')?.data as
+                    { model?: string } | undefined
+                )?.model ?? null)
+              : null,
+            ...(work.status === 'running' && activityFor(work.sessionId).activity
+              ? {
+                  activity: activityFor(work.sessionId).activity,
+                  updatedAt:
+                    activityFor(work.sessionId).updatedAt ?? work.updatedAt ?? task.updatedAt,
+                }
+              : {}),
+            ...(permissions.some((p) => p.sessionId === work.sessionId)
+              ? { status: 'awaiting_permission' as const }
+              : {}),
             usage: taskUsage(
               task.id,
               store,
-              sessions.filter((s) => s.id === work.sessionId),
-              harness.activity(task.id) !== null,
+              sessions.filter((s) => s.id === work.sessionId || work.sessionIds?.includes(s.id)),
+              [
+                'queued',
+                'running',
+                'awaiting_permission',
+                'awaiting_children',
+                'awaiting_pm',
+              ].includes(work.status),
               Date.now(),
               true,
             ),
           })),
+          pmState: {
+            provider: config.agents[task.pm!.agentId]?.provider ?? task.pm!.agentId,
+            model: pmSession
+              ? ((
+                  store.lastSessionEvent(pmSession.id, 'init')?.data as
+                    { model?: string } | undefined
+                )?.model ?? null)
+              : null,
+            status:
+              task.status === 'running' &&
+              (store.lastEvent(task.id, 'pm_reply')?.id ?? 0) >
+                (store.lastEvent(task.id, 'pm_turn')?.id ?? 0) &&
+              works.some((w) =>
+                [
+                  'queued',
+                  'running',
+                  'awaiting_children',
+                  'awaiting_pm',
+                  'awaiting_permission',
+                ].includes(w.status),
+              )
+                ? 'awaiting_children'
+                : task.status,
+            activity: activityFor(pmSession?.id).activity,
+            updatedAt: activityFor(pmSession?.id).updatedAt ?? null,
+          },
           pmUsage: taskUsage(
             task.id,
             store,

@@ -28,10 +28,11 @@ import { NotesView } from './NotesView';
 import { FeatureProgress } from './Meter';
 import { PermissionPrompt } from './PermissionPrompt';
 import { PlanReview } from './PlanReview';
+import { AgentTeam } from './AgentTeam';
 import { Timeline } from './Timeline';
 
 export type DrawerTab =
-  'timeline' | 'notes' | 'chat' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
+  'team' | 'timeline' | 'notes' | 'chat' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
 
 interface Props {
   taskId: number;
@@ -106,7 +107,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   });
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
@@ -134,6 +137,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   const hasCriteria = task?.mode === 'single' && (task.confirmPlan || task.acceptance);
   const tabs: DrawerTab[] = [
     'timeline',
+    ...(task?.workflow === 'pm' ? (['team'] as const) : []),
     ...(task?.mode === 'loop' ? (['features'] as const) : []),
     ...(hasCriteria ? (['criteria'] as const) : []),
     ...(task?.latestSessionId && task.workflow !== 'pm' ? (['notes'] as const) : []),
@@ -156,7 +160,12 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   return (
     <>
       <div className="scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={task?.title ?? ''}>
+      <aside
+        className={`drawer ${tab === 'team' ? 'drawer-team' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={task?.title ?? ''}
+      >
         <div className="drawer-head">
           <div className="drawer-title">
             <h2>{task?.title}</h2>
@@ -344,6 +353,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
           ))}
         </div>
         <div className="drawer-body">
+          {tab === 'team' && task && <AgentTeam task={task} events={events} />}
           {tab === 'timeline' && <Timeline entries={timeline} />}
           {tab === 'notes' && task && task.workflow !== 'pm' && (
             <NotesView taskId={taskId} version={task.updatedAt} onError={onError} />

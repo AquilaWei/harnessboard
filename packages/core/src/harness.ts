@@ -2014,6 +2014,8 @@ export class Harness {
                 });
               },
               notice: (id, message) => this.notice(id, message),
+              updated: (id) =>
+                this.emit({ type: 'task', taskId: id, status: this.requireTask(id).status }),
             },
             ready,
             controller.signal,
@@ -2261,14 +2263,16 @@ export class Harness {
           : {}),
         access: plan.access,
         // A read-only session may run the task's own check, but nothing that edits.
-        allowedTools:
-          plan.access === 'readOnly'
+        allowedTools: [
+          ...((plan as PmSessionPlan).mcpServers ? ['mcp__harnessboard__*'] : []),
+          ...(plan.access === 'readOnly'
             ? plan.role === 'pm'
               ? ['mcp__harnessboard__*']
               : task.verifyCommand && plan.role !== 'reviewer'
                 ? [`Bash(${task.verifyCommand})`]
                 : []
-            : [...new Set([...task.permission.allowedTools, ...this.config.allowedTools])],
+            : [...new Set([...task.permission.allowedTools, ...this.config.allowedTools])]),
+        ],
         skipPermissions: task.permission.skipPermissions,
         // Read-only sessions must not change anything, so they are never offered more tools.
         askPermission: plan.access === 'edit' && adapter.capabilities.permissionPrompts,

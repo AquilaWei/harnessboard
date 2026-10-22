@@ -3,6 +3,10 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { PmConfig, Task } from '@harnessboard/shared';
+import { resolveThresholds } from '@harnessboard/shared';
+import { ClaudeCodeAdapter } from '../src/claude-code.js';
+import { runSession } from '../src/runner.js';
+import { FAKE_CLAUDE, init, result, writeScenario } from './helpers.js';
 import { git } from '../src/worktree.js';
 import { Store } from '../src/store.js';
 import { PmWorkflow, pmWork, validatePm } from '../src/pm.js';
@@ -96,16 +100,27 @@ function pmTurn(action: () => Promise<void>) {
   return engine.run();
 }
 
-it('allows two workers but refuses a second writer and a third worker', async () => {
+it('allows more than two read-only workers', async () => {
   await pmTurn(async () => {
-    await engine.call('dispatch', input);
-    await expect(engine.call('dispatch', input)).rejects.toThrow('Only one worker');
     await engine.call('dispatch', { ...input, access: 'readOnly' });
-    await expect(engine.call('dispatch', { ...input, access: 'readOnly' })).rejects.toThrow(
-      'At most two',
-    );
+    await engine.call('dispatch', { ...input, access: 'readOnly' });
+    await engine.call('dispatch', { ...input, access: 'readOnly' });
   });
-  expect(pmWork(store, task.id)).toHaveLength(2);
+  expect(pmWork(store, task.id)).toHaveLength(3);
+});
+
+it('rejects waiting when no worker can produce an event', async () => {
+  await pmTurn(async () => {
+    await expect(engine.call('wait', {})).rejects.toThrow('No worker');
+  });
+});
+
+it('fails after one corrective turn instead of inventing a user question', async () => {
+  host.run = vi.fn(async () => outcome);
+  await engine.run();
+  expect(host.run).toHaveBeenCalledTimes(2);
+  expect(store.getTask(task.id)?.status).toBe('failed');
+  expect(store.lastEvent(task.id, 'pm_question')).toBeUndefined();
 });
 
 it('refuses models outside the task model pool', async () => {
@@ -292,4 +307,292 @@ it('runs a worker from an unborn branch through its first commit', async () => {
   };
   await engine.run();
   expect(pmWork(store, task.id)[0]).toMatchObject({ status: 'completed', since: null });
+});
+
+async function workerTool(
+  plan: Parameters<PmHost['run']>[1],
+  name: string,
+  args: Record<string, unknown> = {},
+) {
+  const server = plan.mcpServers!.harnessboard!;
+  const response = await fetch(server.env.HB_PM_ENDPOINT!, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${server.env.HB_PM_CAPABILITY}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ method: 'tools/call', params: { name, arguments: args } }),
+  });
+  return response.json() as Promise<{ isError?: boolean; content: { text: string }[] }>;
+}
+
+it('hands shared write access to a child and resumes its parent after child completion', async () => {
+  const order: string[] = [];
+  let dispatched = false;
+  let parentTurn = 0;
+  host.run = async (_task, plan, id) => {
+    store.setAgentSessionId(id, id);
+    if (plan.role === 'pm') {
+      if (!dispatched) {
+        dispatched = true;
+        await engine.call('dispatch', input);
+        await engine.call('wait', {});
+      } else if (pmWork(store, task.id).some((w) => w.status !== 'completed')) {
+        await engine.call('wait', {});
+      } else {
+        await engine.call('ask_user', { message: 'Please inspect the result.' });
+      }
+      return outcome;
+    }
+    const work = pmWork(store, task.id).find((w) => w.sessionId === id)!;
+    if (work.parentWorkId) {
+      order.push('child');
+      await git(task.worktreePath!, ['commit', '--allow-empty', '-m', 'feat: complete child work']);
+      return outcome;
+    }
+    parentTurn++;
+    if (parentTurn === 1) {
+      order.push('parent starts');
+      const result = await workerTool(plan, 'dispatch', { ...input, goal: 'Child edit' });
+      expect(result.isError).toBeUndefined();
+      expect(pmWork(store, task.id)[1]?.status).toBe('queued');
+      await workerTool(plan, 'wait');
+      order.push('parent yields');
+    } else {
+      order.push('parent resumes');
+      expect(plan.prompt).toContain('Resume your assigned work');
+    }
+    return outcome;
+  };
+  await engine.run();
+  expect(order).toEqual(['parent starts', 'parent yields', 'child', 'parent resumes']);
+  expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']);
+  expect(pmWork(store, task.id)[1]?.parentWorkId).toBe(pmWork(store, task.id)[0]?.id);
+});
+
+it('does not allow a read-only worker to delegate write access or PM decisions', async () => {
+  host.run = async (_task, plan) => {
+    if (plan.role === 'pm') {
+      await engine.call('dispatch', { ...input, access: 'readOnly' });
+      await engine.call('ask_user', { message: 'Inspect analysis.' });
+    } else {
+      expect((await workerTool(plan, 'dispatch', input)).isError).toBe(true);
+      expect(
+        (await workerTool(plan, 'permission', { requestId: 'r', behavior: 'allow', reason: 'x' }))
+          .isError,
+      ).toBe(true);
+    }
+    return outcome;
+  };
+  await engine.run();
+  expect(pmWork(store, task.id)).toHaveLength(1);
+  expect(host.answer).not.toHaveBeenCalled();
+});
+
+it('cancels a worker subtree including queued writers', async () => {
+  host.run = async (_task, plan, id) => {
+    if (plan.role === 'pm') {
+      if (pmWork(store, task.id).length === 0) {
+        await engine.call('dispatch', input);
+        await engine.call('wait', {});
+      } else {
+        await engine.call('cancel_work', { id: pmWork(store, task.id)[0]!.id });
+        await engine.call('ask_user', { message: 'Work cancelled.' });
+      }
+    } else {
+      await workerTool(plan, 'dispatch', { ...input, goal: 'Queued child' });
+      await workerTool(plan, 'report_progress', { message: 'Child queued' });
+      const work = pmWork(store, task.id).find((w) => w.sessionId === id)!;
+      expect(work.parentWorkId).toBeNull();
+      await workerTool(plan, 'wait');
+    }
+    return outcome;
+  };
+  await engine.run();
+  expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['cancelled', 'cancelled']);
+});
+
+it('sends historical failure state even when there are no new child events', async () => {
+  store.appendEvent(task.id, null, 'pm_work', {
+    ...input,
+    id: 'failed-work',
+    parentSessionId: 'saved-pm',
+    sessionId: null,
+    model: null,
+    effort: null,
+    status: 'failed',
+    summary: 'Old worker crashed',
+    evidence: null,
+    since: null,
+    head: null,
+    execution: 'managed',
+  });
+  store.startSession('saved-pm', task.id, 'pm', 'claude', 'saved-pm');
+  store.appendEvent(task.id, 'saved-pm', 'pm_turn', { hash: 'previous', fingerprints: {} });
+  store.endSession('saved-pm', 'completed');
+  host.run = async (_task, plan) => {
+    expect(plan.prompt).toContain('Old worker crashed');
+    expect(plan.prompt).toContain('Choose the number of managed workers');
+    expect(plan.prompt).toContain('"status":"failed"');
+    expect(plan.prompt).toContain('User has approved the current specification');
+    expect(plan.resume?.id).toBe('saved-pm');
+    await engine.call('ask_user', { message: 'A genuine external dependency needs a choice.' });
+    return outcome;
+  };
+  await engine.run();
+});
+
+it('routes a worker escalation to the PM and resumes the same conversation with its answer', async () => {
+  let dispatched = false;
+  let workerTurns = 0;
+  host.run = async (_task, plan, id) => {
+    store.setAgentSessionId(id, id);
+    if (plan.role === 'pm') {
+      if (!dispatched) {
+        dispatched = true;
+        await engine.call('dispatch', { ...input, access: 'readOnly' });
+        await engine.call('wait', {});
+      } else {
+        const work = pmWork(store, task.id)[0]!;
+        if (work.status === 'awaiting_pm') {
+          expect(plan.prompt).toContain('Which protocol version?');
+          await engine.call('continue_work', { id: work.id, message: 'Use approved protocol v1.' });
+          await engine.call('wait', {});
+        } else if (work.status === 'completed') {
+          await engine.call('ask_user', { message: 'Review findings.' });
+        } else {
+          await engine.call('wait', {});
+        }
+      }
+    } else {
+      workerTurns++;
+      if (workerTurns === 1) {
+        const reply = await workerTool(plan, 'ask_pm', { message: 'Which protocol version?' });
+        expect(reply.isError).toBeUndefined();
+      } else {
+        expect(plan.prompt).toContain('Use approved protocol v1.');
+      }
+    }
+    return outcome;
+  };
+  await engine.run();
+  expect(workerTurns).toBe(2);
+  expect(pmWork(store, task.id)[0]?.status).toBe('completed');
+  expect(store.listSessions(task.id).filter((s) => s.role === 'worker')).toHaveLength(1);
+});
+
+it('joins multi-level delegated work before each parent completes', async () => {
+  const order: string[] = [];
+  const turns = new Map<string, number>();
+  let dispatched = false;
+  host.run = async (_task, plan, id) => {
+    store.setAgentSessionId(id, id);
+    if (plan.role === 'pm') {
+      if (!dispatched) {
+        dispatched = true;
+        await engine.call('dispatch', { ...input, access: 'readOnly' });
+        await engine.call('wait', {});
+      } else if (pmWork(store, task.id).some((w) => w.status !== 'completed')) {
+        await engine.call('wait', {});
+      } else {
+        await engine.call('ask_user', { message: 'Review combined analysis.' });
+      }
+    } else {
+      const work = pmWork(store, task.id).find((w) => w.sessionId === id)!;
+      const turn = (turns.get(work.id) ?? 0) + 1;
+      turns.set(work.id, turn);
+      if (work.goal !== 'Leaf analysis' && turn === 1) {
+        const goal = work.parentWorkId ? 'Leaf analysis' : 'Nested analysis';
+        await workerTool(plan, 'dispatch', { ...input, goal, access: 'readOnly' });
+        await workerTool(plan, 'wait');
+      } else {
+        order.push(work.goal);
+      }
+    }
+    return outcome;
+  };
+  await engine.run();
+  expect(order).toEqual(['Leaf analysis', 'Nested analysis', 'Implement greeting']);
+  expect(pmWork(store, task.id).map((w) => w.status)).toEqual([
+    'completed',
+    'completed',
+    'completed',
+  ]);
+});
+
+it('delegates through real managed CLI processes and resumes only after the child exits', async () => {
+  const scenario = writeScenario(tempDir('nested-cli'), [
+    [
+      [
+        init('parent-thread'),
+        {
+          __pm: { name: 'dispatch', arguments: { ...input, goal: 'Implement delegated greeting' } },
+        },
+        { __pm: { name: 'wait' } },
+        result('Waiting for delegated edit'),
+      ],
+    ],
+    [
+      [
+        init('child-thread'),
+        { __write: { path: 'greeting.txt', content: 'hello\n' } },
+        { __commit: 'feat: add delegated greeting' },
+        result('Greeting implemented and checked'),
+      ],
+    ],
+    [[init('parent-thread'), result('Inspected child changes and verified greeting')]],
+  ]);
+  vi.stubEnv('FAKE_CLAUDE_SCENARIO', scenario);
+  const adapter = new ClaudeCodeAdapter(FAKE_CLAUDE);
+  let dispatched = false;
+  host.run = async (_task, plan, id, signal) => {
+    if (plan.role === 'pm') {
+      if (!dispatched) {
+        dispatched = true;
+        await engine.call('dispatch', input);
+        await engine.call('wait', {});
+      } else if (pmWork(store, task.id).some((w) => w.status !== 'completed')) {
+        await engine.call('wait', {});
+      } else {
+        await engine.call('ask_user', { message: 'Please review the integrated greeting.' });
+      }
+      return outcome;
+    }
+    return runSession({
+      adapter,
+      signal,
+      thresholds: resolveThresholds({}),
+      contextWindow: 100000,
+      spec: {
+        cwd: task.worktreePath!,
+        sessionId: plan.resume?.agentSessionId ?? id,
+        resume: !!plan.resume,
+        prompt: plan.prompt,
+        model: null,
+        effort: null,
+        access: plan.access,
+        allowedTools: ['mcp__harnessboard__*'],
+        skipPermissions: false,
+        askPermission: false,
+        managedWorker: true,
+        mcpServers: plan.mcpServers!,
+      },
+      onEvent: (event) => {
+        if (event.kind === 'init') store.setAgentSessionId(id, event.sessionId);
+      },
+      onNotice: () => {},
+      onStderr: () => {},
+    });
+  };
+  try {
+    await engine.run();
+    expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']);
+    expect(store.listSessions(task.id).filter((s) => s.role === 'worker')).toHaveLength(2);
+    expect(pmWork(store, task.id)[0]?.summary).toBe(
+      'Inspected child changes and verified greeting',
+    );
+    expect(await git(task.worktreePath!, ['show', 'HEAD:greeting.txt'])).toBe('hello\n');
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

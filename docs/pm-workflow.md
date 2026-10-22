@@ -59,18 +59,31 @@ PM and worker session exactly once; missing provider usage stays unknown.
 
 ## Delegation and permissions
 
-The PM normally continues the same worker conversation for implementation and fixes.
-At most two workers run per task, and only one may write the task worktree. The second
-worker is for independent read-only analysis. Workers cannot access the PM's tools.
-Native subagents are disabled until their permissions, cancellation and usage can satisfy
-the same management contract; same-platform and cross-platform jobs both use managed CLI
-sessions today.
+PM and workers choose whether to delegate based on dependencies, elapsed time, context
+and token cost. Small tasks need no extra agents; tightly coupled edits should stay with
+one agent. There is no fixed two-worker limit. Local Claude Code and Codex workers can
+use the same managed delegation tools as the PM; Gemini and Docker transports currently
+remain leaf workers because they cannot reach this task-scoped MCP bridge. The `profiles`
+tool reports delegation support. Native CLI subagents remain disabled.
 
-Dispatch returns a job ID immediately. A waiting PM ends its model turn and is woken by
-child results, permissions or user messages, without polling. The PM can continue a
-worker, cancel it, change to another permitted worker, or ask you about an unresolved
-problem. Cancelled work remains in the history, including any files it changed; the final
-writer and PM must account for those changes before acceptance.
+Each delegated job records its parent. PM can inspect the whole tree; workers can manage
+only their descendants, within their original scope and permitted profile/model pool.
+Read-only workers cannot delegate write access or make PM permission/specification decisions.
+Workers use `ask_pm` for missing information or authorization; the PM answers with
+`continue_work` or asks the user through the existing Chat flow.
+
+Dispatch returns immediately. Independent read-only work can run in parallel. All writers
+share one worktree, so edits queue: a parent writer dispatching child edits calls `wait`
+and ends its turn, then the harness waits for its process to exit before releasing write
+access. The parent resumes after child results and must integrate and verify them. Waiting
+is not completion and does not require a final clean commit at the handoff boundary.
+`report_progress` records meaningful milestones or blockers without model polling.
+
+The PM retains all user-facing responsibilities: initial specification discussion and
+approval, progress reports, necessary questions, scope changes, review and final acceptance.
+Worker results return through their parent; the PM also receives compact status updates
+for supervision. Cancelling a job cancels its descendants and retains files and evidence.
+A parent cannot complete with unfinished children, and final acceptance checks the entire tree.
 
 Explicit existing tool rules still apply. Other worker permission requests go to the PM,
 which can allow the specific request once, deny it with a reason, or ask you when the
@@ -83,12 +96,15 @@ or a user decision; the harness never silently enables unrestricted mode.
 Stopping a task stops its children and invalidates pending permissions. After a restart,
 interrupted children are marked stopped and shown to the PM rather than dispatched again.
 The PM must inspect existing work before explicitly continuing it. Old permission IDs are
-not replayed.
+not replayed. Historical failed/stopped work remains visible even without new child events.
+`wait` rejects empty waits. If the PM ends without a next step, the harness gives one
+corrective turn; continued inaction becomes an explicit coordination failure, not a fake
+request for user approval.
 
 ## Context and acceptance
 
-PM turns receive only new child summaries, user messages and changed specification/rule
-content. Content hashes track the specification, configured rule documents and worker
+PM turns receive an authoritative compact work-tree snapshot on every turn, plus new
+progress/escalations, user messages and changed specification/rule content. Content hashes track the specification, configured rule documents and worker
 pool per PM conversation. Worker continuations similarly avoid resending unchanged job
 instructions and rules. Compaction restores required context. Original documents and
 full evidence remain available when correctness requires inspection; the harness cannot
@@ -108,6 +124,21 @@ the result and chooses **Mark done** (or merges the changes) to complete it. Wor
 **Merge** or run `hb merge`; PM acceptance does not authorize publication. A merge conflict
 returns to the PM for worker fixes and another acceptance pass.
 
+## Agent team on desktop and phone
+
+Open **Agent team** in a PM task to see robot nodes for the PM, workers and their subagents.
+Reporting lines, current activity and status update from managed events. Select a node
+for its goal, scope, acceptance criteria, blocker/result, observed/result commit, configured
+and reported models, token breakdown, estimated API cost, execution time and event log.
+Usage on a node covers only that agent; children are counted separately. Missing usage is
+unknown, not zero. Activity is a reported milestone or tool event, not inferred progress.
+
+Desktop shows a collapsible tree beside the inspector, with zoom, pan and fit controls.
+Phones show connected hierarchy cards with bounded indentation; selecting a robot opens
+full-width details. Back preserves the tree's branch state and scroll position. Selection
+survives rotation. Controls support touch and keyboard; status also has text labels.
+Agent details are read-only: send instructions and opinions through the PM Chat.
+
 ## Legacy tasks and validation
 
 Existing records migrate to `workflow: legacy` without changing their role assignments,
@@ -124,10 +155,27 @@ become PM tasks without replaying their feature-by-feature workflow.
 
 Automated tests cover the tool transport, approval, dispatch, worker reuse, permissions,
 cancellation, concurrency, restart and migration using scripted agents. Live Claude Code
-and Codex model turns, platform-native subagents and desktop launch remain separate
+and Codex model turns, managed nested delegation on live providers and desktop/phone interaction remain separate
 acceptance checks. No local installer is built by this change.
 
 To compare consumption, run identical tasks with the same models and criteria using
 `hb add --legacy` and `hb add`, then compare `hb show` usage, cache reads/writes, run count,
 elapsed time and correctness. Prompt-size regression tests demonstrate omitted repeated
 context; they are not a measurement of real token savings. No saving percentage is assumed.
+
+## Manual acceptance
+
+Automated coverage uses managed scripted CLI processes and real desktop/mobile browser
+viewports. It does not claim live-model quality, real-phone acceptance or an installed
+Electron upgrade. Check these before release:
+
+- With local Claude Code and Codex, approve a small task, delegate independent analysis,
+  then delegate an edit from a worker. Expect one writer at a time, child results returned
+  to the parent, and the PM to review the integrated current commit.
+- On a real phone, open Agent team, expand a deep branch, inspect model/token details,
+  return and rotate. Expect usable touch controls, retained selection/scroll and no page
+  overflow; PM Chat and approval actions must remain reachable.
+- In the desktop app, inspect a larger tree with zoom/pan/fit, switch agents and stop the
+  task. Expect the whole subtree to stop and old results to remain inspectable.
+- Restart an interrupted task explicitly. Expect the PM to see stopped workers and inspect
+  existing files before continuing, without requesting unchanged specification approval.

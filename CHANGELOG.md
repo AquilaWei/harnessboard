@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- PM 與本機 Claude／Codex worker 可依需求委派受管理的 subagent，追蹤從屬關係與進度；共用工作目錄的修改接續進行，獨立分析可平行。
+- 新增桌面與手機的 Agent 團隊面板，以機器人樹狀關係顯示工作狀態，點選查看模型、token 明細、估算成本與事件紀錄。
+
+### Fixed
+
+- PM 恢復對話時取得實際 worker 狀態，避免將已失敗工作誤認為仍在執行；空等待會被拒絕，補正一次仍無下一步時明確顯示協調失敗。
+
 ## 0.2.6 - 2026-10-22
 
 Local test release; interactive desktop acceptance is pending.

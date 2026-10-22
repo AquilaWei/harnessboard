@@ -22,7 +22,7 @@ export const PM_TOOLS = [
   {
     name: 'dispatch',
     description:
-      'Start a managed worker. Reuse an existing worker for fixes. At most two workers and one writer. Returns immediately.',
+      'Start a managed worker. Delegate only when the benefit exceeds context and integration costs. Writers queue for the shared worktree. A worker delegating edits must yield before its child can start. Returns immediately.',
     inputSchema: fields(
       {
         agentId: string,
@@ -54,8 +54,20 @@ export const PM_TOOLS = [
   {
     name: 'wait',
     description:
-      'Yield until a child result, permission request or user message arrives. End this turn after calling; the harness wakes you.',
+      'Yield to active children. Fails when no child can produce a result. End this turn immediately; the harness releases your write access and resumes you after child results.',
     inputSchema: fields({}),
+  },
+  {
+    name: 'report_progress',
+    description:
+      'Report a concise milestone, current activity or blocker. Do not repeatedly report unchanged status.',
+    inputSchema: fields({ message: string }, ['message']),
+  },
+  {
+    name: 'ask_pm',
+    description:
+      'Workers only: report missing information or authorization to the PM. End this turn and wait for the PM to continue this work.',
+    inputSchema: fields({ message: string }, ['message']),
   },
   {
     name: 'propose_spec',
@@ -115,10 +127,11 @@ for await (const line of rl) {
 }
 `;
 
-/** Creates a loopback bridge for one PM run. Closing revokes its capability immediately. */
+/** Binds tools to one caller; workers see only delegation tools. Closing revokes access. */
 export async function pmTools(
   dataDir: string,
   call: (name: string, input: Record<string, unknown>) => Promise<unknown>,
+  worker = false,
 ): Promise<{ server: SessionMcpServer; close: () => Promise<void> }> {
   const token = randomBytes(32).toString('hex');
   const file = path.join(dataDir, `pm-bridge-${randomBytes(8).toString('hex')}.mjs`);
@@ -139,7 +152,14 @@ export async function pmTools(
       }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       let result: unknown;
-      if (body.method === 'tools/list') result = { tools: PM_TOOLS };
+      if (body.method === 'tools/list')
+        result = {
+          tools: PM_TOOLS.filter((tool) =>
+            worker
+              ? !['propose_spec', 'ask_user', 'permission', 'accept'].includes(tool.name)
+              : tool.name !== 'ask_pm',
+          ),
+        };
       else if (body.method === 'tools/call') {
         try {
           const value = await call(body.params?.name, body.params?.arguments ?? {});

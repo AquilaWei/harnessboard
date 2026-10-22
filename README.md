@@ -175,8 +175,12 @@ flowchart LR
 ```
 
 The PM asks you when scope, authorization or an execution problem cannot be resolved.
-It normally reuses one worker; at most two run, with one writer. Same-platform and
-cross-platform workers use managed CLI sessions. PM currently supports local Claude Code
+PM and workers decide when delegation saves time or tokens; small tasks need no extra
+agents. Independent analysis can run together, while edits take turns in one shared
+worktree. Local Claude Code and Codex workers can delegate managed subagents; Gemini and
+Docker workers remain leaves. **Agent team** shows the reporting tree, live activity and
+per-agent model/token details on desktop and phone. Same-platform and cross-platform
+workers use managed CLI sessions. PM currently supports local Claude Code
 and Codex; Gemini and Docker profiles are worker options. See [PM workflow](docs/pm-workflow.md)
 for configuration, permissions, context reuse and legacy task conversion.
 

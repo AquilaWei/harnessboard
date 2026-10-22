@@ -50,15 +50,25 @@ migration; child snapshots and decisions are durable events. `Harness` still own
 worktrees, session execution, quotas, cancellation and token protection.
 
 `pm-tools.ts` serves a short-lived, loopback MCP dispatcher through a generated stdio
-bridge. Each PM run receives an independent capability with no task selector. Workers
-receive no bridge configuration. Claude Code and Codex adapters inject it for PM sessions;
-Docker/Gemini profiles currently serve as workers only. Closing the bridge revokes access.
+bridge. Each PM run receives an independent capability with no task selector. Local Claude Code and Codex workers receive their own caller-bound bridge capability.
+Workers can manage only descendants and cannot approve specifications or permissions.
+Docker/Gemini profiles currently remain leaf workers without this bridge. Closing the bridge revokes access.
 The bridge uses Electron's Node mode when launched by the desktop utility process.
 
 Dispatch is asynchronous. The PM yields its turn while workers run, and child events wake
-it. Per-task limits allow two workers and one writer. Native delegation is disabled until
-its permissions, results, cancellation and accounting can satisfy the same contract.
+it. Workers can delegate and yield to their own children through the same managed tools.
+Parent IDs are persisted in child snapshots; absent IDs represent historical top-level jobs.
+Independent readers run concurrently without a fixed agent-count cap. Writer access is held
+only while a CLI process and its integrity checks run. A yielding parent releases it after
+its process exits, then queued child edits can start; the parent resumes for integration.
+Cancelled parents cancel descendants, and task stop/restart preserves the entire tree.
+Native CLI delegation remains disabled so all children share managed permissions,
+cancellation and usage accounting. Empty waits fail; a PM ending without a next step gets
+one corrective turn before an explicit coordination failure.
 Task totals contain managed sessions once; PM/child views filter those same usage records.
+TaskView projects parent links, reported models, real tool/progress activity and pending
+permissions for the Agent team panel. Desktop uses a zoomable tree with an inspector;
+phones use bounded-indentation hierarchy cards and full-width details with shared selection.
 
 See [PM-led tasks](pm-workflow.md) for interfaces, permissions, context behavior,
 acceptance and migration. The role-based sections below document legacy tasks.
