@@ -4,7 +4,7 @@ New tasks start with one PM: agree the direction and specification once, then le
 coordinate workers, decide permissions and review architecture and functionality.
 Existing tasks keep their original workflow. [PM workflow and limits](docs/pm-workflow.md).
 
-![version](https://img.shields.io/badge/version-0.2.3-blue)
+![version](https://img.shields.io/badge/version-0.2.4-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -90,7 +90,7 @@ Then give the command a short name (put the line in your shell's startup file to
 
 ```bash
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # prints the version, for example 0.2.3
+hb --version             # prints the version, for example 0.2.4
 ```
 
 <details>
