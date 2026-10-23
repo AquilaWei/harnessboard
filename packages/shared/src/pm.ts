@@ -14,6 +14,21 @@ export interface PmWorkerProfile {
   models: (string | null)[];
 }
 
+/** PM-appointed coordinator; every batch uses a fresh conversation. */
+export interface PmSecretary {
+  id: string;
+  parentSessionId: string;
+  agentId: string;
+  model: string | null;
+  effort: string | null;
+  status: 'waiting' | 'running' | 'failed';
+  sessionIds: string[];
+  summary: string | null;
+  updatedAt: number;
+  usage?: TaskUsage;
+  provider?: string;
+}
+
 export type WorkStatus =
   | 'queued'
   | 'running'

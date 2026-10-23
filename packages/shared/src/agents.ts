@@ -57,7 +57,7 @@ export function isProfileId(id: string): boolean {
 
 /** What a session was asked to do. */
 export type AgentRole =
-  'spec' | 'designer' | 'implementer' | 'tester' | 'reviewer' | 'pm' | 'worker';
+  'spec' | 'designer' | 'implementer' | 'tester' | 'reviewer' | 'pm' | 'worker' | 'secretary';
 
 /**
  * A model a profile's CLI offers (`GET /api/agents/:id/models`), as the platform describes

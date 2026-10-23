@@ -10,6 +10,7 @@ import { Markdown } from './Markdown';
  */
 const ROLE_ICONS = {
   pm: '📋',
+  secretary: '📎',
   worker: '🛠',
   spec: '📝',
   designer: '🎨',
@@ -261,19 +262,23 @@ function Step({ entry, firstFeatures }: { entry: TimelineEntry; firstFeatures: b
     case 'permission_decision': {
       const d = entry.decision;
       const key =
-        d.actor === 'pm'
+        d.actor === 'secretary'
           ? d.behavior === 'allow'
-            ? 'permissionPmAllowed'
-            : 'permissionPmDenied'
-          : d.behavior === 'deny'
-            ? 'permissionDenied'
-            : d.auto
-              ? 'permissionAuto'
-              : d.rules.length > 0
-                ? d.scope === 'global'
-                  ? 'permissionAllowedGlobal'
-                  : 'permissionAllowedRules'
-                : 'permissionAllowed';
+            ? 'permissionSecretaryAllowed'
+            : 'permissionSecretaryDenied'
+          : d.actor === 'pm'
+            ? d.behavior === 'allow'
+              ? 'permissionPmAllowed'
+              : 'permissionPmDenied'
+            : d.behavior === 'deny'
+              ? 'permissionDenied'
+              : d.auto
+                ? 'permissionAuto'
+                : d.rules.length > 0
+                  ? d.scope === 'global'
+                    ? 'permissionAllowedGlobal'
+                    : 'permissionAllowedRules'
+                  : 'permissionAllowed';
       return (
         <li className={`step ${d.behavior === 'allow' ? 'step-good' : 'step-bad'}`}>
           <StepHead

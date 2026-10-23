@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { pmWork, pmQuestion } from '@harnessboard/core';
+import { pmWork, pmQuestion, pmSecretary } from '@harnessboard/core';
 import type { PmAcceptance } from '@harnessboard/shared';
 import {
   contextPct,
@@ -51,6 +51,7 @@ export function taskView(task: Task, harness: Harness): TaskView {
     sessions.find((s) => s.id === pmTurnSession && s.agentId === task.pm?.agentId) ??
     sessions.findLast((s) => s.role === 'pm' && s.agentId === task.pm?.agentId);
   const works = task.workflow === 'pm' ? pmWork(store, task.id) : [];
+  const secretary = task.workflow === 'pm' ? pmSecretary(store, task.id) : null;
   const permissions = harness.permissionRequests(task.id);
   const activityFor = (sessionId: string | null | undefined) => {
     const progress = sessionId ? store.lastSessionEvent(sessionId, 'pm_progress') : null;
@@ -72,6 +73,20 @@ export function taskView(task: Task, harness: Harness): TaskView {
     operations: harness.taskOperations(task.id),
     ...(task.workflow === 'pm'
       ? {
+          secretary: secretary
+            ? {
+                ...secretary,
+                provider: config.agents[secretary.agentId]?.provider ?? secretary.agentId,
+                usage: taskUsage(
+                  task.id,
+                  store,
+                  sessions.filter((s) => s.role === 'secretary'),
+                  secretary.status === 'running' && harness.activity(task.id) !== null,
+                  Date.now(),
+                  true,
+                ),
+              }
+            : null,
           work: works.map((work) => ({
             ...work,
             provider: config.agents[work.agentId]?.provider ?? work.agentId,

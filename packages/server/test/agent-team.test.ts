@@ -148,3 +148,28 @@ it('stops a completed agents elapsed time while other agents continue working', 
   harness.activity = () => ({ phase: 'managing', agentId: 'claude' });
   expect(taskView(task, harness).work?.[0]?.usage?.elapsedMs).toBe(2000);
 });
+
+it('counts fresh secretary batches separately from PM and worker usage', () => {
+  store.startSession('pm', task.id, 'pm', 'claude', 'pm');
+  store.startSession('secretary-one', task.id, 'secretary', 'claude', 's1');
+  store.startSession('secretary-two', task.id, 'secretary', 'claude', 's2');
+  store.appendEvent(task.id, 'pm', 'usage', { ...usage(100), role: 'pm' });
+  store.appendEvent(task.id, 'secretary-one', 'usage', { ...usage(10), role: 'secretary' });
+  store.appendEvent(task.id, 'secretary-two', 'usage', { ...usage(20), role: 'secretary' });
+  store.appendEvent(task.id, null, 'pm_secretary', {
+    id: 'assistant',
+    parentSessionId: 'pm',
+    agentId: 'claude',
+    model: 'small',
+    effort: null,
+    status: 'waiting',
+    sessionIds: ['secretary-one', 'secretary-two'],
+    summary: 'Recorded routine approvals.',
+    updatedAt: 3000,
+  });
+  const view = taskView(task, harness);
+  expect(view.secretary?.usage?.tokens?.input).toBe(30);
+  expect(view.secretary?.usage?.runs).toBe(2);
+  expect(view.pmUsage?.tokens?.input).toBe(100);
+  expect(view.usage.tokens?.input).toBe(130);
+});

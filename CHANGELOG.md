@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- PM 可從允許的輕量模型中自行委任秘書，處理例行權限、整理進度；重要決策與交付審查才喚醒 PM，秘書用量於團隊面板獨立顯示。
+- 秘書每批使用新對話，保留重啟恢復與權限有效性檢查；失敗或額度不足時升交 PM，避免反覆重試。
+
+### Fixed
+
+- 受管理 Codex agent 使用 harnessboard 工具時，由程式直接處理內部確認，避免回報進度或等待也反覆要求 PM 審批。
+
 ## 0.2.7 - 2026-10-22
 
 Local test release; interactive desktop acceptance is pending.

@@ -35,6 +35,32 @@ available when the platform does not list a model. These controls are also avail
 when editing a stopped task's PM configuration.
 Only configured, explicitly permitted worker models can be dispatched.
 
+## PM-appointed secretary
+
+After specification approval, the PM can use `appoint_secretary` to select one fast,
+low-cost local Claude Code or Codex model from the same permitted pool. Include a
+lightweight model in that pool to make it available. Appointment does not start a model;
+routine events start short batches when needed. Without an appointment, the existing PM
+workflow continues. Existing tasks gain the tool on their next normal PM turn.
+
+The harness handles its own MCP tool confirmations directly. Remaining routine worker
+permissions and progress go to the secretary while the PM sleeps. The secretary can allow
+or deny a current request once, record a summary, or escalate; it cannot dispatch work,
+change scope, edit files, contact the user, or accept delivery. Higher-risk permissions,
+worker delivery/failure, worker decision questions and user messages go to the PM.
+
+Each secretary batch starts a fresh conversation containing the approved specification,
+applicable rules and pending events, without the PM or worker transcript. Concurrent
+events remain pending for a later batch. User messages and worker decisions preempt an
+active batch. A batch that fails, exceeds 60 seconds or runs out of quota escalates once
+and suspends secretary processing until the PM reappoints it. Restart preserves the
+appointment and event cursor; expired approvals are never replayed.
+
+The Team panel shows the secretary below the PM, with its model, status, batch history,
+tokens and cost. Its usage is included in task totals and excluded from PM/worker totals;
+permission history identifies decisions made by the secretary. Lightweight models still
+use tokens: compare total task cost and PM run count when evaluating savings.
+
 ```bash
 hb add "Add a dark mode toggle" --pm claude --pm-model sonnet \
   --worker claude:sonnet codex:gpt-5.5

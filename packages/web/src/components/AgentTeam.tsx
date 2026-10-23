@@ -9,7 +9,7 @@ import { UsageSummary } from './UsageSummary';
 type Node = {
   id: string;
   parent: string | null;
-  role: 'pm' | 'worker' | 'subagent';
+  role: 'pm' | 'worker' | 'subagent' | 'secretary';
   agent: string;
   provider: string;
   model: string | null;
@@ -73,6 +73,23 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
       updatedAt: task.pmState?.updatedAt ?? null,
       work: null,
     },
+    ...(task.secretary
+      ? [
+          {
+            id: task.secretary.id,
+            parent: 'pm',
+            role: 'secretary' as const,
+            agent: task.secretary.agentId,
+            provider: task.secretary.provider ?? task.secretary.agentId,
+            model: task.secretary.model,
+            reportedModel: Object.keys(task.secretary.usage?.byModel ?? {}).at(-1) ?? null,
+            status: task.secretary.status,
+            activity: task.secretary.summary,
+            updatedAt: task.secretary.updatedAt,
+            work: null,
+          },
+        ]
+      : []),
     ...(task.work ?? []).map((work): Node => ({
       id: work.id,
       parent: work.parentWorkId ?? 'pm',
@@ -163,10 +180,16 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
       </li>
     );
   };
-  const sessions = current?.work
-    ? (current.work.sessionIds ?? [current.work.sessionId])
-    : events.filter((e) => e.kind === 'pm_turn').map((e) => e.sessionId);
-  const usage = current?.work?.usage ?? (current?.id === 'pm' ? task.pmUsage : undefined);
+  const sessions =
+    current?.role === 'secretary'
+      ? task.secretary?.sessionIds
+      : current?.work
+        ? (current.work.sessionIds ?? [current.work.sessionId])
+        : events.filter((e) => e.kind === 'pm_turn').map((e) => e.sessionId);
+  const usage =
+    current?.role === 'secretary'
+      ? task.secretary?.usage
+      : (current?.work?.usage ?? (current?.id === 'pm' ? task.pmUsage : undefined));
   return (
     <section
       className={`agent-team ${current ? 'has-selection' : ''}`}
@@ -324,7 +347,7 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
                 )}
               </>
             ) : (
-              <p>{t('team.pmDuty')}</p>
+              <p>{t(current.role === 'secretary' ? 'team.secretaryDuty' : 'team.pmDuty')}</p>
             )}
             {usage ? <UsageSummary usage={usage} /> : <p>{t('usage.notRecorded')}</p>}
             <p className="hint">{t('team.ownUsage')}</p>

@@ -23,3 +23,4 @@ export * from './tailscale.js';
 export * from './workflow.js';
 export * from './worktree.js';
 export * from './pm.js';
+export { pmSecretary } from './pm-secretary.js';

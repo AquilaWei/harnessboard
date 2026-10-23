@@ -58,11 +58,21 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       args.push('--strict-mcp-config');
     }
     if (spec.mcpServers || spec.managedWorker) args.push('--disallowedTools', 'Agent', 'Task');
+    if (spec.toolsOnly)
+      args.push(
+        '--tools',
+        '',
+        '--no-session-persistence',
+        '--setting-sources',
+        'user',
+        '--system-prompt',
+        'You are a task-scoped secretary. Follow the approved specification and batch instructions. Use only the provided MCP tools. Escalate decisions to the PM.',
+      );
     if (spec.model) args.push('--model', spec.model);
     if (spec.effort) args.push('--effort', spec.effort);
     if (spec.access === 'readOnly') {
       // Default permission mode: in print mode every tool not listed here is refused.
-      args.push('--allowedTools', ...READ_ONLY_TOOLS, ...spec.allowedTools);
+      args.push('--allowedTools', ...(spec.toolsOnly ? [] : READ_ONLY_TOOLS), ...spec.allowedTools);
     } else if (spec.skipPermissions) {
       args.push('--dangerously-skip-permissions');
     } else {

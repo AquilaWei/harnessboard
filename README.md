@@ -4,6 +4,10 @@ New tasks start with one PM: agree the direction and specification once, then le
 coordinate workers, decide permissions and review architecture and functionality.
 Existing tasks keep their original workflow. [PM workflow and limits](docs/pm-workflow.md).
 
+The PM can appoint a lightweight secretary from the permitted model pool to handle
+routine permissions and summarize progress. Decisions and final review stay with the PM;
+the Team panel shows the secretary's usage separately.
+
 ![version](https://img.shields.io/badge/version-0.2.7-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)

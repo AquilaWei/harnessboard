@@ -22,6 +22,7 @@ import { COMMIT_RULE, checkCommits } from './commit-check.js';
 import { readGuidelines } from './guidelines.js';
 import { headCommit, optionalHeadCommit, porcelainStatus } from './worktree.js';
 import { pmTools } from './pm-tools.js';
+import { Secretary } from './pm-secretary.js';
 
 interface WorkerTurn {
   yielded: boolean;
@@ -39,6 +40,9 @@ export interface PmSessionPlan extends SessionPlan {
   pmModel: string | null;
   pmEffort: string | null;
   mcpServers?: Record<string, SessionMcpServer>;
+  toolsOnly?: boolean;
+  /** Secretary batches run outside the repository to avoid project auto-loaded context. */
+  cwd?: string;
 }
 
 export interface PmHost {
@@ -53,7 +57,13 @@ export interface PmHost {
   status(id: number, status: TaskStatus): void;
   blocked(agentId: string): boolean;
   permissions(id: number): PermissionRequest[];
-  answer(id: number, requestId: string, behavior: 'allow' | 'deny', reason: string): void;
+  answer(
+    id: number,
+    requestId: string,
+    behavior: 'allow' | 'deny',
+    reason: string,
+    actor?: 'pm' | 'secretary',
+  ): void;
   notice(id: number, message: string): void;
   /** Publish child changes without changing the task status, so live views can refresh. */
   updated?(id: number): void;
@@ -125,15 +135,23 @@ export class PmWorkflow {
   private paused = false;
   private pmSessionId = '';
   private current = false;
+  private pmPending = true;
+  private readonly secretary: Secretary;
 
   constructor(
     private readonly host: PmHost,
     private readonly task: Task,
     private readonly signal: AbortSignal,
-  ) {}
+  ) {
+    this.secretary = new Secretary(host, task.id, signal);
+  }
 
   /** Wakes an idle PM on a child permission or user message without polling. */
-  notify(): void {
+  notify(kind: 'decision' | 'routine' | 'state' = 'decision'): void {
+    if (kind === 'decision') {
+      this.pmPending = true;
+      this.secretary.interrupt();
+    }
     this.version++;
     this.wake?.();
     for (const resolve of this.listeners) resolve();
@@ -160,6 +178,7 @@ export class PmWorkflow {
     this.signal.addEventListener('abort', cancel);
     const bridge = await pmTools(this.host.config.dataDir, (name, args) => this.call(name, args));
     try {
+      this.secretary.recover();
       for (const work of this.works.filter(active))
         this.record({
           ...work,
@@ -169,7 +188,7 @@ export class PmWorkflow {
         });
       while (!this.signal.aborted && !this.paused && !this.accepted) {
         const observed = this.version;
-        await this.turn(bridge.server);
+        await this.coordinate(bridge.server);
         this.correction = false;
         if (pmQuestion(this.host.store, this.task.id)) {
           this.host.status(this.task.id, 'awaiting_approval');
@@ -203,6 +222,7 @@ export class PmWorkflow {
         if (!this.correctionUsed) {
           this.correctionUsed = true;
           this.correction = true;
+          this.pmPending = true;
           continue;
         }
         this.host.notice(
@@ -225,6 +245,17 @@ export class PmWorkflow {
 
   private question(message: string, kind: PmQuestion['kind']): void {
     this.host.store.appendEvent(this.task.id, this.pmSessionId, 'pm_question', { message, kind });
+  }
+
+  private async coordinate(server: SessionMcpServer): Promise<void> {
+    const secretary = this.secretary.state;
+    if (!this.pmPending && secretary && secretary.status !== 'failed') {
+      const escalate = await this.secretary.handle();
+      if (!escalate && !this.pmPending) return;
+    }
+    if (this.signal.aborted) return;
+    this.pmPending = false;
+    await this.turn(server);
   }
 
   private text(input: Record<string, unknown>, key: string): string {
@@ -251,11 +282,16 @@ export class PmWorkflow {
     if (caller && this.work(caller).status === 'cancelled') throw new Error('Worker was cancelled');
     if (caller && (workerTurn?.yielded || workerTurn?.askPm))
       throw new Error('Worker must end this turn');
-    if (caller && ['propose_spec', 'ask_user', 'permission', 'accept'].includes(name))
+    if (
+      caller &&
+      ['propose_spec', 'ask_user', 'permission', 'accept', 'appoint_secretary'].includes(name)
+    )
       throw new Error('Only the PM may use this tool');
     if (this.accepted || (!caller && pmQuestion(this.host.store, this.task.id)))
       throw new Error('PM must end this turn');
     switch (name) {
+      case 'appoint_secretary':
+        return this.secretary.appoint(input, this.pmSessionId);
       case 'profiles':
         return this.latest.pm!.workers.map((w) => ({
           ...w,
@@ -295,7 +331,7 @@ export class PmWorkflow {
           { workId: caller, message },
         );
         this.host.updated?.(this.task.id);
-        this.notify();
+        this.notify('routine');
         return { recorded: true };
       }
       case 'ask_pm': {
@@ -384,7 +420,7 @@ export class PmWorkflow {
       this.controllers.get(work.id)?.abort();
       this.record({ ...work, status: 'cancelled' });
     }
-    this.notify();
+    this.notify('state');
   }
 
   private assertDispatch(access: PmWork['access'], caller: string | null): void {
@@ -469,7 +505,7 @@ export class PmWorkflow {
         status: 'awaiting_children',
         activity: 'PM supplied direction; waiting for child work to finish.',
       });
-      this.notify();
+      this.notify('state');
       return this.work(work.id);
     }
     if (active(work)) throw new Error('Worker is already active');
@@ -497,13 +533,14 @@ export class PmWorkflow {
               : 'failed',
           summary: (err as Error).message,
         });
+        this.notify('decision');
       })
       .finally(() => {
         this.processes.delete(work.id);
         this.turns.delete(work.id);
         this.controllers.delete(work.id);
         this.jobs.delete(job);
-        this.notify();
+        this.notify('state');
       });
     this.jobs.add(job);
   }
@@ -598,7 +635,7 @@ export class PmWorkflow {
         } finally {
           this.processes.delete(work.id);
           this.turns.delete(work.id);
-          this.notify();
+          this.notify('state');
         }
         // Children cannot acquire a writer until the parent process above has actually exited.
         while (
@@ -725,6 +762,8 @@ export class PmWorkflow {
                 : 'completed',
     };
     this.record(work);
+    if (['completed', 'failed', 'stopped', 'cancelled', 'awaiting_pm'].includes(work.status))
+      this.notify('decision');
     if (failure) this.cancelDescendants(work.id);
     return !failure && !signal.aborted && waiting;
   }
@@ -832,13 +871,27 @@ export class PmWorkflow {
         'pm_merge_conflict',
         'pm_escalation',
         'pm_progress',
+        'pm_secretary_escalation',
+        'pm_secretary_batch_end',
       ],
       before?.id ?? 0,
     );
+    const secretary = this.secretary.state;
     const messages: unknown[] = [];
     for (const event of updates) {
-      if (event.kind !== 'pm_work') messages.push(event.data);
+      if (
+        event.kind !== 'pm_work' &&
+        event.kind !== 'pm_secretary_batch_end' &&
+        !(secretary && event.kind === 'pm_progress')
+      )
+        messages.push(event.data);
     }
+    const batches = updates.filter((event) => event.kind === 'pm_secretary_batch_end');
+    if (batches.length)
+      messages.push({
+        routineBatches: batches.length,
+        lastSummary: (batches.at(-1)!.data as { summary: string }).summary,
+      });
     const prompt = [
       ...(!known
         ? [
@@ -852,6 +905,11 @@ export class PmWorkflow {
             'Use accept to submit your completion report for user review. The user decides when to mark the task done. Publishing and merging require existing user authorization. Escalate material scope changes with propose_spec before further work.',
           ]
         : ['Continue as PM. Only changes since your previous turn follow.']),
+      ...(!secretary || secretary.status === 'failed'
+        ? [
+            'After specification approval, use appoint_secretary to select a fast low-cost local model from profiles when available. Routine approvals and progress then go to it while you sleep; you retain dispatch, decisions and acceptance. If no suitable lightweight model is permitted, continue without one. Do not repeatedly reappoint an unavailable model.',
+          ]
+        : []),
       ...(Object.keys(changed).length || removed.length
         ? [
             `Specification/rule updates (content hashes tracked per conversation):\n${JSON.stringify({ changed, removed })}`,
@@ -866,6 +924,16 @@ export class PmWorkflow {
         : []),
       `User decisions/messages:\n${JSON.stringify(messages)}`,
       `Pending permissions:\n${JSON.stringify(this.host.permissions(this.task.id))}`,
+      `Secretary:\n${JSON.stringify(
+        secretary
+          ? {
+              agentId: secretary.agentId,
+              model: secretary.model,
+              status: secretary.status,
+              summary: secretary.summary,
+            }
+          : null,
+      )}`,
       (store.lastEvent(this.task.id, 'criteria_approved')?.id ?? 0) >
       (store.lastEvent(this.task.id, 'criteria')?.id ?? 0)
         ? 'User has approved the current specification.'

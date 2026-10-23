@@ -69,6 +69,7 @@ export class CodexAdapter implements AgentAdapter {
       }
     }
     if (spec.mcpServers || spec.managedWorker) args.push('-c', 'features.multi_agent=false');
+    if (spec.toolsOnly) args.push('-c', 'features.shell_tool=false', '-c', 'web_search="disabled"');
     return args;
   }
 

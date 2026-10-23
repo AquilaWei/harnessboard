@@ -117,6 +117,69 @@ it('rejects an attempted dispatch before approval without starting a worker', as
   expect(harness.store.getTask(task.id)?.status).toBe('failed');
 });
 
+it('runs a secretary CLI for routine approval and wakes the PM only for delivery', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    spec(),
+    turn(
+      'pm-thread',
+      tool('appoint_secretary', { agentId: 'claude', model: 'small' }),
+      dispatch(),
+      tool('wait'),
+    ),
+    turn(
+      'worker-thread',
+      askBash('check', 'cargo test', 'cargo test'),
+      assistantText('Checking results', 100),
+      { __write: { path: 'greeting.txt', content: 'hello\n' } },
+      { __commit: 'feat: add greeting' },
+    ),
+    turn(
+      'secretary-thread',
+      tool('permission', {
+        requestId: '$permission',
+        sessionId: '$permission',
+        ts: '$permission',
+        behavior: 'allow',
+        reason: 'Test command is within the approved task.',
+      }),
+      tool('finish_batch', { summary: 'Allowed worker verification.' }),
+    ),
+    turn('pm-thread', accept()),
+  ]);
+  const task = await harness.createTask({
+    prompt: 'Add greeting',
+    repo,
+    pm: {
+      agentId: 'claude',
+      model: 'large',
+      effort: null,
+      workers: [{ agentId: 'claude', models: [null, 'small'] }],
+    },
+  });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await harness.waitForIdle();
+  expect(harness.store.getTask(task.id)?.status).toBe('review');
+  expect(harness.store.eventsOfKind(task.id, 'pm_turn')).toHaveLength(3);
+  expect(harness.store.eventsOfKind(task.id, 'permission_decision')[0]?.data).toMatchObject({
+    actor: 'secretary',
+    behavior: 'allow',
+    rules: [],
+  });
+  expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual([
+    'pm',
+    'worker',
+    'secretary',
+  ]);
+  const runs = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  const secretaryRun = runs.find((run) => run.args.includes('--tools'));
+  expect(secretaryRun.args).toContain('small');
+  expect(secretaryRun.args).not.toContain('--resume');
+});
+
 it('resumes the PM for feedback without resending unchanged task rules', async () => {
   process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec(), spec()]);
   const task = await harness.createTask({ prompt: 'Add greeting', repo });

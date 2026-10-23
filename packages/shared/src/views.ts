@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import type { PmConfig, PmWork, PmQuestion, PmAcceptance } from './pm.js';
+import type { PmConfig, PmWork, PmQuestion, PmAcceptance, PmSecretary } from './pm.js';
 import type {
   ContextPolicy,
   CriteriaProposal,
@@ -36,6 +36,7 @@ export interface TaskView extends Task {
   pmQuestion?: PmQuestion | null;
   pmAcceptance?: PmAcceptance | null;
   pmUsage?: TaskUsage;
+  secretary?: PmSecretary | null;
   /** PM activity is distinct from task status while it supervises running children. */
   pmState?: {
     model?: string | null;

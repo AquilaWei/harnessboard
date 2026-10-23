@@ -241,6 +241,44 @@ describe('Codex approval transport', () => {
     });
   });
 
+  it('allows its own managed bridge confirmation without waking a PM, including read-only secretaries', () => {
+    const { emit, messages } = connect({
+      access: 'readOnly',
+      askPermission: false,
+      mcpServers: { harnessboard: { command: 'node', args: ['bridge'], env: {} } },
+    });
+    expect(
+      emit(
+        'mcpServer/elicitation/request',
+        {
+          threadId: 'thread',
+          serverName: 'harnessboard',
+          mode: 'form',
+          message: 'Allow the harnessboard MCP server to run tool "report_progress"?',
+          requestedSchema: { type: 'object', properties: {} },
+        },
+        8,
+      ),
+    ).toEqual([]);
+    expect(messages.at(-1)).toEqual({ id: 8, result: { action: 'accept', content: {} } });
+  });
+
+  it('does not auto-approve a server just because it uses the harnessboard name', () => {
+    const { emit, messages } = connect({ access: 'readOnly', askPermission: false });
+    emit(
+      'mcpServer/elicitation/request',
+      {
+        threadId: 'thread',
+        serverName: 'harnessboard',
+        mode: 'form',
+        message: 'Allow action?',
+        requestedSchema: { type: 'object', properties: {} },
+      },
+      8,
+    );
+    expect(messages.at(-1)).toEqual({ id: 8, result: { action: 'decline', content: null } });
+  });
+
   it('declines unsupported forms instead of leaving the server waiting indefinitely', () => {
     const { emit, messages } = connect();
     emit(

@@ -106,10 +106,14 @@ async function emit(lines) {
       };
       const args = { ...(line.__pm.arguments ?? {}) };
       if (args.id === '$work') args.id = (await call('work_status'))[0].id;
-      if (args.requestId === '$permission')
-        args.requestId = JSON.parse(
+      if (args.requestId === '$permission') {
+        const permission = JSON.parse(
           received.at(-1).split('Pending permissions:\n')[1].split('\n\n')[0],
-        )[0].requestId;
+        )[0];
+        args.requestId = permission.requestId;
+        if (args.sessionId === '$permission') args.sessionId = permission.sessionId;
+        if (args.ts === '$permission') args.ts = permission.ts;
+      }
       if (args.head === '$head')
         args.head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
       await call(line.__pm.name, args);

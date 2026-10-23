@@ -15,6 +15,31 @@ const string = { type: 'string' };
 const id = { id: string };
 export const PM_TOOLS = [
   {
+    name: 'appoint_secretary',
+    description:
+      'Appoint one lightweight, permitted local model to handle routine approvals and progress while you sleep. Prefer a fast low-cost model from profiles; keep decisions, dispatch and acceptance yourself. Reappoint to replace a failed secretary.',
+    inputSchema: fields(
+      {
+        agentId: string,
+        model: { type: ['string', 'null'] },
+        effort: { type: ['string', 'null'] },
+      },
+      ['agentId', 'model'],
+    ),
+  },
+  {
+    name: 'finish_batch',
+    description:
+      'Secretary only: record a concise summary after resolving all batch permissions. End your turn.',
+    inputSchema: fields({ summary: string }, ['summary']),
+  },
+  {
+    name: 'escalate_pm',
+    description:
+      'Secretary only: summarize a decision, ambiguity or blocker requiring the PM. End your turn.',
+    inputSchema: fields({ message: string }, ['message']),
+  },
+  {
     name: 'profiles',
     description: 'Available permitted worker profiles and models.',
     inputSchema: fields({}),
@@ -86,7 +111,13 @@ export const PM_TOOLS = [
     description:
       'Allow once or deny a currently pending worker permission. Never grants permanent rules.',
     inputSchema: fields(
-      { requestId: string, behavior: { enum: ['allow', 'deny'] }, reason: string },
+      {
+        requestId: string,
+        sessionId: string,
+        ts: { type: 'number' },
+        behavior: { enum: ['allow', 'deny'] },
+        reason: string,
+      },
       ['requestId', 'behavior', 'reason'],
     ),
   },
@@ -131,7 +162,7 @@ for await (const line of rl) {
 export async function pmTools(
   dataDir: string,
   call: (name: string, input: Record<string, unknown>) => Promise<unknown>,
-  worker = false,
+  worker: boolean | 'secretary' = false,
 ): Promise<{ server: SessionMcpServer; close: () => Promise<void> }> {
   const token = randomBytes(32).toString('hex');
   const file = path.join(dataDir, `pm-bridge-${randomBytes(8).toString('hex')}.mjs`);
@@ -152,16 +183,39 @@ export async function pmTools(
       }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       let result: unknown;
+      const tools = PM_TOOLS.filter((tool) =>
+        worker === 'secretary'
+          ? ['permission', 'finish_batch', 'escalate_pm'].includes(tool.name)
+          : worker
+            ? ![
+                'propose_spec',
+                'ask_user',
+                'permission',
+                'accept',
+                'appoint_secretary',
+                'finish_batch',
+                'escalate_pm',
+              ].includes(tool.name)
+            : !['ask_pm', 'finish_batch', 'escalate_pm'].includes(tool.name),
+      ).map((tool) =>
+        worker === 'secretary' && tool.name === 'permission'
+          ? {
+              ...tool,
+              inputSchema: {
+                ...tool.inputSchema,
+                required: ['requestId', 'sessionId', 'ts', 'behavior', 'reason'],
+              },
+            }
+          : tool,
+      );
       if (body.method === 'tools/list')
         result = {
-          tools: PM_TOOLS.filter((tool) =>
-            worker
-              ? !['propose_spec', 'ask_user', 'permission', 'accept'].includes(tool.name)
-              : tool.name !== 'ask_pm',
-          ),
+          tools,
         };
       else if (body.method === 'tools/call') {
         try {
+          if (!tools.some((tool) => tool.name === body.params?.name))
+            throw new Error('Tool is not available to this role');
           const value = await call(body.params?.name, body.params?.arguments ?? {});
           result = { content: [{ type: 'text', text: JSON.stringify(value) }] };
         } catch (err) {

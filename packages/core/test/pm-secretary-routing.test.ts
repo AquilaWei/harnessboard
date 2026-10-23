@@ -1,0 +1,374 @@
+// SPDX-License-Identifier: Apache-2.0
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { PermissionRequest, Task } from '@harnessboard/shared';
+import { defaultConfig } from '../src/config.js';
+import { PmWorkflow } from '../src/pm.js';
+import { Secretary, pmSecretary } from '../src/pm-secretary.js';
+import type { PmHost, PmSessionPlan } from '../src/pm.js';
+import type { SessionOutcome } from '../src/runner.js';
+import { Store } from '../src/store.js';
+import { makeRepo, tempDir } from './helpers.js';
+
+const completed: SessionOutcome = {
+  reason: 'completed',
+  finalText: 'done',
+  quota: null,
+  contextWindow: null,
+  detail: null,
+  usage: null,
+};
+let store: Store;
+let task: Task;
+let host: PmHost;
+let engine: PmWorkflow;
+let controller: AbortController;
+let pending: PermissionRequest[];
+const permission: PermissionRequest = {
+  requestId: 'r1',
+  sessionId: 'worker-session',
+  toolName: 'Bash',
+  summary: 'cargo test',
+  suggestedRules: [],
+  risk: null,
+  ts: 100,
+};
+
+beforeEach(() => {
+  store = new Store(':memory:');
+  const repo = makeRepo();
+  task = store.createTask({
+    title: 'Secretary',
+    prompt: 'Check greeting',
+    repoPath: repo,
+    baseRef: 'main',
+    workspace: 'base',
+    workflow: 'pm',
+    mode: 'single',
+    verifyCommand: null,
+    acceptance: 'Check greeting',
+    confirmPlan: true,
+    contextPolicy: {},
+    permission: { allowedTools: [], skipPermissions: false },
+    agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
+    pm: {
+      agentId: 'claude',
+      model: 'large',
+      effort: null,
+      workers: [{ agentId: 'claude', models: ['small'] }],
+    },
+  });
+  task = store.updateTask(task.id, { worktreePath: repo });
+  store.appendEvent(task.id, null, 'criteria_approved', { criteria: task.acceptance });
+  controller = new AbortController();
+  pending = [];
+  host = {
+    store,
+    config: { ...defaultConfig({}), dataDir: tempDir('secretary-routing') },
+    run: vi.fn(),
+    blocked: () => false,
+    permissions: () => pending,
+    answer: vi.fn(() => {
+      pending = [];
+    }),
+    notice: vi.fn(),
+    status: (_id, status) => {
+      store.updateTask(task.id, { status });
+    },
+  };
+  engine = new PmWorkflow(host, task, controller.signal);
+});
+afterEach(() => store.close());
+
+async function rpc(plan: PmSessionPlan, name: string, args: Record<string, unknown>) {
+  const server = plan.mcpServers!.harnessboard!;
+  const response = await fetch(server.env.HB_PM_ENDPOINT!, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${server.env.HB_PM_CAPABILITY}` },
+    body: JSON.stringify({ method: 'tools/call', params: { name, arguments: args } }),
+  });
+  const result = (await response.json()) as { isError?: boolean; content: { text: string }[] };
+  if (result.isError) throw new Error(result.content[0]!.text);
+  return result;
+}
+
+it('handles a routine permission without restarting the PM until worker delivery', async () => {
+  let approve!: () => void;
+  const approved = new Promise<void>((resolve) => {
+    approve = resolve;
+  });
+  host.answer = vi.fn(() => {
+    pending = [];
+    approve();
+  });
+  let pmRuns = 0;
+  let secretaryRuns = 0;
+  host.run = vi.fn(async (_task, plan) => {
+    if (plan.role === 'pm') {
+      pmRuns++;
+      if (pmRuns === 1) {
+        await engine.call('appoint_secretary', { agentId: 'claude', model: 'small' });
+        await engine.call('dispatch', {
+          agentId: 'claude',
+          model: 'small',
+          goal: 'Check',
+          acceptance: 'Checked',
+          scope: 'greeting',
+          access: 'readOnly',
+        });
+        await engine.call('wait', {});
+      } else controller.abort();
+    } else if (String(plan.role) === 'secretary') {
+      secretaryRuns++;
+      expect(pmRuns).toBe(1);
+      expect(plan.resume).toBeNull();
+      await rpc(plan, 'permission', {
+        requestId: 'r1',
+        sessionId: 'worker-session',
+        ts: 100,
+        behavior: 'allow',
+        reason: 'Approved test command.',
+      });
+      await rpc(plan, 'finish_batch', { summary: 'Allowed the approved test command.' });
+    } else {
+      pending = [permission];
+      engine.notify('routine');
+      await approved;
+    }
+    return completed;
+  });
+  await engine.run();
+  expect(pmRuns).toBe(2);
+  expect(secretaryRuns).toBe(1);
+  expect(host.answer).toHaveBeenCalledWith(
+    task.id,
+    'r1',
+    'allow',
+    'Approved test command.',
+    'secretary',
+  );
+});
+
+it('rejects appointing a secretary outside the permitted model pool', async () => {
+  host.run = vi.fn(async () => {
+    await expect(
+      engine.call('appoint_secretary', { agentId: 'claude', model: 'unapproved' }),
+    ).rejects.toThrow('not permitted');
+    controller.abort();
+    return completed;
+  });
+  await engine.run();
+});
+
+function secretary() {
+  const secretary = new Secretary(host, task.id, controller.signal);
+  secretary.appoint({ agentId: 'claude', model: 'small' }, 'pm-session');
+  return secretary;
+}
+
+it('does not start a model when there is no routine work', async () => {
+  const assistant = secretary();
+  expect(await assistant.handle()).toBe(false);
+  expect(host.run).not.toHaveBeenCalled();
+});
+
+it('coalesces progress into one fresh conversation and never replays handled events', async () => {
+  const assistant = secretary();
+  store.appendEvent(task.id, 'worker-session', 'pm_progress', { message: 'Compiled' });
+  store.appendEvent(task.id, 'worker-session', 'pm_progress', { message: 'Tests running' });
+  host.run = vi.fn(async (_task, plan) => {
+    expect(plan.prompt).toContain('Compiled');
+    expect(plan.prompt).toContain('Tests running');
+    expect(plan.resume).toBeNull();
+    await rpc(plan, 'finish_batch', { summary: 'Build passed; tests running.' });
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(false);
+  expect(await assistant.handle()).toBe(false);
+  expect(host.run).toHaveBeenCalledTimes(1);
+});
+
+it('keeps events arriving during a batch for the next fresh conversation', async () => {
+  const assistant = secretary();
+  store.appendEvent(task.id, null, 'pm_progress', { message: 'First milestone' });
+  host.run = vi.fn(async (_task, plan) => {
+    store.appendEvent(task.id, null, 'pm_progress', { message: 'Second milestone' });
+    await rpc(plan, 'finish_batch', { summary: 'First milestone recorded.' });
+    return completed;
+  });
+  await assistant.handle();
+  host.run = vi.fn(async (_task, plan) => {
+    expect(plan.prompt).toContain('Second milestone');
+    expect(plan.prompt).not.toContain('First milestone');
+    expect(plan.resume).toBeNull();
+    await rpc(plan, 'finish_batch', { summary: 'Second milestone recorded.' });
+    return completed;
+  });
+  await assistant.handle();
+  expect(store.listSessions(task.id).map((s) => s.role)).toEqual(['secretary', 'secretary']);
+});
+
+it('rejects stale permissions when another session reuses a request id', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async (_task, plan) => {
+    pending = [{ ...permission, sessionId: 'different-worker', ts: 200 }];
+    await expect(
+      rpc(plan, 'permission', {
+        requestId: 'r1',
+        sessionId: 'worker-session',
+        ts: 100,
+        behavior: 'allow',
+        reason: 'Run tests',
+      }),
+    ).rejects.toThrow('expired');
+    await rpc(plan, 'escalate_pm', { message: 'Permission changed; inspect the current worker.' });
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(true);
+  expect(host.answer).not.toHaveBeenCalled();
+});
+
+it('forwards risky permissions to the PM without starting the secretary', async () => {
+  const assistant = secretary();
+  pending = [{ ...permission, risk: 'grants additional filesystem or network access' }];
+  expect(await assistant.handle()).toBe(true);
+  expect(host.run).not.toHaveBeenCalled();
+  expect(store.eventsOfKind(task.id, 'pm_secretary_escalation')).toHaveLength(1);
+});
+
+it('enforces the secretary tool boundary even when it calls an unlisted tool', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async (_task, plan) => {
+    await expect(rpc(plan, 'dispatch', {})).rejects.toThrow('not available');
+    await expect(rpc(plan, 'accept', {})).rejects.toThrow('not available');
+    await rpc(plan, 'escalate_pm', { message: 'Need a PM decision.' });
+    await expect(rpc(plan, 'permission', { requestId: 'r1' })).rejects.toThrow('has ended');
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(true);
+  expect(host.answer).not.toHaveBeenCalled();
+});
+
+it('refuses decisions after the specification changes during a batch', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async (_task, plan) => {
+    store.appendEvent(task.id, null, 'criteria', { criteria: 'Different scope' });
+    await expect(
+      rpc(plan, 'permission', {
+        requestId: 'r1',
+        sessionId: 'worker-session',
+        ts: 100,
+        behavior: 'allow',
+        reason: 'Run tests',
+      }),
+    ).rejects.toThrow('Specification changed');
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(true);
+  expect(host.answer).not.toHaveBeenCalled();
+});
+
+it('suspends a failed secretary and escalates once instead of retrying its model', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async () => ({ ...completed, reason: 'quota' as const }));
+  expect(await assistant.handle()).toBe(true);
+  expect(await assistant.handle()).toBe(true);
+  expect(host.run).toHaveBeenCalledTimes(1);
+  expect(pmSecretary(store, task.id)?.status).toBe('failed');
+  expect(store.eventsOfKind(task.id, 'pm_secretary_escalation')).toHaveLength(1);
+});
+
+it('restores the appointment and skips completed batches after restart', async () => {
+  const assistant = secretary();
+  store.appendEvent(task.id, null, 'pm_progress', { message: 'Already handled' });
+  host.run = vi.fn(async (_task, plan) => {
+    await rpc(plan, 'finish_batch', { summary: 'Recorded progress.' });
+    return completed;
+  });
+  await assistant.handle();
+  const restored = new Secretary(host, task.id, controller.signal);
+  restored.recover();
+  expect(await restored.handle()).toBe(false);
+  expect(restored.state?.model).toBe('small');
+  expect(host.run).toHaveBeenCalledTimes(1);
+});
+
+it('does not acknowledge an interrupted batch and preserves pending requests', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async () => {
+    controller.abort();
+    return { ...completed, reason: 'stopped' as const };
+  });
+  expect(await assistant.handle()).toBe(false);
+  expect(store.eventsOfKind(task.id, 'pm_secretary_batch_end')).toHaveLength(0);
+  expect(pmSecretary(store, task.id)?.status).toBe('waiting');
+  expect(pending).toEqual([permission]);
+});
+
+it('preempts routine approvals immediately when a PM decision arrives', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async (_task, plan, _id, signal) => {
+    assistant.interrupt();
+    expect(signal.aborted).toBe(true);
+    await expect(
+      rpc(plan, 'permission', {
+        requestId: 'r1',
+        sessionId: 'worker-session',
+        ts: 100,
+        behavior: 'allow',
+        reason: 'Run tests',
+      }),
+    ).rejects.toThrow('has ended');
+    return { ...completed, reason: 'stopped' as const };
+  });
+  expect(await assistant.handle()).toBe(true);
+  expect(assistant.state?.status).toBe('waiting');
+  expect(host.answer).not.toHaveBeenCalled();
+});
+
+it('suspends a batch that exceeds its time limit without retrying the model', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  host.run = vi.fn(async (_task, _plan, _id, signal) => {
+    started();
+    return new Promise<SessionOutcome>((resolve) =>
+      signal.addEventListener('abort', () => resolve({ ...completed, reason: 'stopped' }), {
+        once: true,
+      }),
+    );
+  });
+  vi.useFakeTimers();
+  try {
+    const run = assistant.handle();
+    await ready;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(await run).toBe(true);
+    expect(assistant.state?.summary).toContain('exceeded 60 seconds');
+    expect(assistant.state?.status).toBe('failed');
+    expect(host.run).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('offers appointment to an existing PM without resending its initial instructions', async () => {
+  store.startSession('existing-pm', task.id, 'pm', 'claude', 'old-thread');
+  store.appendEvent(task.id, 'existing-pm', 'pm_turn', {});
+  store.endSession('existing-pm', 'completed');
+  host.run = vi.fn(async (_task, plan) => {
+    expect(plan.prompt).toContain('appoint_secretary');
+    expect(plan.prompt).not.toContain('sole user-facing coordinator');
+    controller.abort();
+    return completed;
+  });
+  await engine.run();
+});

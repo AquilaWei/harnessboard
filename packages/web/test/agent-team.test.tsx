@@ -106,3 +106,48 @@ it('preserves branch collapse when returning from an agent detail', async () => 
     container.querySelector('[aria-label="Expand Worker · codex"]')?.getAttribute('aria-expanded'),
   ).toBe('false');
 });
+
+it('shows the secretary under PM with its own model, summary and token usage', async () => {
+  await act(async () =>
+    root.render(
+      <AgentTeam
+        task={{
+          ...task,
+          secretary: {
+            id: 'assistant',
+            parentSessionId: 'pm-session',
+            agentId: 'claude',
+            model: 'small',
+            effort: null,
+            status: 'waiting',
+            sessionIds: ['secretary-session'],
+            summary: 'Approved routine tests',
+            updatedAt: 1000,
+            usage: {
+              runs: 1,
+              agentMs: 100,
+              elapsedMs: 100,
+              costUsd: 0.01,
+              tokens: { input: 10, output: 20, cacheRead: 0, cacheWrite: 0 },
+              byModel: {
+                small: { input: 10, output: 20, cacheRead: 0, cacheWrite: 0, costUsd: 0.01 },
+              },
+            },
+          },
+        }}
+        events={[]}
+      />,
+    ),
+  );
+  expect(container.querySelector('[data-agent-id="assistant"]')?.textContent).toContain(
+    'Secretary',
+  );
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[data-agent-id="assistant"]')!.click(),
+  );
+  const inspector = container.querySelector('.agent-inspector')!;
+  expect(inspector.textContent).toContain('small');
+  expect(inspector.textContent).toContain('Approved routine tests');
+  expect(inspector.textContent).toContain('in 10, out 20, cache read 0, cache write 0');
+  expect(inspector.textContent).not.toContain('in 100, out 200');
+});

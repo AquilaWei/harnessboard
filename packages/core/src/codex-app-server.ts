@@ -86,6 +86,16 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
     const method = string(msg.method);
     const event = approval(msg, params, items.get(string(params.itemId)), spec);
     if (event) {
+      // The harness owns this bridge and enforces the caller's tool capability itself.
+      // Do not send its empty confirmation forms back through PM permission routing.
+      if (
+        method === 'mcpServer/elicitation/request' &&
+        params.serverName === 'harnessboard' &&
+        spec.mcpServers?.harnessboard
+      ) {
+        write(codexPermissionReply(event, { behavior: 'allow' }));
+        return [];
+      }
       // Reviewers never offer a route out of their read-only policy, even on a resumed thread.
       if (readOnly || !spec.askPermission) {
         write(

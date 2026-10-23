@@ -12,6 +12,8 @@ export interface SessionMcpServer {
 }
 
 export interface SessionSpec {
+  /** Secretary batches use only their task-scoped MCP tools, without built-in tools. */
+  toolsOnly?: boolean;
   managedWorker?: boolean;
   mcpServers?: Record<string, SessionMcpServer>;
   cwd: string;

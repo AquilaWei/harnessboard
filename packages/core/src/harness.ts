@@ -2002,7 +2002,7 @@ export class Harness {
               },
               blocked: (agentId) => this.agentBlocked(agentId, Date.now()),
               permissions: (id) => this.permissionRequests(id),
-              answer: (id, requestId, behavior, reason) => {
+              answer: (id, requestId, behavior, reason, actor = 'pm') => {
                 const pending = this.permissions.get(id)?.get(requestId);
                 if (!pending) throw new Error('Permission request is expired or not pending');
                 this.settlePermission(id, pending, {
@@ -2010,7 +2010,7 @@ export class Harness {
                   rules: [],
                   message: reason,
                   auto: false,
-                  actor: 'pm',
+                  actor,
                 });
               },
               notice: (id, message) => this.notice(id, message),
@@ -2177,6 +2177,7 @@ export class Harness {
     // A resumed turn may report no usage (e.g. `/compact`), so start from what is known.
     let tokens = plan.resume?.contextTokens ?? 0;
     const started = Date.now();
+    const secretaryQuota = new AbortController();
     const previous = this.store
       .eventsOfKinds(task.id, ['usage', 'usage_checkpoint'])
       .findLast(
@@ -2198,7 +2199,8 @@ export class Harness {
           const used = Math.round((this.quotas.get(provider)?.fiveHourUtilization ?? 0) * 100);
           const level = Math.round(quotaPauseLevel(this.config, provider) * 100);
           this.notice(task.id, `Paused for quota: ${provider} at ${used}% (pause level ${level}%)`);
-          this.running.get(task.id)?.abort();
+          if (plan.role === 'secretary') secretaryQuota.abort();
+          else this.running.get(task.id)?.abort();
         },
       });
     }
@@ -2241,7 +2243,7 @@ export class Harness {
         latestUsage = usage;
       },
       spec: {
-        cwd: task.worktreePath!,
+        cwd: (plan as PmSessionPlan).cwd ?? task.worktreePath!,
         ...(task.workflow === 'pm' ? { managedWorker: true } : {}),
         sessionId: plan.resume
           ? plan.resume.agentSessionId
@@ -2262,11 +2264,12 @@ export class Harness {
           ? { mcpServers: (plan as PmSessionPlan).mcpServers! }
           : {}),
         access: plan.access,
+        ...((plan as PmSessionPlan).toolsOnly ? { toolsOnly: true } : {}),
         // A read-only session may run the task's own check, but nothing that edits.
         allowedTools: [
           ...((plan as PmSessionPlan).mcpServers ? ['mcp__harnessboard__*'] : []),
           ...(plan.access === 'readOnly'
-            ? plan.role === 'pm'
+            ? plan.role === 'pm' || plan.role === 'secretary'
               ? ['mcp__harnessboard__*']
               : task.verifyCommand && plan.role !== 'reviewer'
                 ? [`Bash(${task.verifyCommand})`]
@@ -2281,9 +2284,9 @@ export class Harness {
       thresholds: resolveThresholds(task.contextPolicy),
       wrapUp,
       // Every role: compacted only once its turn has ended, never in the middle of work.
-      compact: true,
+      compact: plan.role !== 'secretary',
       contextWindow: window,
-      signal,
+      signal: plan.role === 'secretary' ? AbortSignal.any([signal, secretaryQuota.signal]) : signal,
       onEvent: (event) => {
         if (event.kind === 'init' && event.sessionId) {
           this.store.setAgentSessionId(sessionId, event.sessionId);
@@ -2377,7 +2380,7 @@ export class Harness {
       waiting.set(requestId, { request, provider, resolve });
       this.store.appendEvent(taskId, sessionId, 'permission_request', request);
       if (task.workflow !== 'pm') this.setStatus(taskId, 'awaiting_permission');
-      this.pms.get(taskId)?.notify();
+      this.pms.get(taskId)?.notify('routine');
     });
   }
 
