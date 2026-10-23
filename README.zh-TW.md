@@ -6,7 +6,7 @@
 PM 可從允許的模型中委任輕量秘書，處理例行權限與整理進度，減少 PM 頻繁啟動。
 重要決策與驗收仍由 PM 負責；團隊面板會獨立顯示秘書用量。
 
-![version](https://img.shields.io/badge/version-0.2.5-blue)
+![version](https://img.shields.io/badge/version-0.2.8-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 

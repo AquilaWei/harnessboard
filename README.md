@@ -8,7 +8,7 @@ The PM can appoint a lightweight secretary from the permitted model pool to hand
 routine permissions and summarize progress. Decisions and final review stay with the PM;
 the Team panel shows the secretary's usage separately.
 
-![version](https://img.shields.io/badge/version-0.2.7-blue)
+![version](https://img.shields.io/badge/version-0.2.8-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -94,7 +94,7 @@ Then give the command a short name (put the line in your shell's startup file to
 
 ```bash
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # prints the version, for example 0.2.7
+hb --version             # prints the version, for example 0.2.8
 ```
 
 <details>

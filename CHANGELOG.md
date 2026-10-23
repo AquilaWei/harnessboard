@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.8 - 2026-10-23
+
+Local test release; interactive desktop acceptance is pending.
 
 ### Added
 
