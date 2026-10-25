@@ -143,12 +143,36 @@ export class PmWorkflow {
     private readonly task: Task,
     private readonly signal: AbortSignal,
   ) {
-    this.secretary = new Secretary(host, task.id, signal);
+    this.secretary = new Secretary(host, task.id, signal, (question, message) => {
+      const work = this.work(question.id);
+      if (
+        work.status !== 'awaiting_pm' ||
+        work.sessionId !== question.sessionId ||
+        work.updatedAt !== question.updatedAt ||
+        this.replies.has(work.id)
+      )
+        throw new Error('Worker question is no longer pending; escalate to the PM');
+      this.replies.set(work.id, message);
+      this.record({
+        ...work,
+        status: 'awaiting_children',
+        activity: 'Secretary quoted approved instructions.',
+      });
+      this.host.store.appendEvent(task.id, work.sessionId, 'pm_secretary_reply', {
+        workId: work.id,
+        message,
+      });
+      this.notify('state');
+    });
   }
 
   /** Wakes an idle PM on a child permission or user message without polling. */
   notify(kind: 'decision' | 'routine' | 'state' = 'decision'): void {
-    if (kind === 'decision') {
+    const secretary = this.secretary.state;
+    if (
+      kind === 'decision' ||
+      (kind === 'routine' && (!secretary || secretary.status === 'failed'))
+    ) {
       this.pmPending = true;
       this.secretary.interrupt();
     }
@@ -249,7 +273,8 @@ export class PmWorkflow {
 
   private async coordinate(server: SessionMcpServer): Promise<void> {
     const secretary = this.secretary.state;
-    if (!this.pmPending && secretary && secretary.status !== 'failed') {
+    if (!this.pmPending) {
+      if (!secretary || secretary.status === 'failed') return;
       const escalate = await this.secretary.handle();
       if (!escalate && !this.pmPending) return;
     }
@@ -331,7 +356,7 @@ export class PmWorkflow {
           { workId: caller, message },
         );
         this.host.updated?.(this.task.id);
-        this.notify('routine');
+        if (caller) this.notify('routine');
         return { recorded: true };
       }
       case 'ask_pm': {
@@ -344,7 +369,10 @@ export class PmWorkflow {
           message,
         });
         // Wake the PM only after the process exits and awaiting_pm is durable.
-        return { instruction: 'End your turn. The PM will continue this work with an answer.' };
+        return {
+          instruction:
+            'End your turn. The secretary will check explicit instructions first; uncertain questions go to the PM for a direct answer.',
+        };
       }
       case 'propose_spec': {
         if (this.works.some(active))
@@ -481,6 +509,7 @@ export class PmWorkflow {
       head: null,
       execution: 'managed',
     };
+    this.secretary.ensure(this.pmSessionId);
     this.start(work, null);
     if (caller) this.turns.get(caller)!.delegated = true;
     return work;
@@ -496,10 +525,16 @@ export class PmWorkflow {
     )
       throw new Error('Worker profile/model is no longer permitted');
     this.assertDispatch(work.access, caller);
+    this.secretary.ensure(this.pmSessionId);
     if (this.host.blocked(work.agentId)) throw new Error('Worker provider is waiting for quota');
     if (work.status === 'awaiting_pm') {
       if (caller) throw new Error('Only the PM may answer an escalation');
-      this.replies.set(work.id, this.text(input, 'message'));
+      const message = this.text(input, 'message');
+      this.host.store.appendEvent(this.task.id, this.pmSessionId, 'pm_worker_direction', {
+        workId: work.id,
+        message,
+      });
+      this.replies.set(work.id, message);
       this.record({
         ...work,
         status: 'awaiting_children',
@@ -533,7 +568,7 @@ export class PmWorkflow {
               : 'failed',
           summary: (err as Error).message,
         });
-        this.notify('decision');
+        this.workerUpdate(this.work(work.id));
       })
       .finally(() => {
         this.processes.delete(work.id);
@@ -695,7 +730,7 @@ export class PmWorkflow {
         ? [
             'You are a worker accountable for correct, efficient implementation and verification of your assigned scope. The PM coordinates the user and reviews delivery.',
             canDelegate
-              ? 'Use only harnessboard managed tools to delegate within your scope and permitted profiles. No native subagents or other agent CLIs. Writers share one directory: after dispatching write work call wait and end your turn immediately before the child can start. Never wait by polling. Use ask_pm for missing information or authorization; end your turn. Report meaningful milestones or blockers with report_progress.'
+              ? 'Use only harnessboard managed tools to delegate within your scope and permitted profiles. No native subagents or other agent CLIs. Writers share one directory: after dispatching write work call wait and end your turn immediately before the child can start. Never wait by polling. Use ask_pm for missing information or authorization; end your turn. Execution messages go to the secretary first; uncertain questions are escalated to the PM, who answers you directly. If a secretary quote does not resolve the question, say so in ask_pm and request the PM. Report meaningful milestones or blockers with report_progress.'
               : 'This transport cannot use managed delegation tools. Complete this assigned work directly; report missing information or required delegation in your final result for the PM.',
             work.access === 'edit' ? COMMIT_RULE : 'Read only. Do not modify or commit any file.',
             `Approved specification and applicable rules:\n${JSON.stringify(context)}`,
@@ -763,9 +798,20 @@ export class PmWorkflow {
     };
     this.record(work);
     if (['completed', 'failed', 'stopped', 'cancelled', 'awaiting_pm'].includes(work.status))
-      this.notify('decision');
+      this.workerUpdate(work);
     if (failure) this.cancelDescendants(work.id);
     return !failure && !signal.aborted && waiting;
+  }
+
+  /** All execution results pass through the secretary; user messages still wake the PM directly. */
+  private workerUpdate(work: PmWork): void {
+    this.host.store.appendEvent(
+      this.task.id,
+      work.sessionId,
+      'pm_worker_update',
+      this.work(work.id),
+    );
+    this.notify('routine');
   }
 
   private cancelDescendants(id: string): void {
@@ -834,6 +880,7 @@ export class PmWorkflow {
     const resume = previous ?? null;
     this.pmSessionId = resume?.id ?? randomUUID();
     if (!resume) store.startSession(this.pmSessionId, this.task.id, 'pm', pm.agentId, null);
+    if (this.works.length) this.secretary.ensure(this.pmSessionId);
     const before = store.lastSessionEvent(this.pmSessionId, 'pm_turn');
     const guidelines = readGuidelines(this.host.config.reviewGuidelines);
     const context = {
@@ -882,7 +929,11 @@ export class PmWorkflow {
       if (
         event.kind !== 'pm_work' &&
         event.kind !== 'pm_secretary_batch_end' &&
-        !(secretary && event.kind === 'pm_progress')
+        !(
+          secretary &&
+          secretary.status !== 'failed' &&
+          ['pm_progress', 'pm_escalation'].includes(event.kind)
+        )
       )
         messages.push(event.data);
     }
@@ -907,7 +958,7 @@ export class PmWorkflow {
         : ['Continue as PM. Only changes since your previous turn follow.']),
       ...(!secretary || secretary.status === 'failed'
         ? [
-            'After specification approval, use appoint_secretary to select a fast low-cost local model from profiles when available. Routine approvals and progress then go to it while you sleep; you retain dispatch, decisions and acceptance. If no suitable lightweight model is permitted, continue without one. Do not repeatedly reappoint an unavailable model.',
+            'After specification approval, use appoint_secretary to select a fast low-cost permitted local model. Dispatch automatically appoints an available permitted local profile if you omit this. All worker execution updates go through the secretary first. It quotes explicit approved instructions for simple questions and immediately escalates anything uncertain. On escalation, personally answer the original worker with continue_work; retain dispatch, decisions and acceptance. If no local profile is available or the secretary fails, handle events directly. Do not repeatedly reappoint an unavailable model.',
           ]
         : []),
       ...(Object.keys(changed).length || removed.length
@@ -916,6 +967,7 @@ export class PmWorkflow {
           ]
         : []),
       `Current work tree (authoritative, overrides old conversation claims):\n${JSON.stringify(this.snapshot(null))}`,
+      'Worker execution messages are filtered by the secretary first. When it escalates uncertainty, personally answer or direct the original worker with continue_work. Retain all technical decisions and final review.',
       'If work failed or stopped, inspect preserved changes and continue or reassign within the approved scope. Do not claim inactive workers are running. Never ask for approval again unless scope changed.',
       ...(this.correction
         ? [

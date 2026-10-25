@@ -121,6 +121,10 @@ it('handles a routine permission without restarting the PM until worker delivery
       secretaryRuns++;
       expect(pmRuns).toBe(1);
       expect(plan.resume).toBeNull();
+      if (secretaryRuns === 2) {
+        await rpc(plan, 'escalate_pm', { message: 'Delivery ready for PM review.' });
+        return completed;
+      }
       await rpc(plan, 'permission', {
         requestId: 'r1',
         sessionId: 'worker-session',
@@ -138,7 +142,7 @@ it('handles a routine permission without restarting the PM until worker delivery
   });
   await engine.run();
   expect(pmRuns).toBe(2);
-  expect(secretaryRuns).toBe(1);
+  expect(secretaryRuns).toBe(2);
   expect(host.answer).toHaveBeenCalledWith(
     task.id,
     'r1',
@@ -371,4 +375,175 @@ it('offers appointment to an existing PM without resending its initial instructi
     return completed;
   });
   await engine.run();
+});
+
+it('appoints a permitted secretary before dispatch even when the PM omits appointment', async () => {
+  host.run = vi.fn(async (_task, plan) => {
+    if (plan.role === 'pm') {
+      await engine.call('dispatch', {
+        agentId: 'claude',
+        model: 'small',
+        goal: 'Check',
+        acceptance: 'Checked',
+        scope: 'greeting',
+        access: 'readOnly',
+      });
+      expect(pmSecretary(store, task.id)?.model).toBe('small');
+      controller.abort();
+    }
+    return completed;
+  });
+  await engine.run();
+});
+
+it('routes an uncertain worker question through the secretary before the PM answers directly', async () => {
+  let pmRuns = 0;
+  let secretaryRuns = 0;
+  let workId = '';
+  host.run = vi.fn(async (_task, plan) => {
+    if (plan.role === 'pm') {
+      pmRuns++;
+      if (pmRuns === 1) {
+        const work = (await engine.call('dispatch', {
+          agentId: 'claude',
+          model: 'small',
+          goal: 'Check',
+          acceptance: 'Checked',
+          scope: 'greeting',
+          access: 'readOnly',
+        })) as { id: string };
+        workId = work.id;
+        await engine.call('wait', {});
+      } else {
+        expect(secretaryRuns).toBe(1);
+        expect(plan.prompt).toContain('Need an architecture decision');
+        await engine.call('continue_work', {
+          id: workId,
+          message: 'PM directly chooses option A.',
+        });
+        controller.abort();
+      }
+    } else if (plan.role === 'secretary') {
+      secretaryRuns++;
+      expect(pmRuns).toBe(1);
+      expect(plan.prompt).toContain('Choose architecture A or B?');
+      await expect(rpc(plan, 'finish_batch', { summary: 'Ignored question' })).rejects.toThrow(
+        'escalate',
+      );
+      await rpc(plan, 'escalate_pm', { message: 'Need an architecture decision' });
+    } else {
+      await rpc(plan, 'ask_pm', { message: 'Choose architecture A or B?' });
+    }
+    return completed;
+  });
+  await engine.run();
+  expect(secretaryRuns).toBe(1);
+  expect(pmRuns).toBe(2);
+});
+
+it('answers an explicit question without waking the PM and escalates its unresolved follow-up', async () => {
+  task = store.updateTask(task.id, { acceptance: 'The greeting must be exactly Hello world.' });
+  let pmRuns = 0;
+  let workerRuns = 0;
+  let secretaryRuns = 0;
+  host.run = vi.fn(async (_task, plan) => {
+    if (plan.role === 'pm') {
+      pmRuns++;
+      if (pmRuns === 1) {
+        await engine.call('dispatch', {
+          agentId: 'claude',
+          model: 'small',
+          goal: 'Check',
+          acceptance: 'Checked',
+          scope: 'greeting',
+          access: 'readOnly',
+        });
+        await engine.call('wait', {});
+      } else {
+        expect(workerRuns).toBe(2);
+        expect(secretaryRuns).toBe(2);
+        expect(plan.prompt).toContain('Still unclear');
+        controller.abort();
+      }
+    } else if (plan.role === 'secretary') {
+      secretaryRuns++;
+      const updates = store.eventsOfKind(task.id, 'pm_worker_update');
+      const id = (updates.at(-1)!.data as { id: string }).id;
+      if (secretaryRuns === 1) {
+        await expect(
+          rpc(plan, 'reply_worker', { id, quote: 'Invented requirement' }),
+        ).rejects.toThrow('verbatim');
+        await rpc(plan, 'reply_worker', { id, quote: 'The greeting must be exactly Hello world.' });
+        await rpc(plan, 'finish_batch', { summary: 'Quoted the exact approved greeting.' });
+      } else {
+        await expect(
+          rpc(plan, 'reply_worker', { id, quote: 'The greeting must be exactly Hello world.' }),
+        ).rejects.toThrow('escalate');
+        await rpc(plan, 'escalate_pm', {
+          message: 'Still unclear; PM must answer the original worker.',
+        });
+      }
+    } else {
+      workerRuns++;
+      expect(pmRuns).toBe(1);
+      if (workerRuns === 1) await rpc(plan, 'ask_pm', { message: 'What greeting should I check?' });
+      else {
+        expect(plan.prompt).toContain('Secretary: existing approved instructions state:');
+        await rpc(plan, 'ask_pm', {
+          message: 'Still unclear; does this apply to translated text?',
+        });
+      }
+    }
+    return completed;
+  });
+  await engine.run();
+  expect(pmRuns).toBe(2);
+  expect(workerRuns).toBe(2);
+  expect(store.eventsOfKind(task.id, 'pm_secretary_reply')).toHaveLength(1);
+});
+
+it('cannot hide a worker delivery by finishing a secretary batch', async () => {
+  const assistant = secretary();
+  store.appendEvent(task.id, 'worker-session', 'pm_worker_update', {
+    id: 'delivered',
+    status: 'completed',
+    summary: 'Tests passed',
+    evidence: '/evidence/delivery.txt',
+  });
+  host.run = vi.fn(async (_task, plan) => {
+    expect(plan.prompt).toContain('/evidence/delivery.txt');
+    await expect(rpc(plan, 'finish_batch', { summary: 'Done' })).rejects.toThrow('escalate');
+    await rpc(plan, 'escalate_pm', { message: 'Review worker delivery.' });
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(true);
+  expect(store.lastEvent(task.id, 'pm_secretary_escalation')?.data).toMatchObject({
+    workers: [{ id: 'delivered', evidence: '/evidence/delivery.txt' }],
+  });
+});
+
+it('records a visible fallback when no permitted local secretary can run', () => {
+  host.config.agents.claude = { provider: 'gemini', command: 'gemini', model: null };
+  const assistant = new Secretary(host, task.id, controller.signal);
+  assistant.ensure('pm-session');
+  assistant.ensure('pm-session');
+  expect(assistant.state).toBeNull();
+  expect(host.notice).toHaveBeenCalledTimes(1);
+  expect(store.eventsOfKind(task.id, 'pm_secretary_unavailable')).toHaveLength(1);
+});
+
+it('does not spend secretary tokens on the PM own progress messages', async () => {
+  const assistant = secretary();
+  store.appendEvent(task.id, 'pm-session', 'pm_progress', { workId: null, message: 'User update' });
+  expect(await assistant.handle()).toBe(false);
+  expect(host.run).not.toHaveBeenCalled();
+});
+
+it('prefers a permitted lightweight model over the first large model', () => {
+  store.updateTask(task.id, {
+    pm: { ...task.pm!, workers: [{ agentId: 'claude', models: ['large', 'small'] }] },
+  });
+  const assistant = new Secretary(host, task.id, controller.signal);
+  assistant.ensure('pm-session');
+  expect(assistant.state?.model).toBe('small');
 });

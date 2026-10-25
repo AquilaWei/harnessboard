@@ -26,6 +26,8 @@ const tool = (name: string, args: Record<string, unknown> = {}) => ({
 const turn = (id: string, ...actions: unknown[]) => [
   [init(id), ...actions, assistantText('Step complete', 100), result('Step complete')],
 ];
+const secretaryEscalation = () =>
+  turn('secretary-thread', tool('escalate_pm', { message: 'Worker needs direct PM review.' }));
 const spec = () =>
   turn(
     'pm-thread',
@@ -87,6 +89,7 @@ it('dispatches after approval and waits for user confirmation after PM acceptanc
       { __write: { path: 'greeting.txt', content: 'hello\n' } },
       { __commit: 'feat: add greeting' },
     ),
+    secretaryEscalation(),
     turn('pm-thread', accept()),
   ]);
   const task = await harness.createTask({ prompt: 'Add greeting', repo });
@@ -101,7 +104,11 @@ it('dispatches after approval and waits for user confirmation after PM acceptanc
   expect(harness.store.lastEvent(task.id, 'pm_acceptance')?.data).toMatchObject({
     summary: 'Greeting complete.',
   });
-  expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual(['pm', 'worker']);
+  expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual([
+    'pm',
+    'worker',
+    'secretary',
+  ]);
   harness.completeTask(task.id);
   expect(harness.store.getTask(task.id)?.status).toBe('done');
   expect(harness.taskOperations(task.id).merge).toMatchObject({ visible: true, enabled: true });
@@ -144,6 +151,7 @@ it('runs a secretary CLI for routine approval and wakes the PM only for delivery
       }),
       tool('finish_batch', { summary: 'Allowed worker verification.' }),
     ),
+    secretaryEscalation(),
     turn('pm-thread', accept()),
   ]);
   const task = await harness.createTask({
@@ -169,6 +177,7 @@ it('runs a secretary CLI for routine approval and wakes the PM only for delivery
   expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual([
     'pm',
     'worker',
+    'secretary',
     'secretary',
   ]);
   const runs = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
@@ -235,6 +244,7 @@ it('resumes the same worker for PM-requested fixes', async () => {
       { __write: { path: 'greeting.txt', content: 'hello\n' } },
       { __commit: 'feat: add greeting' },
     ),
+    secretaryEscalation(),
     turn(
       'pm-thread',
       tool('continue_work', { id: '$work', message: 'Use a capital H.' }),
@@ -245,6 +255,7 @@ it('resumes the same worker for PM-requested fixes', async () => {
       { __write: { path: 'greeting.txt', content: 'Hello\n' } },
       { __commit: 'fix: capitalize greeting' },
     ),
+    secretaryEscalation(),
     turn('pm-thread', accept()),
   ]);
   const task = await harness.createTask({ prompt: 'Add greeting', repo });
@@ -252,12 +263,17 @@ it('resumes the same worker for PM-requested fixes', async () => {
   harness.approveCriteria(task.id);
   await harness.waitForIdle();
   expect(harness.store.getTask(task.id)?.status).toBe('review');
-  expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual(['pm', 'worker']);
+  expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual([
+    'pm',
+    'worker',
+    'secretary',
+    'secretary',
+  ]);
   const runs = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line));
-  expect(runs).toHaveLength(6);
+  expect(runs).toHaveLength(8);
   const correction = runs.find((run) => run.received[0].startsWith('Use a capital H.'));
   expect(correction.args).toContain('worker-thread');
   expect(pmWork(harness.store, task.id)).toHaveLength(1);
@@ -268,6 +284,7 @@ it('wakes the PM to grant a worker permission once without a deadlock', async ()
     spec(),
     turn('pm-thread', dispatch(), tool('wait')),
     turn('worker-thread', askBash('worker-request', 'make test', 'make test')),
+    secretaryEscalation(),
     turn(
       'pm-thread',
       tool('permission', {
@@ -277,6 +294,7 @@ it('wakes the PM to grant a worker permission once without a deadlock', async ()
       }),
       tool('wait'),
     ),
+    secretaryEscalation(),
     turn('pm-thread', accept()),
   ]);
   const task = await harness.createTask({ prompt: 'Add greeting', repo });

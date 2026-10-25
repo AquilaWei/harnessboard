@@ -290,7 +290,8 @@ export const en = {
     fit: 'Fit',
     hint: 'Select a robot to inspect its work. Independent analysis can run together; edits take turns.',
     pmDuty: 'Discuss specifications, coordinate delivery, report progress and review results.',
-    secretaryDuty: 'Handle routine approvals and summarize progress; escalate decisions to the PM.',
+    secretaryDuty:
+      'Filter worker updates, summarize progress and quote approved instructions; escalate anything uncertain to the PM.',
     parent: 'Reports to',
     expand: 'Expand',
     collapse: 'Collapse',
@@ -1003,7 +1004,7 @@ export const zhTW: typeof en = {
     fit: '符合視窗',
     hint: '點選機器人查看工作詳情。獨立分析可以平行，程式修改接續進行。',
     pmDuty: '討論規格、協調交付、回報進度並審查成果。',
-    secretaryDuty: '處理例行權限並整理進度，需要決策時升交 PM。',
+    secretaryDuty: '先過濾 worker 回報、整理進度並引用核准指示；只要不確定就升交 PM 親自處理。',
     parent: '回報對象',
     expand: '展開',
     collapse: '收合',

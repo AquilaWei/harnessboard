@@ -228,6 +228,10 @@ it('records explicit cancellation so the PM can replace a failed worker', async 
 
 it('releases its task slot when an escalated question outlives the last worker', async () => {
   host.run = async (_task, plan) => {
+    if (plan.role === 'secretary') {
+      await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
+      return outcome;
+    }
     if (plan.role === 'pm') {
       await engine.call('dispatch', { ...input, access: 'readOnly' });
       await engine.call('ask_user', { message: 'Please choose the final direction.' });
@@ -297,6 +301,10 @@ it('runs PM permission decisions while an orphan branch has no HEAD', async () =
 it('runs a worker from an unborn branch through its first commit', async () => {
   await git(task.worktreePath!, ['checkout', '--orphan', 'fresh-history']);
   host.run = async (_task, plan) => {
+    if (plan.role === 'secretary') {
+      await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
+      return outcome;
+    }
     if (plan.role === 'pm') {
       await engine.call('dispatch', input);
       await engine.call('ask_user', { message: 'Review the new history.' });
@@ -332,6 +340,10 @@ it('hands shared write access to a child and resumes its parent after child comp
   let parentTurn = 0;
   host.run = async (_task, plan, id) => {
     store.setAgentSessionId(id, id);
+    if (plan.role === 'secretary') {
+      await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
+      return outcome;
+    }
     if (plan.role === 'pm') {
       if (!dispatched) {
         dispatched = true;
@@ -372,6 +384,10 @@ it('hands shared write access to a child and resumes its parent after child comp
 
 it('does not allow a read-only worker to delegate write access or PM decisions', async () => {
   host.run = async (_task, plan) => {
+    if (plan.role === 'secretary') {
+      await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
+      return outcome;
+    }
     if (plan.role === 'pm') {
       await engine.call('dispatch', { ...input, access: 'readOnly' });
       await engine.call('ask_user', { message: 'Inspect analysis.' });
@@ -391,6 +407,10 @@ it('does not allow a read-only worker to delegate write access or PM decisions',
 
 it('cancels a worker subtree including queued writers', async () => {
   host.run = async (_task, plan, id) => {
+    if (plan.role === 'secretary') {
+      await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
+      return outcome;
+    }
     if (plan.role === 'pm') {
       if (pmWork(store, task.id).length === 0) {
         await engine.call('dispatch', input);
@@ -447,6 +467,10 @@ it('routes a worker escalation to the PM and resumes the same conversation with 
   let workerTurns = 0;
   host.run = async (_task, plan, id) => {
     store.setAgentSessionId(id, id);
+    if (plan.role === 'secretary') {
+      await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
+      return outcome;
+    }
     if (plan.role === 'pm') {
       if (!dispatched) {
         dispatched = true;
@@ -487,6 +511,10 @@ it('joins multi-level delegated work before each parent completes', async () => 
   let dispatched = false;
   host.run = async (_task, plan, id) => {
     store.setAgentSessionId(id, id);
+    if (plan.role === 'secretary') {
+      await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
+      return outcome;
+    }
     if (plan.role === 'pm') {
       if (!dispatched) {
         dispatched = true;
@@ -546,6 +574,10 @@ it('delegates through real managed CLI processes and resumes only after the chil
   const adapter = new ClaudeCodeAdapter(FAKE_CLAUDE);
   let dispatched = false;
   host.run = async (_task, plan, id, signal) => {
+    if (plan.role === 'secretary') {
+      await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
+      return outcome;
+    }
     if (plan.role === 'pm') {
       if (!dispatched) {
         dispatched = true;

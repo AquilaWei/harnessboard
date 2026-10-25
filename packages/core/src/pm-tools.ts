@@ -28,6 +28,12 @@ export const PM_TOOLS = [
     ),
   },
   {
+    name: 'reply_worker',
+    description:
+      'Secretary only: answer a simple pending question using a verbatim quote from approved instructions. If uncertain or previously unanswered by a secretary quote, escalate_pm so the PM handles the worker directly.',
+    inputSchema: fields({ ...id, quote: string }, ['id', 'quote']),
+  },
+  {
     name: 'finish_batch',
     description:
       'Secretary only: record a concise summary after resolving all batch permissions. End your turn.',
@@ -185,7 +191,7 @@ export async function pmTools(
       let result: unknown;
       const tools = PM_TOOLS.filter((tool) =>
         worker === 'secretary'
-          ? ['permission', 'finish_batch', 'escalate_pm'].includes(tool.name)
+          ? ['permission', 'reply_worker', 'finish_batch', 'escalate_pm'].includes(tool.name)
           : worker
             ? ![
                 'propose_spec',
@@ -193,10 +199,11 @@ export async function pmTools(
                 'permission',
                 'accept',
                 'appoint_secretary',
+                'reply_worker',
                 'finish_batch',
                 'escalate_pm',
               ].includes(tool.name)
-            : !['ask_pm', 'finish_batch', 'escalate_pm'].includes(tool.name),
+            : !['ask_pm', 'reply_worker', 'finish_batch', 'escalate_pm'].includes(tool.name),
       ).map((tool) =>
         worker === 'secretary' && tool.name === 'permission'
           ? {

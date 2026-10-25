@@ -37,24 +37,38 @@ Only configured, explicitly permitted worker models can be dispatched.
 
 ## PM-appointed secretary
 
-After specification approval, the PM can use `appoint_secretary` to select one fast,
-low-cost local Claude Code or Codex model from the same permitted pool. Include a
-lightweight model in that pool to make it available. Appointment does not start a model;
-routine events start short batches when needed. Without an appointment, the existing PM
-workflow continues. Existing tasks gain the tool on their next normal PM turn.
+After specification approval, the PM directly dispatches workers and may use
+`appoint_secretary` to select a permitted local Claude Code or Codex model. Dispatch
+ensures an appointment even when the PM omits it. Automatic selection prefers permitted
+model names containing haiku/mini/nano/small/flash, otherwise the first available local
+profile/model; names do not guarantee price. Include a lightweight model in the permitted
+pool, or let the PM explicitly select one. Appointment does not start a CLI.
 
-The harness handles its own MCP tool confirmations directly. Remaining routine worker
-permissions and progress go to the secretary while the PM sleeps. The secretary can allow
-or deny a current request once, record a summary, or escalate; it cannot dispatch work,
-change scope, edit files, contact the user, or accept delivery. Higher-risk permissions,
-worker delivery/failure, worker decision questions and user messages go to the PM.
+During execution, all worker progress, questions, delivery and failures pass through the
+secretary first. It summarizes routine progress and handles clearly authorized routine
+permissions. For a simple question completely answered by approved instructions, it can
+use `reply_worker` with a verbatim quote from the specification, assignment or applicable
+rules. The harness validates the quote and the original pending worker identity before
+resuming that worker. A repeat question after a secretary answer must go to the PM.
 
-Each secretary batch starts a fresh conversation containing the approved specification,
-applicable rules and pending events, without the PM or worker transcript. Concurrent
-events remain pending for a later batch. User messages and worker decisions preempt an
-active batch. A batch that fails, exceeds 60 seconds or runs out of quota escalates once
-and suspends secretary processing until the PM reappoints it. Restart preserves the
-appointment and event cursor; expired approvals are never replayed.
+If uncertain for any reason, the secretary immediately uses `escalate_pm`. Technical
+decisions, scope changes, failures and delivery review require escalation; it cannot finish
+a batch while questions or deliveries remain unresolved. Escalation preserves the original
+worker IDs, questions and evidence. The PM personally answers or directs the original
+worker with `continue_work`; subsequent execution messages return to the secretary.
+The secretary cannot dispatch, edit files, contact the user or accept delivery.
+
+The harness handles its own MCP tool confirmations directly. Higher-risk permissions are
+deterministically escalated by the secretary router without an extra model call. User
+messages still wake the PM directly and preempt an active secretary batch.
+
+Each batch starts a fresh conversation with approved instructions and pending events,
+without the PM/worker transcript. Concurrent events remain pending for a later batch.
+Failure, 60-second timeout or quota exhaustion escalates once and suspends secretary
+processing until PM reappointment. If no permitted local profile is available, a visible
+notice records that the PM handles events directly. Restart preserves appointment and
+cursor; expired permissions and worker questions cannot be answered again. Existing PM
+tasks adopt the router when their workflow next starts; running processes need a restart.
 
 The Team panel shows the secretary below the PM, with its model, status, batch history,
 tokens and cost. Its usage is included in task totals and excluded from PM/worker totals;
