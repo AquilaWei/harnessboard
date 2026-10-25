@@ -546,7 +546,13 @@ export class PmWorkflow {
     if (active(work)) throw new Error('Worker is already active');
     this.cancelled.delete(work.id);
     const next = { ...work, status: 'queued' as const };
-    this.start(next, this.text(input, 'message'));
+    const message = this.text(input, 'message');
+    if (!caller)
+      this.host.store.appendEvent(this.task.id, this.pmSessionId, 'pm_worker_direction', {
+        workId: work.id,
+        message,
+      });
+    this.start(next, message);
     if (caller) this.turns.get(caller)!.delegated = true;
     return next;
   }

@@ -58,6 +58,15 @@ worker IDs, questions and evidence. The PM personally answers or directs the ori
 worker with `continue_work`; subsequent execution messages return to the secretary.
 The secretary cannot dispatch, edit files, contact the user or accept delivery.
 
+Each batch also includes the initial goal, scope and acceptance of only the workers
+referenced by its permissions, progress or results, plus their recorded PM
+`continue_work` instructions in chronological order. This includes permission-only
+batches and historical worker session IDs. Explicit later PM instructions can revise
+earlier task details; unclear conflicts still go to the PM. Routine work does not
+require every filename or command to appear in the top-level specification.
+These instructions survive restarts; old follow-ups that were never recorded are
+not reconstructed. Worker reports cannot create new authorization.
+
 The harness handles its own MCP tool confirmations directly. Higher-risk permissions are
 deterministically escalated by the secretary router without an extra model call. User
 messages still wake the PM directly and preempt an active secretary batch.

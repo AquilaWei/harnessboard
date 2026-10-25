@@ -9,7 +9,9 @@ an available permitted local model if the PM has not selected one; include a lig
 model in the permitted pool. The secretary summarizes routine progress and quotes approved
 instructions for simple questions. Anything uncertain goes to the PM, who communicates
 directly with the original worker. Decisions and final review stay with the PM; the Team
-panel shows secretary usage separately.
+panel shows secretary usage separately. Each batch includes the relevant worker’s initial
+assignment and recorded PM follow-up instructions, so routine checks use the actual
+delegated scope.
 
 ![version](https://img.shields.io/badge/version-0.2.9-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)

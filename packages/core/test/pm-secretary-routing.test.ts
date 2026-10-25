@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { PermissionRequest, Task } from '@harnessboard/shared';
+import type { PermissionRequest, PmWork, Task } from '@harnessboard/shared';
 import { defaultConfig } from '../src/config.js';
 import { PmWorkflow } from '../src/pm.js';
 import { Secretary, pmSecretary } from '../src/pm-secretary.js';
@@ -421,6 +421,10 @@ it('routes an uncertain worker question through the secretary before the PM answ
           id: workId,
           message: 'PM directly chooses option A.',
         });
+        expect(store.lastEvent(task.id, 'pm_worker_direction')?.data).toEqual({
+          workId,
+          message: 'PM directly chooses option A.',
+        });
         controller.abort();
       }
     } else if (plan.role === 'secretary') {
@@ -546,4 +550,125 @@ it('prefers a permitted lightweight model over the first large model', () => {
   const assistant = new Secretary(host, task.id, controller.signal);
   assistant.ensure('pm-session');
   expect(assistant.state?.model).toBe('small');
+});
+
+function assignedWork(): PmWork {
+  return {
+    id: 'assigned',
+    parentSessionId: 'pm-session',
+    parentWorkId: null,
+    sessionId: 'worker-session',
+    agentId: 'claude',
+    model: 'small',
+    effort: null,
+    goal: 'Implement TheraNote export and import.',
+    acceptance: 'Mask every student name and pass export tests.',
+    scope: 'Edit src/datafuzzy/ot/ and tests/test_ot_*.py only.',
+    access: 'edit',
+    status: 'running',
+    summary: null,
+    evidence: null,
+    since: null,
+    head: null,
+    execution: 'managed',
+  };
+}
+
+it('supplies the initial assignment for a permission-only batch after restart', async () => {
+  secretary();
+  const work = assignedWork();
+  store.appendEvent(task.id, work.sessionId, 'pm_work', work);
+  store.appendEvent(task.id, null, 'pm_work', { ...work, sessionId: 'new-worker-session' });
+  store.appendEvent(task.id, null, 'pm_work', {
+    ...work,
+    id: 'unrelated',
+    sessionId: 'other-session',
+    goal: 'UNRELATED_PRIVATE_GOAL',
+  });
+  const restarted = new Secretary(host, task.id, controller.signal);
+  restarted.recover();
+  pending = [permission];
+  let prompt = '';
+  host.run = vi.fn(async (_task, plan) => {
+    prompt = plan.prompt;
+    await rpc(plan, 'escalate_pm', { message: 'Inspect assignment.' });
+    return completed;
+  });
+  expect(await restarted.handle()).toBe(true);
+  expect(prompt).toContain(work.goal);
+  expect(prompt).toContain(work.acceptance);
+  expect(prompt).toContain(work.scope);
+  expect(prompt).not.toContain('UNRELATED_PRIVATE_GOAL');
+  expect(restarted.state?.status).toBe('waiting');
+});
+
+it('includes PM follow-up directions for progress-only batches without unrelated directions', async () => {
+  const assistant = secretary();
+  const work = assignedWork();
+  store.appendEvent(task.id, work.sessionId, 'pm_work', work);
+  store.appendEvent(task.id, 'pm-session', 'pm_worker_direction', {
+    workId: work.id,
+    message: 'After acceptance, bump the version to 0.1.0.',
+  });
+  store.appendEvent(task.id, 'pm-session', 'pm_worker_direction', {
+    workId: 'other',
+    message: 'UNRELATED_PRIVATE_DIRECTION',
+  });
+  store.appendEvent(task.id, work.sessionId, 'pm_progress', {
+    workId: work.id,
+    message: 'Preparing the version commit.',
+  });
+  host.run = vi.fn(async (_task, plan) => {
+    expect(plan.prompt).toContain(work.scope);
+    expect(plan.prompt).toContain('After acceptance, bump the version to 0.1.0.');
+    expect(plan.prompt).not.toContain('UNRELATED_PRIVATE_DIRECTION');
+    await rpc(plan, 'finish_batch', { summary: 'Progress recorded.' });
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(false);
+});
+
+it('permits a verbatim answer from a durable PM follow-up', async () => {
+  const reply = vi.fn();
+  const assistant = new Secretary(host, task.id, controller.signal, reply);
+  assistant.appoint({ agentId: 'claude', model: 'small' }, 'pm-session');
+  const work = { ...assignedWork(), status: 'awaiting_pm' as const };
+  store.appendEvent(task.id, work.sessionId, 'pm_work', work);
+  store.appendEvent(task.id, 'pm-session', 'pm_worker_direction', {
+    workId: work.id,
+    message: 'Mask all students, including students outside the selected dates.',
+  });
+  store.appendEvent(task.id, work.sessionId, 'pm_worker_update', work);
+  host.run = vi.fn(async (_task, plan) => {
+    await rpc(plan, 'reply_worker', {
+      id: work.id,
+      quote: 'Mask all students, including students outside the selected dates.',
+    });
+    await rpc(plan, 'finish_batch', { summary: 'Quoted PM direction.' });
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(false);
+  expect(reply).toHaveBeenCalledWith(work, expect.stringContaining('Mask all students'));
+});
+
+it('persists PM directions when continuing completed work and rejects invalid continuations', async () => {
+  const work = { ...assignedWork(), status: 'completed' as const };
+  store.appendEvent(task.id, work.sessionId, 'pm_work', work);
+  host.run = vi.fn(async (_task, plan) => {
+    if (plan.role === 'pm') {
+      await expect(engine.call('continue_work', { id: work.id, message: '' })).rejects.toThrow();
+      expect(store.eventsOfKind(task.id, 'pm_worker_direction')).toHaveLength(0);
+      await engine.call('continue_work', {
+        id: work.id,
+        message: 'Build the approved UI and package version 0.7.0.0.1.',
+      });
+      expect(store.lastEvent(task.id, 'pm_worker_direction')?.data).toEqual({
+        workId: work.id,
+        message: 'Build the approved UI and package version 0.7.0.0.1.',
+      });
+      controller.abort();
+    }
+    return completed;
+  });
+  await engine.run();
 });
