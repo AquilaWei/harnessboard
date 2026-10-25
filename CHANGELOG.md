@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.10 - 2026-10-24
+
+Local test release; live-model filtering quality and token savings still need observation.
+
+### Fixed
+
+- 秘書每批同步取得相關 worker 的初次交辦、工作範圍與驗收條件，以及 PM 後續指示，避免只拿總規格誤判例行工作。
+- PM 繼續已完成的 worker 時也會保存交辦內容；權限請求可對應原 worker 與歷史 session，重啟後仍能取得已記錄的指示。
+- 秘書可引用 PM 後續指示回答簡單問題；不確定、衝突不清或交付驗收仍交由 PM 親自處理。
+
 ## 0.2.9 - 2026-10-24
 
 Local test release; live-model quality and interactive desktop acceptance are pending.
