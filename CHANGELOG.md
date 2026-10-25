@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.9 - 2026-10-24
+
+Local test release; live-model quality and interactive desktop acceptance are pending.
+
+### Added
+
+- worker 執行期間的進度、問題與交付先經秘書過濾；派工時自動委任允許的本機模型，優先選擇名稱標示為輕量的模型。
+- 秘書可引用核准指示回答簡單問題；只要不確定、同一問題仍未解決，或需要交付審查，就升交 PM，由 PM 親自與原 worker 溝通。
+
+### Fixed
+
+- 未委任或秘書失敗時明確回退 PM，避免 worker 回報無人處理；PM 自己的進度訊息不再啟動秘書批次。
+
 ## 0.2.8 - 2026-10-23
 
 Local test release; interactive desktop acceptance is pending.
