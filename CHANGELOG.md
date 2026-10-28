@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.14 - 2026-10-28
+
+Local test build. Typecheck, lint and build pass. Full suite: 1949 passed, 1 failed, 14 skipped; the previously recorded nested development branch CLI test still times out. No tag or Release.
+
+### Fixed
+
+- 任務卡片與詳情頂部只顯示簡短的 PM 等待狀態，避免長篇問題撐高卡片；完整問題保留於「回答 PM」對話頁。
+
 ## 0.2.13 - 2026-10-28
 
 Local test build. Typecheck, lint and build pass. Full suite: 1949 passed, 1 failed, 14 skipped; the previously recorded nested development branch CLI test still times out. Its sequential CLI fixture competes with secretary/worker execution. Installed RPM 0.2.13 starts successfully; isolated desktop fixtures verify PM answer navigation, concurrent waiting states, hidden raw approvals and API rejection. Live-model routing quality remains unverified. No tag or Release.
