@@ -672,3 +672,33 @@ it('persists PM directions when continuing completed work and rejects invalid co
   });
   await engine.run();
 });
+
+it('hands an omitted batch finish to the PM without disabling the secretary', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async (_task, plan) => {
+    await rpc(plan, 'permission', {
+      requestId: 'r1',
+      sessionId: 'worker-session',
+      ts: 100,
+      behavior: 'allow',
+      reason: 'Approved verification.',
+    });
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(true);
+  expect(assistant.state?.status).toBe('waiting');
+  expect(store.eventsOfKind(task.id, 'pm_secretary_escalation')).toHaveLength(1);
+  expect(store.listSessions(task.id)[0]?.endReason).toBe('completed');
+});
+
+it('preserves unanswered permissions when a completed secretary omits batch finish', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async () => completed);
+  expect(await assistant.handle()).toBe(true);
+  expect(pending).toEqual([permission]);
+  expect(host.answer).not.toHaveBeenCalled();
+  expect(assistant.state?.status).toBe('waiting');
+  expect(store.eventsOfKind(task.id, 'pm_secretary_escalation')).toHaveLength(1);
+});

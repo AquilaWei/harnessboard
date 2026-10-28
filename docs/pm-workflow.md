@@ -73,6 +73,10 @@ messages still wake the PM directly and preempt an active secretary batch.
 
 Each batch starts a fresh conversation with approved instructions and pending events,
 without the PM/worker transcript. Concurrent events remain pending for a later batch.
+A batch ends after handling its supplied messages and permissions, even while workers
+are still running. If the model completes its turn without `finish_batch` or
+`escalate_pm`, the router hands that batch to the PM and keeps the secretary available;
+unanswered permissions remain pending.
 Failure, 60-second timeout or quota exhaustion escalates once and suspends secretary
 processing until PM reappointment. If no permitted local profile is available, a visible
 notice records that the PM handles events directly. Restart preserves appointment and

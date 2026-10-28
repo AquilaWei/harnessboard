@@ -36,7 +36,7 @@ export const PM_TOOLS = [
   {
     name: 'finish_batch',
     description:
-      'Secretary only: record a concise summary after resolving all batch permissions. End your turn.',
+      'Secretary only: close this message batch after resolving its permissions and questions. Workers may still be running; do not wait for their assignment, CI or acceptance. Record a concise summary and end your turn.',
     inputSchema: fields({ summary: string }, ['summary']),
   },
   {

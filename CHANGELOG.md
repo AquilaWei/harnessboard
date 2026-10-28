@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- 秘書明確區分本輪訊息與工程師完整任務；正常回覆卻漏呼叫收尾工具時交由 PM 接手，保留待決權限並保持秘書可用，避免誤標失敗。
+
 ## 0.2.11 - 2026-10-27
 
 Local test build. Typecheck, lint and new project-bootstrap tests pass. Full suite: 1932 passed, 5 failed, 14 skipped; nested PM branches, chat, designer and quota-pause failures remain under investigation. Live desktop acceptance is pending.
