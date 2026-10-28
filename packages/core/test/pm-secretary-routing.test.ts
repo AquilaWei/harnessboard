@@ -702,3 +702,164 @@ it('preserves unanswered permissions when a completed secretary omits batch fini
   expect(assistant.state?.status).toBe('waiting');
   expect(store.eventsOfKind(task.id, 'pm_secretary_escalation')).toHaveLength(1);
 });
+
+it('reviews worker permissions while the PM waits for an installation answer', async () => {
+  let approve!: () => void;
+  const approved = new Promise<void>((resolve) => {
+    approve = resolve;
+  });
+  host.answer = vi.fn(() => {
+    pending = [];
+    approve();
+  });
+  host.run = vi.fn(async (_task, plan) => {
+    if (plan.role === 'pm') {
+      await engine.call('dispatch', {
+        agentId: 'claude',
+        model: 'small',
+        goal: 'Screenshot',
+        acceptance: 'Screenshot captured',
+        scope: 'browser',
+        access: 'readOnly',
+      });
+      await engine.call('ask_user', { message: 'Install the browser tool?' });
+    } else if (plan.role === 'secretary') {
+      await rpc(plan, 'permission', {
+        requestId: 'r1',
+        sessionId: 'worker-session',
+        ts: 100,
+        behavior: 'allow',
+        reason: 'Approved screenshot operation.',
+      });
+      await rpc(plan, 'finish_batch', { summary: 'Screenshot permission reviewed.' });
+      controller.abort();
+    } else {
+      pending = [permission];
+      engine.notify('routine');
+      await Promise.race([
+        approved,
+        new Promise<void>((resolve) => {
+          controller.signal.addEventListener('abort', () => resolve(), { once: true });
+        }),
+      ]);
+    }
+    return completed;
+  });
+  const timeout = setTimeout(() => controller.abort(), 2000);
+  try {
+    await engine.run();
+  } finally {
+    clearTimeout(timeout);
+  }
+  expect(host.answer).toHaveBeenCalledWith(
+    task.id,
+    'r1',
+    'allow',
+    'Approved screenshot operation.',
+    'secretary',
+  );
+  expect(store.lastEvent(task.id, 'pm_question')?.data).toEqual({
+    message: 'Install the browser tool?',
+    kind: 'question',
+  });
+});
+
+it('lets the PM take over an escalation without replacing an unanswered question', async () => {
+  let pmRuns = 0;
+  host.run = vi.fn(async (_task, plan) => {
+    if (plan.role === 'pm') {
+      pmRuns++;
+      if (pmRuns === 1) {
+        await engine.call('dispatch', {
+          agentId: 'claude',
+          model: 'small',
+          goal: 'Check',
+          acceptance: 'Checked',
+          scope: 'greeting',
+          access: 'readOnly',
+        });
+        await engine.call('ask_user', { message: 'Install tool?' });
+      } else {
+        await expect(engine.call('ask_user', { message: 'Replace original?' })).rejects.toThrow(
+          'unanswered',
+        );
+        await engine.call('permission', {
+          requestId: 'r1',
+          sessionId: 'worker-session',
+          ts: 100,
+          behavior: 'deny',
+          reason: 'Outside approved scope.',
+        });
+        controller.abort();
+      }
+    } else if (plan.role === 'secretary') {
+      await rpc(plan, 'escalate_pm', { message: 'Needs PM judgment.' });
+    } else {
+      pending = [permission];
+      engine.notify('routine');
+      await new Promise<void>((resolve) =>
+        controller.signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+    }
+    return completed;
+  });
+  const timeout = setTimeout(() => controller.abort(), 2000);
+  try {
+    await engine.run();
+  } finally {
+    clearTimeout(timeout);
+  }
+  expect(pmRuns).toBe(2);
+  expect(host.answer).toHaveBeenCalledWith(task.id, 'r1', 'deny', 'Outside approved scope.');
+  expect(store.eventsOfKind(task.id, 'pm_question')).toHaveLength(1);
+});
+
+it('lets the PM take over a failed secretary while preserving the unanswered question', async () => {
+  let pmRuns = 0;
+  host.run = vi.fn(async (_task, plan) => {
+    if (plan.role === 'pm') {
+      pmRuns++;
+      if (pmRuns === 1) {
+        await engine.call('dispatch', {
+          agentId: 'claude',
+          model: 'small',
+          goal: 'Check',
+          acceptance: 'Checked',
+          scope: 'greeting',
+          access: 'readOnly',
+        });
+        await engine.call('ask_user', { message: 'Install tool?' });
+      } else {
+        await expect(engine.call('ask_user', { message: 'Replace original?' })).rejects.toThrow(
+          'unanswered',
+        );
+        await engine.call('permission', {
+          requestId: 'r1',
+          sessionId: 'worker-session',
+          ts: 100,
+          behavior: 'deny',
+          reason: 'Outside approved scope.',
+        });
+        controller.abort();
+      }
+    } else if (plan.role === 'secretary') {
+      throw new Error('Secretary CLI unavailable');
+    } else {
+      pending = [permission];
+      engine.notify('routine');
+      await new Promise<void>((resolve) =>
+        controller.signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+    }
+    return completed;
+  });
+  const timeout = setTimeout(() => controller.abort(), 2000);
+  try {
+    await engine.run();
+  } finally {
+    clearTimeout(timeout);
+  }
+  expect(pmRuns).toBe(2);
+  expect(host.answer).toHaveBeenCalledWith(task.id, 'r1', 'deny', 'Outside approved scope.');
+  expect(store.eventsOfKind(task.id, 'pm_question')).toHaveLength(1);
+});

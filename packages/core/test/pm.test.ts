@@ -9,7 +9,7 @@ import { runSession } from '../src/runner.js';
 import { FAKE_CLAUDE, init, result, writeScenario } from './helpers.js';
 import { git } from '../src/worktree.js';
 import { Store } from '../src/store.js';
-import { PmWorkflow, pmWork, validatePm } from '../src/pm.js';
+import { PmWorkflow, pmWork, pmQuestion, validatePm } from '../src/pm.js';
 import type { PmHost } from '../src/pm.js';
 import type { SessionOutcome } from '../src/runner.js';
 import { defaultConfig } from '../src/config.js';
@@ -153,7 +153,20 @@ it('rejects tools after the PM turn has ended', async () => {
 
 it('passes permission decisions without permanent rules or global scope', async () => {
   await pmTurn(async () => {
+    host.permissions = () => [
+      {
+        requestId: 'r',
+        sessionId: 'worker',
+        ts: 100,
+        toolName: 'Bash',
+        summary: 'test',
+        risk: null,
+        suggestedRules: [],
+      },
+    ];
     await engine.call('permission', {
+      sessionId: 'worker',
+      ts: 100,
       requestId: 'r',
       behavior: 'deny',
       reason: 'Outside the approved scope.',
@@ -233,6 +246,7 @@ it('releases its task slot when an escalated question outlives the last worker',
       return outcome;
     }
     if (plan.role === 'pm') {
+      if (pmQuestion(store, task.id)) return outcome;
       await engine.call('dispatch', { ...input, access: 'readOnly' });
       await engine.call('ask_user', { message: 'Please choose the final direction.' });
     }
@@ -289,7 +303,20 @@ it('reports PM acceptance for user review without marking the task done', async 
 it('runs PM permission decisions while an orphan branch has no HEAD', async () => {
   await git(task.worktreePath!, ['checkout', '--orphan', 'fresh-history']);
   await pmTurn(async () => {
+    host.permissions = () => [
+      {
+        requestId: 'pending-first-commit',
+        sessionId: 'worker',
+        ts: 100,
+        toolName: 'Bash',
+        summary: 'test',
+        risk: null,
+        suggestedRules: [],
+      },
+    ];
     await engine.call('permission', {
+      sessionId: 'worker',
+      ts: 100,
       requestId: 'pending-first-commit',
       behavior: 'allow',
       reason: 'Approved new history.',
@@ -306,6 +333,7 @@ it('runs a worker from an unborn branch through its first commit', async () => {
       return outcome;
     }
     if (plan.role === 'pm') {
+      if (pmQuestion(store, task.id)) return outcome;
       await engine.call('dispatch', input);
       await engine.call('ask_user', { message: 'Review the new history.' });
     } else {
@@ -345,6 +373,7 @@ it('hands shared write access to a child and resumes its parent after child comp
       return outcome;
     }
     if (plan.role === 'pm') {
+      if (pmQuestion(store, task.id)) return outcome;
       if (!dispatched) {
         dispatched = true;
         await engine.call('dispatch', input);
@@ -389,10 +418,12 @@ it('does not allow a read-only worker to delegate write access or PM decisions',
       return outcome;
     }
     if (plan.role === 'pm') {
+      if (pmQuestion(store, task.id)) return outcome;
       await engine.call('dispatch', { ...input, access: 'readOnly' });
       await engine.call('ask_user', { message: 'Inspect analysis.' });
     } else {
       expect((await workerTool(plan, 'dispatch', input)).isError).toBe(true);
+      expect((await workerTool(plan, 'ask_user', { message: 'Bypass PM?' })).isError).toBe(true);
       expect(
         (await workerTool(plan, 'permission', { requestId: 'r', behavior: 'allow', reason: 'x' }))
           .isError,
@@ -412,6 +443,7 @@ it('cancels a worker subtree including queued writers', async () => {
       return outcome;
     }
     if (plan.role === 'pm') {
+      if (pmQuestion(store, task.id)) return outcome;
       if (pmWork(store, task.id).length === 0) {
         await engine.call('dispatch', input);
         await engine.call('wait', {});
@@ -516,6 +548,7 @@ it('joins multi-level delegated work before each parent completes', async () => 
       return outcome;
     }
     if (plan.role === 'pm') {
+      if (pmQuestion(store, task.id)) return outcome;
       if (!dispatched) {
         dispatched = true;
         await engine.call('dispatch', { ...input, access: 'readOnly' });
@@ -935,4 +968,30 @@ it('allows a continued branch to inherit integrated sibling files without claimi
     expect(await readFile(path.join(task.worktreePath!, 'target.txt'), 'utf8')).toBe('sibling');
     expect(await readFile(path.join(task.worktreePath!, 'greeting.txt'), 'utf8')).toBe('Hello');
   });
+});
+
+it('rejects a PM decision after a request id is reused by another worker session', async () => {
+  host.permissions = () => [
+    {
+      requestId: 'r',
+      sessionId: 'replacement',
+      ts: 200,
+      toolName: 'Bash',
+      summary: 'test',
+      risk: null,
+      suggestedRules: [],
+    },
+  ];
+  await pmTurn(async () => {
+    await expect(
+      engine.call('permission', {
+        requestId: 'r',
+        sessionId: 'original',
+        ts: 100,
+        behavior: 'allow',
+        reason: 'Old answer',
+      }),
+    ).rejects.toThrow('expired');
+  });
+  expect(host.answer).not.toHaveBeenCalled();
 });

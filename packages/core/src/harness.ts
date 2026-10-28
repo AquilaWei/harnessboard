@@ -420,6 +420,10 @@ export class Harness {
    */
   answerPermission(id: number, decision: PermissionDecision): Task {
     const task = this.requireTask(id);
+    if (task.workflow === 'pm')
+      throw new Error(
+        'PM permissions require internal review; answer the PM user question instead',
+      );
     const pending = this.permissions.get(id)?.get(decision.requestId);
     if (!pending)
       throw new Error(`task ${id} has no pending permission request ${decision.requestId}`);
@@ -2437,7 +2441,7 @@ export class Harness {
     } else {
       pending.resolve(reply);
     }
-    if (waiting?.size === 0 && this.running.has(taskId)) {
+    if (waiting?.size === 0 && this.running.has(taskId) && !pmQuestion(this.store, taskId)) {
       this.setStatus(taskId, this.held.has(taskId) ? 'queued' : 'running');
     }
   }

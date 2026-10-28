@@ -48,6 +48,7 @@ export interface PmWork {
   sessionIds?: string[];
   provider?: string;
   reportedModel?: string | null;
+  reviewStage?: 'secretary' | 'pm';
   activity?: string | null;
   updatedAt?: number;
   observedHead?: string | null;

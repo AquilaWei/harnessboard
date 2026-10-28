@@ -259,3 +259,16 @@ Electron upgrade. Check these before release:
   existing files before continuing, without requesting unchanged specification approval.
 
 PM tasks also accept existing folders without Git or commits. These tasks run in the selected folder; Harnessboard creates an empty local bookkeeping commit without staging files. After specification approval, PM arranges project setup, ignore rules and project commits according to the configured coding standards. Remote repository creation still requires explicit authorization.
+
+## 使用者溝通與授權
+
+執行訊息固定由 Worker → 秘書 → PM → 使用者傳遞。只有 PM 的 `ask_user`
+會建立使用者待辦；worker 用 `ask_pm`，秘書只能引用已核准指示回覆或升級給 PM。
+秘書失敗或不可用時由 PM 接手。PM 等待回答期間仍以事件喚醒處理其他已核准工作，
+不輪詢；新增問題會被拒絕，原問題保持不變，PM 必須保留其餘決策直到原問題回答。
+
+PM 任務的底層 CLI 請求只供內部審查，事件紀錄保留稽核用途。使用者可操作清單不含
+這些請求，一般授權 API 也拒絕直接批准。使用者回答只交回 PM，由 PM 重查請求是否
+仍待決，再決定回覆 worker；回答本身不批准任何 CLI 請求。一般非 PM 任務沿用原流程。
+團隊面板分別呈現等待秘書審查、等待 PM 決策及 PM 等待使用者回答，其他工作可同時執行。
+重啟不恢復舊 CLI 授權，舊 worker 標記中斷，由 PM 明確續派；歷史事件不改寫。

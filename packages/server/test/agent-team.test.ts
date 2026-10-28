@@ -173,3 +173,20 @@ it('counts fresh secretary batches separately from PM and worker usage', () => {
   expect(view.pmUsage?.tokens?.input).toBe(100);
   expect(view.usage.tokens?.input).toBe(130);
 });
+
+it('keeps internal PM permissions out of user actions while showing the reviewer', () => {
+  store.appendEvent(task.id, 'worker-new', 'pm_work', work);
+  harness.permissionRequests = () =>
+    [{ sessionId: 'worker-new' }] as ReturnType<Harness['permissionRequests']>;
+  const view = taskView(task, harness);
+  expect(view.permissionRequests).toEqual([]);
+  expect(view.work?.[0]?.reviewStage).toBe('pm');
+});
+
+it('shows an unanswered PM question alongside a running worker', () => {
+  store.appendEvent(task.id, 'worker-new', 'pm_work', work);
+  store.appendEvent(task.id, 'pm', 'pm_question', { message: 'Install tool?', kind: 'question' });
+  const view = taskView(task, harness);
+  expect(view.pmState?.status).toBe('awaiting_approval');
+  expect(view.work?.[0]?.status).toBe('running');
+});

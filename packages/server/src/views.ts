@@ -53,6 +53,31 @@ export function taskView(task: Task, harness: Harness): TaskView {
   const works = task.workflow === 'pm' ? pmWork(store, task.id) : [];
   const secretary = task.workflow === 'pm' ? pmSecretary(store, task.id) : null;
   const permissions = harness.permissionRequests(task.id);
+  const escalation = store.lastEvent(task.id, 'pm_secretary_escalation')?.data as
+    | {
+        workers?: { id: string; sessionId?: string | null; updatedAt?: number }[];
+        permissions?: PermissionRequest[];
+      }
+    | undefined;
+  const reviewStage = (work: (typeof works)[number]): 'pm' | 'secretary' => {
+    const pending = permissions.filter((p) => p.sessionId === work.sessionId);
+    if (
+      !secretary ||
+      secretary.status === 'failed' ||
+      pending.some(
+        (p) =>
+          p.risk != null ||
+          escalation?.permissions?.some(
+            (e) => e.requestId === p.requestId && e.sessionId === p.sessionId && e.ts === p.ts,
+          ),
+      ) ||
+      escalation?.workers?.some(
+        (w) => w.id === work.id && w.sessionId === work.sessionId && w.updatedAt === work.updatedAt,
+      )
+    )
+      return 'pm';
+    return 'secretary';
+  };
   const activityFor = (sessionId: string | null | undefined) => {
     const progress = sessionId ? store.lastSessionEvent(sessionId, 'pm_progress') : null;
     const tool = sessionId ? store.lastSessionEvent(sessionId, 'tool_use') : null;
@@ -104,8 +129,10 @@ export function taskView(task: Task, harness: Harness): TaskView {
                 }
               : {}),
             ...(permissions.some((p) => p.sessionId === work.sessionId)
-              ? { status: 'awaiting_permission' as const }
-              : {}),
+              ? { status: 'awaiting_permission' as const, reviewStage: reviewStage(work) }
+              : work.status === 'awaiting_pm'
+                ? { reviewStage: reviewStage(work) }
+                : {}),
             usage: taskUsage(
               task.id,
               store,
@@ -129,19 +156,20 @@ export function taskView(task: Task, harness: Harness): TaskView {
                     { model?: string } | undefined
                 )?.model ?? null)
               : null,
-            status:
-              task.status === 'running' &&
-              (store.lastEvent(task.id, 'pm_reply')?.id ?? 0) >
-                (store.lastEvent(task.id, 'pm_turn')?.id ?? 0) &&
-              works.some((w) =>
-                [
-                  'queued',
-                  'running',
-                  'awaiting_children',
-                  'awaiting_pm',
-                  'awaiting_permission',
-                ].includes(w.status),
-              )
+            status: pmQuestion(store, task.id)
+              ? 'awaiting_approval'
+              : task.status === 'running' &&
+                  (store.lastEvent(task.id, 'pm_reply')?.id ?? 0) >
+                    (store.lastEvent(task.id, 'pm_turn')?.id ?? 0) &&
+                  works.some((w) =>
+                    [
+                      'queued',
+                      'running',
+                      'awaiting_children',
+                      'awaiting_pm',
+                      'awaiting_permission',
+                    ].includes(w.status),
+                  )
                 ? 'awaiting_children'
                 : task.status,
             activity: activityFor(pmSession?.id).activity,
@@ -178,7 +206,7 @@ export function taskView(task: Task, harness: Harness): TaskView {
     specChange: harness.specChange(task.id),
     specRevisionPending: harness.pendingSpecRevision(task.id) !== null,
     merge: harness.lastMerge(task.id),
-    permissionRequests: harness.permissionRequests(task.id),
+    permissionRequests: task.workflow === 'pm' ? [] : harness.permissionRequests(task.id),
     usage: taskUsage(task.id, store, sessions, harness.activity(task.id) !== null),
     lastNotice:
       (store.lastEvent(task.id, 'notice')?.data as { message?: string } | undefined)?.message ??

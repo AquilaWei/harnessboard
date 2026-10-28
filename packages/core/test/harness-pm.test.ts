@@ -329,6 +329,8 @@ it('wakes the PM to grant a worker permission once without a deadlock', async ()
       'pm-thread',
       tool('permission', {
         requestId: '$permission',
+        sessionId: '$permission',
+        ts: '$permission',
         behavior: 'allow',
         reason: 'Necessary verification within the approved scope.',
       }),
@@ -515,4 +517,13 @@ it('runs nested development branches through real CLIs and integrates them befor
     .map((line) => JSON.parse(line));
   expect(runs).toHaveLength(6);
   expect(runs.filter((run) => run.cwd === work[1]?.worktreePath)).toHaveLength(1);
+});
+
+it('rejects direct user permission decisions on PM tasks', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec()]);
+  const task = await harness.createTask({ prompt: 'Build greeting', repo });
+  await harness.waitForIdle();
+  expect(() =>
+    harness.answerPermission(task.id, { requestId: 'raw-cli', behavior: 'allow' }),
+  ).toThrow('internal review');
 });

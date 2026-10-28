@@ -212,7 +212,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
                 </details>
               )}
               {(s === 'review' || s === 'done') && <UsageLine usage={task.usage} />}
-              {task.permissionRequests.length > 0 && (
+              {task.workflow !== 'pm' && task.permissionRequests.length > 0 && (
                 <PermissionPrompt
                   taskId={task.id}
                   requests={task.permissionRequests}

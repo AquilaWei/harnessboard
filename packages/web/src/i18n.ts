@@ -279,6 +279,9 @@ export const en = {
     states: {
       waiting: 'Waiting for routine work',
       awaiting_children: 'Waiting for subagents',
+      awaiting_user: 'Waiting for user answer',
+      awaiting_secretary_review: 'Waiting for secretary review',
+      awaiting_pm_review: 'Waiting for PM decision',
       awaiting_pm: 'Waiting for PM',
       completed: 'Completed',
       cancelled: 'Cancelled',
@@ -997,6 +1000,9 @@ export const zhTW: typeof en = {
     states: {
       waiting: '等待例行工作',
       awaiting_children: '等待子任務',
+      awaiting_user: '等待使用者回答',
+      awaiting_secretary_review: '等待秘書審查',
+      awaiting_pm_review: '等待 PM 決策',
       awaiting_pm: '等待 PM 指示',
       completed: '已完成',
       cancelled: '已取消',

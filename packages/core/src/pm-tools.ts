@@ -154,7 +154,7 @@ export const PM_TOOLS = [
         behavior: { enum: ['allow', 'deny'] },
         reason: string,
       },
-      ['requestId', 'behavior', 'reason'],
+      ['requestId', 'sessionId', 'ts', 'behavior', 'reason'],
     ),
   },
   {

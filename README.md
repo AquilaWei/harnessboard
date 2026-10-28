@@ -11,7 +11,8 @@ instructions for simple questions. Anything uncertain goes to the PM, who commun
 directly with the original worker. Decisions and final review stay with the PM; the Team
 panel shows secretary usage separately. Each batch includes the relevant worker’s initial
 assignment and recorded PM follow-up instructions, so routine checks use the actual
-delegated scope.
+delegated scope. While the PM waits for your answer, approved work and internal permission
+review continue. Only PM questions create user actions; raw CLI requests remain internal.
 
 ![version](https://img.shields.io/badge/version-0.2.12-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
