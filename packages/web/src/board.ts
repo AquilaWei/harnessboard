@@ -107,9 +107,16 @@ export type PrimaryAction =
   | 'resume'
   | 'approvePlan'
   | 'approveCriteria'
-  | 'answerPermission';
+  | 'answerPermission'
+  | 'answerPm';
 
 export function primaryAction(task: TaskView): PrimaryAction | null {
+  if (
+    task.workflow === 'pm' &&
+    task.pmQuestion?.kind === 'question' &&
+    ['running', 'awaiting_approval'].includes(task.status)
+  )
+    return 'answerPm';
   switch (task.status) {
     case 'backlog':
       return 'plan';

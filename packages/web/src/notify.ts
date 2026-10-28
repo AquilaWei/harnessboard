@@ -21,6 +21,7 @@ export function newlyWaiting(prev: Map<number, TaskStatus> | null, tasks: TaskVi
 
 /** The panel tab that shows what a waiting task needs from you. */
 export function openTab(task: TaskView): DrawerTab {
+  if (task.workflow === 'pm' && task.pmQuestion?.kind === 'question') return 'chat';
   switch (task.status) {
     case 'review':
       return 'changes';

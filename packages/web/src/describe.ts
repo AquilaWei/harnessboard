@@ -22,6 +22,18 @@ const d = (key: string, tone: Tone, vars: Record<string, string | number> = {}):
  * to decide. Shown on cards and at the top of the task panel.
  */
 export function describeTask(task: TaskView): Description {
+  if (
+    task.workflow === 'pm' &&
+    task.pmQuestion?.kind === 'question' &&
+    ['running', 'awaiting_approval'].includes(task.status)
+  )
+    return d(
+      task.work?.some((w) => ['running', 'queued'].includes(w.status))
+        ? 'pmWaitingContinuing'
+        : 'pmWaiting',
+      'attention',
+      { message: task.pmQuestion.message },
+    );
   const review = task.lastReview;
   const reviewer = task.agents.reviewer ?? '';
   switch (task.status) {

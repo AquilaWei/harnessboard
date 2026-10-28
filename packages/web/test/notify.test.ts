@@ -80,3 +80,13 @@ describe('safety pause notifications', () => {
     expect(newlyWaiting(new Map([[1, 'paused_safety']]), [task(1, 'paused_safety')])).toEqual([]);
   });
 });
+
+it('opens PM questions in the reply conversation', () => {
+  expect(
+    openTab({
+      ...task(1, 'awaiting_approval'),
+      workflow: 'pm',
+      pmQuestion: { kind: 'question', message: 'Install tool?' },
+    }),
+  ).toBe('chat');
+});

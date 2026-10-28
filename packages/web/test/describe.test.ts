@@ -437,3 +437,27 @@ describe('safety pause description', () => {
     });
   });
 });
+
+it('describes a PM question while approved workers continue', () => {
+  expect(
+    describeTask({
+      ...base,
+      workflow: 'pm',
+      status: 'running',
+      pmQuestion: { kind: 'question', message: 'Install tool?' },
+      work: [{ status: 'running' }],
+    } as TaskView),
+  ).toEqual({ key: 'pmWaitingContinuing', tone: 'attention', vars: { message: 'Install tool?' } });
+});
+
+it('describes a PM question as waiting for an answer rather than specification approval', () => {
+  expect(
+    describeTask({
+      ...base,
+      workflow: 'pm',
+      status: 'awaiting_approval',
+      pmQuestion: { kind: 'question', message: 'Install tool?' },
+      work: [],
+    } as TaskView),
+  ).toEqual({ key: 'pmWaiting', tone: 'attention', vars: { message: 'Install tool?' } });
+});

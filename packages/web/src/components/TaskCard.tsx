@@ -49,6 +49,7 @@ export function TaskCard({
       case 'approvePlan':
       case 'approveCriteria':
       case 'answerPermission':
+      case 'answerPm':
         onOpen(openTab(task));
         return;
     }

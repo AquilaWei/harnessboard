@@ -229,3 +229,13 @@ describe('safety pause on the board', () => {
     expect(groupByPhoneTab([task('paused_safety')]).waiting).toEqual([task('paused_safety')]);
   });
 });
+
+it('offers answering the PM when work continues behind an unanswered question', () => {
+  expect(
+    primaryAction({
+      ...task('running'),
+      workflow: 'pm',
+      pmQuestion: { kind: 'question', message: 'Install tool?' },
+    }),
+  ).toBe('answerPm');
+});

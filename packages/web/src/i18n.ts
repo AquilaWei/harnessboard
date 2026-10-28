@@ -107,6 +107,9 @@ export const en = {
   describe: {
     draft: 'Discuss the spec, then confirm it to join Pending.',
     pending: 'Planned. Starts by itself when quota allows.',
+    pmWaiting: 'PM is waiting for your answer: {{message}}',
+    pmWaitingContinuing:
+      'PM is waiting for your answer; other approved work continues. {{message}}',
     permissionAsked: '{{agent}} wants to use {{tool}}: {{summary}}. Allow it or not?',
     queued: 'Waiting for a free slot.',
     planReady: '{{agent}} planned {{total}} features. Review the plan, then approve it or reply.',
@@ -177,6 +180,7 @@ export const en = {
     approveCriteria: 'Review criteria',
     changeSpec: 'Change the spec',
     answerPermission: 'View request',
+    answerPm: 'Answer PM',
     markDone: 'Mark done',
     markDoneOnly: 'Mark done without merging',
     sendBack: 'Run again',
@@ -835,6 +839,8 @@ export const zhTW: typeof en = {
   describe: {
     draft: '先討論規格，確認完成後才進待執行。',
     pending: '已規劃好，額度允許時會自動開始。',
+    pmWaiting: 'PM 等待使用者回答：{{message}}',
+    pmWaitingContinuing: 'PM 等待使用者回答，其他已核准工作繼續中。{{message}}',
     permissionAsked: '{{agent}} 想使用 {{tool}}：{{summary}}。要允許嗎？',
     queued: '等待空出執行位置。',
     planReady: '{{agent}} 規劃了 {{total}} 項 feature。請檢查規格，確認開工或提出意見。',
@@ -901,6 +907,7 @@ export const zhTW: typeof en = {
     approveCriteria: '確認驗收標準',
     changeSpec: '修改規格',
     answerPermission: '查看請求',
+    answerPm: '回答 PM',
     markDone: '標為完成',
     markDoneOnly: '只標為完成，不合併',
     sendBack: '再執行一次',
