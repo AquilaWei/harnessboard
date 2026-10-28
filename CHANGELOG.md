@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.13 - 2026-10-28
+
+Local test build. Typecheck, lint and build pass. Full suite: 1949 passed, 1 failed, 14 skipped; the previously recorded nested development branch CLI test still times out. Its sequential CLI fixture competes with secretary/worker execution. Installed RPM 0.2.13 starts successfully; isolated desktop fixtures verify PM answer navigation, concurrent waiting states, hidden raw approvals and API rejection. Live-model routing quality remains unverified. No tag or Release.
+
+### Fixed
+
+- PM 等待使用者回答時，秘書仍以事件喚醒審查 worker 的例行授權與問題；升級或失敗由 PM 接手，保留原本尚未回答的問題。
+- PM 任務的底層 CLI 授權只留在內部審查佇列；前端不提供直接批准入口，一般授權 API 也拒絕繞過 PM。一般任務維持既有授權流程。
+- 卡片與通知中的 PM 問題直接開啟回答對話，並顯示等待回答時其他已核准工作仍在繼續。
+- 使用者回答只交回 PM 判斷；過期或重用 ID 的請求不能以舊 session 與時間戳批准。團隊面板分別顯示等待秘書、PM 決策與使用者回答。
+
 ## 0.2.12 - 2026-10-27
 
 Local test build. Secretary regression suite: 28 passed. Full suite: 1938 passed, 1 failed, 14 skipped; the previously observed nested development branch CLI integration test still times out.
