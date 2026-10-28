@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- 新增 PM 任務可選擇尚無 Git 或 commit 的資料夾；保留既有檔案與暫存內容，由 PM 在規格核准後依 code 規範安排專案初始化。
+
+- PM 可依明確功能、驗收條件與不重疊的修改路徑，從當下提交建立獨立 branch／worktree 平行開發；同一工作續用原對話與分支。
+- 完成的分支由父層整合與驗證；越界修改拒絕交付，整合衝突回報檔案並保留主工作區，未整合不得驗收。團隊面板顯示各工作分支與責任路徑。
+
 ## 0.2.10 - 2026-10-24
 
 Local test release; live-model filtering quality and token savings still need observation.

@@ -76,13 +76,9 @@ function FolderStatus({ info }: { info: FolderInfo | null }) {
   if (!info) return <small className="hint">{t('form.repoHint')}</small>;
   if (!info.exists) return <small className="bad-text">✗ {t('folders.missing')}</small>;
   if (!info.repoRoot) {
-    return (
-      <small className="bad-text">
-        ✗ {t('folders.notRepo')} <code>git init</code> + <code>git commit</code>
-      </small>
-    );
+    return <small className="hint">{t('folders.notRepo')}</small>;
   }
-  if (!info.hasCommits) return <small className="bad-text">✗ {t('folders.noCommits')}</small>;
+  if (!info.hasCommits) return <small className="hint">{t('folders.noCommits')}</small>;
   return (
     <small className="ok-text">
       ✓ {t('folders.repo')} <span className="mono">{info.repoRoot}</span>

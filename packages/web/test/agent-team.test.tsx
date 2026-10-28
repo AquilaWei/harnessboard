@@ -151,3 +151,34 @@ it('shows the secretary under PM with its own model, summary and token usage', a
   expect(inspector.textContent).toContain('in 10, out 20, cache read 0, cache write 0');
   expect(inspector.textContent).not.toContain('in 100, out 200');
 });
+
+it('shows branch ownership and integration evidence for development work', async () => {
+  await act(async () =>
+    root.render(
+      <AgentTeam
+        task={{
+          ...task,
+          work: [
+            {
+              ...task.work![0]!,
+              workspace: 'branch',
+              branch: 'hb/1/work-feature',
+              worktreePath: '/tmp/work-feature',
+              writePaths: ['src/transfer/', 'test/transfer.test.ts'],
+              integratedHead: 'abc123',
+            },
+          ],
+        }}
+        events={[]}
+      />,
+    ),
+  );
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[data-agent-id="worker"]')!.click(),
+  );
+  const inspector = container.querySelector('.agent-inspector')!;
+  expect(inspector.textContent).toContain('hb/1/work-feature');
+  expect(inspector.textContent).toContain('/tmp/work-feature');
+  expect(inspector.textContent).toContain('src/transfer/, test/transfer.test.ts');
+  expect(inspector.textContent).toContain('abc123');
+});

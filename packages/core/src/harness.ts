@@ -82,7 +82,7 @@ import {
 } from './config.js';
 import { mergeMessage } from './commit-check.js';
 import type { EditableSettings, HarnessConfig } from './config.js';
-import { resolveRepository } from './folders.js';
+import { inspectFolder, resolveRepository } from './folders.js';
 import { readGuidelines } from './guidelines.js';
 import { readPlan } from './loop.js';
 import { copyNotes } from './notes.js';
@@ -106,6 +106,7 @@ import {
   commitRange,
   commitTree,
   currentRef,
+  git,
   deleteMergedBranch,
   diffBase,
   headCommit,
@@ -588,7 +589,7 @@ export class Harness {
 
   /**
    * Validates the repository and thresholds, then records the task.
-   * Throws when `repo` is missing, not inside a git repository with a commit, the context policy is invalid, a
+   * Throws when `repo` is missing, a legacy task lacks a committed repository, the context policy is invalid, a
    * loop task has no verify command (from the input or the project's config file), an
    * allowed-tools entry is not a tool rule, an agent profile or model id is invalid, or the
    * workspace is unknown.
@@ -601,7 +602,7 @@ export class Harness {
 
   /** Validates and persists a draft before starting its initial discussion. */
   private async createDraft(input: CreateTaskInput): Promise<Task> {
-    const workspace = input.workspace ?? 'worktree';
+    let workspace = input.workspace ?? 'worktree';
     if (workspace !== 'worktree' && workspace !== 'base') {
       throw new Error(`unknown workspace ${String(workspace)}; use worktree or base`);
     }
@@ -617,7 +618,11 @@ export class Harness {
           })
         : null;
     if (pm) validatePm(this.config, pm);
-    const repoPath = await resolveRepository(input.repo);
+    const repoPath = await resolveRepository(input.repo, workflow === 'pm');
+    const folder = await inspectFolder(repoPath);
+    // Bootstrap in place so existing, untracked project files remain visible to workers.
+    const bootstrap = workflow === 'pm' && !folder.hasCommits;
+    if (bootstrap) workspace = 'base';
     const project = loadProjectConfig(repoPath);
     const contextPolicy = {
       ...this.config.defaultContextPolicy,
@@ -680,7 +685,11 @@ export class Harness {
       title: input.title ?? firstLine(input.prompt),
       prompt: input.prompt,
       repoPath,
-      baseRef: input.baseRef ?? project.baseRef ?? (await currentRef(repoPath)),
+      baseRef: bootstrap
+        ? folder.repoRoot
+          ? (await git(repoPath, ['symbolic-ref', '--short', 'HEAD'])).trim()
+          : 'main'
+        : (input.baseRef ?? project.baseRef ?? (await currentRef(repoPath))),
       workspace,
       mode,
       verifyCommand:
@@ -2086,12 +2095,36 @@ export class Harness {
 
   private async ensureWorktree(task: Task): Promise<Task> {
     // Checked before every session: the user may have switched branches since the last one.
+    if (task.workflow === 'pm') await this.preparePmRepository(task);
     if (task.workspace === 'base') return this.startOnBase(task);
     if (task.worktreePath) return task;
     const branch = branchName(task.id, task.title);
     const dir = worktreePath(this.config.dataDir, task.repoPath, task.id);
     await addWorktree(task.repoPath, dir, branch, task.baseRef);
     return this.store.updateTask(task.id, { branch, worktreePath: dir });
+  }
+
+  /** Establishes Git bookkeeping only; PM workers own project files and ignore rules. */
+  private async preparePmRepository(task: Task): Promise<void> {
+    const folder = await inspectFolder(task.repoPath);
+    if (!folder.exists) throw new Error(`folder not found: ${task.repoPath}`);
+    if (folder.hasCommits) return;
+    if (!folder.repoRoot) await git(task.repoPath, ['init', '-b', task.baseRef]);
+    // Never stage user files (or a pre-existing index) into the bootstrap commit.
+    const tree = (await git(task.repoPath, ['mktree'])).trim();
+    const commit = (
+      await git(task.repoPath, [
+        '-c',
+        'user.name=Harnessboard',
+        '-c',
+        'user.email=harnessboard@localhost',
+        'commit-tree',
+        tree,
+        '-m',
+        'chore: initialize repository',
+      ])
+    ).trim();
+    await git(task.repoPath, ['update-ref', `refs/heads/${task.baseRef}`, commit, '']);
   }
 
   /**

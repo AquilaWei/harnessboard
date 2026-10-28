@@ -628,3 +628,311 @@ it('delegates through real managed CLI processes and resumes only after the chil
     vi.unstubAllEnvs();
   }
 });
+
+it('requires explicit feature ownership before starting branch development', async () => {
+  await pmTurn(async () => {
+    await expect(engine.call('dispatch', { ...input, workspace: 'branch' })).rejects.toThrow(
+      'writePaths',
+    );
+  });
+  expect(pmWork(store, task.id)).toEqual([]);
+});
+
+it('rejects overlapping parallel feature ownership', async () => {
+  await pmTurn(async () => {
+    await engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['src/'] });
+    await expect(
+      engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['src/greeting.ts'] }),
+    ).rejects.toThrow('overlaps');
+  });
+  expect(pmWork(store, task.id)).toHaveLength(1);
+});
+
+it('rejects path traversal in branch ownership', async () => {
+  await pmTurn(async () => {
+    await expect(
+      engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['../outside/'] }),
+    ).rejects.toThrow('relative');
+  });
+});
+
+it('refuses branching from uncommitted source changes', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(path.join(task.worktreePath!, 'pending.txt'), 'pending');
+  await pmTurn(async () => {
+    await expect(
+      engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['src/'] }),
+    ).rejects.toThrow('Commit source');
+  });
+});
+
+it('runs independent writers concurrently from the same commit in private worktrees', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const { headCommit } = await import('../src/worktree.js');
+  const base = await headCommit(task.worktreePath!);
+  let startA!: () => void;
+  let startB!: () => void;
+  let releaseWorkers!: () => void;
+  const startedA = new Promise<void>((resolve) => {
+    startA = resolve;
+  });
+  const startedB = new Promise<void>((resolve) => {
+    startB = resolve;
+  });
+  const release = new Promise<void>((resolve) => {
+    releaseWorkers = resolve;
+  });
+  const directories: string[] = [];
+  host.run = async (workerTask, plan) => {
+    directories.push(plan.cwd!);
+    expect(workerTask.worktreePath).toBe(plan.cwd);
+    if (plan.prompt.includes('Feature A')) startA();
+    else startB();
+    await release;
+    return outcome;
+  };
+  await pmTurn(async () => {
+    try {
+      await engine.call('dispatch', {
+        ...input,
+        goal: 'Feature A',
+        workspace: 'branch',
+        writePaths: ['a.txt'],
+      });
+      await startedA;
+      await engine.call('dispatch', {
+        ...input,
+        goal: 'Feature B',
+        workspace: 'branch',
+        writePaths: ['b.txt'],
+      });
+      await startedB;
+      expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['running', 'running']);
+      expect(directories[0]).not.toBe(directories[1]);
+      expect(pmWork(store, task.id).map((w) => w.baseCommit)).toEqual([base, base]);
+      await writeFile(path.join(directories[0]!, 'a.txt'), 'only in A');
+      expect(await git(directories[1]!, ['status', '--porcelain'])).toBe('');
+      expect(await git(task.worktreePath!, ['status', '--porcelain'])).toBe('');
+    } finally {
+      releaseWorkers();
+    }
+  });
+});
+
+it('integrates completed branch commits without losing independent sibling changes', async () => {
+  const { writeFile, readFile } = await import('node:fs/promises');
+  host.run = async (_task, plan) => {
+    const file = plan.prompt.includes('Feature A') ? 'a.txt' : 'b.txt';
+    await writeFile(path.join(plan.cwd!, file), file);
+    await git(plan.cwd!, ['add', file]);
+    await git(plan.cwd!, ['commit', '-m', `feat: add ${file}`]);
+    return outcome;
+  };
+  await pmTurn(async () => {
+    const a = (await engine.call('dispatch', {
+      ...input,
+      goal: 'Feature A',
+      workspace: 'branch',
+      writePaths: ['a.txt'],
+    })) as { id: string };
+    const b = (await engine.call('dispatch', {
+      ...input,
+      goal: 'Feature B',
+      workspace: 'branch',
+      writePaths: ['b.txt'],
+    })) as { id: string };
+    await vi.waitFor(() =>
+      expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+    );
+    await vi.waitFor(async () =>
+      expect(await engine.call('integrate_work', { id: a.id })).toMatchObject({ integrated: true }),
+    );
+    await vi.waitFor(async () =>
+      expect(await engine.call('integrate_work', { id: b.id })).toMatchObject({ integrated: true }),
+    );
+    expect(await readFile(path.join(task.worktreePath!, 'a.txt'), 'utf8')).toBe('a.txt');
+    expect(await readFile(path.join(task.worktreePath!, 'b.txt'), 'utf8')).toBe('b.txt');
+  });
+});
+
+it('blocks acceptance until completed branch delivery is integrated', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  host.run = async (_task, plan) => {
+    await writeFile(path.join(plan.cwd!, 'greeting.txt'), 'hello');
+    await git(plan.cwd!, ['add', 'greeting.txt']);
+    await git(plan.cwd!, ['commit', '-m', 'feat: add greeting']);
+    return outcome;
+  };
+  await pmTurn(async () => {
+    await engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['greeting.txt'] });
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(async () =>
+      expect(engine.call('accept', {})).rejects.toThrow('Integrate completed'),
+    );
+  });
+});
+
+it('rejects delivery that modifies files outside its assigned feature', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  host.run = async (_task, plan) => {
+    await writeFile(path.join(plan.cwd!, 'outside.txt'), 'not owned');
+    await git(plan.cwd!, ['add', 'outside.txt']);
+    await git(plan.cwd!, ['commit', '-m', 'feat: change unrelated file']);
+    return outcome;
+  };
+  await pmTurn(async () => {
+    await engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['greeting.txt'] });
+    await vi.waitFor(() =>
+      expect(pmWork(store, task.id)[0]).toMatchObject({
+        status: 'failed',
+        summary: 'Worker changed paths outside its assigned feature: outside.txt',
+      }),
+    );
+  });
+});
+
+it('reports merge conflicts while leaving the task branch and index untouched', async () => {
+  const { writeFile } = await import('node:fs/promises');
+  const { headCommit } = await import('../src/worktree.js');
+  await writeFile(path.join(task.worktreePath!, 'greeting.txt'), 'base\n');
+  await git(task.worktreePath!, ['add', 'greeting.txt']);
+  await git(task.worktreePath!, ['commit', '-m', 'feat: seed greeting']);
+  host.run = async (_task, plan) => {
+    await writeFile(
+      path.join(plan.cwd!, 'greeting.txt'),
+      plan.prompt.includes('Target edit') ? 'target\n' : 'worker\n',
+    );
+    await git(plan.cwd!, ['add', 'greeting.txt']);
+    await git(plan.cwd!, ['commit', '-m', 'feat: change greeting']);
+    return outcome;
+  };
+  await pmTurn(async () => {
+    const work = (await engine.call('dispatch', {
+      ...input,
+      workspace: 'branch',
+      writePaths: ['greeting.txt'],
+    })) as { id: string };
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await engine.call('dispatch', { ...input, goal: 'Target edit' });
+    await vi.waitFor(() =>
+      expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+    );
+    const target = await headCommit(task.worktreePath!);
+    await vi.waitFor(async () =>
+      expect(await engine.call('integrate_work', { id: work.id })).toMatchObject({
+        integrated: false,
+        conflicts: ['greeting.txt'],
+        targetHead: target,
+      }),
+    );
+    expect(await headCommit(task.worktreePath!)).toBe(target);
+    expect(await git(task.worktreePath!, ['status', '--porcelain'])).toBe('');
+  });
+});
+
+it('continues a branch job in the same model conversation and worktree', async () => {
+  const seen: string[] = [];
+  host.run = async (_task, plan, id) => {
+    store.setAgentSessionId(id, 'branch-thread');
+    seen.push(`${plan.cwd}:${plan.resume?.agentSessionId ?? 'new'}`);
+    return outcome;
+  };
+  await pmTurn(async () => {
+    const work = (await engine.call('dispatch', {
+      ...input,
+      workspace: 'branch',
+      writePaths: ['greeting.txt'],
+    })) as { id: string };
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(async () =>
+      engine.call('continue_work', { id: work.id, message: 'Verify additional acceptance case' }),
+    );
+    await vi.waitFor(() => expect(seen).toHaveLength(2));
+    const dir = pmWork(store, task.id)[0]!.worktreePath;
+    expect(seen).toEqual([`${dir}:new`, `${dir}:branch-thread`]);
+  });
+});
+
+it('refuses branch children outside their parent feature ownership', async () => {
+  let refusal = '';
+  host.run = async (_task, plan) => {
+    const reply = await workerTool(plan, 'dispatch', {
+      ...input,
+      workspace: 'branch',
+      writePaths: ['other/'],
+    });
+    refusal = reply.content[0]!.text;
+    return outcome;
+  };
+  await pmTurn(async () => {
+    await engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['src/'] });
+    await vi.waitFor(() => expect(refusal).toContain('within parent ownership'));
+  });
+  expect(pmWork(store, task.id)).toHaveLength(1);
+});
+
+it('preserves a cancelled branch for explicit recovery', async () => {
+  const { headCommit } = await import('../src/worktree.js');
+  let branch = '';
+  let directory = '';
+  await pmTurn(async () => {
+    const work = (await engine.call('dispatch', {
+      ...input,
+      workspace: 'branch',
+      writePaths: ['src/'],
+    })) as { id: string; branch: string; worktreePath: string };
+    branch = work.branch;
+    directory = work.worktreePath;
+    await engine.call('cancel_work', { id: work.id });
+  });
+  expect(await headCommit(directory)).toBe(await headCommit(task.worktreePath!));
+  expect(await git(directory, ['branch', '--show-current'])).toBe(`${branch}\n`);
+  expect(pmWork(store, task.id)[0]?.status).toBe('cancelled');
+});
+
+it('allows a continued branch to inherit integrated sibling files without claiming them', async () => {
+  const { writeFile, readFile } = await import('node:fs/promises');
+  const { headCommit } = await import('../src/worktree.js');
+  host.run = async (_task, plan, id) => {
+    store.setAgentSessionId(id, id);
+    if (plan.prompt.includes('Target edit')) {
+      await writeFile(path.join(plan.cwd!, 'target.txt'), 'sibling');
+      await git(plan.cwd!, ['add', 'target.txt']);
+      await git(plan.cwd!, ['commit', '-m', 'feat: add sibling file']);
+    } else {
+      if (plan.resume)
+        await git(plan.cwd!, [
+          'merge',
+          '--no-ff',
+          '-m',
+          'chore: inherit integrated changes',
+          await headCommit(task.worktreePath!),
+        ]);
+      await writeFile(path.join(plan.cwd!, 'greeting.txt'), plan.resume ? 'Hello' : 'hello');
+      await git(plan.cwd!, ['add', 'greeting.txt']);
+      await git(plan.cwd!, ['commit', '-m', 'feat: update greeting']);
+    }
+    return outcome;
+  };
+  await pmTurn(async () => {
+    const work = (await engine.call('dispatch', {
+      ...input,
+      workspace: 'branch',
+      writePaths: ['greeting.txt'],
+    })) as { id: string };
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(async () => engine.call('integrate_work', { id: work.id }));
+    await engine.call('dispatch', { ...input, goal: 'Target edit' });
+    await vi.waitFor(() => expect(pmWork(store, task.id)[1]?.status).toBe('completed'));
+    await vi.waitFor(async () =>
+      engine.call('continue_work', {
+        id: work.id,
+        message: 'Capitalize the greeting and merge latest target first.',
+      }),
+    );
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(async () => engine.call('integrate_work', { id: work.id }));
+    expect(await readFile(path.join(task.worktreePath!, 'target.txt'), 'utf8')).toBe('sibling');
+    expect(await readFile(path.join(task.worktreePath!, 'greeting.txt'), 'utf8')).toBe('Hello');
+  });
+});

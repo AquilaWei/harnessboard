@@ -29,11 +29,12 @@ export async function inspectFolder(dir: string): Promise<FolderInfo> {
 
 /**
  * The repository root a task at `dir` works in.
- * Throws an explanation when the folder is missing, not in a repository, or has no commits.
+ * Missing folders always fail. PM bootstrap also accepts folders without Git or commits.
  */
-export async function resolveRepository(dir: string): Promise<string> {
+export async function resolveRepository(dir: string, allowBootstrap = false): Promise<string> {
   const info = await inspectFolder(dir);
   if (!info.exists) throw new Error(`folder not found: ${info.path}`);
+  if (allowBootstrap) return info.repoRoot ?? info.path;
   if (!info.repoRoot) {
     throw new Error(
       `${info.path} is not inside a git repository. Run "git init" there and make a first commit, or choose another folder.`,

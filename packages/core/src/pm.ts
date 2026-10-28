@@ -20,7 +20,20 @@ import type { Store } from './store.js';
 import type { SessionMcpServer } from './agent.js';
 import { COMMIT_RULE, checkCommits } from './commit-check.js';
 import { readGuidelines } from './guidelines.js';
-import { headCommit, optionalHeadCommit, porcelainStatus } from './worktree.js';
+import {
+  addWorktree,
+  advanceBranch,
+  changedPaths,
+  commitTree,
+  currentRef,
+  headCommit,
+  isMergedInto,
+  mergeBase,
+  mergeTree,
+  optionalHeadCommit,
+  porcelainStatus,
+  resolveCommit,
+} from './worktree.js';
 import { pmTools } from './pm-tools.js';
 import { Secretary } from './pm-secretary.js';
 
@@ -70,9 +83,9 @@ export interface PmHost {
 }
 
 const PM_COORDINATION =
-  'After approval, autonomously plan and supervise delivery, report meaningful progress to the user, and review actual work. Choose the number of managed workers by dependency, speed and token efficiency. Independent tasks may run in parallel; keep tightly coupled work together. Small tasks need no extra subagents. Workers may delegate through the same managed tools. Writers queue in one shared worktree. Read-only findings refer to observedHead; recheck findings made stale by concurrent edits before acceptance.';
+  'After approval, autonomously plan and supervise delivery, report meaningful progress to the user, and review actual work. Choose the number of managed workers by dependency, speed and token efficiency. Independent tasks may run in parallel; keep tightly coupled work together. Never edit a child-owned path while that child is active. Small tasks need no extra subagents. Workers may delegate through the same managed tools. Define one clear feature, acceptance tests, interface contracts and explicit non-overlapping writePaths per parallel worker. Keep shared API/schema changes with one owner or finish that prerequisite first. For independent development, dispatch with workspace=branch to fork the current committed HEAD into private branches/worktrees and run writers in parallel. Commit pending changes before branching. Use shared workspace for tightly coupled edits and special build/install tasks; shared writers queue. Reuse continue_work for the same job. Use integrate_work to merge each completed direct child into its parent workspace, resolve conflicts in that same child branch, and verify the combined result before acceptance. Read-only findings refer to observedHead; recheck findings made stale by concurrent edits before acceptance.';
 const WORKER_COORDINATION =
-  'Delegate only when independent work saves time or context. Keep tightly coupled changes together; small jobs need no subagents. Minimize repeated reading and duplicated context. You own integration and review of your children.';
+  'Delegate only when independent work saves time or context. Keep tightly coupled changes together; small jobs need no subagents. Minimize repeated reading and duplicated context. Never edit a child-owned path while that child is active. You own integration and review of your children. Dispatch independent development with workspace=branch from your current clean committed HEAD; children run in private worktrees. Use integrate_work for completed direct children before delivery; on conflict continue the child to merge the returned target commit, resolve and test. Shared writers still require you to yield.';
 
 const active = (w: PmWork) =>
   ['queued', 'running', 'awaiting_permission', 'awaiting_children', 'awaiting_pm'].includes(
@@ -124,7 +137,9 @@ export class PmWorkflow {
   private readonly cancelled = new Set<string>();
   private readonly jobs = new Set<Promise<void>>();
   private readonly listeners = new Set<() => void>();
-  private readonly processes = new Map<string, PmWork['access']>();
+  private readonly processes = new Map<string, { access: PmWork['access']; cwd: string }>();
+  private readonly integrations = new Set<string>();
+  private readonly integrationVersions = new Map<string, number>();
   private readonly turns = new Map<string, WorkerTurn>();
   private readonly replies = new Map<string, string>();
   private correction = false;
@@ -338,6 +353,8 @@ export class PmWorkflow {
         return { yield: true, instruction: 'End your turn now. Child events will wake you.' };
       case 'dispatch':
         return this.dispatch(input, caller);
+      case 'integrate_work':
+        return this.integrate(input, caller);
       case 'continue_work':
         return this.continue(input, caller);
       case 'cancel_work': {
@@ -473,7 +490,7 @@ export class PmWorkflow {
     });
   }
 
-  private dispatch(input: Record<string, unknown>, caller: string | null): PmWork {
+  private async dispatch(input: Record<string, unknown>, caller: string | null): Promise<PmWork> {
     const agentId = this.text(input, 'agentId');
     const model = input.model ?? null;
     const allowed = this.latest.pm!.workers.some(
@@ -482,6 +499,11 @@ export class PmWorkflow {
     if (!allowed) throw new Error('Worker profile/model is not permitted');
     if (input.access !== 'edit' && input.access !== 'readOnly')
       throw new Error('Invalid worker access');
+    const workspace = input.workspace ?? 'shared';
+    if (workspace !== 'branch' && workspace !== 'shared')
+      throw new Error('Invalid worker workspace');
+    if (workspace === 'branch' && input.access !== 'edit')
+      throw new Error('Branch workspace requires edit access');
     const effort = input.effort ?? null;
     if (effort !== null && (typeof effort !== 'string' || !isEffortId(effort)))
       throw new Error('Invalid worker effort');
@@ -490,6 +512,8 @@ export class PmWorkflow {
       throw new Error(
         'Worker provider is waiting for quota; choose another permitted profile or ask the user',
       );
+    const writePaths =
+      workspace === 'branch' ? this.ownership(input.writePaths, caller) : undefined;
     const work: PmWork = {
       id: randomUUID(),
       parentSessionId: caller ? this.work(caller).sessionId! : this.pmSessionId,
@@ -508,11 +532,212 @@ export class PmWorkflow {
       since: null,
       head: null,
       execution: 'managed',
+      workspace,
+      ...(writePaths ? { writePaths } : {}),
     };
+    if (workspace === 'branch') await this.fork(work, caller);
+    if (this.signal.aborted || (caller && this.controllers.get(caller)?.signal.aborted))
+      throw new Error('Dispatch was cancelled; branch workspace is preserved');
     this.secretary.ensure(this.pmSessionId);
     this.start(work, null);
     if (caller) this.turns.get(caller)!.delegated = true;
     return work;
+  }
+
+  private directory(work: PmWork): string {
+    if (work.worktreePath) return work.worktreePath;
+    return work.parentWorkId
+      ? this.directory(this.work(work.parentWorkId))
+      : this.task.worktreePath!;
+  }
+
+  private hasWriter(cwd: string, except?: string | null): boolean {
+    return [...this.processes.entries()].some(
+      ([id, process]) => id !== except && process.access === 'edit' && process.cwd === cwd,
+    );
+  }
+
+  private owns(owned: string, file: string): boolean {
+    return owned === file || (owned.endsWith('/') && file.startsWith(owned));
+  }
+
+  private ownership(value: unknown, caller: string | null, except?: string): string[] {
+    if (!Array.isArray(value) || !value.length || value.length > 100)
+      throw new Error(
+        'Branch development requires explicit writePaths (files or directory prefixes)',
+      );
+    const paths: string[] = [];
+    for (const file of value) {
+      if (
+        typeof file !== 'string' ||
+        !file ||
+        file.length > 1000 ||
+        file.startsWith('/') ||
+        /[\\:*?[\]]/.test(file) ||
+        [...file].some((char) => char.charCodeAt(0) < 32) ||
+        file
+          .split('/')
+          .some(
+            (part, i, parts) =>
+              part === '.' ||
+              part === '..' ||
+              (part === '' && i !== parts.length - 1) ||
+              part.toLowerCase() === '.git',
+          )
+      )
+        throw new Error(
+          'writePaths must be relative files or directory prefixes, without globs or traversal',
+        );
+      paths.push(file);
+    }
+    const parent = caller ? this.work(caller) : null;
+    if (
+      parent?.workspace === 'branch' &&
+      paths.some((file) => !parent.writePaths?.some((owned) => this.owns(owned, file)))
+    )
+      throw new Error('Child writePaths must stay within parent ownership');
+    const siblings = this.works.filter(
+      (w) =>
+        w.id !== except &&
+        (w.parentWorkId ?? null) === caller &&
+        w.workspace === 'branch' &&
+        w.status !== 'cancelled' &&
+        !(w.status === 'completed' && w.integratedHead && w.integratedHead === w.head),
+    );
+    if (
+      siblings.some((w) =>
+        w.writePaths?.some((owned) =>
+          paths.some((file) => this.owns(owned, file) || this.owns(file, owned)),
+        ),
+      )
+    )
+      throw new Error(
+        'Parallel feature ownership overlaps another branch; continue that worker or integrate it first',
+      );
+    return paths;
+  }
+
+  /** Forks only a stable clean source; failures leave any created branch available for recovery. */
+  private async fork(work: PmWork, caller: string | null): Promise<void> {
+    const source = caller ? this.directory(this.work(caller)) : this.task.worktreePath!;
+    if (this.integrations.has(source) || this.hasWriter(source, caller))
+      throw new Error('Source workspace is busy; commit and yield before branching');
+    this.integrations.add(source);
+    try {
+      if (await porcelainStatus(source)) throw new Error('Commit source changes before branching');
+      const base = await headCommit(source);
+      work.branch = `hb/${this.task.id}/work-${work.id}`;
+      work.worktreePath = path.join(
+        this.host.config.dataDir,
+        'workers',
+        String(this.task.id),
+        work.id,
+      );
+      work.baseCommit = base;
+      work.since = base;
+      await mkdir(path.dirname(work.worktreePath), { recursive: true });
+      await addWorktree(source, work.worktreePath, work.branch, base);
+    } finally {
+      this.integrations.delete(source);
+      this.notify('state');
+    }
+  }
+
+  private target(work: PmWork): string {
+    return work.parentWorkId
+      ? this.directory(this.work(work.parentWorkId))
+      : this.task.worktreePath!;
+  }
+
+  private async ownershipFailure(work: PmWork): Promise<string | null> {
+    const target = await headCommit(this.target(work));
+    const base = await mergeBase(this.directory(work), target);
+    const files = await changedPaths(this.directory(work), base);
+    const outside = files.filter(
+      (file) => !work.writePaths?.some((owned) => this.owns(owned, file)),
+    );
+    return outside.length
+      ? `Worker changed paths outside its assigned feature: ${outside.join(', ')}`
+      : null;
+  }
+
+  private async unmergedChildren(caller: string | null, cwd: string): Promise<string[]> {
+    const missing: string[] = [];
+    for (const child of this.works.filter(
+      (w) =>
+        (w.parentWorkId ?? null) === caller && w.workspace === 'branch' && w.status === 'completed',
+    )) {
+      // Check the current branch, not a stale integration marker, including after restart.
+      if (!child.branch || !(await isMergedInto(cwd, child.branch, 'HEAD'))) missing.push(child.id);
+    }
+    return missing;
+  }
+
+  /** Merge clean committed delivery only; conflicting trees never alter the target worktree. */
+  private async integrate(input: Record<string, unknown>, caller: string | null): Promise<unknown> {
+    const work = this.work(this.text(input, 'id'));
+    if ((work.parentWorkId ?? null) !== caller) throw new Error('Integrate only direct children');
+    if (caller && this.work(caller).access !== 'edit')
+      throw new Error('Read-only workers cannot integrate');
+    if (work.workspace !== 'branch' || !work.branch || !work.worktreePath)
+      throw new Error('Worker has no branch workspace');
+    if (
+      work.status !== 'completed' ||
+      this.processes.has(work.id) ||
+      this.works.some((w) => this.descendsFrom(w, work.id) && active(w))
+    )
+      throw new Error('Finish child work before integration');
+    const target = this.target(work);
+    if (
+      this.integrations.has(target) ||
+      [...this.processes.entries()].some(([id, process]) => id !== caller && process.cwd === target)
+    )
+      throw new Error('Target workspace is busy; finish shared writes before integration');
+    this.integrations.add(target);
+    try {
+      if ((await porcelainStatus(target)) || (await porcelainStatus(work.worktreePath)))
+        throw new Error('Both workspaces must be clean before integration');
+      const from = await headCommit(target);
+      const delivered = await resolveCommit(target, work.branch);
+      if (delivered !== work.head)
+        throw new Error('Worker branch changed after delivery; continue and verify it first');
+      const violation = await this.ownershipFailure(work);
+      if (violation) throw new Error(violation);
+      let to = from;
+      if (!(await isMergedInto(target, delivered, from))) {
+        const merged = await mergeTree(target, from, delivered);
+        if ('conflicts' in merged)
+          return {
+            integrated: false,
+            conflicts: merged.conflicts,
+            targetHead: from,
+            instruction:
+              'Continue this same child: merge targetHead into its branch, resolve within assigned ownership, commit and test, then retry integration.',
+          };
+        to = await commitTree(
+          target,
+          merged.tree,
+          [from, delivered],
+          `feat: integrate delegated work ${work.id}`,
+        );
+        const branch = await currentRef(target);
+        if (branch === from) throw new Error('Integration requires a checked-out target branch');
+        // Recheck HEAD and cleanliness before moving the checked-out branch.
+        if ((await headCommit(target)) !== from || (await porcelainStatus(target)))
+          throw new Error('Target changed during integration; retry after inspection');
+        await advanceBranch(target, branch, from, to);
+        this.integrationVersions.set(target, (this.integrationVersions.get(target) ?? 0) + 1);
+      }
+      this.record({ ...this.work(work.id), integratedHead: delivered, integratedInto: to });
+      return {
+        integrated: true,
+        head: to,
+        instruction: 'Inspect and test the combined result before delivery or acceptance.',
+      };
+    } finally {
+      this.integrations.delete(target);
+      this.notify('state');
+    }
   }
 
   private continue(input: Record<string, unknown>, caller: string | null): PmWork {
@@ -525,6 +750,8 @@ export class PmWorkflow {
     )
       throw new Error('Worker profile/model is no longer permitted');
     this.assertDispatch(work.access, caller);
+    if (work.workspace === 'branch')
+      this.ownership(work.writePaths, work.parentWorkId ?? null, work.id);
     this.secretary.ensure(this.pmSessionId);
     if (this.host.blocked(work.agentId)) throw new Error('Worker provider is waiting for quota');
     if (work.status === 'awaiting_pm') {
@@ -543,7 +770,8 @@ export class PmWorkflow {
       this.notify('state');
       return this.work(work.id);
     }
-    if (active(work)) throw new Error('Worker is already active');
+    if (active(work) || this.controllers.has(work.id))
+      throw new Error('Worker is already active or still finishing');
     this.cancelled.delete(work.id);
     const next = { ...work, status: 'queued' as const };
     const message = this.text(input, 'message');
@@ -601,7 +829,7 @@ export class PmWorkflow {
         // A writer owns the directory only while its CLI process (and integrity checks) runs.
         while (
           work.access === 'edit' &&
-          [...this.processes.values()].includes('edit') &&
+          (this.hasWriter(this.directory(work)) || this.integrations.has(this.directory(work))) &&
           !signal.aborted
         ) {
           await this.changed(signal, this.version);
@@ -611,7 +839,8 @@ export class PmWorkflow {
           throw new Error(
             'Worker provider is waiting for quota; the PM must choose another permitted profile or wait for quota',
           );
-        this.processes.set(work.id, work.access);
+        const cwd = this.directory(work);
+        this.processes.set(work.id, { access: work.access, cwd });
         const turn = { yielded: false, askPm: false, delegated: false };
         this.turns.set(work.id, turn);
         try {
@@ -623,11 +852,11 @@ export class PmWorkflow {
           const id = resume?.id ?? randomUUID();
           const since = work.sessionId
             ? work.since
-            : await optionalHeadCommit(this.task.worktreePath!);
-          const headBefore = await optionalHeadCommit(this.task.worktreePath!);
-          const statusBefore = await porcelainStatus(this.task.worktreePath!);
+            : (work.baseCommit ?? (await optionalHeadCommit(cwd)));
+          const headBefore = await optionalHeadCommit(cwd);
+          const statusBefore = await porcelainStatus(cwd);
           const writerAtStart = [...this.processes.entries()].some(
-            ([key, access]) => key !== work.id && access === 'edit',
+            ([key, process]) => key !== work.id && process.access === 'edit' && process.cwd === cwd,
           );
           const marker = this.host.store.lastEvent(this.task.id, 'pm_work')?.id ?? 0;
           work = {
@@ -648,11 +877,12 @@ export class PmWorkflow {
           this.record(work);
           if (!resume) this.host.store.startSession(id, this.task.id, 'worker', work.agentId, null);
           const outcome = await this.host.run(
-            this.latest,
+            { ...this.latest, worktreePath: cwd },
             {
               role: 'worker',
               agentId: work.agentId,
               access: work.access,
+              cwd,
               resume,
               prompt: this.workerPrompt(work, resume, message, canDelegate),
               pmModel: work.model,
@@ -678,7 +908,7 @@ export class PmWorkflow {
           this.turns.delete(work.id);
           this.notify('state');
         }
-        // Children cannot acquire a writer until the parent process above has actually exited.
+        // Resume the parent only after its children have delivered; shared children acquire the directory after parent exit.
         while (
           !signal.aborted &&
           (this.works.some((w) => w.parentWorkId === work.id && active(w)) ||
@@ -719,6 +949,12 @@ export class PmWorkflow {
       specification: this.latest.acceptance,
       guidelines: readGuidelines(this.host.config.reviewGuidelines),
       coordinationRules: WORKER_COORDINATION,
+      workspace: {
+        directory: this.directory(work),
+        branch: work.branch,
+        baseCommit: work.baseCommit,
+        writePaths: work.writePaths,
+      },
     };
     const hash = createHash('sha256').update(JSON.stringify(context)).digest('hex');
     const before = this.host.store.lastSessionEvent(id, 'pm_worker_turn');
@@ -736,7 +972,7 @@ export class PmWorkflow {
         ? [
             'You are a worker accountable for correct, efficient implementation and verification of your assigned scope. The PM coordinates the user and reviews delivery.',
             canDelegate
-              ? 'Use only harnessboard managed tools to delegate within your scope and permitted profiles. No native subagents or other agent CLIs. Writers share one directory: after dispatching write work call wait and end your turn immediately before the child can start. Never wait by polling. Use ask_pm for missing information or authorization; end your turn. Execution messages go to the secretary first; uncertain questions are escalated to the PM, who answers you directly. If a secretary quote does not resolve the question, say so in ask_pm and request the PM. Report meaningful milestones or blockers with report_progress.'
+              ? 'Use only harnessboard managed tools to delegate within your scope and permitted profiles. No native subagents or other agent CLIs. Branch children run independently in private directories. Shared writers use your directory: after dispatching shared write work call wait and end your turn immediately before the child can start. Never wait by polling. Use ask_pm for missing information or authorization; end your turn. Execution messages go to the secretary first; uncertain questions are escalated to the PM, who answers you directly. If a secretary quote does not resolve the question, say so in ask_pm and request the PM. Report meaningful milestones or blockers with report_progress.'
               : 'This transport cannot use managed delegation tools. Complete this assigned work directly; report missing information or required delegation in your final result for the PM.',
             work.access === 'edit' ? COMMIT_RULE : 'Read only. Do not modify or commit any file.',
             `Approved specification and applicable rules:\n${JSON.stringify(context)}`,
@@ -756,7 +992,8 @@ export class PmWorkflow {
     observation: WorkerObservation,
   ): Promise<boolean> {
     const { headBefore, statusBefore, writerAtStart, marker } = observation;
-    const head = await optionalHeadCommit(this.task.worktreePath!);
+    const cwd = this.directory(work);
+    const head = await optionalHeadCommit(cwd);
     const children = this.works.filter((w) => w.parentWorkId === work.id);
     const waiting = turn.yielded || turn.askPm || turn.delegated || children.some(active);
     let failure =
@@ -764,19 +1001,31 @@ export class PmWorkflow {
         ? null
         : `Worker ended: ${outcome.reason}. ${outcome.detail ?? ''}`;
     if (work.access === 'edit' && !failure && !waiting)
-      failure = await checkCommits(this.task.worktreePath!, work.since);
+      failure = await checkCommits(cwd, work.since);
     const otherWriter =
       writerAtStart ||
       this.host.store.eventsOfKinds(this.task.id, ['pm_work'], marker).some((e) => {
         const w = e.data as PmWork;
-        return w.id !== work.id && w.access === 'edit' && w.status === 'running';
+        return (
+          w.id !== work.id &&
+          w.access === 'edit' &&
+          w.status === 'running' &&
+          this.directory(w) === cwd
+        );
       });
     if (
       work.access === 'readOnly' &&
       !otherWriter &&
-      (head !== headBefore || (await porcelainStatus(this.task.worktreePath!)) !== statusBefore)
+      (head !== headBefore || (await porcelainStatus(cwd)) !== statusBefore)
     )
       failure = 'Read-only worker changed the worktree';
+    if (!failure && !waiting && !signal.aborted && work.workspace === 'branch')
+      failure = await this.ownershipFailure(work);
+    if (!failure && !waiting && !signal.aborted) {
+      const missing = await this.unmergedChildren(work.id, cwd);
+      if (missing.length)
+        failure = `Integrate completed child branches before delivery: ${missing.join(', ')}`;
+    }
     const evidence = path.join(
       this.host.config.dataDir,
       'pm-evidence',
@@ -838,6 +1087,13 @@ export class PmWorkflow {
       evidence: w.evidence,
       head: w.head,
       observedHead: w.observedHead,
+      workspace: w.workspace ?? 'shared',
+      branch: w.branch,
+      worktreePath: w.worktreePath,
+      baseCommit: w.baseCommit,
+      writePaths: w.writePaths,
+      integratedHead: w.integratedHead,
+      integratedInto: w.integratedInto,
       updatedAt: w.updatedAt,
     }));
   }
@@ -853,6 +1109,11 @@ export class PmWorkflow {
       throw new Error('Finish all child work and resolve permissions before acceptance');
     if (!this.works.some((w) => w.access === 'edit' && w.status === 'completed'))
       throw new Error('No implementation job has completed');
+    const missing = await this.unmergedChildren(null, this.task.worktreePath!);
+    if (missing.length)
+      throw new Error(
+        `Integrate completed child branches before acceptance: ${missing.join(', ')}`,
+      );
     const head = await headCommit(this.task.worktreePath!);
     if (
       this.text(input, 'head') !== head ||
@@ -894,6 +1155,8 @@ export class PmWorkflow {
       acceptance: this.latest.acceptance,
       workers: pm.workers,
       coordinationRules: PM_COORDINATION,
+      projectSetup:
+        'The selected folder may be a new project with only an empty Git bookkeeping commit. During specification inspect existing files and applicable coding standards. After approval proactively dispatch project setup in the shared workspace: create appropriate .gitignore and required project structure/documentation, verify and commit only project source/configuration. Preserve existing files; never blindly git add all files or commit secrets, dependencies, build outputs or personal settings. Do not ask the user to initialize Git. Create remote repositories or publish only with explicit authorization.',
       ...Object.fromEntries(guidelines.map((g) => [`rule:${g.file}`, g.text])),
     };
     const hash = createHash('sha256').update(JSON.stringify(context)).digest('hex');
@@ -997,7 +1260,8 @@ export class PmWorkflow {
         ? 'User has approved the current specification.'
         : 'Specification still requires explicit approval.',
     ].join('\n\n');
-    const writerAtStart = [...this.processes.values()].includes('edit');
+    const writerAtStart = this.hasWriter(this.task.worktreePath!);
+    const integrationBefore = this.integrationVersions.get(this.task.worktreePath!) ?? 0;
     const marker = store.appendEvent(this.task.id, this.pmSessionId, 'pm_turn', {
       hash,
       fingerprints,
@@ -1026,9 +1290,14 @@ export class PmWorkflow {
     // Attribute concurrent worker writes before applying the additional read-only integrity check.
     if (
       !writerAtStart &&
+      integrationBefore === (this.integrationVersions.get(this.task.worktreePath!) ?? 0) &&
       !store.eventsOfKinds(this.task.id, ['pm_work'], marker).some((event) => {
         const w = event.data as PmWork;
-        return w.access === 'edit' && w.status === 'running';
+        return (
+          w.access === 'edit' &&
+          w.status === 'running' &&
+          this.directory(w) === this.task.worktreePath
+        );
       }) &&
       ((await optionalHeadCommit(this.task.worktreePath!)) !== start ||
         (await porcelainStatus(this.task.worktreePath!)) !== status)

@@ -198,10 +198,13 @@ async function gitExit(cwd: string, args: string[]): Promise<{ code: number; std
 }
 
 async function gitRaw(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', ['-c', 'core.longpaths=true', ...args], {
+  const execution = execFileAsync('git', ['-c', 'core.longpaths=true', ...args], {
     cwd,
     maxBuffer: 64 * 1024 * 1024,
   });
+  // No caller supplies stdin; close it so plumbing commands such as mktree see EOF.
+  execution.child.stdin?.end();
+  const { stdout } = await execution;
   return stdout;
 }
 

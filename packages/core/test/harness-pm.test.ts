@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Harness } from '../src/harness.js';
@@ -78,6 +78,46 @@ it('creates a PM task and waits for explicit specification approval', async () =
   });
   expect(pmQuestion(harness.store, task.id)?.kind).toBe('spec');
   expect(pmWork(harness.store, task.id)).toEqual([]);
+});
+
+it('starts PM specification in a plain folder without staging existing files', async () => {
+  const plain = tempDir('pm-plain');
+  writeFileSync(path.join(plain, 'existing.txt'), 'keep me');
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec()]);
+  const task = await harness.createTask({ prompt: 'Build a project', repo: plain });
+  await harness.waitForIdle();
+  expect(harness.store.getTask(task.id)).toMatchObject({
+    status: 'awaiting_approval',
+    repoPath: plain,
+    worktreePath: plain,
+    workspace: 'base',
+  });
+  expect(execFileSync('git', ['log', '-1', '--format=%s'], { cwd: plain }).toString().trim()).toBe(
+    'chore: initialize repository',
+  );
+  expect(execFileSync('git', ['ls-files'], { cwd: plain }).toString()).toBe('');
+  expect(readFileSync(path.join(plain, 'existing.txt'), 'utf8')).toBe('keep me');
+});
+
+it('bootstraps an unborn repository while preserving its staged files and branch', async () => {
+  const plain = tempDir('pm-unborn');
+  execFileSync('git', ['init', '-b', 'project', plain]);
+  writeFileSync(path.join(plain, 'existing.txt'), 'keep me');
+  execFileSync('git', ['add', 'existing.txt'], { cwd: plain });
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec()]);
+  const task = await harness.createTask({ prompt: 'Build a project', repo: plain });
+  await harness.waitForIdle();
+  expect(harness.store.getTask(task.id)).toMatchObject({
+    status: 'awaiting_approval',
+    baseRef: 'project',
+    workspace: 'base',
+  });
+  expect(execFileSync('git', ['ls-tree', '--name-only', 'HEAD'], { cwd: plain }).toString()).toBe(
+    '',
+  );
+  expect(execFileSync('git', ['diff', '--cached', '--name-only'], { cwd: plain }).toString()).toBe(
+    'existing.txt\n',
+  );
 });
 
 it('dispatches after approval and waits for user confirmation after PM acceptance', async () => {
@@ -412,4 +452,67 @@ it('disables merge when the PM worktree is missing', async () => {
     reason: 'task 1 worktree is missing',
   });
   await expect(harness.mergeTask(task.id)).rejects.toThrow('worktree is missing');
+});
+
+it('runs nested development branches through real CLIs and integrates them before acceptance', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    spec(),
+    turn(
+      'pm-thread',
+      tool('dispatch', {
+        agentId: 'claude',
+        goal: 'Implement greeting',
+        acceptance: 'Greeting works',
+        scope: 'greeting.txt only; no shared API change',
+        access: 'edit',
+        workspace: 'branch',
+        writePaths: ['greeting.txt'],
+      }),
+      tool('wait'),
+    ),
+    turn(
+      'parent-thread',
+      tool('dispatch', {
+        agentId: 'claude',
+        goal: 'Implement greeting content',
+        acceptance: 'greeting.txt contains hello',
+        scope: 'greeting.txt only',
+        access: 'edit',
+        workspace: 'branch',
+        writePaths: ['greeting.txt'],
+      }),
+      tool('wait'),
+    ),
+    turn(
+      'child-thread',
+      { __write: { path: 'greeting.txt', content: 'hello\n' } },
+      { __commit: 'feat: add greeting' },
+    ),
+    turn('parent-thread', tool('integrate_work', { id: '$work' })),
+    turn('pm-thread', tool('integrate_work', { id: '$work' }), accept()),
+  ]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await harness.waitForIdle();
+  expect(
+    harness.store.getTask(task.id)?.status,
+    JSON.stringify({
+      notices: harness.store.eventsOfKind(task.id, 'notice'),
+    }),
+  ).toBe('review');
+  const work = pmWork(harness.store, task.id);
+  expect(work.map((w) => w.status)).toEqual(['completed', 'completed']);
+  expect(work[1]?.parentWorkId).toBe(work[0]?.id);
+  expect(work[0]?.worktreePath).not.toBe(work[1]?.worktreePath);
+  expect(readFileSync(path.join(work[0]!.worktreePath!, 'greeting.txt'), 'utf8')).toBe('hello\n');
+  expect(
+    readFileSync(path.join(harness.store.getTask(task.id)!.worktreePath!, 'greeting.txt'), 'utf8'),
+  ).toBe('hello\n');
+  const runs = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(runs).toHaveLength(6);
+  expect(runs.filter((run) => run.cwd === work[1]?.worktreePath)).toHaveLength(1);
 });

@@ -165,7 +165,9 @@ flowchart LR
   D --> M[你決定是否合併]
 ```
 
-PM 預設延續同一個執行者，最多兩個並行、一個寫入者；只有無法判斷的問題才詢問你。
+同一工作優先延續原執行者；獨立功能由 PM 明確約定介面、驗收與不重疊的修改路徑，
+從當下提交建立 branch／worktree 平行開發，再整合與測試。手機安裝等特殊任務可獨立派工；
+共用工作目錄的寫入仍接續執行。只有無法判斷的問題才詢問你。
 PM 目前支援本地 Claude Code 與 Codex；Gemini 和 Docker profile 可作為執行者。
 同平台與跨平台都使用受管理的 CLI session；原生 subagent 尚未啟用。
 既有任務保留原流程，停止後可手動轉換。[操作與限制](docs/pm-workflow.md)。
@@ -208,3 +210,5 @@ PM 目前支援本地 Claude Code 與 Codex；Gemini 和 Docker profile 可作�
 
 [Apache-2.0](LICENSE)。Harnessboard 是獨立專案，與 Anthropic 沒有關係。網頁看板內含套件的授權見
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+
+PM 任務也接受尚未建立 Git 或沒有 commit 的既有資料夾，並直接在所選目錄工作。系統先建立不包含檔案的本機基礎 commit；規格核准後由 PM 依 code 規範安排專案結構、忽略規則與專案提交。建立遠端儲存庫仍需明確授權。

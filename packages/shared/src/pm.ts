@@ -61,6 +61,16 @@ export interface PmWork {
   acceptance: string;
   scope: string;
   access: 'edit' | 'readOnly';
+  /** Absent on older jobs: use the task's shared directory. Branch jobs retain their workspace. */
+  workspace?: 'shared' | 'branch';
+  branch?: string;
+  worktreePath?: string;
+  baseCommit?: string;
+  /** Repository-relative files or directory prefixes owned by this branch. */
+  writePaths?: string[];
+  /** Last branch HEAD integrated into its parent's workspace; later edits require integration again. */
+  integratedHead?: string;
+  integratedInto?: string;
   status: WorkStatus;
   summary: string | null;
   evidence: string | null;

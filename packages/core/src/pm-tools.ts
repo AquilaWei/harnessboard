@@ -53,19 +53,49 @@ export const PM_TOOLS = [
   {
     name: 'dispatch',
     description:
-      'Start a managed worker. Delegate only when the benefit exceeds context and integration costs. Writers queue for the shared worktree. A worker delegating edits must yield before its child can start. Returns immediately.',
+      'Start a managed worker. Delegate only when the benefit exceeds context and integration costs. For independent development set workspace=branch: fork the current committed HEAD into a private branch/worktree and run in parallel. Shared workspace is for coupled edits or special operations (build/install); shared writers queue. Commit local changes before branching. Reuse continue_work for the same job. Returns immediately.',
     inputSchema: fields(
       {
         agentId: string,
         model: { type: ['string', 'null'] },
         effort: { type: ['string', 'null'] },
-        goal: string,
-        acceptance: string,
-        scope: string,
+        goal: {
+          ...string,
+          description:
+            'One clearly bounded feature; state dependencies and the interface contracts other workers can rely on.',
+        },
+        acceptance: {
+          ...string,
+          description:
+            'Concrete behavior and test commands proving this feature, including integration expectations.',
+        },
+        scope: {
+          ...string,
+          description:
+            'Responsibilities, exclusions and shared interface owner; do not split tightly coupled edits.',
+        },
         access: { enum: ['edit', 'readOnly'] },
+        writePaths: {
+          type: 'array',
+          items: string,
+          minItems: 1,
+          description:
+            'Required for branch development: explicit owned files or directories (trailing /), no globs. Sibling ownership must not overlap. Agree interfaces in goal and acceptance.',
+        },
+        workspace: {
+          enum: ['branch', 'shared'],
+          description:
+            'Use branch for independent development; omitted preserves the shared workspace.',
+        },
       },
       ['agentId', 'goal', 'acceptance', 'scope', 'access'],
     ),
+  },
+  {
+    name: 'integrate_work',
+    description:
+      'Integrate a completed direct child branch into your own clean workspace (PM: task workspace). Returns conflict paths without changing files on conflict. Continue the same child to merge the target commit, resolve and test; then retry. Verify the combined result before acceptance.',
+    inputSchema: fields(id, ['id']),
   },
   {
     name: 'continue_work',

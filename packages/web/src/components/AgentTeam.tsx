@@ -323,6 +323,24 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
             </dl>
             {current.work ? (
               <>
+                {current.work.branch && (
+                  <dl className="facts">
+                    <dt>{t('team.branch')}</dt>
+                    <dd>
+                      <code>{current.work.branch}</code>
+                    </dd>
+                    <dt>{t('team.worktree')}</dt>
+                    <dd>
+                      <code>{current.work.worktreePath}</code>
+                    </dd>
+                    <dt>{t('team.writePaths')}</dt>
+                    <dd>{current.work.writePaths?.join(', ')}</dd>
+                    <dt>{t('team.integratedHead')}</dt>
+                    <dd>
+                      <code>{current.work.integratedHead ?? '—'}</code>
+                    </dd>
+                  </dl>
+                )}
                 <h4>{t('team.goal')}</h4>
                 <Markdown text={current.work.goal} />
                 <h4>{t('team.scope')}</h4>

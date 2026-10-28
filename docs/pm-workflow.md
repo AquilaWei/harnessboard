@@ -121,12 +121,37 @@ Read-only workers cannot delegate write access or make PM permission/specificati
 Workers use `ask_pm` for missing information or authorization; the PM answers with
 `continue_work` or asks the user through the existing Chat flow.
 
-Dispatch returns immediately. Independent read-only work can run in parallel. All writers
-share one worktree, so edits queue: a parent writer dispatching child edits calls `wait`
-and ends its turn, then the harness waits for its process to exit before releasing write
-access. The parent resumes after child results and must integrate and verify them. Waiting
-is not completion and does not require a final clean commit at the handoff boundary.
-`report_progress` records meaningful milestones or blockers without model polling.
+Dispatch returns immediately. For independent development, PMs and workers use
+`workspace: "branch"` with explicit `writePaths`: repository-relative filenames or directory
+prefixes ending in `/` (no globs). Each job must describe one bounded feature, its exclusions,
+interface contracts and concrete acceptance tests. Sibling jobs cannot claim overlapping
+paths; a branch child must stay within its parent's ownership. Assign shared API/schema
+changes to one owner or complete that prerequisite before parallel implementation. Do not
+edit a child's owned paths while it runs. Disjoint paths reduce Git conflicts but cannot
+prove that interfaces or behavior are compatible: the parent still owns integration tests.
+
+A branch job forks its parent's current clean committed HEAD into a private branch and
+worktree and can write concurrently with other private workspaces. Dirty or busy sources
+refuse branching. All transport execution, commit checks and delivery evidence use that
+job's directory. Ownership violations fail delivery. `continue_work` preserves the branch,
+worktree and model conversation. The Team panel shows branch, workspace, owned paths and
+the last integrated commit.
+
+Use `integrate_work` after a direct child delivers clean committed work. It merges into the
+parent workspace (the task workspace for PM children), serializing integration into that
+directory. Conflicts return paths and the target commit without changing target files or
+index. Continue the same child to merge that target commit, resolve within its ownership,
+commit and test, then retry integration. Inspect and test the combined result before
+acceptance. Parents cannot deliver, and the PM cannot accept, unmerged completed branches.
+Branch/worktree state survives cancellation and restart for explicit inspection and reuse;
+it is retained with the delivery evidence rather than deleted automatically.
+
+Omitting `workspace`, or selecting `"shared"`, preserves the shared-directory workflow for
+coupled work and special build/install jobs. Shared writers queue per directory; a parent
+using shared write children must call `wait` and end its turn before they can acquire the
+directory. Independent read-only work can still run in parallel. Waiting is not completion
+and does not require a final clean commit at a shared handoff boundary. `report_progress`
+records meaningful milestones or blockers without model polling.
 
 The PM retains all user-facing responsibilities: initial specification discussion and
 approval, progress reports, necessary questions, scope changes, review and final acceptance.
@@ -228,3 +253,5 @@ Electron upgrade. Check these before release:
   task. Expect the whole subtree to stop and old results to remain inspectable.
 - Restart an interrupted task explicitly. Expect the PM to see stopped workers and inspect
   existing files before continuing, without requesting unchanged specification approval.
+
+PM tasks also accept existing folders without Git or commits. These tasks run in the selected folder; Harnessboard creates an empty local bookkeeping commit without staging files. After specification approval, PM arranges project setup, ignore rules and project commits according to the configured coding standards. Remote repository creation still requires explicit authorization.

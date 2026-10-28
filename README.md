@@ -185,8 +185,10 @@ flowchart LR
 
 The PM asks you when scope, authorization or an execution problem cannot be resolved.
 PM and workers decide when delegation saves time or tokens; small tasks need no extra
-agents. Independent analysis can run together, while edits take turns in one shared
-worktree. Local Claude Code and Codex workers can delegate managed subagents; Gemini and
+agents. Independent features use private branches/worktrees with explicit, non-overlapping
+file ownership, interface contracts and acceptance tests. Parents integrate and verify
+delivery; shared workspaces remain available for coupled edits and special build/install
+jobs, with writes queued per directory. Local Claude Code and Codex workers can delegate managed subagents; Gemini and
 Docker workers remain leaves. **Agent team** shows the reporting tree, live activity and
 per-agent model/token details on desktop and phone. Same-platform and cross-platform
 workers use managed CLI sessions. PM currently supports local Claude Code
@@ -233,3 +235,5 @@ The detailed pages are English only. What changed in each version is in
 [Apache-2.0](LICENSE). Harnessboard is an independent project and is not affiliated with
 Anthropic. The licenses of the packages bundled in the web board are in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+PM tasks also accept existing folders without Git or commits. These tasks run in the selected folder; Harnessboard creates an empty local bookkeeping commit without staging files. After specification approval, PM arranges project setup, ignore rules and project commits according to the configured coding standards. Remote repository creation still requires explicit authorization.
