@@ -2014,6 +2014,7 @@ export class Harness {
                 this.setStatus(id, status);
               },
               blocked: (agentId) => this.agentBlocked(agentId, Date.now()),
+              quota: (agentId) => this.quotas.get(this.config.agents[agentId]!.provider) ?? null,
               permissions: (id) => this.permissionRequests(id),
               answer: (id, requestId, behavior, reason, actor = 'pm') => {
                 const pending = this.permissions.get(id)?.get(requestId);

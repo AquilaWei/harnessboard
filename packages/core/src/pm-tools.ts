@@ -47,7 +47,8 @@ export const PM_TOOLS = [
   },
   {
     name: 'profiles',
-    description: 'Available permitted worker profiles and models.',
+    description:
+      'Available permitted worker profiles/models with live subscription quota (0–1 utilization; null means unknown), blocked state, and provider-wide activeWork/dispatchedWork counts for this task. Inspect before dispatch to balance suitable work across providers.',
     inputSchema: fields({}),
   },
   {

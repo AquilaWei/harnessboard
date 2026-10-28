@@ -11,6 +11,7 @@ import type {
   Task,
   TaskStatus,
   Session,
+  QuotaInfo,
 } from '@harnessboard/shared';
 import { isEffortId, isModelId } from '@harnessboard/shared';
 import type { HarnessConfig } from './config.js';
@@ -69,6 +70,8 @@ export interface PmHost {
   ): Promise<SessionOutcome>;
   status(id: number, status: TaskStatus): void;
   blocked(agentId: string): boolean;
+  /** Latest subscription snapshot; missing telemetry must not imply unused quota. */
+  quota?(agentId: string): QuotaInfo | null;
   permissions(id: number): PermissionRequest[];
   answer(
     id: number,
@@ -84,6 +87,8 @@ export interface PmHost {
 
 const PM_COORDINATION =
   'After approval, autonomously plan and supervise delivery, report meaningful progress to the user, and review actual work. Choose the number of managed workers by dependency, speed and token efficiency. Independent tasks may run in parallel; keep tightly coupled work together. Never edit a child-owned path while that child is active. Small tasks need no extra subagents. Workers may delegate through the same managed tools. Define one clear feature, acceptance tests, interface contracts and explicit non-overlapping writePaths per parallel worker. Keep shared API/schema changes with one owner or finish that prerequisite first. For independent development, dispatch with workspace=branch to fork the current committed HEAD into private branches/worktrees and run writers in parallel. Commit pending changes before branching. Use shared workspace for tightly coupled edits and special build/install tasks; shared writers queue. Reuse continue_work for the same job. Use integrate_work to merge each completed direct child into its parent workspace, resolve conflicts in that same child branch, and verify the combined result before acceptance. Read-only findings refer to observedHead; recheck findings made stale by concurrent edits before acceptance.';
+const PROVIDER_BALANCE =
+  'Before dispatching new work, inspect profiles for live provider quota, blocked state and provider-wide activeWork/dispatchedWork in this task (counts are not tokens). Balance interchangeable work across permitted Claude Code and Codex providers: prefer more headroom in both five-hour and seven-day windows, considering reset times, then fewer active or previously dispatched jobs when quotas are comparable or unknown. Missing quota is unknown, never zero usage; elapsed windows are not current measurements. Avoid concentrating work on one provider merely out of habit. Preserve task/model suitability and user constraints; use a lightweight permitted model for routine work. Continue the original worker for the same job to avoid duplicate context cost; do not spawn extra workers just to balance counts. If only one suitable permitted provider exists, use it. Never change the PM model or exceed the permitted pool for balancing.';
 const WORKER_COORDINATION =
   'Delegate only when independent work saves time or context. Keep tightly coupled changes together; small jobs need no subagents. Minimize repeated reading and duplicated context. Never edit a child-owned path while that child is active. You own integration and review of your children. Dispatch independent development with workspace=branch from your current clean committed HEAD; children run in private worktrees. Use integrate_work for completed direct children before delivery; on conflict continue the child to merge the returned target commit, resolve and test. Shared writers still require you to yield.';
 
@@ -350,15 +355,7 @@ export class PmWorkflow {
       case 'appoint_secretary':
         return this.secretary.appoint(input, this.pmSessionId);
       case 'profiles':
-        return this.latest.pm!.workers.map((w) => ({
-          ...w,
-          provider: this.host.config.agents[w.agentId]!.provider,
-          native: false,
-          delegation:
-            this.host.config.agents[w.agentId]!.provider !== 'gemini' &&
-            this.host.config.agents[w.agentId]!.sandbox !== 'docker',
-          execution: 'managed',
-        }));
+        return this.profiles();
       case 'work_status':
         return this.snapshot(caller);
       case 'wait':
@@ -513,6 +510,26 @@ export class PmWorkflow {
       this.listeners.add(done);
       signal.addEventListener('abort', done, { once: true });
       if (signal.aborted || this.version !== version) done();
+    });
+  }
+
+  private profiles() {
+    return this.latest.pm!.workers.map((worker) => {
+      const profile = this.host.config.agents[worker.agentId]!;
+      const works = this.works.filter(
+        (work) => this.host.config.agents[work.agentId]?.provider === profile.provider,
+      );
+      return {
+        ...worker,
+        provider: profile.provider,
+        blocked: this.host.blocked(worker.agentId),
+        quota: this.host.quota?.(worker.agentId) ?? null,
+        activeWork: works.filter(active).length,
+        dispatchedWork: works.length,
+        native: false,
+        delegation: profile.provider !== 'gemini' && profile.sandbox !== 'docker',
+        execution: 'managed',
+      };
     });
   }
 
@@ -1006,6 +1023,7 @@ export class PmWorkflow {
           ]
         : []),
       message ?? '',
+      ...(canDelegate ? [PROVIDER_BALANCE] : []),
       `Current children (authoritative):\n${JSON.stringify(this.snapshot(work.id))}`,
     ].join('\n\n');
   }
@@ -1261,6 +1279,8 @@ export class PmWorkflow {
             `Specification/rule updates (content hashes tracked per conversation):\n${JSON.stringify({ changed, removed })}`,
           ]
         : []),
+      PROVIDER_BALANCE,
+      `Available worker capacity (live snapshot; call profiles again before dispatch):\n${JSON.stringify(this.profiles())}`,
       `Current work tree (authoritative, overrides old conversation claims):\n${JSON.stringify(this.snapshot(null))}`,
       'Worker execution messages are filtered by the secretary first. When it escalates uncertainty, personally answer or direct the original worker with continue_work. Retain all technical decisions and final review.',
       'If work failed or stopped, inspect preserved changes and continue or reassign within the approved scope. Do not claim inactive workers are running. Never ask for approval again unless scope changed.',

@@ -995,3 +995,62 @@ it('rejects a PM decision after a request id is reused by another worker session
   });
   expect(host.answer).not.toHaveBeenCalled();
 });
+
+it('exposes live provider quota and blocking state to PM dispatch decisions', async () => {
+  host.quota = () => ({
+    status: 'allowed',
+    fiveHourUtilization: 0.8,
+    sevenDayUtilization: 0.4,
+    fiveHourResetsAt: null,
+    sevenDayResetsAt: null,
+    resetsAt: null,
+  });
+  let profiles: unknown;
+  let refreshed: unknown;
+  await pmTurn(async () => {
+    host.blocked = () => true;
+    profiles = await engine.call('profiles', {});
+    host.quota = () => null;
+    refreshed = await engine.call('profiles', {});
+  });
+  expect(profiles).toEqual([
+    expect.objectContaining({
+      provider: 'claude-code',
+      blocked: true,
+      quota: expect.objectContaining({ fiveHourUtilization: 0.8, sevenDayUtilization: 0.4 }),
+      activeWork: 0,
+      dispatchedWork: 0,
+    }),
+  ]);
+  expect(refreshed).toEqual([expect.objectContaining({ quota: null })]);
+});
+
+it('refreshes balancing guidance and capacity on each PM turn', async () => {
+  let prompt = '';
+  host.run = async (_task, plan) => {
+    prompt = plan.prompt;
+    controller.abort();
+    return outcome;
+  };
+  await engine.run();
+  expect(prompt).toContain('Balance interchangeable work across permitted Claude Code and Codex');
+  expect(prompt).toContain('Missing quota is unknown, never zero usage');
+  expect(prompt).toContain('Continue the original worker for the same job');
+  expect(prompt).toContain('"dispatchedWork":0');
+});
+
+it('counts dispatched jobs across profiles sharing a provider', async () => {
+  host.config.agents.other = { ...host.config.agents.claude! };
+  const workers = [...pm.workers, { agentId: 'other', models: [null] }];
+  task = store.updateTask(task.id, { pm: { ...pm, workers } });
+  engine = new PmWorkflow(host, task, controller.signal);
+  let profiles: unknown;
+  await pmTurn(async () => {
+    await engine.call('dispatch', { ...input, access: 'readOnly' });
+    profiles = await engine.call('profiles', {});
+  });
+  expect(profiles).toEqual([
+    expect.objectContaining({ agentId: 'claude', activeWork: 1, dispatchedWork: 1 }),
+    expect.objectContaining({ agentId: 'other', activeWork: 1, dispatchedWork: 1 }),
+  ]);
+});

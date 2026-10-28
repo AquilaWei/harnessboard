@@ -272,3 +272,19 @@ PM 任務的底層 CLI 請求只供內部審查，事件紀錄保留稽核用途
 仍待決，再決定回覆 worker；回答本身不批准任何 CLI 請求。一般非 PM 任務沿用原流程。
 團隊面板分別呈現等待秘書審查、等待 PM 決策及 PM 等待使用者回答，其他工作可同時執行。
 重啟不恢復舊 CLI 授權，舊 worker 標記中斷，由 PM 明確續派；歷史事件不改寫。
+
+## Provider usage balance
+
+Before new delegation, the PM and delegating workers inspect `profiles`: it includes
+live subscription quota for both five-hour and seven-day windows, reset times,
+blocking state, and provider-wide active and dispatched job counts within this task.
+These counts include all worker profiles of the same provider; they are not token
+measurements. The PM receives an updated snapshot on every turn.
+
+For interchangeable work, prefer the permitted Claude Code or Codex provider with
+more quota headroom, then the less occupied provider when usage is comparable or
+unknown. Missing telemetry is unknown, not unused quota. Capability and explicit
+user choices take priority. Continue an existing job with its original worker to
+avoid paying for repeated context; do not create extra jobs to force equal counts.
+This is guidance for model decisions, not a forced round-robin or automatic model
+replacement. Only the task's permitted worker pool is eligible.
