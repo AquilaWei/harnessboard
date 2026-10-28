@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.11 - 2026-10-27
+
+Local test build. Typecheck, lint and new project-bootstrap tests pass. Full suite: 1932 passed, 5 failed, 14 skipped; nested PM branches, chat, designer and quota-pause failures remain under investigation. Live desktop acceptance is pending.
 
 ### Added
 
