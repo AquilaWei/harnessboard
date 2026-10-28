@@ -8,7 +8,7 @@ PM 直接交辦 worker，執行後的回報與問題先經秘書；未委任時�
 秘書每批同步取得相關 worker 的初次交辦與已保存的 PM 後續指示，依實際工作範圍過濾例行事項。
 重要決策與驗收仍由 PM 負責；團隊面板會獨立顯示秘書用量。
 
-![version](https://img.shields.io/badge/version-0.2.11-blue)
+![version](https://img.shields.io/badge/version-0.2.12-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.12 - 2026-10-27
+
+Local test build. Secretary regression suite: 28 passed. Full suite: 1938 passed, 1 failed, 14 skipped; the previously observed nested development branch CLI integration test still times out.
 
 ### Fixed
 

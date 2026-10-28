@@ -13,7 +13,7 @@ panel shows secretary usage separately. Each batch includes the relevant workerâ
 assignment and recorded PM follow-up instructions, so routine checks use the actual
 delegated scope.
 
-![version](https://img.shields.io/badge/version-0.2.11-blue)
+![version](https://img.shields.io/badge/version-0.2.12-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
