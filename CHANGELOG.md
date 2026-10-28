@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.15 - 2026-10-28
+
+Local test build. Typecheck, lint and build pass. Full suite: 1952 passed, 1 failed, 14 skipped; the previously recorded nested development branch CLI test still times out. Live-model balancing quality requires observation during real tasks. No tag or Release.
+
+### Changed
+
+- PM 與可委派的 worker 在新派工前檢查各家的五小時／七天額度、重設時間與任務內派工負載；能力相當時盡量分散 Claude Code／Codex 使用，續作保留原 worker 以節省上下文。只使用已允許的模型，未知額度不視為零使用。
+
 ## 0.2.14 - 2026-10-28
 
 Local test build. Typecheck, lint and build pass. Full suite: 1949 passed, 1 failed, 14 skipped; the previously recorded nested development branch CLI test still times out. No tag or Release.
