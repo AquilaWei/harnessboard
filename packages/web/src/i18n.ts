@@ -107,9 +107,8 @@ export const en = {
   describe: {
     draft: 'Discuss the spec, then confirm it to join Pending.',
     pending: 'Planned. Starts by itself when quota allows.',
-    pmWaiting: 'PM is waiting for your answer: {{message}}',
-    pmWaitingContinuing:
-      'PM is waiting for your answer; other approved work continues. {{message}}',
+    pmWaiting: 'PM is waiting for your answer.',
+    pmWaitingContinuing: 'PM is waiting for your answer; other approved work continues.',
     permissionAsked: '{{agent}} wants to use {{tool}}: {{summary}}. Allow it or not?',
     queued: 'Waiting for a free slot.',
     planReady: '{{agent}} planned {{total}} features. Review the plan, then approve it or reply.',
@@ -839,8 +838,8 @@ export const zhTW: typeof en = {
   describe: {
     draft: '先討論規格，確認完成後才進待執行。',
     pending: '已規劃好，額度允許時會自動開始。',
-    pmWaiting: 'PM 等待使用者回答：{{message}}',
-    pmWaitingContinuing: 'PM 等待使用者回答，其他已核准工作繼續中。{{message}}',
+    pmWaiting: 'PM 等待你回答。',
+    pmWaitingContinuing: 'PM 等待你回答，其他已核准工作繼續中。',
     permissionAsked: '{{agent}} 想使用 {{tool}}：{{summary}}。要允許嗎？',
     queued: '等待空出執行位置。',
     planReady: '{{agent}} 規劃了 {{total}} 項 feature。請檢查規格，確認開工或提出意見。',

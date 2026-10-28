@@ -32,7 +32,6 @@ export function describeTask(task: TaskView): Description {
         ? 'pmWaitingContinuing'
         : 'pmWaiting',
       'attention',
-      { message: task.pmQuestion.message },
     );
   const review = task.lastReview;
   const reviewer = task.agents.reviewer ?? '';

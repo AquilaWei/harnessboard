@@ -447,7 +447,7 @@ it('describes a PM question while approved workers continue', () => {
       pmQuestion: { kind: 'question', message: 'Install tool?' },
       work: [{ status: 'running' }],
     } as TaskView),
-  ).toEqual({ key: 'pmWaitingContinuing', tone: 'attention', vars: { message: 'Install tool?' } });
+  ).toEqual({ key: 'pmWaitingContinuing', tone: 'attention', vars: {} });
 });
 
 it('describes a PM question as waiting for an answer rather than specification approval', () => {
@@ -459,5 +459,5 @@ it('describes a PM question as waiting for an answer rather than specification a
       pmQuestion: { kind: 'question', message: 'Install tool?' },
       work: [],
     } as TaskView),
-  ).toEqual({ key: 'pmWaiting', tone: 'attention', vars: { message: 'Install tool?' } });
+  ).toEqual({ key: 'pmWaiting', tone: 'attention', vars: {} });
 });
