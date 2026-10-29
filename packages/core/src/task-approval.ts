@@ -29,6 +29,19 @@ export function approvalInput(input: Record<string, unknown>): Record<string, un
 /** Missing previews and screen-dependent operations must always be reviewed again. */
 export function reusableApproval(request: PermissionRequest): boolean {
   if (!request.cwd || !request.input || Object.keys(request.input).length === 0) return false;
+  if (request.toolName === '?' || request.toolName === 'CodexApproval') return false;
+  if (
+    request.toolName === 'Edit' &&
+    (typeof request.input.file_path !== 'string' ||
+      typeof request.input.old_string !== 'string' ||
+      typeof request.input.new_string !== 'string')
+  )
+    return false;
+  if (
+    request.toolName === 'Write' &&
+    (typeof request.input.file_path !== 'string' || typeof request.input.content !== 'string')
+  )
+    return false;
   if (
     request.toolName === 'Bash' &&
     (typeof request.input.command !== 'string' || !request.input.command.trim())

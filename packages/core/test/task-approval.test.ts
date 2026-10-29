@@ -89,3 +89,14 @@ it('rejects a changed file edit even when the path matches', () => {
     ),
   ).toBeUndefined();
 });
+
+it('does not reuse a file edit without the replacement content', () => {
+  expect(reusableApproval({ ...request, toolName: 'Edit', input: { file_path: '/repo/a' } })).toBe(
+    false,
+  );
+});
+it('does not reuse a generic confirmation without an operation preview', () => {
+  expect(
+    reusableApproval({ ...request, toolName: 'CodexApproval', input: { question: 'Proceed?' } }),
+  ).toBe(false);
+});

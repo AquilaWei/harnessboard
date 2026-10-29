@@ -2,7 +2,7 @@
 
 ## 0.2.17 - 2026-10-29
 
-Local test build. Full suite: 1995 passed, 14 skipped. Typecheck, lint, format and build pass. Native Codex sandbox verification confirms scratch writes succeed and source writes are denied. No PATCH tag or Release.
+Local test build. Full suite: 1997 passed, 14 skipped. Typecheck, lint, format and build pass. Native Codex sandbox verification confirms scratch writes succeed and source writes are denied. No PATCH tag or Release.
 
 ### Fixed
 
