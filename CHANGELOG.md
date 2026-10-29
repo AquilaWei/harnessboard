@@ -12,7 +12,7 @@ Local test build. Full suite: 1997 passed, 14 skipped. Typecheck, lint, format a
 - Worker 啟動前驗證任務 repo、cwd 與 Git 身分；失效的歷史基準保留紀錄並建立新基準。未修改既有髒工作區的成功探測不再因舊變更誤判失敗。
 - Codex 唯讀審查從獨立 scratch 啟動，可寫測試與建置輸出而原始 repo 保持唯讀。續跑重新套用 MCP endpoint；橋接錯誤顯示 HTTP 狀態及底層連線原因。
 - 並行核准去重並重新匹配排隊請求；修復秘書處理巢狀交付的等待問題。派工缺少參數會列出欄位，摘要截斷有標示，團隊面板可開啟完整交付報告。
-- main 推送執行 CI 並產生桌面安裝產物；Android 簽署及 draft release 維持只在版本 tag 執行。
+- CI 維持只在發布版本 tag 推送時執行；PATCH 測試版只做本機驗證，不建立 tag 或因 main 推送觸發 CI。
 
 ## 0.2.16 - 2026-10-29
 

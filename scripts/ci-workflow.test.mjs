@@ -10,8 +10,8 @@ const workflow = load(
 const android = workflow.jobs.android;
 
 describe('CI workflow', () => {
-  it('verifies main pushes and version tags', () => {
-    expect(workflow.on).toEqual({ push: { tags: ['v*'], branches: ['main'] } });
+  it('runs only when a v* tag is pushed', () => {
+    expect(workflow.on).toEqual({ push: { tags: ['v*'] } });
   });
 
   it('builds the Android app on ubuntu after the tests pass', () => {

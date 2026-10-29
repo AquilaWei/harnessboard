@@ -307,5 +307,5 @@ from the team and usage panels; shortened summaries explicitly indicate truncati
 Codex read-only reviews use a dedicated scratch working directory for test/build/cache
 output. The original source is outside the writable roots; review prompts identify both
 paths. A resumed MCP thread receives the current task-scoped bridge configuration.
-Main-branch pushes now run CI and build desktop artifacts without creating a release;
-Android signing and draft releases remain tag-only.
+CI runs only when a release version tag is pushed. PATCH builds are verified locally
+without creating a tag or triggering CI.
