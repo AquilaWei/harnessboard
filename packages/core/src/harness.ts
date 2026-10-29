@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-import { PmWorkflow, pmQuestion, validatePm } from './pm.js';
+import { PmWorkflow, pmQuestion, pmWork, validatePm } from './pm.js';
 import type { PmSessionPlan } from './pm.js';
 import type { TaskOperations, PmConfig } from '@harnessboard/shared';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
   AGENT_PROVIDERS,
@@ -95,6 +95,7 @@ import type { SessionOutcome } from './runner.js';
 import { dueForRetry, promotable, quotaBlocks, quotaFreeAt, startable } from './scheduler.js';
 import { Store } from './store.js';
 import { riskOf } from './risk.js';
+import { approvalInput, matchingApproval, reusableApproval } from './task-approval.js';
 import { Workflow } from './workflow.js';
 import type { SessionPlan } from './workflow.js';
 import {
@@ -1143,6 +1144,31 @@ export class Harness {
     return updated;
   }
 
+  /** Reads the complete delivery report recorded for this task's worker. */
+  async workerReport(id: number, workId: string): Promise<string> {
+    this.requireTask(id);
+    const work = pmWork(this.store, id).find((entry) => entry.id === workId);
+    if (!work?.evidence) throw new Error('Worker has no delivery report');
+    return readFile(work.evidence, 'utf8');
+  }
+
+  /** Revokes a persisted exact approval without deleting its audit history. */
+  revokeApprovalRule(id: number, ruleId: string): Task {
+    const task = this.requireTask(id);
+    if (!task.permission.approvalRules?.some((rule) => rule.id === ruleId))
+      throw new Error('Unknown task approval rule');
+    const updated = this.store.updateTask(id, {
+      permission: {
+        ...task.permission,
+        approvalRules: task.permission.approvalRules.map((rule) =>
+          rule.id === ruleId ? { ...rule, revokedAt: Date.now() } : rule,
+        ),
+      },
+    });
+    this.emit({ type: 'task', taskId: id, status: updated.status });
+    return updated;
+  }
+
   /**
    * Replaces the tool rules of a task, e.g. to fix rules that kept it from working. Takes
    * effect from its next session. Throws when the task is running or a rule is invalid.
@@ -2081,17 +2107,8 @@ export class Harness {
               blocked: (agentId) => this.agentBlocked(agentId, Date.now()),
               quota: (agentId) => this.quotas.get(this.config.agents[agentId]!.provider) ?? null,
               permissions: (id) => this.permissionRequests(id),
-              answer: (id, requestId, behavior, reason, actor = 'pm') => {
-                const pending = this.permissions.get(id)?.get(requestId);
-                if (!pending) throw new Error('Permission request is expired or not pending');
-                this.settlePermission(id, pending, {
-                  behavior,
-                  rules: [],
-                  message: reason,
-                  auto: false,
-                  actor,
-                });
-              },
+              answer: (id, requestId, behavior, reason, actor = 'pm') =>
+                this.answerPmPermission(id, requestId, behavior, reason, actor),
               notice: (id, message) => this.notice(id, message),
               updated: (id) =>
                 this.emit({ type: 'task', taskId: id, status: this.requireTask(id).status }),
@@ -2342,6 +2359,11 @@ export class Harness {
             implementerEffort: task.agents.implementerFallbackEffort ?? null,
           }
         : task.agents;
+    const reviewScratchDir =
+      provider === 'codex' && plan.access === 'readOnly' && plan.role !== 'secretary'
+        ? path.join(this.config.dataDir, 'review-scratch', String(task.id), sessionId)
+        : null;
+    if (reviewScratchDir) await mkdir(reviewScratchDir, { recursive: true });
     const outcome = await runSession({
       adapter,
       initialUsage: provider === 'gemini' ? null : (previous?.usage ?? null),
@@ -2349,7 +2371,13 @@ export class Harness {
         latestUsage = usage;
       },
       spec: {
-        cwd: (plan as PmSessionPlan).cwd ?? task.worktreePath!,
+        cwd: reviewScratchDir ?? (plan as PmSessionPlan).cwd ?? task.worktreePath!,
+        ...(reviewScratchDir
+          ? {
+              reviewScratchDir,
+              reviewSourceDir: (plan as PmSessionPlan).cwd ?? task.worktreePath!,
+            }
+          : {}),
         ...(task.workflow === 'pm' ? { managedWorker: true } : {}),
         sessionId: plan.resume
           ? plan.resume.agentSessionId
@@ -2409,7 +2437,14 @@ export class Harness {
         this.recordAgentEvent(task.id, sessionId, provider, event);
         monitor(event);
       },
-      onPermissionRequest: (event) => this.askPermission(task.id, sessionId, provider, event),
+      onPermissionRequest: (event) =>
+        this.askPermission(
+          task.id,
+          sessionId,
+          provider,
+          event,
+          (plan as PmSessionPlan).cwd ?? task.worktreePath!,
+        ),
       onNotice: (message) => this.notice(task.id, message, sessionId),
       onCompacted: () => this.store.appendEvent(task.id, sessionId, 'compacted', {}),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
@@ -2445,6 +2480,7 @@ export class Harness {
     sessionId: string,
     provider: AgentProvider,
     event: PermissionRequestEvent,
+    cwd: string,
   ): Promise<PermissionReply> {
     const { requestId, toolName, summary, suggestedRules } = event;
     const task = this.requireTask(taskId);
@@ -2456,38 +2492,98 @@ export class Harness {
           : riskOf(toolName, event.input, task.worktreePath!)
         : null;
     const request: PermissionRequest = {
-      requestId,
+      requestId: task.workflow === 'pm' ? sessionId + ':' + requestId : requestId,
       sessionId,
       toolName,
       summary,
+      input: structuredClone(event.input),
+      cwd: typeof event.input.cwd === 'string' ? event.input.cwd : cwd,
       // A dangerous command is answered once; it must not become a standing rule.
       suggestedRules: risk === null ? suggestedRules : [],
       risk,
       ts: Date.now(),
     };
+    const exactRule = matchingApproval(request, task.permission.approvalRules ?? []);
     const allowed = [...task.permission.allowedTools, ...this.config.allowedTools];
     const covered =
       provider === 'codex' && event.input.rpcMethod === 'item/commandExecution/requestApproval'
         ? typeof event.input.approvalRisk !== 'string' &&
           matchingCodexRules(String(event.input.command ?? ''), allowed).length > 0
         : suggestedRules.length > 0 && suggestedRules.every((rule) => allowed.includes(rule));
-    if (covered || (auto && risk === null && task.workflow !== 'pm')) {
+    if (exactRule || covered || (auto && risk === null && task.workflow !== 'pm')) {
       this.recordDecision(taskId, request, {
         behavior: 'allow',
         rules: [],
         message: null,
         auto: true,
+        ...(exactRule ? { sourceRuleId: exactRule.id } : {}),
       });
       return Promise.resolve({ behavior: 'allow' });
     }
     return new Promise((resolve) => {
       let waiting = this.permissions.get(taskId);
       if (!waiting) this.permissions.set(taskId, (waiting = new Map()));
-      waiting.set(requestId, { request, provider, resolve });
+      waiting.set(request.requestId, { request, provider, resolve });
       this.store.appendEvent(taskId, sessionId, 'permission_request', request);
       if (task.workflow !== 'pm') this.setStatus(taskId, 'awaiting_permission');
       this.pms.get(taskId)?.notify('routine');
     });
+  }
+
+  private answerPmPermission(
+    id: number,
+    requestId: string,
+    behavior: 'allow' | 'deny',
+    reason: string,
+    actor: 'pm' | 'secretary',
+  ): void {
+    const pending = this.permissions.get(id)?.get(requestId);
+    if (!pending) throw new Error('Permission request is expired or not pending');
+    if (behavior === 'allow') {
+      const current = this.requireTask(id);
+      const rule = {
+        id: randomUUID(),
+        toolName: pending.request.toolName,
+        input: approvalInput(pending.request.input ?? {}),
+        cwd: pending.request.cwd ?? '',
+        actor,
+        reason,
+        sourceRequestId: requestId,
+        sourceSessionId: pending.request.sessionId,
+        createdAt: Date.now(),
+        reusable: reusableApproval(pending.request),
+      };
+      // Persist before releasing the worker; a storage error leaves it pending.
+      this.store.updateTask(id, {
+        permission: {
+          ...current.permission,
+          approvalRules: [...(current.permission.approvalRules ?? []), rule],
+        },
+      });
+    }
+    this.settlePermission(id, pending, {
+      behavior,
+      rules: [],
+      message: reason,
+      auto: false,
+      actor,
+    });
+    if (behavior === 'allow') {
+      for (const queued of this.permissions.get(id)?.values() ?? []) {
+        const rule = matchingApproval(
+          queued.request,
+          this.requireTask(id).permission.approvalRules ?? [],
+        );
+        if (rule)
+          this.settlePermission(id, queued, {
+            behavior: 'allow',
+            rules: [],
+            message: null,
+            auto: true,
+            sourceRuleId: rule.id,
+          });
+      }
+    }
   }
 
   private settlePermission(
@@ -2496,7 +2592,9 @@ export class Harness {
     outcome: Omit<PermissionDecisionRecord, 'requestId' | 'toolName' | 'summary'>,
   ): void {
     const waiting = this.permissions.get(taskId);
-    waiting?.delete(pending.request.requestId);
+    if (waiting?.get(pending.request.requestId) !== pending)
+      throw new Error('Permission request is expired or already answered');
+    waiting.delete(pending.request.requestId);
     this.recordDecision(taskId, pending.request, outcome);
     const reply: PermissionReply =
       outcome.behavior === 'allow'

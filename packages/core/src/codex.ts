@@ -55,7 +55,7 @@ export class CodexAdapter implements AgentAdapter {
       '-c',
       `approval_policy="${readOnly || skip ? 'never' : 'on-request'}"`,
       '-c',
-      `sandbox_mode="${readOnly ? 'read-only' : skip ? 'danger-full-access' : 'workspace-write'}"`,
+      `sandbox_mode="${readOnly && !spec.reviewScratchDir ? 'read-only' : skip ? 'danger-full-access' : 'workspace-write'}"`,
       '-c',
       'approvals_reviewer="user"',
     ];

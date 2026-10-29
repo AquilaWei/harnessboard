@@ -59,6 +59,49 @@ describe('Codex approval transport', () => {
     });
   });
 
+  it('restricts review writes to scratch and gives the source path explicitly', () => {
+    const { messages } = connect({
+      cwd: '/scratch',
+      access: 'readOnly',
+      reviewScratchDir: '/scratch',
+      reviewSourceDir: '/work',
+    });
+    expect(messages[3]!.params).toMatchObject({
+      cwd: '/scratch',
+      approvalPolicy: 'never',
+      sandboxPolicy: {
+        type: 'workspaceWrite',
+        writableRoots: ['/scratch'],
+        networkAccess: false,
+        excludeSlashTmp: true,
+        excludeTmpdirEnvVar: true,
+      },
+      input: [
+        { type: 'text', text: expect.stringContaining('Source repository (read-only): /work') },
+      ],
+    });
+  });
+
+  it('refreshes task MCP endpoint configuration on thread resume', () => {
+    const { messages } = connect({
+      resume: true,
+      sessionId: 'old',
+      mcpServers: {
+        harnessboard: {
+          command: 'node',
+          args: ['bridge.mjs'],
+          env: { HB_PM_ENDPOINT: 'http://127.0.0.1:1234' },
+        },
+      },
+    });
+    expect(messages[2]!.params).toMatchObject({
+      threadId: 'old',
+      config: {
+        mcp_servers: { harnessboard: { env: { HB_PM_ENDPOINT: 'http://127.0.0.1:1234' } } },
+      },
+    });
+  });
+
   it('sends the effort with turn/start', () => {
     const { messages } = connect({ effort: 'xhigh' });
     expect(messages[3]!.params).toMatchObject({ effort: 'xhigh' });

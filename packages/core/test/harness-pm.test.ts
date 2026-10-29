@@ -180,6 +180,7 @@ it('runs a secretary CLI for routine approval and wakes the PM only for delivery
     turn(
       'worker-thread',
       askBash('check', 'cargo test', 'cargo test'),
+      askBash('check-again', 'cargo test', 'cargo test'),
       assistantText('Checking results', 100),
       { __write: { path: 'greeting.txt', content: 'hello\n' } },
       { __commit: 'feat: add greeting' },
@@ -213,10 +214,25 @@ it('runs a secretary CLI for routine approval and wakes the PM only for delivery
   await harness.waitForIdle();
   expect(harness.store.getTask(task.id)?.status).toBe('review');
   expect(harness.store.eventsOfKind(task.id, 'pm_turn')).toHaveLength(3);
+  expect(harness.store.getTask(task.id)?.permission.approvalRules).toEqual([
+    expect.objectContaining({
+      toolName: 'Bash',
+      input: { command: 'cargo test' },
+      cwd: harness.store.getTask(task.id)!.worktreePath,
+      actor: 'secretary',
+      reusable: true,
+      sourceSessionId: expect.any(String),
+    }),
+  ]);
   expect(harness.store.eventsOfKind(task.id, 'permission_decision')[0]?.data).toMatchObject({
     actor: 'secretary',
     behavior: 'allow',
     rules: [],
+  });
+  expect(harness.store.eventsOfKind(task.id, 'permission_decision')[1]?.data).toMatchObject({
+    behavior: 'allow',
+    auto: true,
+    sourceRuleId: expect.any(String),
   });
   expect(harness.store.listSessions(task.id).map((s) => s.role)).toEqual([
     'pm',
@@ -494,7 +510,12 @@ it('runs nested development branches through real CLIs and integrates them befor
       { __write: { path: 'greeting.txt', content: 'hello\n' } },
       { __commit: 'feat: add greeting' },
     ),
+    turn(
+      'secretary-thread',
+      tool('finish_batch', { summary: 'Child delivered; parent owns integration.' }),
+    ),
     turn('parent-thread', tool('integrate_work', { id: '$work' })),
+    secretaryEscalation(),
     turn('pm-thread', tool('integrate_work', { id: '$work' }), accept()),
   ]);
   const task = await harness.createTask({ prompt: 'Add greeting', repo });
@@ -505,6 +526,9 @@ it('runs nested development branches through real CLIs and integrates them befor
     harness.store.getTask(task.id)?.status,
     JSON.stringify({
       notices: harness.store.eventsOfKind(task.id, 'notice'),
+      stderr: harness.store
+        .eventsOfKind(task.id, 'stderr')
+        .filter((e) => (e.data as { line: string }).line.startsWith('Error:')),
     }),
   ).toBe('review');
   const work = pmWork(harness.store, task.id);
@@ -519,7 +543,7 @@ it('runs nested development branches through real CLIs and integrates them befor
     .trim()
     .split('\n')
     .map((line) => JSON.parse(line));
-  expect(runs).toHaveLength(6);
+  expect(runs).toHaveLength(8);
   expect(runs.filter((run) => run.cwd === work[1]?.worktreePath)).toHaveLength(1);
 });
 

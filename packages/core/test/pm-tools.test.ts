@@ -61,3 +61,25 @@ it('revokes the capability when its PM run ends', async () => {
   await bridge.close();
   await expect(fetch(bridge.server.env.HB_PM_ENDPOINT!)).rejects.toThrow();
 });
+
+it('reports every missing dispatch field before invoking a worker', async () => {
+  const call = vi.fn();
+  const bridge = await pmTools(tempDir('bridge'), call);
+  try {
+    const response = await fetch(bridge.server.env.HB_PM_ENDPOINT!, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer ' + bridge.server.env.HB_PM_CAPABILITY,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ method: 'tools/call', params: { name: 'dispatch', arguments: {} } }),
+    });
+    const result = (await response.json()) as { isError: boolean; content: { text: string }[] };
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('missing required fields:');
+    expect(result.content[0]!.text).toContain('tools/list');
+    expect(call).not.toHaveBeenCalled();
+  } finally {
+    await bridge.close();
+  }
+});

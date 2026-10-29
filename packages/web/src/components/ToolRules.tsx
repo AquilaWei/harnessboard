@@ -76,7 +76,46 @@ export function ToolRules({ task, onSaved, onError }: Props) {
   if (!editing) {
     return (
       <div className="tool-rules">
-        {autoToggle}
+        {task.workflow !== 'pm' && autoToggle}
+        {task.permission.approvalRules?.map((rule) => (
+          <details key={rule.id}>
+            <summary>
+              {rule.toolName} · {rule.actor} ·{' '}
+              {rule.revokedAt
+                ? t('rules.revoked')
+                : rule.reusable
+                  ? t('rules.exact')
+                  : t('rules.auditOnly')}
+            </summary>
+            <p>{rule.reason}</p>
+            <pre>
+              {JSON.stringify(
+                {
+                  cwd: rule.cwd,
+                  input: rule.input,
+                  sourceRequestId: rule.sourceRequestId,
+                  sourceSessionId: rule.sourceSessionId,
+                },
+                null,
+                2,
+              )}
+            </pre>
+            {!rule.revokedAt && (
+              <button
+                type="button"
+                className="btn small"
+                onClick={() => {
+                  void api
+                    .revokeApprovalRule(task.id, rule.id)
+                    .then(onSaved)
+                    .catch((err: Error) => onError(err.message));
+                }}
+              >
+                {t('rules.revoke')}
+              </button>
+            )}
+          </details>
+        ))}
         {rules.length > 0 ? (
           <ul className="rule-list mono">
             {rules.map((rule) => (

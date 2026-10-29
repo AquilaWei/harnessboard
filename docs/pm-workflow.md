@@ -164,7 +164,7 @@ for supervision. Cancelling a job cancels its descendants and retains files and 
 A parent cannot complete with unfinished children, and final acceptance checks the entire tree.
 
 Explicit existing tool rules still apply. Other worker permission requests go to the PM,
-which can allow the specific request once, deny it with a reason, or ask you when the
+which can approve and persist the exact task operation, deny it with a reason, or ask you when the
 impact or authorization is unclear. It cannot add permanent global rules through its
 permission tool. User decisions and PM decisions are separately attributed in history.
 Platform and operating-system restrictions still apply. Gemini currently cannot pause for
@@ -288,3 +288,24 @@ user choices take priority. Continue an existing job with its original worker to
 avoid paying for repeated context; do not create extra jobs to force equal counts.
 This is guidance for model decisions, not a forced round-robin or automatic model
 replacement. Only the task's permitted worker pool is eligible.
+
+## Exact task approvals
+
+Permission routing is task rules → secretary → PM. A secretary or PM allowance first
+persists the full tool arguments, actual working directory, reviewer, reason and source
+request/session in the task. Later identical operations in that task reuse the approval,
+including across workers and restarts; queued requests are checked again after approval.
+Arguments, targets, edit contents and additional privileges must match exactly. Historical
+allow-once decisions are not converted into reusable rules. Denials and expired requests
+never create allow rules, and storage failure leaves the worker waiting.
+
+Details → tool rules shows these records and lets you revoke them. Incomplete previews,
+Codex directory/file grants without full edit evidence, and adb operations require fresh
+review. Existing allowedTools rules remain supported. Full worker reports are available
+from the team and usage panels; shortened summaries explicitly indicate truncation.
+
+Codex read-only reviews use a dedicated scratch working directory for test/build/cache
+output. The original source is outside the writable roots; review prompts identify both
+paths. A resumed MCP thread receives the current task-scoped bridge configuration.
+Main-branch pushes now run CI and build desktop artifacts without creating a release;
+Android signing and draft releases remain tag-only.

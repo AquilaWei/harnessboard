@@ -12,6 +12,9 @@ export interface SessionMcpServer {
 }
 
 export interface SessionSpec {
+  /** Codex reviews write test/build output here while the repository stays read-only. */
+  reviewScratchDir?: string;
+  reviewSourceDir?: string;
   /** Secretary batches use only their task-scoped MCP tools, without built-in tools. */
   toolsOnly?: boolean;
   managedWorker?: boolean;

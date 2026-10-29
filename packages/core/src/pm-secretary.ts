@@ -428,7 +428,13 @@ export class Secretary {
       return { requestId: current.requestId, behavior: input.behavior };
     }
     if (name === 'finish_batch') {
-      if (batch.workers.some((w) => w.status !== 'awaiting_pm' || !batch.answered.has(w.id)))
+      if (
+        batch.workers.some((w) =>
+          w.status === 'awaiting_pm'
+            ? !batch.answered.has(w.id)
+            : !(w.parentWorkId && w.status === 'completed'),
+        )
+      )
         throw new Error('Unresolved worker questions, delivery or failure: escalate to the PM');
       if (
         batch.permissions.some((p) =>

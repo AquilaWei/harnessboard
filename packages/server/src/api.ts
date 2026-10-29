@@ -327,6 +327,10 @@ export function createApi(
     return c.json(harness.setAutoApprove(taskId(c), on));
   });
 
+  app.delete('/tasks/:id/approval-rules/:ruleId', (c) => {
+    return c.json(harness.revokeApprovalRule(taskId(c), c.req.param('ruleId')));
+  });
+
   app.put('/tasks/:id/allowed-tools', async (c) => {
     const { rules } = await c.req.json<{ rules?: unknown }>();
     if (!Array.isArray(rules) || !rules.every((r) => typeof r === 'string')) {
@@ -359,6 +363,10 @@ export function createApi(
   app.post('/tasks/:id/draft', (c) => c.json(harness.toDraft(taskId(c))));
   app.post('/tasks/:id/stop', (c) => c.json(harness.stopTask(taskId(c))));
   app.post('/tasks/:id/complete', (c) => c.json(harness.completeTask(taskId(c))));
+
+  app.get('/tasks/:id/work/:workId/report', async (c) =>
+    c.text(await harness.workerReport(taskId(c), c.req.param('workId'))),
+  );
 
   app.get('/tasks/:id/events', (c) => {
     const after = Number(c.req.query('after') ?? 0);

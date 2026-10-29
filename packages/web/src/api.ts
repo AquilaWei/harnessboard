@@ -243,6 +243,8 @@ export const api = {
     send<unknown>('POST', `/tasks/${id}/permission`, decision),
   setAgents: (id: number, update: AgentsUpdate) =>
     send<unknown>('PUT', `/tasks/${id}/agents`, update),
+  revokeApprovalRule: (id: number, ruleId: string) =>
+    send<unknown>('DELETE', `/tasks/${id}/approval-rules/${encodeURIComponent(ruleId)}`),
   setAllowedTools: (id: number, rules: string[]) =>
     send<unknown>('PUT', `/tasks/${id}/allowed-tools`, { rules }),
   deleteTask: (id: number) => send<DeletedTask>('DELETE', `/tasks/${id}`),

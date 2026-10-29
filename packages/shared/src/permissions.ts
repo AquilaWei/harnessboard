@@ -80,6 +80,21 @@ export function assertToolRules(rules: readonly string[]): void {
   }
 }
 
+/** A task-local exact approval; revoked or incomplete records never grant access. */
+export interface TaskApprovalRule {
+  id: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  cwd: string;
+  actor: 'pm' | 'secretary';
+  reason: string;
+  sourceRequestId: string;
+  sourceSessionId: string;
+  createdAt: number;
+  reusable: boolean;
+  revokedAt?: number;
+}
+
 /** A tool use waiting for the user's answer, as shown on the board. */
 export interface PermissionRequest {
   requestId: string;
@@ -87,6 +102,8 @@ export interface PermissionRequest {
   toolName: string;
   summary: string;
   suggestedRules: string[];
+  input?: Record<string, unknown>;
+  cwd?: string;
   /** Why it is dangerous enough that auto-approve did not allow it on its own; `null` when the task does not auto-approve. */
   risk: string | null;
   /** Unix ms when the agent asked. */
@@ -109,6 +126,7 @@ export interface PermissionDecision {
 /** What was decided, as kept in the task's history. */
 export interface PermissionDecisionRecord {
   actor?: 'pm' | 'user' | 'secretary';
+  sourceRuleId?: string;
   requestId: string;
   toolName: string;
   summary: string;

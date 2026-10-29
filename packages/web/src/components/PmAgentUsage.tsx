@@ -51,6 +51,15 @@ export function PmAgentUsage({ task }: { task: TaskView }) {
                     <p>{work.goal}</p>
                     <p>{work.scope}</p>
                     {work.summary && <Markdown text={work.summary} />}
+                    {work.evidence && (
+                      <a
+                        href={`/api/tasks/${task.id}/work/${work.id}/report`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {t('team.fullReport')}
+                      </a>
+                    )}
                     {work.head && <small className="mono">{work.head}</small>}
                   </details>
                 )}

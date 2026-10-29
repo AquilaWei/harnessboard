@@ -23,12 +23,13 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
   let compacted = false;
   const items = new Map<string, Fields>();
   const readOnly = spec.access === 'readOnly';
+  const scratch = readOnly ? spec.reviewScratchDir : undefined;
   const skip = !readOnly && spec.skipPermissions;
   const policy = {
-    cwd: spec.cwd,
+    cwd: scratch ?? spec.cwd,
     approvalPolicy: readOnly || skip ? 'never' : 'on-request',
     approvalsReviewer: 'user',
-    sandbox: readOnly ? 'read-only' : skip ? 'danger-full-access' : 'workspace-write',
+    sandbox: readOnly && !scratch ? 'read-only' : skip ? 'danger-full-access' : 'workspace-write',
     ...(spec.model ? { model: spec.model } : {}),
   };
   const send = (value: unknown) => write(wire(value));
@@ -40,7 +41,19 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
       send({
         id: 'hb:thread',
         method: spec.resume ? 'thread/resume' : 'thread/start',
-        params: { ...policy, ...(spec.resume ? { threadId: spec.sessionId } : {}) },
+        params: {
+          ...policy,
+          ...(spec.mcpServers
+            ? {
+                config: {
+                  mcp_servers: Object.fromEntries(
+                    Object.entries(spec.mcpServers).map(([name, server]) => [name, server]),
+                  ),
+                },
+              }
+            : {}),
+          ...(spec.resume ? { threadId: spec.sessionId } : {}),
+        },
       });
     } else if (msg.id === 'hb:thread') {
       const result = fields(msg.result);
@@ -58,11 +71,19 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
         method: 'turn/start',
         params: {
           threadId,
-          cwd: spec.cwd,
+          cwd: scratch ?? spec.cwd,
           approvalPolicy: policy.approvalPolicy,
           approvalsReviewer: 'user',
           sandboxPolicy: readOnly
-            ? { ...sandbox, type: 'readOnly' }
+            ? scratch
+              ? {
+                  type: 'workspaceWrite',
+                  writableRoots: [scratch],
+                  networkAccess: false,
+                  excludeSlashTmp: true,
+                  excludeTmpdirEnvVar: true,
+                }
+              : { ...sandbox, type: 'readOnly' }
             : skip
               ? { type: 'dangerFullAccess' }
               : {
@@ -74,7 +95,19 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
           ...(spec.model ? { model: spec.model } : {}),
           // Only `turn/start` takes an effort; `thread/start` and `thread/resume` have none.
           ...(spec.effort ? { effort: spec.effort } : {}),
-          input: [{ type: 'text', text: spec.prompt }],
+          input: [
+            {
+              type: 'text',
+              text: scratch
+                ? spec.prompt +
+                  '\n\nSource repository (read-only): ' +
+                  (spec.reviewSourceDir ?? spec.cwd) +
+                  '\nWritable review scratch/build directory: ' +
+                  scratch +
+                  '\nRun tests against the source; redirect all build/cache/temp output into scratch. Do not copy edits back or modify source.'
+                : spec.prompt,
+            },
+          ],
         },
       });
       return [{ kind: 'init', sessionId: threadId, model }];

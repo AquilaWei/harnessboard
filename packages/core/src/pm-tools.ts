@@ -213,11 +213,11 @@ for await (const line of rl) {
   else if(m.method==='ping') result={};
   else if(m.method==='tools/list'||m.method==='tools/call') {
    const r=await fetch(process.env.HB_PM_ENDPOINT,{method:'POST',headers:{authorization:'Bearer '+process.env.HB_PM_CAPABILITY,'content-type':'application/json'},body:JSON.stringify({method:m.method,params:m.params})});
-   if(!r.ok) throw new Error('PM tool bridge refused request');
+   if(!r.ok) throw new Error('PM tool bridge HTTP '+r.status+' '+r.statusText);
    result=await r.json();
   } else throw new Error('Unsupported MCP method');
   process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');
- } catch(e) {process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,error:{code:-32603,message:e.message}})+'\\n')}
+ } catch(e) {process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,error:{code:-32603,message:[e.message,e.cause?.code,e.cause?.message].filter(Boolean).join(': ')}})+'\\n')}
 }
 `;
 
@@ -278,8 +278,17 @@ export async function pmTools(
         };
       else if (body.method === 'tools/call') {
         try {
-          if (!tools.some((tool) => tool.name === body.params?.name))
-            throw new Error('Tool is not available to this role');
+          const tool = tools.find((tool) => tool.name === body.params?.name);
+          if (!tool) throw new Error('Tool is not available to this role');
+          const input = body.params?.arguments ?? {};
+          const missing = tool.inputSchema.required.filter((key) => input[key] === undefined);
+          if (missing.length)
+            throw new Error(
+              tool.name +
+                ': missing required fields: ' +
+                missing.join(', ') +
+                '. Resubmit with all required fields; use tools/list for the schema.',
+            );
           const value = await call(body.params?.name, body.params?.arguments ?? {});
           result = { content: [{ type: 'text', text: JSON.stringify(value) }] };
         } catch (err) {

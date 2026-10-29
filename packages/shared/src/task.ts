@@ -71,6 +71,7 @@ export interface ContextPolicy {
 }
 
 export interface PermissionPolicy {
+  approvalRules?: import('./permissions.js').TaskApprovalRule[];
   /** Tool rules passed to `--allowedTools`, e.g. `Bash(npm test)`. */
   allowedTools: string[];
   /** Maps to `--dangerously-skip-permissions`; must be opted into per task. */

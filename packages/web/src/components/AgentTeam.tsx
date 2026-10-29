@@ -378,6 +378,15 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
                     <Markdown text={current.work.summary} />
                   </>
                 )}
+                {current.work.evidence && (
+                  <a
+                    href={`/api/tasks/${task.id}/work/${current.work.id}/report`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t('team.fullReport')}
+                  </a>
+                )}
                 {current.work.observedHead && (
                   <p>
                     {t('team.observedHead')}: <code>{current.work.observedHead}</code>

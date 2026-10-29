@@ -244,6 +244,10 @@ export const en = {
     cancel: 'Cancel',
   },
   rules: {
+    exact: 'Exact task approval',
+    auditOnly: 'Recorded; requires fresh review',
+    revoked: 'Revoked',
+    revoke: 'Revoke',
     edit: 'Edit',
     hint: 'One rule per line. The next session uses the new list.',
     save: 'Save',
@@ -285,6 +289,7 @@ export const en = {
     cancel: 'Cancel',
   },
   team: {
+    fullReport: 'Full delivery report',
     roles: { pm: 'PM', worker: 'Worker', subagent: 'Subagent', secretary: 'Secretary' },
     states: {
       waiting: 'Waiting for routine work',
@@ -981,6 +986,10 @@ export const zhTW: typeof en = {
     cancel: '取消',
   },
   rules: {
+    exact: '任務精確核准',
+    auditOnly: '已記錄；需重新審核',
+    revoked: '已撤銷',
+    revoke: '撤銷',
     edit: '編輯',
     hint: '一行一條規則。下一個 session 會使用新的清單。',
     save: '儲存',
@@ -1022,6 +1031,7 @@ export const zhTW: typeof en = {
     cancel: '取消',
   },
   team: {
+    fullReport: '完整交付報告',
     roles: { pm: 'PM', worker: 'Worker', subagent: 'Subagent', secretary: '秘書' },
     states: {
       waiting: '等待例行工作',
