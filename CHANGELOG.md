@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.16 - 2026-10-29
+
+Local test build. Typecheck, lint, format and build pass. Full suite: 1968 passed, 1 failed, 14 skipped; the previously recorded nested development branch CLI test still times out. Default parallel worktree and repository-change regressions pass. Live desktop acceptance and live-model token savings remain unverified. No tag or Release.
+
+### Added
+
+- PM 任務首次核准規格前，可在「詳細資料 → 專案路徑」更正專案目錄；執行中須先停止。保留舊檔案與討論紀錄，回到草稿後在新目錄建立新的 agent session 重新確認規格，避免沿用舊 sandbox 權限。
+- 派工前必須記錄效益、上下文與整合成本、另開 worker 而非續用既有對話的理由，以及已完成的前置工作；未完成或尚未整合的前置工作會阻止新派工。團隊面板可查看規劃。
+
+### Changed
+
+- 開發 worker 預設使用獨立分支與 worktree，必須明確分配修改路徑，讓可獨立的工作能真正平行執行。共用目錄改為明確指定的例外；唯讀工作預設檢視父層目錄。
+- PM 與 worker 優先續用原對話完成連續階段與修正，只有獨立且已具備前置條件的工作才另外拆分，避免為了階段切換或平衡 agent 數量重複載入上下文。
+
 ## 0.2.15 - 2026-10-28
 
 Local test build. Typecheck, lint and build pass. Full suite: 1952 passed, 1 failed, 14 skipped; the previously recorded nested development branch CLI test still times out. Live-model balancing quality requires observation during real tasks. No tag or Release.
