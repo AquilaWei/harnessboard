@@ -14,7 +14,7 @@ assignment and recorded PM follow-up instructions, so routine checks use the act
 delegated scope. While the PM waits for your answer, approved work and internal permission
 review continue. Only PM questions create user actions; raw CLI requests remain internal.
 
-![version](https://img.shields.io/badge/version-0.2.16-blue)
+![version](https://img.shields.io/badge/version-0.2.17-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
