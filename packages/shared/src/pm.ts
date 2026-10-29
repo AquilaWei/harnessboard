@@ -40,8 +40,22 @@ export type WorkStatus =
   | 'stopped'
   | 'cancelled';
 
+/** The coordinator's cost and dependency assessment before opening a new conversation. */
+export interface PmDispatchPlan {
+  /** Concrete delivery benefit over continuing an existing worker. */
+  benefit: string;
+  /** Expected repeated reading and integration work, and how it is kept bounded. */
+  contextCost: string;
+  /** Why an existing conversation cannot efficiently own this assignment. */
+  reuse: string;
+  /** Completed prerequisite job IDs; not a queue of future work. */
+  dependencies: string[];
+}
+
 /** Latest durable snapshot of a delegated job; transcripts stay in session events. */
 export interface PmWork {
+  /** Missing on jobs dispatched before planning was required. */
+  plan?: PmDispatchPlan;
   usage?: TaskUsage;
   /** Missing on historical snapshots: the PM is the parent. */
   parentWorkId?: string | null;

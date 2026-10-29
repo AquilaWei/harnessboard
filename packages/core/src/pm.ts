@@ -86,11 +86,13 @@ export interface PmHost {
 }
 
 const PM_COORDINATION =
-  'After approval, autonomously plan and supervise delivery, report meaningful progress to the user, and review actual work. Choose the number of managed workers by dependency, speed and token efficiency. Independent tasks may run in parallel; keep tightly coupled work together. Never edit a child-owned path while that child is active. Small tasks need no extra subagents. Workers may delegate through the same managed tools. Define one clear feature, acceptance tests, interface contracts and explicit non-overlapping writePaths per parallel worker. Keep shared API/schema changes with one owner or finish that prerequisite first. For independent development, dispatch with workspace=branch to fork the current committed HEAD into private branches/worktrees and run writers in parallel. Commit pending changes before branching. Use shared workspace for tightly coupled edits and special build/install tasks; shared writers queue. Reuse continue_work for the same job. Use integrate_work to merge each completed direct child into its parent workspace, resolve conflicts in that same child branch, and verify the combined result before acceptance. Read-only findings refer to observedHead; recheck findings made stale by concurrent edits before acceptance.';
+  'After approval, autonomously plan and supervise delivery, report meaningful progress to the user, and review actual work. Choose the number of managed workers by dependency, speed and token efficiency. Independent tasks may run in parallel; keep tightly coupled work together. Never edit a child-owned path while that child is active. Small tasks need no extra subagents. Workers may delegate through the same managed tools. Define one clear feature, acceptance tests, interface contracts and explicit non-overlapping writePaths per parallel worker. Keep shared API/schema changes with one owner or finish that prerequisite first. Editing workers default to private branch/worktrees from the current committed HEAD; provide explicit non-overlapping writePaths and run independent writers in parallel. Commit pending changes before branching. Choose workspace=shared explicitly only for a necessary coupled handoff or special build/install task; shared writers queue. Reuse continue_work for the same job. Use integrate_work to merge each completed direct child into its parent workspace, resolve conflicts in that same child branch, and verify the combined result before acceptance. Read-only findings refer to observedHead; recheck findings made stale by concurrent edits before acceptance.';
 const PROVIDER_BALANCE =
   'Before dispatching new work, inspect profiles for live provider quota, blocked state and provider-wide activeWork/dispatchedWork in this task (counts are not tokens). Balance interchangeable work across permitted Claude Code and Codex providers: prefer more headroom in both five-hour and seven-day windows, considering reset times, then fewer active or previously dispatched jobs when quotas are comparable or unknown. Missing quota is unknown, never zero usage; elapsed windows are not current measurements. Avoid concentrating work on one provider merely out of habit. Preserve task/model suitability and user constraints; use a lightweight permitted model for routine work. Continue the original worker for the same job to avoid duplicate context cost; do not spawn extra workers just to balance counts. If only one suitable permitted provider exists, use it. Never change the PM model or exceed the permitted pool for balancing.';
+const DELEGATION_PLANNING =
+  'Before creating any new worker conversation, make a concrete dispatch plan: benefit, repeated-context and integration cost, why an existing worker cannot efficiently continue, and completed prerequisite work IDs. Use one primary implementer for small or tightly coupled work. Reuse continue_work for fixes and sequential phases in the same area; do not create a fresh worker for every milestone. Editing workers default to separate branch worktrees; always provide writePaths. Additional development workers are for ready independent features that can actually run in parallel with explicit interfaces and disjoint writePaths. Shared workspaces require an explicit exception for a necessary coupled handoff or build/install operation. Resolve shared API/schema prerequisites first. Do not preload workers for blocked future phases or add workers merely to balance provider counts. A separate independent review or specialist assignment must justify its cost. Plan this yourself; do not spawn a planning agent merely to decide whether to delegate.';
 const WORKER_COORDINATION =
-  'Delegate only when independent work saves time or context. Keep tightly coupled changes together; small jobs need no subagents. Minimize repeated reading and duplicated context. Never edit a child-owned path while that child is active. You own integration and review of your children. Dispatch independent development with workspace=branch from your current clean committed HEAD; children run in private worktrees. Use integrate_work for completed direct children before delivery; on conflict continue the child to merge the returned target commit, resolve and test. Shared writers still require you to yield.';
+  'Delegate only when independent work saves time or context. Keep tightly coupled changes together; small jobs need no subagents. Minimize repeated reading and duplicated context. Never edit a child-owned path while that child is active. You own integration and review of your children. Editing children default to branch workspaces from your current clean committed HEAD; provide explicit non-overlapping writePaths. Use integrate_work for completed direct children before delivery; on conflict continue the child to merge the returned target commit, resolve and test. Only explicitly request a shared writer for a necessary handoff; shared writers still require you to yield.';
 
 const active = (w: PmWork) =>
   ['queued', 'running', 'awaiting_permission', 'awaiting_children', 'awaiting_pm'].includes(
@@ -542,7 +544,7 @@ export class PmWorkflow {
     if (!allowed) throw new Error('Worker profile/model is not permitted');
     if (input.access !== 'edit' && input.access !== 'readOnly')
       throw new Error('Invalid worker access');
-    const workspace = input.workspace ?? 'shared';
+    const workspace = input.workspace ?? (input.access === 'edit' ? 'branch' : 'shared');
     if (workspace !== 'branch' && workspace !== 'shared')
       throw new Error('Invalid worker workspace');
     if (workspace === 'branch' && input.access !== 'edit')
@@ -555,6 +557,7 @@ export class PmWorkflow {
       throw new Error(
         'Worker provider is waiting for quota; choose another permitted profile or ask the user',
       );
+    const plan = this.dispatchPlan(input.plan, caller);
     const writePaths =
       workspace === 'branch' ? this.ownership(input.writePaths, caller) : undefined;
     const work: PmWork = {
@@ -569,6 +572,7 @@ export class PmWorkflow {
       acceptance: this.text(input, 'acceptance'),
       scope: this.text(input, 'scope'),
       access: input.access,
+      plan,
       status: 'queued',
       summary: null,
       evidence: null,
@@ -585,6 +589,34 @@ export class PmWorkflow {
     this.start(work, null);
     if (caller) this.turns.get(caller)!.delegated = true;
     return work;
+  }
+
+  private dispatchPlan(value: unknown, caller: string | null) {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      throw new Error('A concrete delegation plan is required before dispatch');
+    const input = value as Record<string, unknown>;
+    if (
+      !Array.isArray(input.dependencies) ||
+      input.dependencies.some((id) => typeof id !== 'string' || !id.trim())
+    )
+      throw new Error('Delegation plan dependencies must be completed work IDs');
+    const dependencies = [...new Set(input.dependencies as string[])];
+    for (const id of dependencies) {
+      const dependency = this.work(id);
+      this.assertVisible(dependency, caller);
+      if (dependency.status !== 'completed')
+        throw new Error(
+          `Dependency ${id} must be completed before dispatch; continue existing work instead of loading a blocked worker`,
+        );
+      if (dependency.workspace === 'branch' && dependency.integratedHead !== dependency.head)
+        throw new Error(`Dependency ${id} must be integrated before dispatch`);
+    }
+    return {
+      benefit: this.text(input, 'benefit'),
+      contextCost: this.text(input, 'contextCost'),
+      reuse: this.text(input, 'reuse'),
+      dependencies,
+    };
   }
 
   private directory(work: PmWork): string {
@@ -992,6 +1024,7 @@ export class PmWorkflow {
       specification: this.latest.acceptance,
       guidelines: readGuidelines(this.host.config.reviewGuidelines),
       coordinationRules: WORKER_COORDINATION,
+      delegationPlanning: DELEGATION_PLANNING,
       workspace: {
         directory: this.directory(work),
         branch: work.branch,
@@ -1209,6 +1242,7 @@ export class PmWorkflow {
       acceptance: this.latest.acceptance,
       workers: pm.workers,
       coordinationRules: PM_COORDINATION,
+      delegationPlanning: DELEGATION_PLANNING,
       projectSetup:
         'The selected folder may be a new project with only an empty Git bookkeeping commit. During specification inspect existing files and applicable coding standards. After approval proactively dispatch project setup in the shared workspace: create appropriate .gitignore and required project structure/documentation, verify and commit only project source/configuration. Preserve existing files; never blindly git add all files or commit secrets, dependencies, build outputs or personal settings. Do not ask the user to initialize Git. Create remote repositories or publish only with explicit authorization.',
       ...Object.fromEntries(guidelines.map((g) => [`rule:${g.file}`, g.text])),

@@ -8,6 +8,7 @@ import { defaultConfig } from '../src/config.js';
 import { pmQuestion, pmWork } from '../src/pm.js';
 import {
   FAKE_CLAUDE,
+  DISPATCH_PLAN,
   askBash,
   init,
   result,
@@ -21,7 +22,10 @@ let harness: Harness;
 let repo: string;
 let dir: string;
 const tool = (name: string, args: Record<string, unknown> = {}) => ({
-  __pm: { name, arguments: args },
+  __pm: {
+    name,
+    arguments: name === 'dispatch' ? { plan: DISPATCH_PLAN, workspace: 'shared', ...args } : args,
+  },
 });
 const turn = (id: string, ...actions: unknown[]) => [
   [init(id), ...actions, assistantText('Step complete', 100), result('Step complete')],

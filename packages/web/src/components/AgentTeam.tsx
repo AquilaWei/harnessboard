@@ -345,6 +345,31 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
                 <Markdown text={current.work.goal} />
                 <h4>{t('team.scope')}</h4>
                 <Markdown text={current.work.scope} />
+                {current.work.plan && (
+                  <>
+                    <h4>{t('team.dispatchPlan')}</h4>
+                    <dl className="facts">
+                      <dt>{t('team.dispatchBenefit')}</dt>
+                      <dd>
+                        <Markdown text={current.work.plan.benefit} />
+                      </dd>
+                      <dt>{t('team.dispatchCost')}</dt>
+                      <dd>
+                        <Markdown text={current.work.plan.contextCost} />
+                      </dd>
+                      <dt>{t('team.dispatchReuse')}</dt>
+                      <dd>
+                        <Markdown text={current.work.plan.reuse} />
+                      </dd>
+                      <dt>{t('team.dispatchDependencies')}</dt>
+                      <dd>
+                        {current.work.plan.dependencies.length
+                          ? current.work.plan.dependencies.join(', ')
+                          : t('team.noDependencies')}
+                      </dd>
+                    </dl>
+                  </>
+                )}
                 <h4>{t('team.acceptance')}</h4>
                 <Markdown text={current.work.acceptance} />
                 {current.work.summary && (

@@ -22,6 +22,12 @@ const task = {
       goal: 'Implement transfer',
       scope: 'core',
       acceptance: 'Tests pass',
+      plan: {
+        benefit: 'Implement a ready independent transfer feature in parallel',
+        contextCost: 'Read only the transfer API and integrate its tests',
+        reuse: 'The existing worker owns the account feature',
+        dependencies: ['schema-work'],
+      },
       activity: 'Checking child results',
       sessionId: 'worker-session',
       usage: {
@@ -90,6 +96,19 @@ it('shows missing usage as unreported rather than zero', async () => {
   expect(container.querySelector('.agent-inspector')?.textContent).toContain(
     'Protocol needs correction',
   );
+});
+
+it('shows the coordinators reason for opening another worker and its context cost', async () => {
+  await render();
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[data-agent-id="worker"]')!.click(),
+  );
+  const inspector = container.querySelector('.agent-inspector')!;
+  expect(inspector.textContent).toContain('Delegation plan');
+  expect(inspector.textContent).toContain('ready independent transfer feature');
+  expect(inspector.textContent).toContain('Read only the transfer API');
+  expect(inspector.textContent).toContain('The existing worker owns the account feature');
+  expect(inspector.textContent).toContain('schema-work');
 });
 
 it('preserves branch collapse when returning from an agent detail', async () => {

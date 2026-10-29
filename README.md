@@ -39,6 +39,7 @@ side, and none of them touches your files until you say so.
 ## Why use it
 
 - **Correct a project folder:** before a PM task's first specification approval, open **Details → Project folder**. Stop an active discussion first. Saving preserves files and history, returns the task to Draft and uses a fresh agent session when you discuss the specification in the new folder. Existing worktrees are retained; files are not moved.
+- **Plan before delegating:** every new worker requires a recorded benefit, context/integration cost, reason to prefer a new conversation and completed prerequisite jobs. Editing workers default to private branches/worktrees with explicit path ownership, so independent features can run in parallel; shared directories require an explicit choice. Continue the same worker for sequential work. Inspect the plan in the team panel.
 - **Token spike protection:** tasks pause and notify you when reported consumption exceeds 100,000 tokens within 60 seconds, including cache reads/writes. Change the rule in Settings; resume manually to restart monitoring. [Reporting limits and configuration](docs/configuration.md#token-spike-protection).
 - **Safe by default:** every task works in its own git branch and folder, so a bad result
   costs you nothing.

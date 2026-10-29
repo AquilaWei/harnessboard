@@ -54,7 +54,7 @@ export const PM_TOOLS = [
   {
     name: 'dispatch',
     description:
-      'Start a managed worker. Delegate only when the benefit exceeds context and integration costs. For independent development set workspace=branch: fork the current committed HEAD into a private branch/worktree and run in parallel. Shared workspace is for coupled edits or special operations (build/install); shared writers queue. Commit local changes before branching. Reuse continue_work for the same job. Returns immediately.',
+      'Start a managed worker only after planning its benefit, context cost, reuse decision and completed dependencies. Editing workers DEFAULT to private branch worktrees; provide explicit writePaths and commit local changes before dispatch. Start one primary implementer for a small or coupled task and continue it across sequential steps. Additional development workers should accelerate independent ready features with defined interfaces and disjoint writePaths; do not create a series of new workers for sequential phases. Separate read-only review or specialist work needs a concrete benefit; read-only workers inspect the parent workspace by default. Explicit workspace=shared is an exception for coupled handoffs or special build/install operations; shared writers queue for file safety. Returns immediately.',
     inputSchema: fields(
       {
         agentId: string,
@@ -76,6 +76,32 @@ export const PM_TOOLS = [
             'Responsibilities, exclusions and shared interface owner; do not split tightly coupled edits.',
         },
         access: { enum: ['edit', 'readOnly'] },
+        plan: fields(
+          {
+            benefit: {
+              ...string,
+              description:
+                'Concrete benefit of a new conversation: parallel speedup for independent ready work, first implementer, independent review or needed specialization. Do not spawn just to balance counts.',
+            },
+            contextCost: {
+              ...string,
+              description:
+                'Repeated context loading and integration costs, and why the benefit exceeds them. Keep small or tightly coupled work together.',
+            },
+            reuse: {
+              ...string,
+              description:
+                'Consider existing work IDs first. Explain why continue_work is insufficient; use it instead for the same job, fixes or sequential phases in the same area.',
+            },
+            dependencies: {
+              type: 'array',
+              items: string,
+              description:
+                'Prerequisite work IDs. They must already be completed and branch deliveries integrated; do not load contexts for blocked future phases. Empty for independent work.',
+            },
+          },
+          ['benefit', 'contextCost', 'reuse', 'dependencies'],
+        ),
         writePaths: {
           type: 'array',
           items: string,
@@ -86,10 +112,10 @@ export const PM_TOOLS = [
         workspace: {
           enum: ['branch', 'shared'],
           description:
-            'Use branch for independent development; omitted preserves the shared workspace.',
+            'Defaults to branch for edit access (private worktree) and shared for readOnly access. Choose shared explicitly only when the assignment needs the parent directory.',
         },
       },
-      ['agentId', 'goal', 'acceptance', 'scope', 'access'],
+      ['agentId', 'goal', 'acceptance', 'scope', 'access', 'plan'],
     ),
   },
   {

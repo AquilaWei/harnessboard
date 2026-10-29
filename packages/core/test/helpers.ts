@@ -11,6 +11,14 @@ import { ClaudeCodeAdapter } from '../src/claude-code.js';
 
 export const FAKE_CLAUDE = fileURLToPath(new URL('./fixtures/fake-claude.mjs', import.meta.url));
 
+/** Minimal ready assignment used by lifecycle fixtures; no live model planning is mocked. */
+export const DISPATCH_PLAN = {
+  benefit: 'One bounded implementation or independent verification assignment',
+  contextCost: 'Only the greeting fixture and its acceptance criteria are needed',
+  reuse: 'No existing conversation owns this fixture assignment',
+  dependencies: [] as string[],
+};
+
 export const init = (sessionId = 'sess') => ({
   type: 'system',
   subtype: 'init',

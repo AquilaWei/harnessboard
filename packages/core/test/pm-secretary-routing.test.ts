@@ -7,7 +7,7 @@ import { Secretary, pmSecretary } from '../src/pm-secretary.js';
 import type { PmHost, PmSessionPlan } from '../src/pm.js';
 import type { SessionOutcome } from '../src/runner.js';
 import { Store } from '../src/store.js';
-import { makeRepo, tempDir } from './helpers.js';
+import { DISPATCH_PLAN, makeRepo, tempDir } from './helpers.js';
 
 const completed: SessionOutcome = {
   reason: 'completed',
@@ -108,6 +108,8 @@ it('handles a routine permission without restarting the PM until worker delivery
       if (pmRuns === 1) {
         await engine.call('appoint_secretary', { agentId: 'claude', model: 'small' });
         await engine.call('dispatch', {
+          plan: DISPATCH_PLAN,
+          workspace: 'shared',
           agentId: 'claude',
           model: 'small',
           goal: 'Check',
@@ -381,6 +383,8 @@ it('appoints a permitted secretary before dispatch even when the PM omits appoin
   host.run = vi.fn(async (_task, plan) => {
     if (plan.role === 'pm') {
       await engine.call('dispatch', {
+        plan: DISPATCH_PLAN,
+        workspace: 'shared',
         agentId: 'claude',
         model: 'small',
         goal: 'Check',
@@ -405,6 +409,8 @@ it('routes an uncertain worker question through the secretary before the PM answ
       pmRuns++;
       if (pmRuns === 1) {
         const work = (await engine.call('dispatch', {
+          plan: DISPATCH_PLAN,
+          workspace: 'shared',
           agentId: 'claude',
           model: 'small',
           goal: 'Check',
@@ -455,6 +461,8 @@ it('answers an explicit question without waking the PM and escalates its unresol
       pmRuns++;
       if (pmRuns === 1) {
         await engine.call('dispatch', {
+          plan: DISPATCH_PLAN,
+          workspace: 'shared',
           agentId: 'claude',
           model: 'small',
           goal: 'Check',
@@ -715,6 +723,8 @@ it('reviews worker permissions while the PM waits for an installation answer', a
   host.run = vi.fn(async (_task, plan) => {
     if (plan.role === 'pm') {
       await engine.call('dispatch', {
+        plan: DISPATCH_PLAN,
+        workspace: 'shared',
         agentId: 'claude',
         model: 'small',
         goal: 'Screenshot',
@@ -771,6 +781,8 @@ it('lets the PM take over an escalation without replacing an unanswered question
       pmRuns++;
       if (pmRuns === 1) {
         await engine.call('dispatch', {
+          plan: DISPATCH_PLAN,
+          workspace: 'shared',
           agentId: 'claude',
           model: 'small',
           goal: 'Check',
@@ -821,6 +833,8 @@ it('lets the PM take over a failed secretary while preserving the unanswered que
       pmRuns++;
       if (pmRuns === 1) {
         await engine.call('dispatch', {
+          plan: DISPATCH_PLAN,
+          workspace: 'shared',
           agentId: 'claude',
           model: 'small',
           goal: 'Check',

@@ -6,7 +6,7 @@ import type { PmConfig, Task } from '@harnessboard/shared';
 import { resolveThresholds } from '@harnessboard/shared';
 import { ClaudeCodeAdapter } from '../src/claude-code.js';
 import { runSession } from '../src/runner.js';
-import { FAKE_CLAUDE, init, result, writeScenario } from './helpers.js';
+import { DISPATCH_PLAN, FAKE_CLAUDE, init, result, writeScenario } from './helpers.js';
 import { git } from '../src/worktree.js';
 import { Store } from '../src/store.js';
 import { PmWorkflow, pmWork, pmQuestion, validatePm } from '../src/pm.js';
@@ -35,6 +35,8 @@ const outcome: SessionOutcome = {
   usage: null,
 };
 const input = {
+  plan: DISPATCH_PLAN,
+  workspace: 'shared',
   agentId: 'claude',
   goal: 'Implement greeting',
   acceptance: 'Greeting works',
@@ -107,6 +109,35 @@ it('allows more than two read-only workers', async () => {
     await engine.call('dispatch', { ...input, access: 'readOnly' });
   });
   expect(pmWork(store, task.id)).toHaveLength(3);
+});
+
+it('requires a concrete delegation plan before creating another conversation', async () => {
+  await pmTurn(async () => {
+    await expect(engine.call('dispatch', { ...input, plan: undefined })).rejects.toThrow(
+      /delegation plan/i,
+    );
+  });
+  expect(pmWork(store, task.id)).toHaveLength(0);
+  expect(store.listSessions(task.id).filter((s) => s.role === 'worker')).toHaveLength(0);
+});
+
+it('does not load a dependent worker context while its prerequisite is unfinished', async () => {
+  await pmTurn(async () => {
+    const first = (await engine.call('dispatch', input)) as { id: string };
+    await expect(
+      engine.call('dispatch', {
+        ...input,
+        goal: 'Dependent work',
+        plan: {
+          benefit: 'Implement the consumer after its interface is ready',
+          contextCost: 'Read only the stable API',
+          reuse: 'Different consumer specialization',
+          dependencies: [first.id],
+        },
+      }),
+    ).rejects.toThrow(/dependency.*completed/i);
+  });
+  expect(pmWork(store, task.id)).toHaveLength(1);
 });
 
 it('rejects waiting when no worker can produce an event', async () => {
@@ -664,11 +695,28 @@ it('delegates through real managed CLI processes and resumes only after the chil
 
 it('requires explicit feature ownership before starting branch development', async () => {
   await pmTurn(async () => {
-    await expect(engine.call('dispatch', { ...input, workspace: 'branch' })).rejects.toThrow(
+    await expect(engine.call('dispatch', { ...input, workspace: undefined })).rejects.toThrow(
       'writePaths',
     );
   });
   expect(pmWork(store, task.id)).toEqual([]);
+});
+
+it('records the coordinator plan with the worker for later inspection', async () => {
+  await pmTurn(async () => {
+    const work = await engine.call('dispatch', input);
+    expect(work).toMatchObject({ plan: DISPATCH_PLAN });
+    expect(pmWork(store, task.id)[0]).toMatchObject({ plan: DISPATCH_PLAN });
+  });
+});
+
+it('rejects a new context with an unknown prerequisite', async () => {
+  await pmTurn(async () => {
+    await expect(
+      engine.call('dispatch', { ...input, plan: { ...DISPATCH_PLAN, dependencies: ['missing'] } }),
+    ).rejects.toThrow('Unknown child job in this task');
+  });
+  expect(pmWork(store, task.id)).toHaveLength(0);
 });
 
 it('rejects overlapping parallel feature ownership', async () => {
@@ -699,7 +747,7 @@ it('refuses branching from uncommitted source changes', async () => {
   });
 });
 
-it('runs independent writers concurrently from the same commit in private worktrees', async () => {
+it('defaults independent writers to concurrent private worktrees from the same commit', async () => {
   const { writeFile } = await import('node:fs/promises');
   const { headCommit } = await import('../src/worktree.js');
   const base = await headCommit(task.worktreePath!);
@@ -729,14 +777,14 @@ it('runs independent writers concurrently from the same commit in private worktr
       await engine.call('dispatch', {
         ...input,
         goal: 'Feature A',
-        workspace: 'branch',
+        workspace: undefined,
         writePaths: ['a.txt'],
       });
       await startedA;
       await engine.call('dispatch', {
         ...input,
         goal: 'Feature B',
-        workspace: 'branch',
+        workspace: undefined,
         writePaths: ['b.txt'],
       });
       await startedB;
