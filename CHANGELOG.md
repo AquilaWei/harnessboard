@@ -6,6 +6,7 @@ Local test build. Full suite: 1995 passed, 14 skipped. Typecheck, lint, format a
 
 ### Fixed
 
+- 跨平台驗證改為等待實際 CLI 就緒與 Git 工作完成；Windows 的 Git fixture 建立及整合流程採用有界等待，避免固定短延遲造成誤判。
 - Session 準備期間收到新的額度上限時，在註冊停止回呼後立即重新檢查，避免漏停工作；取消流程測試明確保持子 worker 排隊，排除跨平台時序競態。
 - 秘書或 PM 核准後先儲存目前任務的精確規則，再放行 worker；跨 worker、續跑與重啟保留，可在詳細資料查看與撤銷。參數或 cwd 不同、缺少完整預覽及 adb 操作需重新審核；既有允許一次不追溯擴大授權。
 - Worker 啟動前驗證任務 repo、cwd 與 Git 身分；失效的歷史基準保留紀錄並建立新基準。未修改既有髒工作區的成功探測不再因舊變更誤判失敗。

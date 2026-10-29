@@ -4,7 +4,7 @@ import { createHistoricalTask } from './helpers.js';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import { CodexAdapter } from '../src/codex.js';
@@ -578,7 +578,7 @@ describe('a pending chat message of a stopped task', () => {
       confirmPlan: false,
       queue: true,
     });
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await vi.waitFor(() => expect(fakeRuns()).toHaveLength(1), { timeout: 10_000 });
     harness.chat(task.id, 'Why did you stop?');
     harness.stopTask(task.id);
     await runQueued();

@@ -823,14 +823,23 @@ it('integrates completed branch commits without losing independent sibling chang
       workspace: 'branch',
       writePaths: ['b.txt'],
     })) as { id: string };
-    await vi.waitFor(() =>
-      expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+    await vi.waitFor(
+      () => expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+      { timeout: 10_000 },
     );
-    await vi.waitFor(async () =>
-      expect(await engine.call('integrate_work', { id: a.id })).toMatchObject({ integrated: true }),
+    await vi.waitFor(
+      async () =>
+        expect(await engine.call('integrate_work', { id: a.id })).toMatchObject({
+          integrated: true,
+        }),
+      { timeout: 10_000 },
     );
-    await vi.waitFor(async () =>
-      expect(await engine.call('integrate_work', { id: b.id })).toMatchObject({ integrated: true }),
+    await vi.waitFor(
+      async () =>
+        expect(await engine.call('integrate_work', { id: b.id })).toMatchObject({
+          integrated: true,
+        }),
+      { timeout: 10_000 },
     );
     expect(await readFile(path.join(task.worktreePath!, 'a.txt'), 'utf8')).toBe('a.txt');
     expect(await readFile(path.join(task.worktreePath!, 'b.txt'), 'utf8')).toBe('b.txt');
@@ -847,9 +856,12 @@ it('blocks acceptance until completed branch delivery is integrated', async () =
   };
   await pmTurn(async () => {
     await engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['greeting.txt'] });
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
-    await vi.waitFor(async () =>
-      expect(engine.call('accept', {})).rejects.toThrow('Integrate completed'),
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 10_000,
+    });
+    await vi.waitFor(
+      async () => expect(engine.call('accept', {})).rejects.toThrow('Integrate completed'),
+      { timeout: 10_000 },
     );
   });
 });
@@ -864,11 +876,13 @@ it('rejects delivery that modifies files outside its assigned feature', async ()
   };
   await pmTurn(async () => {
     await engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['greeting.txt'] });
-    await vi.waitFor(() =>
-      expect(pmWork(store, task.id)[0]).toMatchObject({
-        status: 'failed',
-        summary: 'Worker changed paths outside its assigned feature: outside.txt',
-      }),
+    await vi.waitFor(
+      () =>
+        expect(pmWork(store, task.id)[0]).toMatchObject({
+          status: 'failed',
+          summary: 'Worker changed paths outside its assigned feature: outside.txt',
+        }),
+      { timeout: 10_000 },
     );
   });
 });
@@ -894,18 +908,23 @@ it('reports merge conflicts while leaving the task branch and index untouched', 
       workspace: 'branch',
       writePaths: ['greeting.txt'],
     })) as { id: string };
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 10_000,
+    });
     await engine.call('dispatch', { ...input, goal: 'Target edit' });
-    await vi.waitFor(() =>
-      expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+    await vi.waitFor(
+      () => expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+      { timeout: 10_000 },
     );
     const target = await headCommit(task.worktreePath!);
-    await vi.waitFor(async () =>
-      expect(await engine.call('integrate_work', { id: work.id })).toMatchObject({
-        integrated: false,
-        conflicts: ['greeting.txt'],
-        targetHead: target,
-      }),
+    await vi.waitFor(
+      async () =>
+        expect(await engine.call('integrate_work', { id: work.id })).toMatchObject({
+          integrated: false,
+          conflicts: ['greeting.txt'],
+          targetHead: target,
+        }),
+      { timeout: 10_000 },
     );
     expect(await headCommit(task.worktreePath!)).toBe(target);
     expect(await git(task.worktreePath!, ['status', '--porcelain'])).toBe('');
@@ -925,11 +944,15 @@ it('continues a branch job in the same model conversation and worktree', async (
       workspace: 'branch',
       writePaths: ['greeting.txt'],
     })) as { id: string };
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
-    await vi.waitFor(async () =>
-      engine.call('continue_work', { id: work.id, message: 'Verify additional acceptance case' }),
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 10_000,
+    });
+    await vi.waitFor(
+      async () =>
+        engine.call('continue_work', { id: work.id, message: 'Verify additional acceptance case' }),
+      { timeout: 10_000 },
     );
-    await vi.waitFor(() => expect(seen).toHaveLength(2));
+    await vi.waitFor(() => expect(seen).toHaveLength(2), { timeout: 10_000 });
     const dir = pmWork(store, task.id)[0]!.worktreePath;
     expect(seen).toEqual([`${dir}:new`, `${dir}:branch-thread`]);
   });
@@ -948,7 +971,9 @@ it('refuses branch children outside their parent feature ownership', async () =>
   };
   await pmTurn(async () => {
     await engine.call('dispatch', { ...input, workspace: 'branch', writePaths: ['src/'] });
-    await vi.waitFor(() => expect(refusal).toContain('within parent ownership'));
+    await vi.waitFor(() => expect(refusal).toContain('within parent ownership'), {
+      timeout: 10_000,
+    });
   });
   expect(pmWork(store, task.id)).toHaveLength(1);
 });
@@ -1002,18 +1027,30 @@ it('allows a continued branch to inherit integrated sibling files without claimi
       workspace: 'branch',
       writePaths: ['greeting.txt'],
     })) as { id: string };
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
-    await vi.waitFor(async () => engine.call('integrate_work', { id: work.id }));
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 10_000,
+    });
+    await vi.waitFor(async () => engine.call('integrate_work', { id: work.id }), {
+      timeout: 10_000,
+    });
     await engine.call('dispatch', { ...input, goal: 'Target edit' });
-    await vi.waitFor(() => expect(pmWork(store, task.id)[1]?.status).toBe('completed'));
-    await vi.waitFor(async () =>
-      engine.call('continue_work', {
-        id: work.id,
-        message: 'Capitalize the greeting and merge latest target first.',
-      }),
+    await vi.waitFor(() => expect(pmWork(store, task.id)[1]?.status).toBe('completed'), {
+      timeout: 10_000,
+    });
+    await vi.waitFor(
+      async () =>
+        engine.call('continue_work', {
+          id: work.id,
+          message: 'Capitalize the greeting and merge latest target first.',
+        }),
+      { timeout: 10_000 },
     );
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
-    await vi.waitFor(async () => engine.call('integrate_work', { id: work.id }));
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 10_000,
+    });
+    await vi.waitFor(async () => engine.call('integrate_work', { id: work.id }), {
+      timeout: 10_000,
+    });
     expect(await readFile(path.join(task.worktreePath!, 'target.txt'), 'utf8')).toBe('sibling');
     expect(await readFile(path.join(task.worktreePath!, 'greeting.txt'), 'utf8')).toBe('Hello');
   });
