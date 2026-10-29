@@ -59,6 +59,7 @@ const SENSITIVE_ROUTES: { method: string | null; path: RegExp }[] = [
   { method: 'POST', path: /^\/api\/tasks\/[^/]+\/complete$/ },
   { method: 'DELETE', path: /^\/api\/tasks\/[^/]+$/ },
   { method: 'PUT', path: /^\/api\/tasks\/[^/]+\/agents$/ },
+  { method: 'PUT', path: /^\/api\/tasks\/[^/]+\/repository$/ },
   { method: 'POST', path: /^\/api\/tasks\/[^/]+\/queue$/ },
   // Settings-level routes (M1 step 5).
   { method: 'PUT', path: /^\/api\/settings$/ },

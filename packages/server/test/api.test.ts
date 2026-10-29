@@ -881,6 +881,40 @@ describe('task context updates', () => {
 });
 
 describe('PM workflow API', () => {
+  it('changes an idle draft folder through the repository endpoint and returns its eligibility', async () => {
+    const task = await harness.createTask({ prompt: 'Add greeting', repo });
+    harness.stopTask(task.id);
+    const target = mkdtempSync(path.join(tmpdir(), 'hb-new-project-'));
+    const response = await app.request(`/api/tasks/${task.id}/repository`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ repo: target }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      repoPath: target,
+      workspace: 'base',
+      status: 'backlog',
+    });
+    const detail = await app.request(`/api/tasks/${task.id}`, { headers: local });
+    expect(await detail.json()).toMatchObject({
+      operations: { repository: { enabled: true, visible: true } },
+    });
+  });
+
+  it('rejects repository changes while a discussion is queued', async () => {
+    const task = await harness.createTask({ prompt: 'Add greeting', repo });
+    const response = await app.request(`/api/tasks/${task.id}/repository`, {
+      method: 'PUT',
+      headers: { ...local, 'content-type': 'application/json', [CLIENT_HEADER]: 'test' },
+      body: JSON.stringify({ repo }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'Stop the task before changing its project folder',
+    });
+  });
+
   it('defaults HTTP task creation to a PM with an explicit worker pool', async () => {
     const response = await app.request('/api/tasks', {
       method: 'POST',

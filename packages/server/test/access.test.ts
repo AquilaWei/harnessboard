@@ -381,6 +381,14 @@ describe('last active time of a device', () => {
 });
 
 describe('sensitive routes from a paired remote device', () => {
+  it('requires recent passkey verification before changing the project folder', async () => {
+    clock = 5 * MINUTE + 1;
+    const res = await write('PUT', '/api/tasks/1/repository', paired, { repo: '/tmp/project' });
+    expect([res.status, await res.json()]).toEqual([
+      401,
+      { error: 'confirm with your passkey first', reauth: true },
+    ]);
+  });
   it('lets POST /tasks through within 5 minutes of a passkey check', async () => {
     clock = 5 * MINUTE;
     const res = await write('POST', '/api/tasks', paired, {});

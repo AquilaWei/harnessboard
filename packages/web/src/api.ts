@@ -199,6 +199,8 @@ function send<T>(method: string, path: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
+  setRepository: (id: number, repo: string) =>
+    send<unknown>('PUT', `/tasks/${id}/repository`, { repo }),
   setPm: (id: number, pm: import('@harnessboard/shared').PmConfig) =>
     send<TaskView>('PUT', `/tasks/${id}/pm`, pm),
   convertToPm: (id: number, pm: import('@harnessboard/shared').PmConfig) =>

@@ -279,6 +279,11 @@ export function createApi(
     return c.json(harness.answerPermission(taskId(c), decision));
   });
 
+  app.put('/tasks/:id/repository', async (c) => {
+    const body = await c.req.json<{ repo: string }>();
+    return c.json(await harness.setRepository(taskId(c), body?.repo));
+  });
+
   app.put('/tasks/:id/context', async (c) => {
     const body = await c.req.json<Parameters<Harness['setContextPolicy']>[1]>();
     return c.json(harness.setContextPolicy(taskId(c), body));

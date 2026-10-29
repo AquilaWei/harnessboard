@@ -992,6 +992,56 @@ export class Harness {
     return this.setStatus(id, 'stopped');
   }
 
+  /** Changes an initial PM discussion's folder without moving or deleting project files. */
+  async setRepository(id: number, repo: string): Promise<Task> {
+    const check = () => {
+      const operation = this.taskOperations(id).repository!;
+      if (!operation.enabled) throw new Error(operation.reason!);
+    };
+    check();
+    if (typeof repo !== 'string' || !repo.trim()) throw new Error('Select a project folder');
+    const task = this.requireTask(id);
+    const repoPath = await resolveRepository(repo, true);
+    if (repoPath === task.repoPath) return this.requireTask(id);
+    const folder = await inspectFolder(repoPath);
+    const baseRef = folder.hasCommits
+      ? await currentRef(repoPath)
+      : folder.repoRoot
+        ? (await git(repoPath, ['symbolic-ref', '--short', 'HEAD'])).trim()
+        : 'main';
+    // Folder checks yield to scheduling and approvals; recheck before changing any state.
+    check();
+    if (this.requireTask(id).repoPath !== task.repoPath)
+      throw new Error('Project folder changed while validating; reload and try again');
+    const next = this.store.updateTask(id, {
+      repoPath,
+      baseRef,
+      workspace: folder.hasCommits ? task.workspace : 'base',
+      worktreePath: null,
+      branch: null,
+      startCommit: null,
+      endCommit: null,
+      priorSpans: [],
+      status: 'backlog',
+      deferred: true,
+      confirmPlan: true,
+      resumeAt: null,
+    });
+    this.store.appendEvent(id, null, 'repository_changed', {
+      from: task.repoPath,
+      to: repoPath,
+      previousWorktree: task.worktreePath,
+      previousBranch: task.branch,
+      sessionIds: this.store.listSessions(id).map((session) => session.id),
+    });
+    this.store.appendEvent(id, null, 'pm_answered', { repositoryChanged: true });
+    this.store.appendEvent(id, null, 'pm_user', {
+      text: `The project folder changed from ${task.repoPath} to ${repoPath}. Use the new task workspace for all inspection and delegation. Previous files and worktrees are preserved, not moved. Recheck the draft specification against the new project and propose it again for explicit approval. Previous draft criteria: ${task.acceptance ?? '(none)'}`,
+    });
+    this.emit({ type: 'task', taskId: id, status: next.status });
+    return next;
+  }
+
   /** Updates the PM and allowed worker models only while all sessions are stopped. */
   setPm(id: number, pm: PmConfig): Task {
     const task = this.requireTask(id);
@@ -1711,7 +1761,22 @@ export class Harness {
       (!(COMPLETABLE.includes(task.status) || (pm && task.status === 'awaiting_approval'))
         ? `task ${id} is ${task.status}; only a task in review, failed or stopped can be marked done`
         : null);
+    const repositoryReason =
+      !pm || approved || this.store.lastEvent(id, 'pm_work')
+        ? 'Project folder can only change before the first specification approval'
+        : this.running.has(id) ||
+            this.merging.has(id) ||
+            !['backlog', 'stopped', 'failed', 'awaiting_approval', 'paused_safety'].includes(
+              task.status,
+            )
+          ? 'Stop the task before changing its project folder'
+          : null;
     return {
+      repository: {
+        visible: pm,
+        enabled: !repositoryReason,
+        reason: repositoryReason,
+      },
       merge: {
         visible:
           task.workspace !== 'base' &&
@@ -2103,8 +2168,11 @@ export class Harness {
     if (task.workflow === 'pm') await this.preparePmRepository(task);
     if (task.workspace === 'base') return this.startOnBase(task);
     if (task.worktreePath) return task;
-    const branch = branchName(task.id, task.title);
-    const dir = worktreePath(this.config.dataDir, task.repoPath, task.id);
+    // Retain old discussion worktrees, including when the user switches back to a folder.
+    const relocation = this.store.lastEvent(task.id, 'repository_changed');
+    const suffix = relocation ? `-r${relocation.id}` : '';
+    const branch = branchName(task.id, task.title) + suffix;
+    const dir = worktreePath(this.config.dataDir, task.repoPath, task.id) + suffix;
     await addWorktree(task.repoPath, dir, branch, task.baseRef);
     return this.store.updateTask(task.id, { branch, worktreePath: dir });
   }

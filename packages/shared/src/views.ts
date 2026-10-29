@@ -337,6 +337,7 @@ export type AgentsUpdate = Partial<
 
 /** Core eligibility shared by presentation and execution; git is rechecked on merge. */
 export interface TaskOperations {
+  repository?: TaskOperation;
   merge: TaskOperation;
   complete: TaskOperation;
 }

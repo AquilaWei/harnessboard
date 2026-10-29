@@ -44,6 +44,8 @@ export class ApiClient {
   rejectSpecChange = (id: number) => this.post<Task>(`/tasks/${id}/spec-change/reject`);
   listTasks = () => this.get<TaskView[]>('/tasks');
   getTask = (id: number) => this.get<TaskDetail>(`/tasks/${id}`);
+  setRepository = (id: number, repo: string) =>
+    this.send<Task>('PUT', `/tasks/${id}/repository`, { repo });
   setPm = (id: number, pm: import('@harnessboard/shared').PmConfig) =>
     this.send<Task>('PUT', `/tasks/${id}/pm`, pm);
   convertToPm = (id: number, pm: import('@harnessboard/shared').PmConfig) =>

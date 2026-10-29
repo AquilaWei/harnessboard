@@ -1185,9 +1185,19 @@ export class PmWorkflow {
       this.host.status(this.task.id, 'waiting_quota');
       return;
     }
+    const relocation = store.lastEvent(this.task.id, 'repository_changed');
+    const oldSessions = new Set(
+      (relocation?.data as { sessionIds?: string[] } | undefined)?.sessionIds ?? [],
+    );
     const previous = store
       .listSessions(this.task.id)
-      .findLast((s) => s.role === 'pm' && s.agentId === pm.agentId && s.agentSessionId !== null);
+      .findLast(
+        (s) =>
+          s.role === 'pm' &&
+          s.agentId === pm.agentId &&
+          s.agentSessionId !== null &&
+          !oldSessions.has(s.id),
+      );
     const resume = previous ?? null;
     this.pmSessionId = resume?.id ?? randomUUID();
     if (!resume) store.startSession(this.pmSessionId, this.task.id, 'pm', pm.agentId, null);

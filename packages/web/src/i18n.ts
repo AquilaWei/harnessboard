@@ -3,6 +3,13 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 export const en = {
+  repository: {
+    title: 'Project folder',
+    hint: 'Correct the folder before approving the specification. Saving returns the task to Draft; discuss the specification again in the new folder. Existing files and discussion history are preserved.',
+    save: 'Save project folder',
+    stopFirst: 'Stop the task before changing its project folder.',
+    beforeApproval: 'The project folder can only change before the first specification approval.',
+  },
   summary: {
     running: '{{count}} running',
     attention_one: '{{count}} needs you',
@@ -737,6 +744,13 @@ export const en = {
 };
 
 export const zhTW: typeof en = {
+  repository: {
+    title: '專案路徑',
+    hint: '規格核准前可更正路徑。儲存後回到草稿，請在新目錄重新討論規格。原有檔案與討論紀錄都會保留。',
+    save: '儲存專案路徑',
+    stopFirst: '請先停止任務，再修改專案路徑。',
+    beforeApproval: '專案路徑僅能在首次核准規格前修改。',
+  },
   summary: {
     running: '{{count}} 個執行中',
     attention_one: '{{count}} 個需要你處理',

@@ -204,6 +204,9 @@ export class Store {
     fields: Partial<
       Pick<
         Task,
+        | 'repoPath'
+        | 'baseRef'
+        | 'workspace'
         | 'mode'
         | 'workflow'
         | 'pm'
@@ -227,6 +230,9 @@ export class Store {
     now = Date.now(),
   ): Task {
     const columns: Record<string, string> = {
+      repoPath: 'repo_path',
+      baseRef: 'base_ref',
+      workspace: 'workspace',
       mode: 'mode',
       workflow: 'workflow',
       pm: 'pm',
