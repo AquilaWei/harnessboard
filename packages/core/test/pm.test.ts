@@ -468,7 +468,7 @@ it('does not allow a read-only worker to delegate write access or PM decisions',
 });
 
 it('cancels a worker subtree including queued writers', async () => {
-  host.run = async (_task, plan, id) => {
+  host.run = async (_task, plan, id, signal) => {
     if (plan.role === 'secretary') {
       await workerTool(plan, 'escalate_pm', { message: 'Worker needs direct PM review.' });
       return outcome;
@@ -487,7 +487,8 @@ it('cancels a worker subtree including queued writers', async () => {
       await workerTool(plan, 'report_progress', { message: 'Child queued' });
       const work = pmWork(store, task.id).find((w) => w.sessionId === id)!;
       expect(work.parentWorkId).toBeNull();
-      await workerTool(plan, 'wait');
+      // Keep the parent writer active so its child stays queued until cancellation.
+      await vi.waitFor(() => expect(signal.aborted).toBe(true), { timeout: 5000 });
     }
     return outcome;
   };

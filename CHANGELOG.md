@@ -2,10 +2,11 @@
 
 ## 0.2.17 - 2026-10-29
 
-Local test build. Full suite: 1994 passed, 14 skipped. Typecheck, lint, format and build pass. Native Codex sandbox verification confirms scratch writes succeed and source writes are denied. No PATCH tag or Release.
+Local test build. Full suite: 1995 passed, 14 skipped. Typecheck, lint, format and build pass. Native Codex sandbox verification confirms scratch writes succeed and source writes are denied. No PATCH tag or Release.
 
 ### Fixed
 
+- Session 準備期間收到新的額度上限時，在註冊停止回呼後立即重新檢查，避免漏停工作；取消流程測試明確保持子 worker 排隊，排除跨平台時序競態。
 - 秘書或 PM 核准後先儲存目前任務的精確規則，再放行 worker；跨 worker、續跑與重啟保留，可在詳細資料查看與撤銷。參數或 cwd 不同、缺少完整預覽及 adb 操作需重新審核；既有允許一次不追溯擴大授權。
 - Worker 啟動前驗證任務 repo、cwd 與 Git 身分；失效的歷史基準保留紀錄並建立新基準。未修改既有髒工作區的成功探測不再因舊變更誤判失敗。
 - Codex 唯讀審查從獨立 scratch 啟動，可寫測試與建置輸出而原始 repo 保持唯讀。續跑重新套用 MCP endpoint；橋接錯誤顯示 HTTP 狀態及底層連線原因。

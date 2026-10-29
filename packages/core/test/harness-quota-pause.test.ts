@@ -82,6 +82,17 @@ async function runningCodexTask(usedPercent: number) {
 /** The next tick is due to read Codex's usage again. */
 const tickAfterAMinute = () => harness.tick(Date.now() + 61_000);
 
+it('pauses when quota changes while a recorded session is still being prepared', async () => {
+  const run = harness['runOne'].bind(harness);
+  harness['runOne'] = async (...args) => {
+    codexUsage(95);
+    await harness['readQuotas'](Date.now());
+    return run(...args);
+  };
+  const task = await runningCodexTask(50);
+  await vi.waitFor(() => expect(harness.store.getTask(task.id)!.status).toBe('waiting_quota'));
+});
+
 describe('a running Codex session whose usage reaches the pause level', () => {
   it('pauses the task for quota', async () => {
     const task = await runningCodexTask(50);

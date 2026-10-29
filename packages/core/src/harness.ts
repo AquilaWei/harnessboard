@@ -2037,7 +2037,7 @@ export class Harness {
       if (!quota) return null;
       this.quotas.set(provider, quota);
       this.emit({ type: 'quota', provider, quota });
-      this.pauseOverQuota(provider, Date.now());
+      this.pauseOverQuota(provider, Math.max(Date.now(), this.quotaReadAt));
       return quota;
     } catch {
       return null; // its records could not be read this time; the last reading stays
@@ -2296,7 +2296,7 @@ export class Harness {
     // A resumed conversation keeps its own window: the agent's last known one may belong
     // to another model (e.g. a reviewer with a larger window).
     const window = plan.resume?.contextWindow ?? this.workflow.contextWindow(plan.agentId);
-    const provider = adapter.provider;
+    const provider = this.config.agents[plan.agentId]!.provider;
     // A resumed turn may report no usage (e.g. `/compact`), so start from what is known.
     let tokens = plan.resume?.contextTokens ?? 0;
     const started = Date.now();
@@ -2326,6 +2326,8 @@ export class Harness {
           else this.running.get(task.id)?.abort();
         },
       });
+      // Quota may have changed while this session was being prepared, before registration.
+      this.pauseOverQuota(provider, Math.max(Date.now(), this.quotaReadAt));
     }
     let latestUsage = previous?.usage ?? null;
     const monitor = (event: AgentEvent) => {
