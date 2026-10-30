@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.18 - 2026-10-30
+
+Local test build. Full suite: 2006 passed, 14 skipped. Lint, typecheck, format and build pass; isolated API smoke returns version 0.2.18 and HTTP 200. No PATCH tag or Release. Full collaboration-plan implementation, live desktop acceptance and task 33 replay remain incomplete.
+
+### Added
+
+- 成本優先派工設定：全層級最多三名執行 worker，預估平行額外 token 預設上限 20%，可建議續用既有工作而不建立新對話。
+- Profiles 顯示可用名額與任務內最近 20 項有效用量樣本；不足五項標示資料不足，續跑累積用量只計差額，失敗與重試保留消耗。
+- PM 可在獨占的來源工作分支執行衝突修復、測試與提交，驗證通過後重試父分支整合；失敗保留工作與 Git merge 狀態。
+- 團隊面板分開顯示派工預估 token 與實測用量，並顯示 PM 整合事件狀態；純進度回報不喚醒協調模型。
+
+### Fixed
+
+- 同時派工時序列保留分支所有權；執行名額在非同步 repo 檢查前保留，排隊不啟動模型，父工作等待子工作時釋放名額。
+
 ## 0.2.17 - 2026-10-29
 
 Local test build. Full suite: 1997 passed, 14 skipped. Typecheck, lint, format and build pass. Native Codex sandbox verification confirms scratch writes succeed and source writes are denied. No PATCH tag or Release.
