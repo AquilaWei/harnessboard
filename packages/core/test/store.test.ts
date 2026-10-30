@@ -21,6 +21,50 @@ const newTask = {
 };
 
 describe('Store', () => {
+  it('adds event lookup indexes to an existing database without changing its history', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    const initial = new Store(file);
+    const task = initial.createTask(newTask);
+    initial.appendEvent(task.id, null, 'notice', { message: 'preserved' }, 123);
+    initial.close();
+    const db = new DatabaseSync(file);
+    const version = db.prepare('PRAGMA user_version').get()!.user_version as number;
+    db.exec(`DROP INDEX events_session_kind; DROP INDEX events_task_kind;
+      PRAGMA user_version = ${version - 1};`);
+    db.close();
+    const upgraded = new Store(file);
+    try {
+      expect(upgraded.listEvents(task.id)).toEqual([
+        {
+          id: 1,
+          taskId: task.id,
+          sessionId: null,
+          kind: 'notice',
+          data: { message: 'preserved' },
+          ts: 123,
+        },
+      ]);
+    } finally {
+      upgraded.close();
+    }
+  });
+
+  it('uses an index when looking up the latest event in a session', () => {
+    const file = path.join(tempDir('db'), 'harness.db');
+    new Store(file).close();
+    const db = new DatabaseSync(file);
+    try {
+      const plan = db
+        .prepare(
+          'EXPLAIN QUERY PLAN SELECT * FROM events WHERE session_id = ? AND kind = ? ORDER BY id DESC LIMIT 1',
+        )
+        .all('session', 'result');
+      expect(plan.map((row) => row.detail).join(' ')).toContain('USING INDEX events_session_kind');
+    } finally {
+      db.close();
+    }
+  });
+
   it('does not reuse the id of a deleted task', () => {
     const store = new Store(':memory:');
     const first = store.createTask(newTask);
@@ -88,9 +132,10 @@ describe('Store', () => {
      CREATE TABLE sessions (id TEXT PRIMARY KEY, task_id INTEGER NOT NULL, started_at INTEGER NOT NULL,
        ended_at INTEGER, end_reason TEXT, context_tokens INTEGER NOT NULL DEFAULT 0,
        context_window INTEGER);
+     CREATE TABLE events (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, session_id TEXT, ts INTEGER NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL);
      INSERT INTO tasks VALUES (1, 't', 'p', '/r', 'main', NULL, NULL, 'done', '{}',
        '{"allowedTools":[],"skipPermissions":false}', NULL, 0, 0);
-     PRAGMA user_version = 1;`);
+     DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 1;`);
     old.close();
     expect(new Store(file).getTask(1)!.mode).toBe('single');
   });
@@ -116,10 +161,11 @@ describe('Store', () => {
      CREATE TABLE sessions (id TEXT PRIMARY KEY, task_id INTEGER NOT NULL, started_at INTEGER NOT NULL,
        ended_at INTEGER, end_reason TEXT, context_tokens INTEGER NOT NULL DEFAULT 0,
        context_window INTEGER);
+     CREATE TABLE events (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, session_id TEXT, ts INTEGER NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL);
      INSERT INTO tasks VALUES (1, 't', 'p', '/r', 'main', NULL, NULL, 'done', '{}',
        '{"allowedTools":[],"skipPermissions":false}', NULL, 0, 0, 'single', NULL);
      INSERT INTO sessions VALUES ('s1', 1, 0, 1, 'completed', 10, NULL);
-     PRAGMA user_version = 2;`);
+     DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 2;`);
     old.close();
     const [session] = new Store(file).listSessions(1);
     expect([session!.role, session!.agentId, session!.agentSessionId]).toEqual([
@@ -140,7 +186,7 @@ describe('Store', () => {
       `DROP TABLE devices; DROP TABLE counters; ALTER TABLE tasks DROP COLUMN acceptance;
        ALTER TABLE tasks DROP COLUMN confirm_plan; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
        ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order;
-       PRAGMA user_version = 3;`,
+       DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 3;`,
     );
     db.close();
     const upgraded = new Store(file).getTask(id)!;
@@ -164,7 +210,7 @@ describe('Store', () => {
     db.exec(
       `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN acceptance;
        ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 5;`,
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 5;`,
     );
     db.close();
     expect(new Store(file).getTask(id)!.acceptance).toBeNull();
@@ -179,7 +225,7 @@ describe('Store', () => {
     db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 9;`,
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 9;`,
     );
     db.close();
     const task = new Store(file).getTask(id)!;
@@ -217,7 +263,7 @@ describe('Store', () => {
     db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order;
-       PRAGMA user_version = 10;`,
+       DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 10;`,
     );
     db.close();
     const task = new Store(file).getTask(id)!;
@@ -389,7 +435,7 @@ describe('Store devices', () => {
        ALTER TABLE devices DROP COLUMN sign_count; ALTER TABLE devices DROP COLUMN verified_at;
        ALTER TABLE devices DROP COLUMN last_active_at; ALTER TABLE devices DROP COLUMN push_subscription;
        ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 7;`,
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 7;`,
     );
     db.close();
     expect(new Store(file).findDeviceByToken('token-one')).toEqual({
@@ -459,7 +505,7 @@ describe('Store devices', () => {
     db.exec(
       `ALTER TABLE devices DROP COLUMN push_subscription; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
        ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order;
-       PRAGMA user_version = 8;`,
+       DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 8;`,
     );
     db.close();
     const store = new Store(file);
@@ -475,7 +521,7 @@ describe('Store devices', () => {
     db.exec('ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm;');
     db.exec(
       `DROP TABLE devices; ALTER TABLE tasks DROP COLUMN workspace; ALTER TABLE tasks DROP COLUMN start_commit;
-       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; PRAGMA user_version = 6;`,
+       ALTER TABLE tasks DROP COLUMN end_commit; ALTER TABLE tasks DROP COLUMN prior_spans; ALTER TABLE tasks DROP COLUMN deferred; ALTER TABLE tasks DROP COLUMN queue_order; DROP INDEX IF EXISTS events_session_kind; DROP INDEX IF EXISTS events_task_kind; PRAGMA user_version = 6;`,
     );
     db.close();
     const store = new Store(file);

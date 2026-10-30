@@ -243,7 +243,7 @@ it('upgrades a pre-PM database with all tasks remaining legacy', () => {
   initial.close();
   const db = new DatabaseSync(file);
   db.exec(
-    'ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm; PRAGMA user_version = 13;',
+    'ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm; DROP INDEX events_session_kind; DROP INDEX events_task_kind; PRAGMA user_version = 13;',
   );
   db.close();
   const upgraded = new Store(file);

@@ -110,6 +110,9 @@ const MIGRATIONS = [
   `ALTER TABLE tasks ADD COLUMN queue_order REAL;`,
   `ALTER TABLE tasks ADD COLUMN workflow TEXT NOT NULL DEFAULT 'legacy';
    ALTER TABLE tasks ADD COLUMN pm TEXT;`,
+  // Task views query each session's latest result/activity; avoid a full log scan per session.
+  `CREATE INDEX events_session_kind ON events(session_id, kind, id);
+   CREATE INDEX events_task_kind ON events(task_id, kind, id);`,
 ];
 
 /** A device's Web Push subscription, with the device it reaches. */
