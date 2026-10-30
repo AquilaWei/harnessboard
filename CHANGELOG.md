@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.19 - 2026-10-30
+
+Local test build. Full suite: 2014 passed, 14 skipped. Lint, typecheck and build pass. No PATCH tag or Release.
+
+### Fixed
+
+- 任務詳情使用完整畫面；長標題可收合展開，手機按鈕加大觸控範圍。
+- 詳細資料精簡為各模型的 token 用量與費用估算，agent 設定預設收起，不再展示允許工具清單。
+- 為事件查詢新增索引，改善歷史紀錄較多的任務開啟速度，保留既有資料。
+
 ## 0.2.18 - 2026-10-30
 
 Local test build. Full suite: 2006 passed, 14 skipped. Lint, typecheck, format and build pass; isolated API smoke returns version 0.2.18 and HTTP 200. No PATCH tag or Release. Full collaboration-plan implementation, live desktop acceptance and task 33 replay remain incomplete.
