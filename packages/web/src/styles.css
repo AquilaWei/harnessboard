@@ -768,7 +768,7 @@ summary:focus-visible {
   z-index: 11;
   display: flex;
   flex-direction: column;
-  width: min(820px, 100vw);
+  width: 100%;
   background: var(--surface);
   box-shadow: var(--shadow-lg);
 }
@@ -788,6 +788,30 @@ summary:focus-visible {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
+}
+
+.task-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-heading summary {
+  cursor: pointer;
+}
+
+.task-heading summary h2 {
+  display: inline;
+}
+
+.task-heading:not([open]) h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.drawer-title > .btn {
+  flex-shrink: 0;
 }
 
 .drawer-title h2 {
@@ -865,6 +889,9 @@ summary:focus-visible {
 }
 
 .drawer-body {
+  min-height: 0;
+  min-width: 0;
+  overscroll-behavior: contain;
   flex: 1;
   overflow: auto;
   padding: 16px 20px 32px;
@@ -1855,9 +1882,6 @@ th {
 }
 
 /* Agent team: one DOM preserves selection and branch state across device sizes. */
-.drawer-team {
-  width: min(1240px, 100vw);
-}
 .agent-team {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(280px, 1fr);
@@ -2159,4 +2183,72 @@ th {
     animation: none;
     transition: none;
   }
+}
+
+/* Keep title expansion and controls usable when the phone is held horizontally too. */
+@media (max-width: 900px) {
+  .drawer-head {
+    max-height: 45%;
+    flex-shrink: 0;
+    gap: 8px;
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+
+  .drawer-title h2 {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  .drawer .btn,
+  .drawer .tab {
+    min-height: 44px;
+  }
+
+  .drawer-title > .btn {
+    min-width: 44px;
+  }
+
+  .drawer .actions > .btn {
+    flex: 1 1 auto;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .drawer-body {
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+
+  .card-open,
+  .card-meta {
+    min-width: 0;
+  }
+
+  .card-foot {
+    flex-wrap: wrap;
+  }
+
+  .card-foot > .btn {
+    min-height: 44px;
+    margin-left: auto;
+  }
+}
+
+.model-usage {
+  width: 100%;
+  table-layout: fixed;
+}
+.model-usage th:first-child {
+  width: 50%;
+}
+.model-usage td {
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+.agent-settings {
+  margin-bottom: 16px;
+}
+.agent-settings > summary {
+  padding-block: 10px;
+  cursor: pointer;
+  color: var(--ink-muted);
 }

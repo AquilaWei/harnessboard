@@ -160,15 +160,14 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
   return (
     <>
       <div className="scrim" onClick={onClose} />
-      <aside
-        className={`drawer ${tab === 'team' ? 'drawer-team' : ''}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={task?.title ?? ''}
-      >
+      <aside className="drawer" role="dialog" aria-modal="true" aria-label={task?.title ?? ''}>
         <div className="drawer-head">
           <div className="drawer-title">
-            <h2>{task?.title}</h2>
+            <details className="task-heading" key={task?.id}>
+              <summary>
+                <h2>{task?.title}</h2>
+              </summary>
+            </details>
             <button
               type="button"
               className="btn icon"

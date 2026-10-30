@@ -6,8 +6,7 @@ import { TaskContextEditor } from './TaskContextEditor';
 import { TaskRepositoryEditor } from './TaskRepositoryEditor';
 import { ContextMeter } from './Meter';
 import { TaskAgentsEditor } from './TaskAgentsEditor';
-import { ToolRules } from './ToolRules';
-import { UsageSummary } from './UsageSummary';
+import { ModelUsage } from './UsageSummary';
 
 interface Props {
   task: TaskDetail;
@@ -20,25 +19,21 @@ export function Details({ task, onSaved, onError }: Props) {
   const { t } = useTranslation();
   return (
     <>
-      {task.sessionCount > 0 && (
-        <UsageSummary usage={task.usage} compact={task.workflow === 'pm'} />
-      )}
-      {task.workflow === 'pm' && (
-        <section className="detail-section">
-          <h3>{t('fields.agents')}</h3>
-          <PmDetails task={task} onSaved={onSaved} onError={onError} />
-        </section>
-      )}
+      <ModelUsage usage={task.usage} />
+      <details className="agent-settings">
+        <summary>
+          {t('rules.edit')} · {t('fields.agents')}
+        </summary>
+        <PmDetails task={task} onSaved={onSaved} onError={onError} showUsage={false} />
+        {task.workflow !== 'pm' && (
+          <TaskAgentsEditor task={task} onSaved={onSaved} onError={onError} />
+        )}
+      </details>
       <dl className="facts">
         {task.workflow !== 'pm' && (
           <>
             <dt>{t('fields.mode')}</dt>
             <dd>{t(`form.modes.${task.mode}`)}</dd>
-            <dt>{t('fields.agents')}</dt>
-            <dd>
-              <PmDetails task={task} onSaved={onSaved} onError={onError} />
-              <TaskAgentsEditor task={task} onSaved={onSaved} onError={onError} />
-            </dd>
           </>
         )}
         {task.verifyCommand && (
@@ -57,10 +52,6 @@ export function Details({ task, onSaved, onError }: Props) {
         <dd className="mono">{task.branch ?? '-'}</dd>
         <dt>{t('fields.worktree')}</dt>
         <dd className="mono">{task.worktreePath ?? '-'}</dd>
-        <dt>{t('fields.tools')}</dt>
-        <dd>
-          <ToolRules task={task} onSaved={onSaved} onError={onError} />
-        </dd>
         <dt>{t('fields.skip')}</dt>
         <dd>{task.permission.skipPermissions ? `⚠ ${t('fields.skipOff')}` : t('fields.skipOn')}</dd>
       </dl>

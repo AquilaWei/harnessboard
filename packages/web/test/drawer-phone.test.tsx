@@ -236,3 +236,25 @@ it('keeps PM operations visible while waiting for an ordinary answer', async () 
   expect(html).toContain('Wait for PM');
   expect(html).not.toContain('Approve criteria');
 });
+
+describe.skipIf(!browser)('task detail layout', () => {
+  it.each([390, 844, 1440])('uses the full viewport at %ipx', async (width) => {
+    const page = await phone(await drawerHtml(task({})), width, 844);
+    const bounds = await page.locator('.drawer').boundingBox();
+    expect(bounds?.x).toBe(0);
+    expect(bounds?.width).toBe(width);
+    await page.close();
+  });
+
+  it('limits a long phone title and lets the reader expand it', async () => {
+    const title = '重新設計任務畫面以及非常長的標題與操作流程'.repeat(20);
+    const page = await phone(await drawerHtml(task({ title })), 320, 667);
+    const heading = page.locator('.drawer-title h2');
+    expect((await heading.boundingBox())!.height).toBeLessThan(80);
+    await page.locator('.drawer-title summary').click();
+    expect((await heading.boundingBox())!.height).toBeGreaterThan(80);
+    expect(await heading.textContent()).toBe(title);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+    await page.close();
+  });
+});

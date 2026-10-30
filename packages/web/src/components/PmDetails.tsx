@@ -11,8 +11,10 @@ export function PmDetails({
   task,
   onSaved,
   onError,
+  showUsage = true,
 }: {
   task: TaskView;
+  showUsage?: boolean;
   onSaved: () => void;
   onError: (message: string) => void;
 }) {
@@ -45,7 +47,7 @@ export function PmDetails({
   };
   return (
     <section>
-      {task.workflow === 'pm' && <PmAgentUsage task={task} />}
+      {showUsage && task.workflow === 'pm' && <PmAgentUsage task={task} />}
       {task.workflow === 'pm' && task.status !== 'review' && task.pmAcceptance && (
         <details>
           <summary>{t('pm.accepted')}</summary>

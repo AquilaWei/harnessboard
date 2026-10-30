@@ -98,3 +98,40 @@ export function UsageSummary({ usage, compact = false }: { usage: TaskUsage; com
     </section>
   );
 }
+
+/** A single task-wide row per reported model, including coordination and worker usage. */
+export function ModelUsage({ usage }: { usage: TaskUsage }) {
+  const { t } = useTranslation();
+  const models = Object.entries(usage.byModel);
+  return (
+    <section className="detail-section">
+      <h3>{t('fields.agents')}</h3>
+      {models.length === 0 ? (
+        <p className="hint">{t('usage.notRecorded')}</p>
+      ) : (
+        <table className="usage-models model-usage">
+          <thead>
+            <tr>
+              <th>{t('usage.model')}</th>
+              <th>{t('usage.tokens')}</th>
+              <th>{t('usage.cost')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {models.map(([model, counts]) => (
+              <tr key={model}>
+                <td className="mono">{model}</td>
+                <td>{formatTokens(total(counts))}</td>
+                <td>
+                  {counts.costUsd == null
+                    ? t('usage.notRecorded')
+                    : `~${formatCost(counts.costUsd)}`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
