@@ -177,27 +177,31 @@ it('does not start a model when there is no routine work', async () => {
   expect(host.run).not.toHaveBeenCalled();
 });
 
-it('coalesces progress into one fresh conversation and never replays handled events', async () => {
+it('does not start a secretary model for pure worker progress', async () => {
   const assistant = secretary();
   store.appendEvent(task.id, 'worker-session', 'pm_progress', { message: 'Compiled' });
   store.appendEvent(task.id, 'worker-session', 'pm_progress', { message: 'Tests running' });
-  host.run = vi.fn(async (_task, plan) => {
-    expect(plan.prompt).toContain('Compiled');
-    expect(plan.prompt).toContain('Tests running');
-    expect(plan.resume).toBeNull();
-    await rpc(plan, 'finish_batch', { summary: 'Build passed; tests running.' });
-    return completed;
-  });
+  host.run = vi.fn();
   expect(await assistant.handle()).toBe(false);
   expect(await assistant.handle()).toBe(false);
-  expect(host.run).toHaveBeenCalledTimes(1);
+  expect(host.run).not.toHaveBeenCalled();
 });
 
 it('keeps events arriving during a batch for the next fresh conversation', async () => {
   const assistant = secretary();
   store.appendEvent(task.id, null, 'pm_progress', { message: 'First milestone' });
+  store.appendEvent(task.id, null, 'pm_worker_update', {
+    ...assignedWork(),
+    parentWorkId: 'parent',
+    status: 'completed',
+  });
   host.run = vi.fn(async (_task, plan) => {
     store.appendEvent(task.id, null, 'pm_progress', { message: 'Second milestone' });
+    store.appendEvent(task.id, null, 'pm_worker_update', {
+      ...assignedWork(),
+      parentWorkId: 'parent',
+      status: 'completed',
+    });
     await rpc(plan, 'finish_batch', { summary: 'First milestone recorded.' });
     return completed;
   });
@@ -290,6 +294,11 @@ it('suspends a failed secretary and escalates once instead of retrying its model
 it('restores the appointment and skips completed batches after restart', async () => {
   const assistant = secretary();
   store.appendEvent(task.id, null, 'pm_progress', { message: 'Already handled' });
+  store.appendEvent(task.id, null, 'pm_worker_update', {
+    ...assignedWork(),
+    parentWorkId: 'parent',
+    status: 'completed',
+  });
   host.run = vi.fn(async (_task, plan) => {
     await rpc(plan, 'finish_batch', { summary: 'Recorded progress.' });
     return completed;
@@ -610,9 +619,9 @@ it('supplies the initial assignment for a permission-only batch after restart', 
   expect(restarted.state?.status).toBe('waiting');
 });
 
-it('includes PM follow-up directions for progress-only batches without unrelated directions', async () => {
+it('includes PM follow-up directions for delivery batches without unrelated directions', async () => {
   const assistant = secretary();
-  const work = assignedWork();
+  const work: PmWork = { ...assignedWork(), parentWorkId: 'parent', status: 'completed' };
   store.appendEvent(task.id, work.sessionId, 'pm_work', work);
   store.appendEvent(task.id, 'pm-session', 'pm_worker_direction', {
     workId: work.id,
@@ -626,6 +635,7 @@ it('includes PM follow-up directions for progress-only batches without unrelated
     workId: work.id,
     message: 'Preparing the version commit.',
   });
+  store.appendEvent(task.id, work.sessionId, 'pm_worker_update', work);
   host.run = vi.fn(async (_task, plan) => {
     expect(plan.prompt).toContain(work.scope);
     expect(plan.prompt).toContain('After acceptance, bump the version to 0.1.0.');

@@ -172,7 +172,8 @@ export class Secretary {
       .filter((event) => (event.data as { workId?: string | null }).workId !== null);
     const permissions = this.host.permissions(this.taskId).map((p) => ({ ...p }));
     const updates = store.eventsOfKinds(this.taskId, ['pm_worker_update'], since);
-    if (!permissions.length && !progress.length && !updates.length) return false;
+    // Status messages are already durable UI events; only decisions buy a model call.
+    if (!permissions.length && !updates.length) return false;
     const events = store.eventsOfKinds(this.taskId, [
       'permission_request',
       'pm_progress',

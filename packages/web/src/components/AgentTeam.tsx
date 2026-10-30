@@ -321,6 +321,18 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
               <dt>{t('team.access')}</dt>
               <dd>{current.work?.access ?? 'readOnly'}</dd>
             </dl>
+            {events
+              .filter(
+                (e) =>
+                  e.kind === 'pm_integration' &&
+                  (e.data as { workId?: string }).workId === current.id,
+              )
+              .slice(-1)
+              .map((e) => (
+                <p key={e.id}>
+                  {t('team.integrationStatus')}: {(e.data as { status: string }).status}
+                </p>
+              ))}
             {current.work ? (
               <>
                 {current.work.branch && (
@@ -353,6 +365,13 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
                       <dd>
                         <Markdown text={current.work.plan.benefit} />
                       </dd>
+                      <dt>{t('team.estimatedTokens')}</dt>
+                      <dd>
+                        {current.work.plan.sequentialTokens ?? '—'} /{' '}
+                        {current.work.plan.parallelTokens ?? '—'}
+                      </dd>
+                      <dt>{t('team.estimateBasis')}</dt>
+                      <dd>{current.work.plan.estimateBasis ?? '—'}</dd>
                       <dt>{t('team.dispatchCost')}</dt>
                       <dd>
                         <Markdown text={current.work.plan.contextCost} />

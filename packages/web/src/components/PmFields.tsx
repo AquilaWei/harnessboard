@@ -14,6 +14,11 @@ interface Props {
 /** PM model and the explicit worker model pool, without fixed role assignments. */
 export function PmFields({ agents, value, onChange }: Props) {
   const { t } = useTranslation();
+  const policy = value.dispatchPolicy ?? {
+    strategy: 'costFirst' as const,
+    maxWorkers: 3,
+    maxExtraTokenRatio: 0.2,
+  };
   return (
     <>
       <label className="field">
@@ -80,6 +85,42 @@ export function PmFields({ agents, value, onChange }: Props) {
             </div>
           );
         })}
+      </fieldset>
+      <fieldset>
+        <legend>{t('pm.costFirst')}</legend>
+        <label className="field">
+          <span>{t('pm.maxWorkers')}</span>
+          <select
+            value={policy.maxWorkers}
+            onChange={(e) =>
+              onChange({
+                ...value,
+                dispatchPolicy: { ...policy, maxWorkers: Number(e.target.value) },
+              })
+            }
+          >
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>{t('pm.maxExtraTokens')}</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={Math.round(policy.maxExtraTokenRatio * 100)}
+            onChange={(e) => {
+              const amount = Number(e.target.value);
+              if (Number.isFinite(amount) && amount >= 0)
+                onChange({
+                  ...value,
+                  dispatchPolicy: { ...policy, maxExtraTokenRatio: amount / 100 },
+                });
+            }}
+          />
+        </label>
       </fieldset>
     </>
   );

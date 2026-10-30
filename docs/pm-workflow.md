@@ -309,3 +309,37 @@ output. The original source is outside the writable roots; review prompts identi
 paths. A resumed MCP thread receives the current task-scoped bridge configuration.
 CI runs only when a release version tag is pushed. PATCH builds are verified locally
 without creating a tag or triggering CI.
+
+## Cost-first dispatch and PM integration
+
+PM task settings accept `dispatchPolicy` (`strategy: "costFirst"`, `maxWorkers: 1..3`,
+`maxExtraTokenRatio`, default `0.2`). Historical configuration remains readable.
+The execution limit covers all descendants; waiting parents release their slot,
+while directory ownership still serializes shared writers. Queued work makes no model call.
+Dispatch admission is serialized so concurrent sibling requests cannot claim overlapping paths.
+
+Dispatch plans may include `workType`, `reuseWorkId`, `sequentialTokens`,
+`parallelTokens` and `estimateBasis`. A reuse candidate returns `outcome: "continue_work"`;
+an estimate above the policy returns `outcome: "ineligible"`. Accepted work returns
+`outcome: "queued"` with a work ID; consult work status for its actual execution state.
+Unknown estimates remain unknown. Profiles expose available slots and per-model task-local
+usage samples, including failed work and resumed conversation deltas. Less than five samples
+is insufficient evidence; estimates are token comparisons, not monetary charges.
+
+For a completed branch conflict, the PM may call `resolve_integration` with the work ID,
+the exact configured task `verification` command and a `reason`. A model cannot introduce an arbitrary shell command through this tool. It locks the source directory, runs a PM
+editing session there, checks committed delivery and path ownership, runs verification,
+and retries integration into the direct parent. The task's repository and permission rules
+still apply. Ownership is checked before integration; CLI filesystem isolation is at worktree
+level, so this check does not prevent an editing process from touching an out-of-scope file.
+Failures preserve files and merge state and emit `pm_integration` audit events.
+
+Task 33 is not resumed by this change. Its historical base-workspace commits and dirty files
+are untouched. Migration of legacy base-workspace tasks to isolated task branches,
+a deterministic task 33 token replay, grouped retry/integration accounting, and a five-second
+coordination event coalescer still need implementation and acceptance. The two-identical-environment-error
+retry stop, per-role/type cost samples, enforced per-file edit boundaries, and automatic
+recommendations for dependent assignments are also pending. Dependency admission currently
+retains the existing rejection behavior. Repair sessions preserve an interrupted merge, but
+recovery after verification fails on an already committed repair still needs a dedicated path.
+These gaps mean this PATCH is not full acceptance of the collaboration plan.

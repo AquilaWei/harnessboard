@@ -6,6 +6,12 @@ export interface PmConfig {
   model: string | null;
   effort: string | null;
   workers: PmWorkerProfile[];
+  /** Missing on historical tasks: cost first, three executing workers, 20% overhead. */
+  dispatchPolicy?: {
+    strategy: 'costFirst';
+    maxWorkers: number;
+    maxExtraTokenRatio: number;
+  };
 }
 
 export interface PmWorkerProfile {
@@ -42,6 +48,12 @@ export type WorkStatus =
 
 /** The coordinator's cost and dependency assessment before opening a new conversation. */
 export interface PmDispatchPlan {
+  workType?: 'implementation' | 'review' | 'specialist';
+  reuseWorkId?: string | null;
+  sequentialTokens?: number | null;
+  parallelTokens?: number | null;
+  /** Evidence for estimates, or why an independent trial is useful with insufficient data. */
+  estimateBasis?: string;
   /** Concrete delivery benefit over continuing an existing worker. */
   benefit: string;
   /** Expected repeated reading and integration work, and how it is kept bounded. */

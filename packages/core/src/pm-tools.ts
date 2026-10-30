@@ -78,6 +78,11 @@ export const PM_TOOLS = [
         access: { enum: ['edit', 'readOnly'] },
         plan: fields(
           {
+            workType: { enum: ['implementation', 'review', 'specialist'] },
+            reuseWorkId: { type: ['string', 'null'] },
+            sequentialTokens: { type: ['number', 'null'], minimum: 0 },
+            parallelTokens: { type: ['number', 'null'], minimum: 0 },
+            estimateBasis: string,
             benefit: {
               ...string,
               description:
@@ -123,6 +128,16 @@ export const PM_TOOLS = [
     description:
       'Integrate a completed direct child branch into your own clean workspace (PM: task workspace). Returns conflict paths without changing files on conflict. Continue the same child to merge the target commit, resolve and test; then retry. Verify the combined result before acceptance.',
     inputSchema: fields(id, ['id']),
+  },
+  {
+    name: 'resolve_integration',
+    description:
+      'PM only: exclusively repair a completed child branch after a merge conflict. Supply the exact configured task verification command. Runs a scoped editing session, checks ownership and verification, commits the repair, then retries integration. Interrupted merge state is preserved.',
+    inputSchema: fields({ ...id, verification: string, reason: string }, [
+      'id',
+      'verification',
+      'reason',
+    ]),
   },
   {
     name: 'continue_work',
@@ -256,6 +271,7 @@ export async function pmTools(
                 'permission',
                 'accept',
                 'appoint_secretary',
+                'resolve_integration',
                 'reply_worker',
                 'finish_batch',
                 'escalate_pm',

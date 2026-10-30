@@ -91,7 +91,7 @@ afterEach(() => store.close());
 function pmTurn(action: () => Promise<void>) {
   const worker = host.run;
   host.run = async (task, plan, id, signal) => {
-    if (plan.role !== 'pm') return worker(task, plan, id, signal);
+    if (plan.role !== 'pm' || plan.cwd) return worker(task, plan, id, signal);
     try {
       await action();
     } finally {
@@ -1111,7 +1111,7 @@ it('exposes live provider quota and blocking state to PM dispatch decisions', as
   expect(refreshed).toEqual([expect.objectContaining({ quota: null })]);
 });
 
-it('refreshes balancing guidance and capacity on each PM turn', async () => {
+it('refreshes cost-first guidance and capacity on each PM turn', async () => {
   let prompt = '';
   host.run = async (_task, plan) => {
     prompt = plan.prompt;
@@ -1119,9 +1119,9 @@ it('refreshes balancing guidance and capacity on each PM turn', async () => {
     return outcome;
   };
   await engine.run();
-  expect(prompt).toContain('Balance interchangeable work across permitted Claude Code and Codex');
-  expect(prompt).toContain('Missing quota is unknown, never zero usage');
-  expect(prompt).toContain('Continue the original worker for the same job');
+  expect(prompt).toContain('Optimize total delivery tokens');
+  expect(prompt).toContain('Unknown usage and quota are unknown');
+  expect(prompt).toContain('Continue the same primary worker');
   expect(prompt).toContain('"dispatchedWork":0');
 });
 
@@ -1139,4 +1139,210 @@ it('counts dispatched jobs across profiles sharing a provider', async () => {
     expect.objectContaining({ agentId: 'claude', activeWork: 1, dispatchedWork: 1 }),
     expect.objectContaining({ agentId: 'other', activeWork: 1, dispatchedWork: 1 }),
   ]);
+});
+
+it('rejects parallel estimates over the token overhead limit without creating work', async () => {
+  await pmTurn(async () => {
+    expect(
+      await engine.call('dispatch', {
+        ...input,
+        plan: { ...DISPATCH_PLAN, sequentialTokens: 100, parallelTokens: 121 },
+      }),
+    ).toMatchObject({ outcome: 'ineligible' });
+  });
+  expect(pmWork(store, task.id)).toHaveLength(0);
+});
+
+it('recommends the existing conversation without creating another worker', async () => {
+  await pmTurn(async () => {
+    const work = (await engine.call('dispatch', input)) as { id: string };
+    expect(
+      await engine.call('dispatch', {
+        ...input,
+        plan: { ...DISPATCH_PLAN, reuseWorkId: work.id },
+      }),
+    ).toMatchObject({ outcome: 'continue_work', workId: work.id });
+  });
+  expect(pmWork(store, task.id)).toHaveLength(1);
+});
+
+it('reserves only three execution slots across concurrent read-only dispatches', async () => {
+  let started = 0;
+  let peak = 0;
+  host.run = vi.fn(async (_task, plan, _id, signal) => {
+    if (plan.role !== 'worker') return outcome;
+    started++;
+    peak = Math.max(peak, started);
+    await new Promise<void>((resolve) => {
+      if (signal.aborted) resolve();
+      else signal.addEventListener('abort', () => resolve(), { once: true });
+    });
+    started--;
+    return outcome;
+  });
+  await pmTurn(async () => {
+    await Promise.all([
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+    ]);
+    await vi.waitFor(() => expect(peak).toBe(3));
+    expect(pmWork(store, task.id).filter((w) => w.status === 'queued')).toHaveLength(1);
+    expect(store.listSessions(task.id).filter((s) => s.role === 'worker')).toHaveLength(3);
+  });
+  expect(peak).toBe(3);
+});
+
+it('lets the PM edit, test and commit a conflict repair before integrating', async () => {
+  store.updateTask(task.id, { verifyCommand: 'git diff --exit-code' });
+  const { writeFile, readFile } = await import('node:fs/promises');
+  await writeFile(path.join(task.worktreePath!, 'greeting.txt'), 'base\n');
+  await git(task.worktreePath!, ['add', 'greeting.txt']);
+  await git(task.worktreePath!, ['commit', '-m', 'feat: seed greeting']);
+  let repaired = false;
+  host.run = async (_task, plan) => {
+    const content = plan.role === 'pm' ? 'resolved\n' : 'worker\n';
+    if (plan.role === 'pm') {
+      expect(plan.access).toBe('edit');
+      expect(
+        await engine
+          .call('continue_work', { id: pmWork(store, task.id)[0]!.id, message: 'race' })
+          .catch((e: Error) => e.message),
+      ).toContain('integration owns');
+      repaired = true;
+    }
+    await writeFile(path.join(plan.cwd!, 'greeting.txt'), content);
+    await git(plan.cwd!, ['add', 'greeting.txt']);
+    await git(plan.cwd!, ['commit', '-m', 'fix: resolve greeting']);
+    return outcome;
+  };
+  await pmTurn(async () => {
+    const work = (await engine.call('dispatch', {
+      ...input,
+      workspace: 'branch',
+      writePaths: ['greeting.txt'],
+    })) as { id: string };
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await writeFile(path.join(task.worktreePath!, 'greeting.txt'), 'target\n');
+    await git(task.worktreePath!, ['add', 'greeting.txt']);
+    await git(task.worktreePath!, ['commit', '-m', 'feat: change target']);
+    await vi.waitFor(async () =>
+      expect(await engine.call('integrate_work', { id: work.id })).toMatchObject({
+        integrated: false,
+      }),
+    );
+    expect(
+      await engine.call('resolve_integration', {
+        id: work.id,
+        verification: 'git diff --exit-code',
+        reason: 'Preserve both greeting changes',
+      }),
+    ).toMatchObject({ integrated: true });
+    expect(await readFile(path.join(task.worktreePath!, 'greeting.txt'), 'utf8')).toBe(
+      'resolved\n',
+    );
+  });
+  expect(repaired).toBe(true);
+  expect(store.eventsOfKind(task.id, 'pm_integration').at(-1)?.data).toMatchObject({
+    status: 'completed',
+  });
+});
+
+it('reports insufficient history without treating unknown consumption as zero', async () => {
+  await pmTurn(async () => {
+    expect(await engine.call('profiles', {})).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          availableSlots: 3,
+          costSamples: [
+            { model: null, averageTokens: null, sampleCount: 0, confidence: 'insufficient' },
+          ],
+        }),
+      ]),
+    );
+  });
+});
+
+it('rejects worker limits exceeding the global three-worker policy', () => {
+  expect(() =>
+    validatePm(host.config, {
+      ...pm,
+      dispatchPolicy: { strategy: 'costFirst', maxWorkers: 4, maxExtraTokenRatio: 0.2 },
+    }),
+  ).toThrow('worker limit');
+});
+
+it('blocks parent integration when the configured verification command fails', async () => {
+  store.updateTask(task.id, { verifyCommand: 'node -e "process.exit(1)"' });
+  const { writeFile, readFile } = await import('node:fs/promises');
+  await writeFile(path.join(task.worktreePath!, 'greeting.txt'), 'base\n');
+  await git(task.worktreePath!, ['add', 'greeting.txt']);
+  await git(task.worktreePath!, ['commit', '-m', 'feat: seed greeting']);
+  let repaired = false;
+  host.run = async (_task, plan) => {
+    const content =
+      plan.role === 'pm'
+        ? 'resolved\n'
+        : plan.prompt.includes('Target edit')
+          ? 'target\n'
+          : 'worker\n';
+    if (plan.role === 'pm') {
+      expect(plan.access).toBe('edit');
+      expect(
+        await engine
+          .call('continue_work', { id: pmWork(store, task.id)[0]!.id, message: 'race' })
+          .catch((e: Error) => e.message),
+      ).toContain('integration owns');
+      repaired = true;
+    }
+    await writeFile(path.join(plan.cwd!, 'greeting.txt'), content);
+    await git(plan.cwd!, ['add', 'greeting.txt']);
+    await git(plan.cwd!, ['commit', '-m', 'fix: resolve greeting']);
+    return outcome;
+  };
+  await pmTurn(async () => {
+    const work = (await engine.call('dispatch', {
+      ...input,
+      workspace: 'branch',
+      writePaths: ['greeting.txt'],
+    })) as { id: string };
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await engine.call('dispatch', { ...input, goal: 'Target edit' });
+    await vi.waitFor(() =>
+      expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+    );
+    await vi.waitFor(async () =>
+      expect(await engine.call('integrate_work', { id: work.id })).toMatchObject({
+        integrated: false,
+      }),
+    );
+    await expect(
+      engine.call('resolve_integration', {
+        id: work.id,
+        verification: 'node -e "process.exit(1)"',
+        reason: 'Preserve both greeting changes',
+      }),
+    ).rejects.toThrow('verification failed');
+    expect(await readFile(path.join(task.worktreePath!, 'greeting.txt'), 'utf8')).toBe('target\n');
+  });
+  expect(repaired).toBe(true);
+  expect(store.eventsOfKind(task.id, 'pm_integration').at(-1)?.data).toMatchObject({
+    status: 'failed',
+  });
+});
+
+it('never resumes an editing integration conversation as the read-only coordinator', async () => {
+  store.startSession('repair', task.id, 'pm', pm.agentId, null);
+  store.setAgentSessionId('repair', 'editing-thread');
+  store.endSession('repair', 'completed');
+  store.appendEvent(task.id, 'repair', 'pm_integration', { status: 'completed', workId: 'child' });
+  host.run = async (_task, plan) => {
+    expect(plan.role).toBe('pm');
+    expect(plan.access).toBe('readOnly');
+    expect(plan.resume).toBeNull();
+    controller.abort();
+    return outcome;
+  };
+  await engine.run();
 });
