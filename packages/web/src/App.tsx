@@ -19,6 +19,7 @@ import { NewTaskDialog } from './components/NewTaskDialog';
 import { NotPaired, PairScreen, UnlockScreen } from './components/PairScreen';
 import { PlanChangeDialog } from './components/PlanChangeDialog';
 import { SettingsDialog } from './components/SettingsDialog';
+import { TaskWindows } from './components/TaskWindows';
 import { TaskDrawer } from './components/TaskDrawer';
 import type { DrawerTab } from './components/TaskDrawer';
 import { descriptionText } from './components/Description';
@@ -42,7 +43,9 @@ export function App() {
   const [status, setStatus] = useState<HarnessStatus | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [version, setVersion] = useState<string | null>(null);
-  const [selected, setSelected] = useState<{ id: number; tab: DrawerTab } | null>(null);
+  const [windows, setWindows] = useState<{ id: number; tab: DrawerTab }[]>([]);
+  const setSelected = (value: { id: number; tab: DrawerTab }) =>
+    setWindows((current) => [...current.filter((w) => w.id !== value.id), value]);
   const [dialog, setDialog] = useState<'new' | 'settings' | null>(null);
   // The draft whose plan button asked what should change.
   const [planAsk, setPlanAsk] = useState<TaskView | null>(null);
@@ -169,7 +172,7 @@ export function App() {
   const refresh = useThrottled(() => void load(), 500);
   useLiveEvents((event) => {
     // Deleted elsewhere (e.g. `hb delete`): close its panel, which could no longer load.
-    if (event.type === 'deleted') setSelected((s) => (s?.id === event.taskId ? null : s));
+    if (event.type === 'deleted') setWindows((items) => items.filter((w) => w.id !== event.taskId));
     refresh();
   });
 
@@ -248,16 +251,27 @@ export function App() {
         }
         onNewTask={() => setDialog('new')}
       />
-      {selected && (
-        <TaskDrawer
-          key={`${selected.id}-${selected.tab}`}
-          taskId={selected.id}
-          initialTab={selected.tab}
-          onAction={act}
-          onClose={() => setSelected(null)}
-          onError={showToast}
-        />
-      )}
+      <TaskWindows
+        windows={windows}
+        onFocus={(id) =>
+          setWindows((items) => [
+            ...items.filter((w) => w.id !== id),
+            ...items.filter((w) => w.id === id),
+          ])
+        }
+      >
+        {(selected, active) => (
+          <TaskDrawer
+            key={selected.id}
+            taskId={selected.id}
+            initialTab={selected.tab}
+            active={active}
+            onAction={act}
+            onClose={() => setWindows((items) => items.filter((w) => w.id !== selected.id))}
+            onError={showToast}
+          />
+        )}
+      </TaskWindows>
       {dialog === 'new' && settings && (
         <NewTaskDialog
           settings={settings}

@@ -36,6 +36,7 @@ export type DrawerTab =
   'team' | 'timeline' | 'notes' | 'chat' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
 
 interface Props {
+  active?: boolean;
   taskId: number;
   initialTab: DrawerTab;
   onAction: (task: TaskDetail, action: TaskAction) => Promise<unknown>;
@@ -44,7 +45,14 @@ interface Props {
 }
 
 /** Task panel: what is happening and what you can do first, then the history and details. */
-export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: Props) {
+export function TaskDrawer({
+  taskId,
+  initialTab,
+  onAction,
+  onClose,
+  onError,
+  active = true,
+}: Props) {
   const { t } = useTranslation();
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [timeline, setTimeline] = useState<TimelineEntry[] | null>(null);
@@ -109,11 +117,11 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) onClose();
+      if (active && e.key === 'Escape' && !e.defaultPrevented) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, active]);
 
   const act = (action: TaskAction) => task && void onAction(task, action).then(loadTask);
 
@@ -160,8 +168,7 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
 
   return (
     <>
-      <div className="scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={task?.title ?? ''}>
+      <aside className="drawer" role="dialog" aria-modal={false} aria-label={task?.title ?? ''}>
         <div className="drawer-head">
           <div className="drawer-title">
             <details className="task-heading" key={task?.id}>
