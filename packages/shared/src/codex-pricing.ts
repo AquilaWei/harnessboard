@@ -2,9 +2,10 @@
 import type { TokenCounts } from './usage.js';
 
 // USD per million tokens: input, cached input, cache writes, output.
-// Standard short-context prices, checked 2026-11-01 against:
+// Standard short-context prices, checked 2026-10-09 against:
 // https://developers.openai.com/api/docs/pricing
 // https://developers.openai.com/api/docs/models/<model-id>
+// gpt-6.1-terra checked 2026-11-01.
 // Cache writes use the 30-minute rate (the 12-hour rate is higher), as in the other gpt-6.x entries.
 // Models before GPT-5.6 have no separate cache-write rate; writes use the input rate.
 const PRICES: Readonly<Record<string, readonly [number, number, number, number]>> = {
