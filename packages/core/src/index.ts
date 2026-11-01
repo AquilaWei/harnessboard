@@ -8,6 +8,7 @@ export * from './config.js';
 export * from './folders.js';
 export * from './guidelines.js';
 export * from './harness.js';
+export * from './localai.js';
 export * from './loop.js';
 export * from './models.js';
 export * from './notes.js';

@@ -152,6 +152,27 @@ environment < CLI flags.
 - **Per repository:** `.harnessboard.json` with `baseRef`, `allowedTools`, `contextPolicy` and
   `verifyCommand`.
 
+**Local AI (optional):** Harnessboard can ask a local model through
+`localai run --json` (LocalAICLI) for small helper jobs (today: `hb pricing refresh`).
+It is off by default and never required: when it is disabled or the binary is missing, the
+feature reports "unavailable" and every other flow works as before.
+
+```json
+{
+  "localAi": {
+    "enabled": true,
+    "command": "/opt/localai/bin/localai",
+    "models": { "pricing": "gpt-oss-20b" }
+  }
+}
+```
+
+- `enabled`: `false` by default.
+- `command`: path of the `localai` binary; `null` (default) looks `localai` up on your PATH.
+- `models`: the model each use case runs. `pricing` is the only use case so far.
+- Requests run one at a time, with a timeout; the plan for further uses is in
+  [docs/plans/local-ai.md](plans/local-ai.md).
+
 **Agent profiles:** each profile names an agent CLI and how to run it. `claude` always exists.
 Harnessboard looks for the `claude`, `codex` and `gemini` commands on your PATH and points out any that
 have no profile yet (in `hb serve`'s output, `hb agents` and **Settings → Agents**). Add one
