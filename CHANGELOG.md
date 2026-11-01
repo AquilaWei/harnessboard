@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Desktop tasks open in independent floating windows with dragging, resizing and left/right half-screen snapping.
+
+## 0.2.20 - 2026-11-01
+
+- 本機測試版：任務可同時以浮動視窗開啟，支援拖曳、調整大小與左右半屏吸附。
+
 - 完成任務後自動清理可重建快取，啟動時補掃已完成任務；保留程式碼、交付成果、分支與歷史。
 - 任務頁新增清理預覽及執行，CLI 新增 `hb cleanup <id> [--execute]`。
 

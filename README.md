@@ -14,7 +14,7 @@ assignment and recorded PM follow-up instructions, so routine checks use the act
 delegated scope. While the PM waits for your answer, approved work and internal permission
 review continue. Only PM questions create user actions; raw CLI requests remain internal.
 
-![version](https://img.shields.io/badge/version-0.2.19-blue)
+![version](https://img.shields.io/badge/version-0.2.20-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -263,3 +263,5 @@ hb cleanup 19 --execute   # discover again and remove eligible caches
 
 API: `GET /api/tasks/:id/cleanup` previews; `POST /api/tasks/:id/cleanup` executes.
 Neither endpoint accepts deletion paths. Dependencies may need reinstalling when reopening a task.
+
+Desktop task panels can be opened together as floating windows. Drag the title bar to move a panel, drag its bottom-right corner to resize, or drag to either screen edge to snap to half the page. Layouts last until the page is refreshed.
