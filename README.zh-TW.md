@@ -193,6 +193,14 @@ PM 目前支援本地 Claude Code 與 Codex；Gemini 和 Docker profile 可作�
 
 所有指令和參數見 [docs/cli.md](docs/cli.md)，`hb --help` 也能列出。
 
+**選用的本地 AI。** 安裝 LocalAICLI 並在設定中開啟 `localAi.enabled` 後，維護者可以用本地模型
+從官方頁面更新 Codex 價目表。指令會先顯示差異，確認後才寫入（設定見
+[docs/configuration.md](docs/configuration.md)）：
+
+```bash
+hb pricing refresh            # 用 gpt-oss-20b 抽取價格、顯示差異、詢問 y/N
+```
+
 ## 進階閱讀
 
 | 主題                                     | 閱讀                                                                           |

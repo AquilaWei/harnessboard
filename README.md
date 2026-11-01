@@ -215,6 +215,14 @@ Run them from any folder with `hb`; tasks belong to the repository you run `hb a
 | `hb open <id>`                     | Continue the task's conversation in Claude Code  |
 | `hb delete <id>`                   | Remove a task that is not running                |
 
+**Optional local AI.** With [LocalAICLI](docs/configuration.md#config-files-agents-and-permissions)
+installed and `localAi.enabled` set, a maintainer can refresh the Codex price table from the
+official page with a local model. It shows a diff and writes only after you confirm:
+
+```bash
+hb pricing refresh            # extract prices with gpt-oss-20b, show the diff, ask y/N
+```
+
 Every command and flag is in [docs/cli.md](docs/cli.md); `hb --help` lists them too.
 
 ## Go further
