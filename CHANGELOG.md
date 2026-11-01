@@ -4,6 +4,10 @@
 
 - Desktop tasks open in independent floating windows with dragging, resizing and left/right half-screen snapping.
 
+## 0.2.21 - 2026-11-01
+
+- 本機測試版：修正使用 gpt-6.1-terra 的 Codex 任務沒有費用估算的問題，現在會依 OpenAI 官方定價顯示。
+
 ## 0.2.20 - 2026-11-01
 
 - 本機測試版：任務可同時以浮動視窗開啟，支援拖曳、調整大小與左右半屏吸附。
