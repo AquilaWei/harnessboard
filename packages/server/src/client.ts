@@ -59,6 +59,10 @@ export class ApiClient {
     this.post<Task>(`/tasks/${id}/reorder`, { beforeId });
   toDraft = (id: number) => this.post<Task>(`/tasks/${id}/draft`);
   stopTask = (id: number) => this.post<Task>(`/tasks/${id}/stop`);
+  previewCleanup = (id: number) =>
+    this.get<import('@harnessboard/shared').CacheCleanup>(`/tasks/${id}/cleanup`);
+  cleanupTask = (id: number) =>
+    this.post<import('@harnessboard/shared').CacheCleanup>(`/tasks/${id}/cleanup`);
   completeTask = (id: number) => this.post<Task>(`/tasks/${id}/complete`);
   setAutoApprove = (id: number, on: boolean) =>
     this.send<Task>('PUT', `/tasks/${id}/auto-approve`, { on });

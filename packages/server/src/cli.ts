@@ -488,6 +488,18 @@ program
   });
 
 program
+  .command('cleanup')
+  .argument('<id>', 'task id', parseInteger)
+  .description('preview rebuildable task caches; use --execute to remove them')
+  .option('--execute', 'remove eligible caches after fresh validation')
+  .action(async (id: number, options: { execute?: boolean }) => {
+    const result = options.execute
+      ? await client().cleanupTask(id)
+      : await client().previewCleanup(id);
+    console.log(JSON.stringify(result, null, 2));
+  });
+
+program
   .command('delete')
   .description(
     'delete a task that is not running, with its history and worktree (the branch is kept)',

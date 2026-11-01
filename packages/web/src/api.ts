@@ -238,6 +238,10 @@ export const api = {
     send<unknown>('POST', `/tasks/${id}/plan`, message ? { message } : {}),
   pend: (id: number) => send<unknown>('POST', `/tasks/${id}/pend`),
   toDraft: (id: number) => send<unknown>('POST', `/tasks/${id}/draft`),
+  previewCleanup: (id: number) =>
+    request<import('@harnessboard/shared').CacheCleanup>(`/tasks/${id}/cleanup`),
+  cleanup: (id: number) =>
+    send<import('@harnessboard/shared').CacheCleanup>('POST', `/tasks/${id}/cleanup`),
   complete: (id: number) => send<unknown>('POST', `/tasks/${id}/complete`),
   answerPermission: (id: number, decision: PermissionDecision) =>
     send<unknown>('POST', `/tasks/${id}/permission`, decision),

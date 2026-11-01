@@ -966,3 +966,27 @@ describe('PM workflow API', () => {
     expect(harness.store.lastEvent(task.id, 'criteria_approved')).toBeUndefined();
   });
 });
+
+describe('task cache cleanup', () => {
+  it('exposes preview and execution without accepting deletion paths', async () => {
+    const result = { entries: [], estimatedBytes: 0, removedBytes: 0 };
+    const cleanup = vi.spyOn(harness, 'cleanupTask').mockResolvedValue(result);
+    const preview = await app.request('/api/tasks/1/cleanup', { headers: local });
+    expect(preview.status).toBe(200);
+    expect(cleanup).toHaveBeenLastCalledWith(1);
+    const executed = await post(
+      '/api/tasks/1/cleanup',
+      { path: '/outside' },
+      { [CLIENT_HEADER]: 'test' },
+    );
+    expect(executed.status).toBe(200);
+    expect(cleanup).toHaveBeenLastCalledWith(1, true);
+  });
+
+  it('returns cleanup eligibility errors', async () => {
+    vi.spyOn(harness, 'cleanupTask').mockRejectedValue(new Error('task is busy'));
+    const response = await app.request('/api/tasks/1/cleanup', { headers: local });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'task is busy' });
+  });
+});

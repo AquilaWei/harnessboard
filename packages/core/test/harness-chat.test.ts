@@ -122,6 +122,7 @@ describe('a chat with a single task whose spec author also implemented it', () =
   it('continues that conversation after the task was completed', async () => {
     const task = await specAuthoredTask();
     harness.completeTask(task.id);
+    await harness.waitForCleanup();
     harness.chat(task.id, 'What does it print?');
     await harness.waitForIdle();
     expect(status(task.id)).toBe('done');
@@ -162,6 +163,7 @@ describe('a chat message', () => {
   it('continues a completed conversation after its worktree was removed', async () => {
     const task = await finishedTask();
     harness.completeTask(task.id);
+    await harness.waitForCleanup();
     const completed = harness.store.getTask(task.id)!;
     execFileSync('git', ['worktree', 'remove', completed.worktreePath!], { cwd: repo });
     execFileSync('git', ['branch', '-D', completed.branch!], { cwd: repo });

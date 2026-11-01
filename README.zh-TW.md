@@ -214,3 +214,21 @@ PM 目前支援本地 Claude Code 與 Codex；Gemini 和 Docker profile 可作�
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
 PM 任務也接受尚未建立 Git 或沒有 commit 的既有資料夾，並直接在所選目錄工作。系統先建立不包含檔案的本機基礎 commit；規格核准後由 PM 依 code 規範安排專案結構、忽略規則與專案提交。建立遠端儲存庫仍需明確授權。
+
+### Task cache cleanup / 任務暫存清理
+
+完成任務後及啟動時，Harnessboard 會逐一清理已完成任務的可重建快取。
+任務頁的「清理暫存」可先預覽再執行，閒置且等待確認的任務也適用。
+僅處理 Harness 管理的 worktree 內、有對應專案描述檔且被 Git ignore 的
+`target/`、`node_modules/`、`.venv/`；含已追蹤檔案、符號連結或巢狀 Git 的候選會略過。
+保留 `dist/`、`build/`、分支、工作成果、歷史與原始專案資料夾。
+容量為檔案邏輯大小，實際磁碟回收可能不同。清理失敗不撤銷完成狀態，原因會記錄在任務通知。
+執行中的任務須先停止；清理期間無法啟動、對話、合併或刪除該任務。
+
+```sh
+hb cleanup 19             # preview candidates and estimated bytes
+hb cleanup 19 --execute   # discover again and remove eligible caches
+```
+
+API: `GET /api/tasks/:id/cleanup` previews; `POST /api/tasks/:id/cleanup` executes.
+Neither endpoint accepts deletion paths. Dependencies may need reinstalling when reopening a task.

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { cleanTaskCaches } from './cache-cleanup.js';
 import { PmWorkflow, pmQuestion, pmWork, validatePm } from './pm.js';
 import type { PmSessionPlan } from './pm.js';
 import type { TaskOperations, PmConfig } from '@harnessboard/shared';
@@ -206,6 +207,9 @@ type ChatTarget = { kind: 'resume'; session: Session } | { kind: 'new'; agentId:
  * event loop, and subscribers receive {@link HarnessEvent}s instead of sharing state.
  */
 export class Harness {
+  private readonly deleting = new Set<number>();
+  private readonly cleaning = new Set<number>();
+  private cleanupQueue: Promise<unknown> = Promise.resolve();
   private readonly tokenWatch = new TokenWatch();
   private readonly running = new Map<number, AbortController>();
   /** Merges in progress by task id, so no `base` task starts in the folder they change. */
@@ -534,6 +538,9 @@ export class Harness {
       // A task that waited for permission asks again once its session resumes.
       if (interrupted) this.setStatus(task.id, 'queued');
     }
+    for (const task of this.store.listTasks()) {
+      if (task.status === 'done') this.scheduleCleanup(task.id);
+    }
     // Codex's usage is not in the store, so it is read before a queued task may go.
     await this.readQuotas(Date.now());
     this.timer = setInterval(() => this.tick(), TICK_MS);
@@ -585,6 +592,7 @@ export class Harness {
     const ids = [...this.running.keys()];
     for (const controller of this.running.values()) controller.abort();
     await this.waitForIdle(ids);
+    await this.cleanupQueue;
   }
 
   subscribe(listener: (event: HarnessEvent) => void): () => void {
@@ -723,6 +731,7 @@ export class Harness {
    * or it works on the base while another such task holds the same repository folder.
    */
   queueTask(id: number): Task {
+    this.assertTaskOperationFree(id);
     const task = this.requireTask(id);
     if (task.status === 'paused_safety' && this.running.has(id)) {
       throw new Error(`task ${id} is still stopping`);
@@ -760,6 +769,7 @@ export class Harness {
    * Throws when the task is not a draft, or a single task with a spec has no message.
    */
   planTask(id: number, message?: string): Task {
+    this.assertTaskOperationFree(id);
     const task = this.requireTask(id);
     if (task.status !== 'backlog') {
       throw new Error(`task ${id} is ${task.status}; only a draft can be planned`);
@@ -807,6 +817,7 @@ export class Harness {
    * works on the base while another such task holds the folder.
    */
   pendTask(id: number): Task {
+    this.assertTaskOperationFree(id);
     const task = this.requireTask(id);
     if (task.status === 'backlog') {
       if (!this.hasApprovedSpec(task)) {
@@ -883,6 +894,7 @@ export class Harness {
    * waits for an answer, since that would drop the question.
    */
   toDraft(id: number): Task {
+    this.assertTaskOperationFree(id);
     const task = this.requireTask(id);
     if (task.status === 'backlog') return task;
     const idle = task.status === 'queued' || task.status === 'waiting_quota';
@@ -1195,21 +1207,27 @@ export class Harness {
    * worktree; the task is then left as it was.
    */
   async deleteTask(id: number): Promise<void> {
+    this.assertTaskOperationFree(id);
     const task = this.requireTask(id);
     if (this.running.has(id) || task.status === 'running') {
       throw new Error(`task ${id} is running; stop it before deleting`);
     }
-    // Take it out of the queue first so the scheduler cannot start it while git works.
-    if (task.status === 'queued' || task.status === 'waiting_quota') {
-      this.setStatus(id, 'stopped', { resumeAt: null });
+    this.deleting.add(id);
+    try {
+      // Take it out of the queue first so the scheduler cannot start it while git works.
+      if (task.status === 'queued' || task.status === 'waiting_quota') {
+        this.setStatus(id, 'stopped', { resumeAt: null });
+      }
+      if (task.workspace === 'worktree' && task.worktreePath) {
+        await this.discardWorktree(task.repoPath, task.worktreePath);
+      }
+      await rm(this.evidenceDir(id), { recursive: true, force: true });
+      this.store.deleteTask(id);
+      this.tokenWatch.clear(id);
+      this.emit({ type: 'deleted', taskId: id });
+    } finally {
+      this.deleting.delete(id);
     }
-    if (task.workspace === 'worktree' && task.worktreePath) {
-      await this.discardWorktree(task.repoPath, task.worktreePath);
-    }
-    await rm(this.evidenceDir(id), { recursive: true, force: true });
-    this.store.deleteTask(id);
-    this.tokenWatch.clear(id);
-    this.emit({ type: 'deleted', taskId: id });
   }
 
   /**
@@ -1411,6 +1429,7 @@ export class Harness {
    * merge changes the same repository folder.
    */
   chat(id: number, message: string): Task {
+    this.assertTaskOperationFree(id);
     const task = this.requireTask(id);
     const text = optionalText(message, 'message')?.trim();
     if (!text) throw new Error('message is empty');
@@ -1761,6 +1780,8 @@ export class Harness {
     const busy =
       this.running.has(id) ||
       this.merging.has(id) ||
+      this.cleaning.has(id) ||
+      this.deleting.has(id) ||
       ['running', 'queued', 'pending', 'awaiting_permission', 'waiting_quota'].includes(
         task.status,
       );
@@ -1792,6 +1813,8 @@ export class Harness {
         ? 'Project folder can only change before the first specification approval'
         : this.running.has(id) ||
             this.merging.has(id) ||
+            this.cleaning.has(id) ||
+            this.deleting.has(id) ||
             !['backlog', 'stopped', 'failed', 'awaiting_approval', 'paused_safety'].includes(
               task.status,
             )
@@ -1820,11 +1843,67 @@ export class Harness {
     };
   }
 
+  private assertTaskOperationFree(id: number): void {
+    const operation = this.cleaning.has(id)
+      ? 'cache cleanup'
+      : this.deleting.has(id)
+        ? 'deletion'
+        : this.merging.has(id)
+          ? 'merge'
+          : null;
+    if (operation) throw new Error(`task ${id} ${operation} is in progress`);
+  }
+
+  /** Serializes disk work and holds the task reservation while queued and running. */
+  async cleanupTask(
+    id: number,
+    execute = false,
+  ): Promise<import('@harnessboard/shared').CacheCleanup> {
+    this.assertTaskOperationFree(id);
+    const task = this.requireTask(id);
+    if (
+      this.running.has(id) ||
+      this.merging.has(id) ||
+      ['running', 'queued', 'pending', 'waiting_quota', 'awaiting_permission'].includes(task.status)
+    )
+      throw new Error(`task ${id} is busy; stop it before cleaning caches`);
+    this.cleaning.add(id);
+    const work = this.cleanupQueue.then(() =>
+      cleanTaskCaches(this.requireTask(id), this.config.dataDir, execute),
+    );
+    this.cleanupQueue = work.catch(() => undefined);
+    try {
+      return await work;
+    } finally {
+      this.cleaning.delete(id);
+    }
+  }
+
+  /** Waits for currently scheduled disk cleanup before closing storage or reopening tasks. */
+  async waitForCleanup(): Promise<void> {
+    await this.cleanupQueue;
+  }
+
+  private scheduleCleanup(id: number): void {
+    void this.cleanupTask(id, true)
+      .then((result) => {
+        const errors = result.entries.filter((e) => e.status === 'failed');
+        this.notice(
+          id,
+          `Cache cleanup: ${result.removedBytes} bytes removed` +
+            (errors.length ? `; ${errors.map((e) => `${e.path}: ${e.reason}`).join('; ')}` : ''),
+        );
+      })
+      .catch((error: Error) => this.notice(id, `Cache cleanup failed: ${error.message}`));
+  }
+
   /** Closes a task after user verification, including an idle PM awaiting confirmation. */
   completeTask(id: number): Task {
     const operation = this.taskOperations(id).complete;
     if (!operation.enabled) throw new Error(operation.reason ?? 'Closing is unavailable');
-    return this.setStatus(id, 'done');
+    const task = this.setStatus(id, 'done');
+    this.scheduleCleanup(id);
+    return task;
   }
 
   /**
@@ -1942,7 +2021,10 @@ export class Harness {
     // A task waits only when the provider of its next session is short of quota.
     const ready = this.store
       .listTasks()
-      .filter((t) => t.status !== 'queued' || !this.nextSessionBlocked(t, now));
+      .filter(
+        (t) =>
+          !this.cleaning.has(t.id) && (t.status !== 'queued' || !this.nextSessionBlocked(t, now)),
+      );
     const next = startable(ready, this.running, this.config.maxConcurrent);
     // Pending messages take the task's turn; its workflow goes on once the reply ends.
     for (const task of next) {
@@ -2714,6 +2796,8 @@ export class Harness {
     status: TaskStatus,
     extra: { resumeAt?: number | null; deferred?: boolean } = {},
   ): Task {
+    if (this.cleaning.has(id) || (this.deleting.has(id) && status !== 'stopped'))
+      this.assertTaskOperationFree(id);
     const task = this.store.updateTask(id, { status, ...extra });
     this.emit({ type: 'task', taskId: id, status });
     return task;

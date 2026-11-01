@@ -240,3 +240,26 @@ Anthropic. The licenses of the packages bundled in the web board are in
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 PM tasks also accept existing folders without Git or commits. These tasks run in the selected folder; Harnessboard creates an empty local bookkeeping commit without staging files. After specification approval, PM arranges project setup, ignore rules and project commits according to the configured coding standards. Remote repository creation still requires explicit authorization.
+
+### Task cache cleanup
+
+Completed tasks automatically clean rebuildable caches in the background, including a
+startup sweep of older completed tasks. Use **Clean caches** in a task to preview paths
+and estimated sizes before removing them, including idle tasks awaiting confirmation.
+
+Only Harness-managed worktrees qualify. Caches need a matching project manifest and
+Git ignore rules: Rust `target/`, Node `node_modules/`, and Python `.venv/`.
+Candidates containing tracked files, symbolic links, or nested Git workspaces are skipped.
+Delivery directories (`dist/`, `build/`, reports and artifacts), branches, source code,
+history, and original project folders are retained. Sizes are logical file bytes;
+actual disk space recovered may differ. Failures appear in task notices and leave the
+task completed. Stop running tasks first; cleanup reserves the task against starting,
+chatting, merging, and deletion until it finishes.
+
+```sh
+hb cleanup 19             # preview candidates and estimated bytes
+hb cleanup 19 --execute   # discover again and remove eligible caches
+```
+
+API: `GET /api/tasks/:id/cleanup` previews; `POST /api/tasks/:id/cleanup` executes.
+Neither endpoint accepts deletion paths. Dependencies may need reinstalling when reopening a task.

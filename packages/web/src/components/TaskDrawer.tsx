@@ -29,6 +29,7 @@ import { FeatureProgress } from './Meter';
 import { PermissionPrompt } from './PermissionPrompt';
 import { PlanReview } from './PlanReview';
 import { AgentTeam } from './AgentTeam';
+import { CacheCleanupButton } from './CacheCleanupButton';
 import { Timeline } from './Timeline';
 
 export type DrawerTab =
@@ -225,6 +226,9 @@ export function TaskDrawer({ taskId, initialTab, onAction, onClose, onError }: P
               )}
               <p className="hint">{t('safety.monitoringLimit')}</p>
               <div className="actions">
+                {task.workspace === 'worktree' && task.worktreePath && (
+                  <CacheCleanupButton key={task.id} taskId={task.id} onError={onError} />
+                )}
                 {task.operations?.merge.visible && (
                   <button
                     type="button"

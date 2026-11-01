@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- 完成任務後自動清理可重建快取，啟動時補掃已完成任務；保留程式碼、交付成果、分支與歷史。
+- 任務頁新增清理預覽及執行，CLI 新增 `hb cleanup <id> [--execute]`。
+
 ## 0.2.19 - 2026-10-30
 
 Local test build. Full suite: 2014 passed, 14 skipped. Lint, typecheck and build pass. No PATCH tag or Release.

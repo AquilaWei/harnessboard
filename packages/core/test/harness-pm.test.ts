@@ -154,6 +154,7 @@ it('dispatches after approval and waits for user confirmation after PM acceptanc
     'secretary',
   ]);
   harness.completeTask(task.id);
+  await harness.waitForCleanup();
   expect(harness.store.getTask(task.id)?.status).toBe('done');
   expect(harness.taskOperations(task.id).merge).toMatchObject({ visible: true, enabled: true });
   await expect(harness.mergeTask(task.id)).resolves.toMatchObject({ status: 'merged' });
@@ -410,6 +411,7 @@ it('keeps merge available while an approved PM waits for confirmation and after 
   harness.store.appendEvent(task.id, null, 'criteria_approved', { criteria: 'Greeting works' });
   await expect(harness.mergeTask(task.id)).rejects.toThrow('already has every commit');
   harness.completeTask(task.id);
+  await harness.waitForCleanup();
   await expect(harness.mergeTask(task.id)).rejects.toThrow('already has every commit');
 });
 

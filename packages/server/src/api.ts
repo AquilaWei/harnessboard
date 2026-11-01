@@ -362,6 +362,8 @@ export function createApi(
   });
   app.post('/tasks/:id/draft', (c) => c.json(harness.toDraft(taskId(c))));
   app.post('/tasks/:id/stop', (c) => c.json(harness.stopTask(taskId(c))));
+  app.get('/tasks/:id/cleanup', async (c) => c.json(await harness.cleanupTask(taskId(c))));
+  app.post('/tasks/:id/cleanup', async (c) => c.json(await harness.cleanupTask(taskId(c), true)));
   app.post('/tasks/:id/complete', (c) => c.json(harness.completeTask(taskId(c))));
 
   app.get('/tasks/:id/work/:workId/report', async (c) =>

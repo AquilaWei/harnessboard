@@ -256,6 +256,7 @@ describe('moving tasks by hand', () => {
     });
     await harness.waitForIdle();
     harness.completeTask(task.id);
+    await harness.waitForCleanup();
     expect(harness.toDraft(task.id).status).toBe('backlog');
   });
 
@@ -269,6 +270,7 @@ describe('moving tasks by hand', () => {
     });
     await harness.waitForIdle();
     harness.completeTask(task.id);
+    await harness.waitForCleanup();
     useUpQuota();
     expect(harness.pendTask(task.id).status).toBe('pending');
   });

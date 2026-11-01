@@ -13,3 +13,4 @@ export * from './usage.js';
 export * from './util.js';
 export * from './views.js';
 export * from './pm.js';
+export * from './cache-cleanup.js';
