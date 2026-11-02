@@ -5,6 +5,7 @@ import { estimateCodexCost } from '../src/codex-pricing.js';
 describe('estimateCodexCost', () => {
   it.each([
     ['gpt-6.1-sol', 14.6],
+    ['gpt-6.1-terra', 7.3],
     ['gpt-6-sol', 14.7],
     ['gpt-6-astra', 73.5],
     ['gpt-6-luna', 0.735],
