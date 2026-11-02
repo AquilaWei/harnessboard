@@ -4,6 +4,13 @@
 
 - Desktop tasks open in independent floating windows with dragging, resizing and left/right half-screen snapping.
 
+## 0.2.22 - 2026-11-01
+
+- 本機測試版：新增選用的本地 AI 支援（LocalAICLI）與 `hb pricing refresh`，可從官方頁面更新 Codex 價目表。
+- 價目表更新會嚴格檢查模型回答，先顯示差異（新模型會特別標示），確認後才寫入。
+- 本地 AI 預設關閉；未安裝或停用時只會顯示原因，不影響其他功能。設定見 `localAi`。
+- 新增 `docs/plans/local-ai.md`，整理本地 AI 可協助與不適合的項目。
+
 ## 0.2.21 - 2026-11-01
 
 - 本機測試版：修正使用 gpt-6.1-terra 的 Codex 任務沒有費用估算的問題，現在會依 OpenAI 官方定價顯示。
