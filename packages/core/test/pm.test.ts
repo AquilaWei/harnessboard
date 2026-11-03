@@ -1381,3 +1381,25 @@ it('refuses PM implementation before the latest specification is approved', asyn
     ).rejects.toThrow('User must approve');
   });
 });
+
+it('never resumes a PM implementation session as the coordinator', async () => {
+  store.startSession('implementation', task.id, 'pm', pm.agentId, null);
+  store.setAgentSessionId('implementation', 'writing-thread');
+  store.endSession('implementation', 'completed');
+  store.appendEvent(task.id, 'implementation', 'pm_work', {
+    ...input,
+    id: 'pm-implementation',
+    model: null,
+    status: 'completed',
+    executor: 'pm',
+    sessionId: 'implementation',
+    sessionIds: ['implementation'],
+  });
+  host.run = async (_task, plan) => {
+    expect(plan.access).toBe('readOnly');
+    expect(plan.resume).toBeNull();
+    controller.abort();
+    return outcome;
+  };
+  await engine.run();
+});

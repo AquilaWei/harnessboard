@@ -1483,6 +1483,14 @@ export class PmWorkflow {
     const repairSessions = new Set(
       store.eventsOfKind(this.task.id, 'pm_integration').map((event) => event.sessionId),
     );
+    // Managed PM implementation threads retain write authority and cannot resume as coordinator.
+    for (const event of store.eventsOfKind(this.task.id, 'pm_work')) {
+      const work = event.data as PmWork;
+      if (work.executor === 'pm') {
+        if (work.sessionId) repairSessions.add(work.sessionId);
+        for (const id of work.sessionIds ?? []) repairSessions.add(id);
+      }
+    }
     const previous = store
       .listSessions(this.task.id)
       .findLast(
