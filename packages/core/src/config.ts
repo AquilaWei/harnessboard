@@ -11,6 +11,7 @@ import {
   isEffortId,
   resolveThresholds,
 } from '@harnessboard/shared';
+import type { LocalAiConfig } from './localai.js';
 import type {
   AgentProfile,
   AgentProvider,
@@ -64,6 +65,8 @@ export interface HarnessConfig {
    * `/.well-known/assetlinks.json`. Empty means no app is verified.
    */
   androidAppFingerprints: string[];
+  /** Optional local model helper (`localai run --json`); off unless enabled. */
+  localAi: LocalAiConfig;
 }
 
 /** Settings the web UI may change at runtime; they are saved to the user config file. */
@@ -141,6 +144,7 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     // TODO: docs/plans/android-app.md "After the release key exists" - add the release key's
     // public fingerprint once the user has created the key; CI prints it with each signed APK.
     androidAppFingerprints: [],
+    localAi: { enabled: false, command: null, models: { pricing: 'gpt-oss-20b' } },
   };
 }
 
@@ -172,6 +176,12 @@ export function loadConfig(
     ...defaults,
     ...fromFile,
     agents: { ...defaults.agents, ...fromFile?.agents },
+    // Nested like agents: a file that only enables local AI keeps the default models.
+    localAi: {
+      ...defaults.localAi,
+      ...fromFile?.localAi,
+      models: { ...defaults.localAi.models, ...fromFile?.localAi?.models },
+    },
   };
   applyEnv(fromUser, env);
   const merged: HarnessConfig = {
@@ -322,6 +332,7 @@ export function validate(config: HarnessConfig): void {
       'config androidAppFingerprints must be a list of SHA-256 fingerprints (32 hex bytes separated by colons)',
     );
   }
+  validateLocalAi(config.localAi);
   if (!config.agents[DEFAULT_AGENT]) {
     throw new Error(`config agents must include "${DEFAULT_AGENT}"`);
   }
@@ -358,6 +369,19 @@ export function validate(config: HarnessConfig): void {
   const fallback = config.defaultImplementerFallback;
   if (fallback !== null && !config.agents[fallback]) {
     throw new Error(`config defaultImplementerFallback "${fallback}" is not an agent profile`);
+  }
+}
+
+function validateLocalAi(localAi: LocalAiConfig): void {
+  if (typeof localAi?.enabled !== 'boolean')
+    throw new Error('config localAi.enabled must be true or false');
+  if (localAi.command !== null && (typeof localAi.command !== 'string' || localAi.command === '')) {
+    throw new Error('config localAi.command must be a binary path or null');
+  }
+  for (const [useCase, model] of Object.entries(localAi.models ?? {})) {
+    if (typeof model !== 'string' || model.trim() === '') {
+      throw new Error(`config localAi.models.${useCase} must be a model name`);
+    }
   }
 }
 

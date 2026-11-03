@@ -14,7 +14,7 @@ assignment and recorded PM follow-up instructions, so routine checks use the act
 delegated scope. While the PM waits for your answer, approved work and internal permission
 review continue. Only PM questions create user actions; raw CLI requests remain internal.
 
-![version](https://img.shields.io/badge/version-0.2.20-blue)
+![version](https://img.shields.io/badge/version-0.2.22-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -214,6 +214,14 @@ Run them from any folder with `hb`; tasks belong to the repository you run `hb a
 | `hb discuss <id>` / `hb pend <id>` | Plan a draft's spec / line it up to start later  |
 | `hb open <id>`                     | Continue the task's conversation in Claude Code  |
 | `hb delete <id>`                   | Remove a task that is not running                |
+
+**Optional local AI.** With [LocalAICLI](docs/configuration.md#config-files-agents-and-permissions)
+installed and `localAi.enabled` set, a maintainer can refresh the Codex price table from the
+official page with a local model. It shows a diff and writes only after you confirm:
+
+```bash
+hb pricing refresh            # extract prices with gpt-oss-20b, show the diff, ask y/N
+```
 
 Every command and flag is in [docs/cli.md](docs/cli.md); `hb --help` lists them too.
 

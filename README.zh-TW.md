@@ -8,7 +8,7 @@ PM 直接交辦 worker，執行後的回報與問題先經秘書；未委任時�
 秘書每批同步取得相關 worker 的初次交辦與已保存的 PM 後續指示，依實際工作範圍過濾例行事項。
 重要決策與驗收仍由 PM 負責；團隊面板會獨立顯示秘書用量。
 
-![version](https://img.shields.io/badge/version-0.2.19-blue)
+![version](https://img.shields.io/badge/version-0.2.22-blue)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
@@ -192,6 +192,14 @@ PM 目前支援本地 Claude Code 與 Codex；Gemini 和 Docker profile 可作�
 | `hb delete <id>`                   | 刪除沒在執行的任務                       |
 
 所有指令和參數見 [docs/cli.md](docs/cli.md)，`hb --help` 也能列出。
+
+**選用的本地 AI。** 安裝 LocalAICLI 並在設定中開啟 `localAi.enabled` 後，維護者可以用本地模型
+從官方頁面更新 Codex 價目表。指令會先顯示差異，確認後才寫入（設定見
+[docs/configuration.md](docs/configuration.md)）：
+
+```bash
+hb pricing refresh            # 用 gpt-oss-20b 抽取價格、顯示差異、詢問 y/N
+```
 
 ## 進階閱讀
 

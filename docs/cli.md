@@ -33,6 +33,7 @@ Every `hb` command and flag, and how merging, working on the base branch and del
 | `hb move <id> [--before <id>]`                                                        | Reorder a task in Pending; without `--before`, put it last           |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish                              |
 | `hb chat <id> <message>` / `hb chat <id> --cancel`                                    | Write to the task's agent; drop pending ones                         |
+| `hb pricing refresh [--file <html>] [--table <json>] [--yes]`                         | Update the Codex price table with local AI (below)                   |
 | `hb commits <id>`                                                                     | List the commits on the task branch                                  |
 | `hb merge <id>`                                                                       | Merge a reviewed task into its base (below)                          |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)                            |
@@ -107,3 +108,27 @@ review marks the task done. The card shows **on main** (or whichever branch it i
 its worktree folder, including edits that were not committed. The branch is kept, so
 committed work can still be merged; remove it with `git branch -D` when you no longer need
 it. Stop a running task first.
+
+## Updating the Codex price table
+
+`hb pricing refresh` is a maintainer command for a checkout of this repository. It reads the
+official [pricing page](https://developers.openai.com/api/docs/pricing) (or a saved copy with
+`--file page.html`), asks local AI to extract the prices, checks the answer strictly and shows
+what would change. It needs [local AI](configuration.md#config-files-agents-and-permissions)
+enabled in your config.
+
+```bash
+hb pricing refresh                       # fetch the page, show the diff, ask y/N
+hb pricing refresh --file pricing.html   # use a saved page instead of the network
+hb pricing refresh --yes                 # write without asking
+```
+
+- **Strict checks:** valid JSON with only the expected fields, finite numbers from 0 to 1000 USD
+  per million tokens, cached input no higher than input, and model ids that are already known
+  or look like `gpt-…` / `codex-…`. Any violation rejects the whole answer and nothing is written.
+- **Diff first:** changed prices are shown as `~`, new models as `+ NEW MODEL`. Models the page
+  no longer lists keep their current prices.
+- **Writes only on confirmation:** `y` at the prompt or `--yes`. The file is
+  `packages/shared/src/codex-prices.json` (or `--table <json>`); commit it yourself.
+- **Without local AI** (disabled, or the `localai` binary is missing) it prints why, exits
+  with a non-zero code and changes nothing.
