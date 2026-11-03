@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.2.23 - 2026-11-03
+
+- PM 可使用自己的模型在受管分支實作已核准的修改，沿用寫入互斥、權限處理及中斷恢復流程。
+- 唯讀 Claude 研究工作與 PM 可搜尋網路及讀取網頁，秘書維持管理工具限制。
+
 - Desktop tasks open in independent floating windows with dragging, resizing and left/right half-screen snapping.
 
 ## 0.2.22 - 2026-11-01
