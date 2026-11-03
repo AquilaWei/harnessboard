@@ -232,3 +232,5 @@ hb cleanup 19 --execute   # discover again and remove eligible caches
 
 API: `GET /api/tasks/:id/cleanup` previews; `POST /api/tasks/:id/cleanup` executes.
 Neither endpoint accepts deletion paths. Dependencies may need reinstalling when reopening a task.
+
+PM 可透過 `edit_work` 使用自己的模型，在受管獨立分支實作已核准的修改；主對話維持唯讀。詳見 [PM 工作流程](docs/pm-workflow.md)。

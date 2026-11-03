@@ -9,6 +9,8 @@ type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }
 
 /** What a reviewer may use: read files and inspect history, nothing that changes them. */
 export const READ_ONLY_TOOLS = [
+  'WebSearch',
+  'WebFetch',
   'Read',
   'Grep',
   'Glob',

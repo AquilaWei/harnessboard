@@ -1346,3 +1346,38 @@ it('never resumes an editing integration conversation as the read-only coordinat
   };
   await engine.run();
 });
+
+it('runs PM implementation with its own model outside the worker pool', async () => {
+  task = store.updateTask(task.id, { pm: { ...pm, model: 'pm-specialist' } });
+  engine = new PmWorkflow(host, task, controller.signal);
+  await pmTurn(async () => {
+    const work = await engine.call('edit_work', {
+      goal: 'Implement greeting',
+      acceptance: 'Greeting works',
+      scope: 'greeting.txt only',
+      writePaths: ['greeting.txt'],
+      plan: DISPATCH_PLAN,
+    });
+    expect(work).toMatchObject({
+      executor: 'pm',
+      model: 'pm-specialist',
+      access: 'edit',
+      workspace: 'branch',
+    });
+  });
+});
+
+it('refuses PM implementation before the latest specification is approved', async () => {
+  store.appendEvent(task.id, null, 'criteria', { criteria: 'New scope' });
+  await pmTurn(async () => {
+    await expect(
+      engine.call('edit_work', {
+        goal: 'Implement greeting',
+        acceptance: 'Greeting works',
+        scope: 'greeting.txt',
+        writePaths: ['greeting.txt'],
+        plan: DISPATCH_PLAN,
+      }),
+    ).rejects.toThrow('User must approve');
+  });
+});

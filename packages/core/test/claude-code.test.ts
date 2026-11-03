@@ -266,6 +266,8 @@ describe('ClaudeCodeAdapter.buildArgs', () => {
       '--session-id',
       'id-1',
       '--allowedTools',
+      'WebSearch',
+      'WebFetch',
       'Read',
       'Grep',
       'Glob',

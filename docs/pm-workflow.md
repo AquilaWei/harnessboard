@@ -343,3 +343,19 @@ recommendations for dependent assignments are also pending. Dependency admission
 retains the existing rejection behavior. Repair sessions preserve an interrupted merge, but
 recovery after verification fails on an already committed repair still needs a dedicated path.
 These gaps mean this PATCH is not full acceptance of the collaboration plan.
+
+## PM implementation sessions
+
+The coordinator stays read-only and can research with web search/fetch tools. After
+approval of the latest specification, `edit_work` starts a bounded PM implementation
+using the configured PM profile/model, even when that model is absent from the worker
+pool. Supply goal, acceptance, scope, explicit writePaths and a dispatch plan. It runs
+asynchronously through the managed job scheduler in a private branch; use `wait` to
+yield, `continue_work` for follow-ups, and `integrate_work` before acceptance.
+
+PM implementation sessions have the same workspace ownership, verification, permission,
+quota and interruption recovery rules as managed workers. The coordinator handles their
+escalations without blocking on its own permission requests. Existing changes survive
+interruptions. Review the actual integrated HEAD and tests before submitting acceptance;
+PM-owned implementation counts as completed implementation work. Publishing still
+requires user authorization. The secretary remains limited to its management tools.

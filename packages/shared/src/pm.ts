@@ -66,6 +66,8 @@ export interface PmDispatchPlan {
 
 /** Latest durable snapshot of a delegated job; transcripts stay in session events. */
 export interface PmWork {
+  /** PM-owned implementation uses the managed job lifecycle and PM model. */
+  executor?: 'pm';
   /** Missing on jobs dispatched before planning was required. */
   plan?: PmDispatchPlan;
   usage?: TaskUsage;

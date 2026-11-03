@@ -15,6 +15,31 @@ const string = { type: 'string' };
 const id = { id: string };
 export const PM_TOOLS = [
   {
+    name: 'edit_work',
+    description:
+      'PM only: implement a bounded approved change yourself in a managed branch session using your PM model. Returns immediately; use wait and end your turn. Reuse continue_work, then integrate_work and review the result. Requires a clean committed source and disjoint writePaths.',
+    inputSchema: fields(
+      {
+        goal: string,
+        acceptance: string,
+        scope: string,
+        writePaths: { type: 'array', items: string, minItems: 1 },
+        plan: {
+          type: 'object',
+          properties: {
+            benefit: string,
+            contextCost: string,
+            reuse: string,
+            dependencies: { type: 'array', items: string },
+          },
+          required: ['benefit', 'contextCost', 'reuse', 'dependencies'],
+          additionalProperties: false,
+        },
+      },
+      ['goal', 'acceptance', 'scope', 'writePaths', 'plan'],
+    ),
+  },
+  {
     name: 'appoint_secretary',
     description:
       'Appoint one lightweight, permitted local model to handle routine approvals and progress while you sleep. Prefer a fast low-cost model from profiles; keep decisions, dispatch and acceptance yourself. Reappoint to replace a failed secretary.',
@@ -272,6 +297,7 @@ export async function pmTools(
                 'accept',
                 'appoint_secretary',
                 'resolve_integration',
+                'edit_work',
                 'reply_worker',
                 'finish_batch',
                 'escalate_pm',

@@ -265,3 +265,5 @@ API: `GET /api/tasks/:id/cleanup` previews; `POST /api/tasks/:id/cleanup` execut
 Neither endpoint accepts deletion paths. Dependencies may need reinstalling when reopening a task.
 
 Desktop task panels can be opened together as floating windows. Drag the title bar to move a panel, drag its bottom-right corner to resize, or drag to either screen edge to snap to half the page. Layouts last until the page is refreshed.
+
+PM can implement approved changes with `edit_work` in a managed private branch using its own model; the coordinator stays read-only. See [PM workflow](docs/pm-workflow.md).
