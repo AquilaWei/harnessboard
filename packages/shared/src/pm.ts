@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { TaskUsage } from './usage.js';
+/** Maximum concurrent workers supported by a PM task. */
+export const MAX_PM_WORKERS = 6;
+/** Historical tasks retain this concurrency when no policy was stored. */
+export const DEFAULT_PM_WORKERS = 3;
+
 /** PM configuration persists independently of the legacy role assignments. */
 export interface PmConfig {
   agentId: string;
   model: string | null;
   effort: string | null;
   workers: PmWorkerProfile[];
-  /** Missing on historical tasks: cost first, three executing workers, 20% overhead. */
+  /** Missing on historical tasks: cost first, DEFAULT_PM_WORKERS, 20% overhead; maxWorkers supports 1..MAX_PM_WORKERS. */
   dispatchPolicy?: {
     strategy: 'costFirst';
     maxWorkers: number;
