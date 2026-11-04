@@ -1264,11 +1264,11 @@ it('reports insufficient history without treating unknown consumption as zero', 
   });
 });
 
-it('rejects worker limits exceeding the global three-worker policy', () => {
+it('rejects worker limits exceeding the supported ceiling', () => {
   expect(() =>
     validatePm(host.config, {
       ...pm,
-      dispatchPolicy: { strategy: 'costFirst', maxWorkers: 4, maxExtraTokenRatio: 0.2 },
+      dispatchPolicy: { strategy: 'costFirst', maxWorkers: 7, maxExtraTokenRatio: 0.2 },
     }),
   ).toThrow('worker limit');
 });
@@ -1402,4 +1402,85 @@ it('never resumes a PM implementation session as the coordinator', async () => {
     return outcome;
   };
   await engine.run();
+});
+
+it('accepts six workers and rejects zero workers', () => {
+  expect(() =>
+    validatePm(host.config, {
+      ...pm,
+      dispatchPolicy: {
+        strategy: 'costFirst',
+        maxWorkers: 6,
+        maxExtraTokenRatio: 0.2,
+      },
+    }),
+  ).not.toThrow();
+  expect(() =>
+    validatePm(host.config, {
+      ...pm,
+      dispatchPolicy: {
+        strategy: 'costFirst',
+        maxWorkers: 0,
+        maxExtraTokenRatio: 0.2,
+      },
+    }),
+  ).toThrow('worker limit');
+});
+
+it('reports the configured five-worker limit in profiles', async () => {
+  store.updateTask(task.id, {
+    pm: {
+      ...pm,
+      dispatchPolicy: {
+        strategy: 'costFirst',
+        maxWorkers: 5,
+        maxExtraTokenRatio: 0.2,
+      },
+    },
+  });
+  await pmTurn(async () => {
+    expect(await engine.call('profiles', {})).toEqual(
+      expect.arrayContaining([expect.objectContaining({ workerLimit: 5, availableSlots: 5 })]),
+    );
+  });
+});
+
+it('reserves only five configured execution slots across concurrent read-only dispatches', async () => {
+  store.updateTask(task.id, {
+    pm: {
+      ...pm,
+      dispatchPolicy: {
+        strategy: 'costFirst',
+        maxWorkers: 5,
+        maxExtraTokenRatio: 0.2,
+      },
+    },
+  });
+  let started = 0;
+  let peak = 0;
+  host.run = vi.fn(async (_task, plan, _id, signal) => {
+    if (plan.role !== 'worker') return outcome;
+    started++;
+    peak = Math.max(peak, started);
+    await new Promise<void>((resolve) => {
+      if (signal.aborted) resolve();
+      else signal.addEventListener('abort', () => resolve(), { once: true });
+    });
+    started--;
+    return outcome;
+  });
+  await pmTurn(async () => {
+    await Promise.all([
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+      engine.call('dispatch', { ...input, access: 'readOnly' }),
+    ]);
+    await vi.waitFor(() => expect(peak).toBe(5));
+    expect(pmWork(store, task.id).filter((w) => w.status === 'queued')).toHaveLength(1);
+    expect(store.listSessions(task.id).filter((s) => s.role === 'worker')).toHaveLength(5);
+  });
+  expect(peak).toBe(5);
 });

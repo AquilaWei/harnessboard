@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AgentInfo, PmConfig, Settings, TaskWorkspace } from '@harnessboard/shared';
+import { defaultPmConfig, loadLastPmConfig, saveLastPmConfig } from '../lastPmConfig';
 import { api } from '../api';
 import { FolderField } from './FolderField';
 import { PmFields } from './PmFields';
@@ -33,16 +34,30 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
   const [workspace, setWorkspace] = useState<TaskWorkspace>('worktree');
   const [acceptance, setAcceptance] = useState('');
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [pm, setPm] = useState<PmConfig>({
-    agentId: 'claude',
-    model: null,
-    effort: null,
-    workers: [{ agentId: 'claude', models: [null] }],
-  });
+  const [pm, setPm] = useState<PmConfig>(defaultPmConfig);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    api.agents().then(setAgents, (e: Error) => setError(e.message));
+    let current = true;
+    api
+      .agents()
+      .then(async (available) => {
+        const catalogs = Object.fromEntries(
+          await Promise.all(
+            available
+              .filter((a) => a.ok)
+              .map(async (a) => [a.id, await api.agentModels(a.id).catch(() => [])] as const),
+          ),
+        );
+        if (current) {
+          setAgents(available);
+          setPm(loadLastPmConfig(localStorage, available, catalogs));
+        }
+      })
+      .catch((e: Error) => current && setError(e.message));
+    return () => {
+      current = false;
+    };
   }, []);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -60,6 +75,7 @@ export function NewTaskDialog({ settings, onClose, onCreated }: Props) {
         ...(acceptance.trim() ? { acceptance: acceptance.trim() } : {}),
         size: settings.defaultContextPolicy.size ?? 'medium',
       });
+      saveLastPmConfig(localStorage, pm);
       try {
         localStorage.setItem(
           RECENT_KEY,
