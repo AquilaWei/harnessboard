@@ -312,7 +312,7 @@ without creating a tag or triggering CI.
 
 ## Cost-first dispatch and PM integration
 
-PM task settings accept `dispatchPolicy` (`strategy: "costFirst"`, `maxWorkers: 1..3`,
+PM task settings accept `dispatchPolicy` (`strategy: "costFirst"`, `maxWorkers: 1..6`,
 `maxExtraTokenRatio`, default `0.2`). Historical configuration remains readable.
 The execution limit covers all descendants; waiting parents release their slot,
 while directory ownership still serializes shared writers. Queued work makes no model call.

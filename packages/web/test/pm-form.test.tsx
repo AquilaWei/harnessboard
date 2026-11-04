@@ -25,6 +25,7 @@ const type = (field: HTMLInputElement | HTMLTextAreaElement, value: string) => {
   field.dispatchEvent(new Event('input', { bubbles: true }));
 };
 beforeEach(async () => {
+  localStorage.clear();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -94,4 +95,31 @@ it('removes fixed-role and mode controls from task creation', () => {
   expect(container.textContent).not.toContain('Spec author');
   expect(container.textContent).not.toContain('Designer');
   expect(container.querySelector('input[name="mode"]')).toBeNull();
+});
+
+it('loads the last submitted configuration when reopened', async () => {
+  const limit = [...container.querySelectorAll('select')].find((select) =>
+    [...select.options].some((option) => option.value === '6'),
+  )!;
+  await act(async () => {
+    limit.value = '5';
+    limit.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await act(async () => container.querySelector('form')!.requestSubmit());
+  act(() => root.unmount());
+  root = createRoot(container);
+  await act(async () =>
+    root.render(<NewTaskDialog settings={settings} onClose={() => {}} onCreated={() => {}} />),
+  );
+  expect(
+    [...container.querySelectorAll('select')].find((select) =>
+      [...select.options].some((option) => option.value === '6'),
+    )!.value,
+  ).toBe('5');
+});
+
+it('does not save preferences when task creation fails', async () => {
+  api.createTask.mockRejectedValueOnce(new Error('creation failed'));
+  await act(async () => container.querySelector('form')!.requestSubmit());
+  expect(localStorage.getItem('harnessboard.lastPmConfig')).toBeNull();
 });

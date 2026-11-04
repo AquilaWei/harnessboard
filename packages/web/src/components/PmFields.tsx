@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { isModelId } from '@harnessboard/shared';
+import { DEFAULT_PM_WORKERS, MAX_PM_WORKERS, isModelId } from '@harnessboard/shared';
 import type { AgentInfo, PmConfig } from '@harnessboard/shared';
 import { ModelPicker } from './ModelPicker';
 
@@ -16,7 +16,7 @@ export function PmFields({ agents, value, onChange }: Props) {
   const { t } = useTranslation();
   const policy = value.dispatchPolicy ?? {
     strategy: 'costFirst' as const,
-    maxWorkers: 3,
+    maxWorkers: DEFAULT_PM_WORKERS,
     maxExtraTokenRatio: 0.2,
   };
   return (
@@ -99,9 +99,11 @@ export function PmFields({ agents, value, onChange }: Props) {
               })
             }
           >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={3}>3</option>
+            {Array.from({ length: MAX_PM_WORKERS }, (_, i) => i + 1).map((limit) => (
+              <option key={limit} value={limit}>
+                {limit}
+              </option>
+            ))}
           </select>
         </label>
         <label className="field">

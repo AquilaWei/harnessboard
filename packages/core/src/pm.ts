@@ -14,7 +14,7 @@ import type {
   Session,
   QuotaInfo,
 } from '@harnessboard/shared';
-import { isEffortId, isModelId } from '@harnessboard/shared';
+import { DEFAULT_PM_WORKERS, MAX_PM_WORKERS, isEffortId, isModelId } from '@harnessboard/shared';
 import type { HarnessConfig } from './config.js';
 import type { SessionPlan } from './workflow.js';
 import type { SessionOutcome } from './runner.js';
@@ -95,7 +95,7 @@ export interface PmHost {
 const PM_COORDINATION =
   'After approval, autonomously plan and supervise delivery, report meaningful progress to the user, and review actual work. Choose the number of managed workers by dependency, speed and token efficiency. Independent tasks may run in parallel; keep tightly coupled work together. Never edit a child-owned path while that child is active. Small tasks need no extra subagents. Workers may delegate through the same managed tools. Define one clear feature, acceptance tests, interface contracts and explicit non-overlapping writePaths per parallel worker. Keep shared API/schema changes with one owner or finish that prerequisite first. Editing workers default to private branch/worktrees from the current committed HEAD; provide explicit non-overlapping writePaths and run independent writers in parallel. Commit pending changes before branching. Choose workspace=shared explicitly only for a necessary coupled handoff or special build/install task; shared writers queue. Reuse continue_work for the same job. Use integrate_work to merge each completed direct child into its parent workspace, resolve conflicts in that same child branch, and verify the combined result before acceptance. Read-only findings refer to observedHead; recheck findings made stale by concurrent edits before acceptance.';
 const PROVIDER_BALANCE =
-  'Optimize total delivery tokens. Continue the same primary worker for fixes, tests and sequential phases. Inspect profiles before dispatch: choose by capability, task-local model cost samples, retries and provider quota headroom. Unknown usage and quota are unknown. Do not balance job counts or spawn to consume idle quota. At most three workers execute across all levels. Independent ready work may run in parallel with disjoint writePaths; compare sequentialTokens and parallelTokens and keep extra estimated tokens within the task policy (default 20%). With fewer than five samples explain independence, estimateBasis and expected benefit. Token estimates compare plans and are not prices. Never change the PM model or exceed the permitted pool.';
+  'Optimize total delivery tokens. Continue the same primary worker for fixes, tests and sequential phases. Inspect profiles before dispatch: choose by capability, task-local model cost samples, retries and provider quota headroom. Unknown usage and quota are unknown. Do not balance job counts or spawn to consume idle quota. Across all levels, respect the configured task worker limit (workerLimit in profiles). Independent ready work may run in parallel with disjoint writePaths; compare sequentialTokens and parallelTokens and keep extra estimated tokens within the task policy (default 20%). With fewer than five samples explain independence, estimateBasis and expected benefit. Token estimates compare plans and are not prices. Never change the PM model or exceed the permitted pool.';
 const DELEGATION_PLANNING =
   'Before creating any new worker conversation, make a concrete dispatch plan: benefit, repeated-context and integration cost, why an existing worker cannot efficiently continue, and completed prerequisite work IDs. Use one primary implementer for small or tightly coupled work. Reuse continue_work for fixes and sequential phases in the same area; do not create a fresh worker for every milestone. Editing workers default to separate branch worktrees; always provide writePaths. Additional development workers are for ready independent features that can actually run in parallel with explicit interfaces and disjoint writePaths. Shared workspaces require an explicit exception for a necessary coupled handoff or build/install operation. Resolve shared API/schema prerequisites first. Do not preload workers for blocked future phases or add workers merely to balance provider counts. A separate independent review or specialist assignment must justify its cost. Plan this yourself; do not spawn a planning agent merely to decide whether to delegate.';
 const WORKER_COORDINATION =
@@ -131,11 +131,13 @@ export function validatePm(config: HarnessConfig, value: PmConfig): void {
     (value.dispatchPolicy.strategy !== 'costFirst' ||
       !Number.isInteger(value.dispatchPolicy.maxWorkers) ||
       value.dispatchPolicy.maxWorkers < 1 ||
-      value.dispatchPolicy.maxWorkers > 3 ||
+      value.dispatchPolicy.maxWorkers > MAX_PM_WORKERS ||
       !Number.isFinite(value.dispatchPolicy.maxExtraTokenRatio) ||
       value.dispatchPolicy.maxExtraTokenRatio < 0)
   )
-    throw new Error('Invalid cost-first dispatch policy (worker limit must be 1–3)');
+    throw new Error(
+      `Invalid cost-first dispatch policy (worker limit must be 1–${MAX_PM_WORKERS})`,
+    );
   const profile = config.agents[value.agentId]!;
   if (profile.provider === 'gemini' || profile.sandbox === 'docker')
     throw new Error(
@@ -1091,7 +1093,10 @@ export class PmWorkflow {
   }
 
   private get workerLimit(): number {
-    return Math.min(3, Math.max(1, this.latest.pm!.dispatchPolicy?.maxWorkers ?? 3));
+    return Math.min(
+      MAX_PM_WORKERS,
+      Math.max(1, this.latest.pm!.dispatchPolicy?.maxWorkers ?? DEFAULT_PM_WORKERS),
+    );
   }
 
   private executionBlock(work: PmWork): string | null {
