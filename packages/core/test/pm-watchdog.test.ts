@@ -401,18 +401,17 @@ it('does not start the clocks of a queued worker', async () => {
       dispatchPolicy: { strategy: 'costFirst', maxWorkers: 1, maxExtraTokenRatio: 0.2 },
     },
   });
-  let first = '';
   pmActions[0] = async () => {
-    first = (
-      (await engine.call('dispatch', { ...input, expectedMinutes: 10 })) as { workId: string }
-    ).workId;
+    await engine.call('dispatch', { ...input, expectedMinutes: 10 });
     await engine.call('dispatch', { ...input, expectedMinutes: 10 });
     await engine.call('wait', {});
   };
   running = engine.run();
   await until(() => turns.length === 1);
+  // Either worker may win the single slot; the other stays queued.
+  const executing = works().find((w) => w.status === 'running')!.id;
   await advance(100);
-  expect(watchdogEvents()).toMatchObject([{ workId: first }]);
+  expect(watchdogEvents()).toMatchObject([{ workId: executing }]);
 });
 
 it('clears the timers when the worker completes', async () => {
