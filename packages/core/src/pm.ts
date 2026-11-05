@@ -1070,7 +1070,10 @@ export class PmWorkflow {
     return this.integrate({ id: work.id }, work.parentWorkId ?? null);
   }
 
-  private continue(input: Record<string, unknown>, caller: string | null): PmWork {
+  private continue(
+    input: Record<string, unknown>,
+    caller: string | null,
+  ): PmWork & { estimateUpdated?: true; messageDelivered?: false } {
     const work = this.work(this.text(input, 'id'));
     this.assertVisible(work, caller);
     const expected = this.expectedMinutes(input);
@@ -1078,7 +1081,8 @@ export class PmWorkflow {
     if (expected !== undefined && work.status === 'running' && this.processes.has(work.id)) {
       this.watchdog.rearm(work.id, expected);
       this.record({ ...work, expectedMinutes: expected });
-      return this.work(work.id);
+      // Say outright that the message was dropped, so the PM does not assume the worker saw it.
+      return { ...this.work(work.id), estimateUpdated: true, messageDelivered: false };
     }
     if (
       !(work.executor === 'pm'

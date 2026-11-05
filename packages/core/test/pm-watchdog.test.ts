@@ -253,6 +253,36 @@ it('re-arms the deadline when continue_work gives the running worker a new estim
   expect(watchdogEvents()).toHaveLength(2);
 });
 
+it('tells the PM that a running worker got the estimate but not the message', async () => {
+  const id = await startWorker({ expectedMinutes: 10 });
+  let result: unknown;
+  pmActions[1] = async () => {
+    result = await engine.call('continue_work', { id, message: 'extend', expectedMinutes: 20 });
+  };
+  engine.notify();
+  await until(() => result !== undefined);
+  expect(result).toMatchObject({
+    id,
+    expectedMinutes: 20,
+    estimateUpdated: true,
+    messageDelivered: false,
+  });
+});
+
+it('still refuses continue_work on a running worker when no estimate is given', async () => {
+  const id = await startWorker({ expectedMinutes: 10 });
+  let rejected = '';
+  pmActions[1] = async () => {
+    rejected = await engine.call('continue_work', { id, message: 'go on' }).then(
+      () => 'accepted',
+      (e: Error) => e.message,
+    );
+  };
+  engine.notify();
+  await until(() => rejected !== '');
+  expect(rejected).toBe('Worker is already active or still finishing');
+});
+
 it('records the new estimate of a running worker', async () => {
   const id = await startWorker({ expectedMinutes: 10 });
   pmActions[1] = async () => {
