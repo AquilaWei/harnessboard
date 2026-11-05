@@ -110,6 +110,65 @@ Stop a task before changing its PM configuration. The Details panel shows PM and
 usage, child results and acceptance findings. Standard task totals include every managed
 PM and worker session exactly once; missing provider usage stays unknown.
 
+## Worker watchdog
+
+The watchdog finds stuck managed workers **without calling any model**. It only notifies
+the PM or pauses one worker; it never cancels or kills work, deletes files or worktrees, or
+dispatches again. Alerts are recorded as `watchdog` events and wake the PM directly, so the
+secretary and event coalescing never delay them. There is no polling: each running worker
+has one deadline timer and one idle timer, and nothing scans.
+
+- **Expected time.** `dispatch`, `edit_work` and `continue_work` accept an optional
+  `expectedMinutes` (a number above 0, at most 10080). The PM should supply it whenever it
+  can estimate. Other values are rejected. The estimate and the actual run time (time spent
+  executing, not waiting) are stored on the work record and shown in the Team panel and in
+  `hb show`.
+- **Deadline.** At the estimate × 1.5 (30 minutes × 1.5 when there is no estimate), a worker
+  that is still running produces one `watchdog` event. A `continue_work` with a new
+  `expectedMinutes` starts the deadline over, including for a worker that is still running
+  (then only the estimate changes; the message is not delivered). A reported deadline is not
+  repeated until a new estimate arrives.
+- **Idle.** No transport event for 15 minutes produces one `watchdog` event; any event
+  resets the clock, and an idle stretch is reported once.
+- **Repeated failure.** Checked when a tool result arrives: the same environment error
+  twice in a row (missing command or module, no name resolution, full or read-only disk), or
+  the identical failed call (same tool and exact arguments) three times in a row, pauses that
+  worker. Pausing ends only the current CLI turn: the session, files, worktree and branch are
+  kept, the work shows as waiting for the PM, and the PM receives a bounded excerpt (at most
+  2 KB) of the last failing output. Resume with `continue_work` and new direction. The
+  environment classifier is deliberately narrow; test, compiler and lint failures never match.
+- **Pausing the clocks.** Timers run only while the worker executes. They stop while the
+  agent waits for a permission answer, and a worker that is queued, waiting for the PM or
+  user, or in `wait` has no turn running and so no timers. Each turn resumes with the
+  remaining time recorded on the work record. Completion, failure, cancellation and task
+  stop clear every timer. After a restart nothing is replayed: interrupted jobs are stopped,
+  and a continued job picks up its recorded remaining time.
+
+Thresholds are the `pmWatchdog` settings in [configuration](configuration.md).
+
+## Secretary event coalescing
+
+With fewer than two managed workers running, every worker event starts a secretary batch at
+once, as before. While two or more run and the secretary is idle, the harness holds events
+(worker results and low-risk permission requests) and starts one batch when either:
+
+- the waiting events reach the smaller of the number of running workers and the threshold
+  cap (default 3), or
+- the oldest waiting event has waited the maximum delay (default 20 seconds). A delay of 0
+  turns coalescing off.
+
+A batch always takes every waiting event, in arrival order, once. These start it at once:
+a worker failure or stop, a delivery after which fewer than two workers run, and
+high-risk permissions (which go straight to the PM). A user message or a watchdog alert wakes
+the PM turn immediately; that turn lists the worker results the secretary has not reviewed
+yet, so none is hidden, and the PM turn then moves the secretary's cursor past them.
+Waiting costs a worker blocked on a permission up to the maximum delay.
+
+The only timer is armed from the oldest waiting event's own timestamp and is cleared when a
+batch or PM turn takes the events, when the secretary fails, and when the task stops. After a
+restart the first PM turn sees the unreviewed results. Without a secretary behaviour is
+unchanged. Settings: `pmCoalescing` in [configuration](configuration.md).
+
 ## Delegation and permissions
 
 PM and workers choose whether to delegate based on dependencies, elapsed time, context
@@ -255,6 +314,11 @@ Electron upgrade. Check these before release:
   overflow; PM Chat and approval actions must remain reachable.
 - In the desktop app, inspect a larger tree with zoom/pan/fit, switch agents and stop the
   task. Expect the whole subtree to stop and old results to remain inspectable.
+- Leave a real worker stuck (for example a command that hangs, or a missing tool it keeps
+  retrying) and expect a `watchdog` alert in the PM turn and a pause for repeated failure.
+- Compare the PM's `expectedMinutes` with the actual run time for several real jobs.
+- With two or more workers, compare secretary batch count and tokens against the earlier
+  one-batch-per-event behaviour.
 - Restart an interrupted task explicitly. Expect the PM to see stopped workers and inspect
   existing files before continuing, without requesting unchanged specification approval.
 
@@ -336,9 +400,8 @@ Failures preserve files and merge state and emit `pm_integration` audit events.
 
 Task 33 is not resumed by this change. Its historical base-workspace commits and dirty files
 are untouched. Migration of legacy base-workspace tasks to isolated task branches,
-a deterministic task 33 token replay, grouped retry/integration accounting, and a five-second
-coordination event coalescer still need implementation and acceptance. The two-identical-environment-error
-retry stop, per-role/type cost samples, enforced per-file edit boundaries, and automatic
+a deterministic task 33 token replay, and grouped retry/integration accounting still need
+implementation and acceptance. Per-role/type cost samples, enforced per-file edit boundaries, and automatic
 recommendations for dependent assignments are also pending. Dependency admission currently
 retains the existing rejection behavior. Repair sessions preserve an interrupted merge, but
 recovery after verification fails on an already committed repair still needs a dedicated path.
