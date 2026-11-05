@@ -12,6 +12,8 @@ import {
   resolveThresholds,
 } from '@harnessboard/shared';
 import type { LocalAiConfig } from './localai.js';
+import { MAX_EXPECTED_MINUTES, WATCHDOG_DEFAULTS } from './watchdog.js';
+import type { WatchdogSettings } from './watchdog.js';
 import type {
   AgentProfile,
   AgentProvider,
@@ -67,6 +69,18 @@ export interface HarnessConfig {
   androidAppFingerprints: string[];
   /** Optional local model helper (`localai run --json`); off unless enabled. */
   localAi: LocalAiConfig;
+  /** PM workflow: when a running worker counts as stuck. No model is involved. */
+  pmWatchdog: WatchdogSettings;
+  /** PM workflow: how worker events are grouped before the secretary reads them. */
+  pmCoalescing: CoalescingSettings;
+}
+
+/** Grouping of worker events while two or more managed workers run. */
+export interface CoalescingSettings {
+  /** Longest an event waits for others, in seconds; 0 turns grouping off. */
+  maxDelaySeconds: number;
+  /** A batch starts once this many events wait, or the number of running workers if fewer. */
+  thresholdCap: number;
 }
 
 /** Settings the web UI may change at runtime; they are saved to the user config file. */
@@ -145,6 +159,8 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     // public fingerprint once the user has created the key; CI prints it with each signed APK.
     androidAppFingerprints: [],
     localAi: { enabled: false, command: null, models: { pricing: 'gpt-oss-20b' } },
+    pmWatchdog: { ...WATCHDOG_DEFAULTS },
+    pmCoalescing: { maxDelaySeconds: 20, thresholdCap: 3 },
   };
 }
 
@@ -182,6 +198,8 @@ export function loadConfig(
       ...fromFile?.localAi,
       models: { ...defaults.localAi.models, ...fromFile?.localAi?.models },
     },
+    pmWatchdog: { ...defaults.pmWatchdog, ...fromFile?.pmWatchdog },
+    pmCoalescing: { ...defaults.pmCoalescing, ...fromFile?.pmCoalescing },
   };
   applyEnv(fromUser, env);
   const merged: HarnessConfig = {
@@ -333,6 +351,7 @@ export function validate(config: HarnessConfig): void {
     );
   }
   validateLocalAi(config.localAi);
+  validatePmTuning(config);
   if (!config.agents[DEFAULT_AGENT]) {
     throw new Error(`config agents must include "${DEFAULT_AGENT}"`);
   }
@@ -369,6 +388,34 @@ export function validate(config: HarnessConfig): void {
   const fallback = config.defaultImplementerFallback;
   if (fallback !== null && !config.agents[fallback]) {
     throw new Error(`config defaultImplementerFallback "${fallback}" is not an agent profile`);
+  }
+}
+
+function validatePmTuning({ pmWatchdog: w, pmCoalescing: c }: HarnessConfig): void {
+  const positive = (value: unknown, max: number): boolean =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= max;
+  const count = (value: unknown): boolean => Number.isInteger(value) && (value as number) >= 1;
+  if (
+    !positive(w?.deadlineMultiplier, 100) ||
+    !positive(w?.defaultMinutes, MAX_EXPECTED_MINUTES) ||
+    !positive(w?.idleMinutes, MAX_EXPECTED_MINUTES) ||
+    !count(w?.repeatedCallLimit) ||
+    !count(w?.environmentRepeatLimit)
+  ) {
+    throw new Error(
+      `config pmWatchdog needs positive deadlineMultiplier (≤100), defaultMinutes and idleMinutes (≤${MAX_EXPECTED_MINUTES}), and whole-number repeatedCallLimit and environmentRepeatLimit (≥1)`,
+    );
+  }
+  if (
+    typeof c?.maxDelaySeconds !== 'number' ||
+    !Number.isFinite(c.maxDelaySeconds) ||
+    c.maxDelaySeconds < 0 ||
+    c.maxDelaySeconds > 3600 ||
+    !count(c.thresholdCap)
+  ) {
+    throw new Error(
+      'config pmCoalescing needs maxDelaySeconds from 0 (off) to 3600 and a whole-number thresholdCap ≥1',
+    );
   }
 }
 

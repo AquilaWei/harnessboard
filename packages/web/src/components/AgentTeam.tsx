@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { PmWork, StoredEvent, TaskView } from '@harnessboard/shared';
+import { formatDuration } from '@harnessboard/shared';
 import { Markdown } from './Markdown';
 import { LogView } from './LogView';
 import { UsageSummary } from './UsageSummary';
@@ -335,6 +336,20 @@ export function AgentTeam({ task, events }: { task: TaskView; events: StoredEven
               ))}
             {current.work ? (
               <>
+                <dl className="facts">
+                  <dt>{t('team.expectedTime')}</dt>
+                  <dd>
+                    {current.work.expectedMinutes === undefined
+                      ? t('team.notRecorded')
+                      : formatDuration(current.work.expectedMinutes * 60_000)}
+                  </dd>
+                  <dt>{t('team.runTime')}</dt>
+                  <dd>
+                    {current.work.runMs === undefined
+                      ? t('team.notRecorded')
+                      : formatDuration(current.work.runMs)}
+                  </dd>
+                </dl>
                 {current.work.branch && (
                   <dl className="facts">
                     <dt>{t('team.branch')}</dt>

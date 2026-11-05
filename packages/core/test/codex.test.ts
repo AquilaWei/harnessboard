@@ -59,13 +59,48 @@ describe('CodexAdapter.parseLine', () => {
     expect(events).toEqual([expect.objectContaining({ kind: 'result', text: '' })]);
   });
 
-  it('reports a command once, when it starts', () => {
+  it('reports a command when it starts and its result when it completes', () => {
     const command = { type: 'command_execution', command: '/bin/bash -lc ls' };
     const events = run([
       { type: 'item.started', item: command },
       { type: 'item.completed', item: command },
     ]);
-    expect(events).toEqual([{ kind: 'tool_use', name: 'Bash', summary: '/bin/bash -lc ls' }]);
+    expect(events).toEqual([
+      { kind: 'tool_use', name: 'Bash', summary: '/bin/bash -lc ls', argsKey: expect.any(String) },
+      { kind: 'tool_result', isError: false, text: '' },
+    ]);
+  });
+
+  it('reports a failed command as an error result with its output', () => {
+    const command = { id: 'item_1', type: 'command_execution', command: 'pnpm test' };
+    const events = run([
+      {
+        type: 'item.completed',
+        item: { ...command, exit_code: 127, aggregated_output: 'pnpm: command not found' },
+      },
+    ]);
+    expect(events).toEqual([
+      { kind: 'tool_result', callId: 'item_1', isError: true, text: 'pnpm: command not found' },
+    ]);
+  });
+
+  it('reports a failed MCP call as an error result', () => {
+    const events = run([
+      {
+        type: 'item.completed',
+        item: {
+          id: 'item_2',
+          type: 'mcp_tool_call',
+          server: 's',
+          tool: 't',
+          status: 'failed',
+          error: { message: 'boom' },
+        },
+      },
+    ]);
+    expect(events).toEqual([
+      { kind: 'tool_result', callId: 'item_2', isError: true, text: 'boom' },
+    ]);
   });
 
   it('reports a file change with its paths once it completes', () => {

@@ -2518,17 +2518,25 @@ export class Harness {
           this.store.updateSessionContext(sessionId, tokens, event.contextWindow);
         }
         if (event.kind === 'result' && !event.isError) replied = true;
+        (plan as PmSessionPlan).onEvent?.(event);
         this.recordAgentEvent(task.id, sessionId, provider, event);
         monitor(event);
       },
-      onPermissionRequest: (event) =>
-        this.askPermission(
-          task.id,
-          sessionId,
-          provider,
-          event,
-          (plan as PmSessionPlan).cwd ?? task.worktreePath!,
-        ),
+      onPermissionRequest: async (event) => {
+        // The watchdog's clocks stand still while the agent waits for an answer.
+        (plan as PmSessionPlan).onPermission?.(true);
+        try {
+          return await this.askPermission(
+            task.id,
+            sessionId,
+            provider,
+            event,
+            (plan as PmSessionPlan).cwd ?? task.worktreePath!,
+          );
+        } finally {
+          (plan as PmSessionPlan).onPermission?.(false);
+        }
+      },
       onNotice: (message) => this.notice(task.id, message, sessionId),
       onCompacted: () => this.store.appendEvent(task.id, sessionId, 'compacted', {}),
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
@@ -2758,7 +2766,9 @@ export class Harness {
     provider: AgentProvider,
     event: AgentEvent,
   ): void {
-    // A permission request is recorded by askPermission, without the tool's full input.
+    // A permission request is recorded by askPermission, without the tool's full input. A tool
+    // result only feeds the PM watchdog: its output is neither stored nor shown.
+    if (event.kind === 'tool_result') return;
     if (event.kind !== 'permission_request') {
       this.store.appendEvent(taskId, sessionId, event.kind, event);
     }

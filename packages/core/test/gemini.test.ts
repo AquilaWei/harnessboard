@@ -216,16 +216,22 @@ describe('GeminiAdapter.createParser', () => {
     ]);
     expect(events).toEqual([
       { kind: 'text', text: 'Looking at the tests.' },
-      { kind: 'tool_use', name: 'run_shell_command', summary: 'pnpm test' },
+      {
+        kind: 'tool_use',
+        name: 'run_shell_command',
+        summary: 'pnpm test',
+        callId: 't1',
+        argsKey: expect.any(String),
+      },
     ]);
   });
 
-  it('leaves the echoed user prompt and tool results out of the log', () => {
+  it('leaves the echoed user prompt out and reports a tool result for the watchdog', () => {
     const events = run([
       { type: 'message', role: 'user', content: 'do it' },
       { type: 'tool_result', tool_id: 't1', status: 'success', output: 'ok' },
     ]);
-    expect(events).toEqual([]);
+    expect(events).toEqual([{ kind: 'tool_result', callId: 't1', isError: false, text: 'ok' }]);
   });
 
   it('reports the last message as the result text, with tokens per model', () => {

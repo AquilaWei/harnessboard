@@ -13,6 +13,7 @@ import { codexConnection, codexPermissionReply } from './codex-app-server.js';
 import { readCodexQuota } from './codex-quota.js';
 import { parseCodexModels } from './models.js';
 import { output } from './process.js';
+import { argsKey, excerpt } from './tool-events.js';
 
 /**
  * Drives Codex app-server over stdio RPC, including tool approvals. Legacy exec parsing
@@ -152,7 +153,13 @@ interface CodexLine {
 }
 
 interface CodexItem {
+  id?: string;
   type?: string;
+  status?: string;
+  exit_code?: number | null;
+  aggregated_output?: string;
+  arguments?: unknown;
+  error?: { message?: string } | null;
   text?: string;
   command?: string;
   query?: string;
@@ -176,14 +183,48 @@ function parseItem(completed: boolean, item: CodexItem | undefined): AgentEvent[
       return completed && item.text ? [{ kind: 'text', text: item.text }] : [];
     // A command shows up twice (started, completed); report it once, when it starts.
     case 'command_execution':
-      return completed ? [] : [{ kind: 'tool_use', name: 'Bash', summary: clip(item.command) }];
+      return completed
+        ? [
+            {
+              kind: 'tool_result',
+              ...(item.id ? { callId: item.id } : {}),
+              isError: item.status === 'failed' || (item.exit_code ?? 0) !== 0,
+              text: excerpt(item.aggregated_output),
+            },
+          ]
+        : [
+            {
+              kind: 'tool_use',
+              name: 'Bash',
+              summary: clip(item.command),
+              ...(item.id ? { callId: item.id } : {}),
+              argsKey: argsKey(item.command),
+            },
+          ];
     case 'file_change': {
       if (!completed) return [];
       const paths = (item.changes ?? []).map((c) => c.path ?? '?').join(', ');
       return [{ kind: 'tool_use', name: 'Edit', summary: clip(paths) }];
     }
     case 'mcp_tool_call':
-      return completed ? [] : [{ kind: 'tool_use', name: 'MCP', summary: clip(toolName(item)) }];
+      return completed
+        ? [
+            {
+              kind: 'tool_result',
+              ...(item.id ? { callId: item.id } : {}),
+              isError: item.status === 'failed' || item.error != null,
+              text: excerpt(item.error?.message),
+            },
+          ]
+        : [
+            {
+              kind: 'tool_use',
+              name: 'MCP',
+              summary: clip(toolName(item)),
+              ...(item.id ? { callId: item.id } : {}),
+              argsKey: argsKey([item.server, item.tool, item.arguments]),
+            },
+          ];
     case 'web_search':
       return completed ? [] : [{ kind: 'tool_use', name: 'WebSearch', summary: clip(item.query) }];
     default:

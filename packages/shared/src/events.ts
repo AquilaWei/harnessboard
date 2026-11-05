@@ -28,7 +28,25 @@ export interface QuotaInfo {
 export type AgentEvent =
   | { kind: 'init'; sessionId: string; model: string }
   | { kind: 'text'; text: string }
-  | { kind: 'tool_use'; name: string; summary: string }
+  | {
+      kind: 'tool_use';
+      name: string;
+      summary: string;
+      /** The agent's id for this call, when it reports one; pairs the call with its `tool_result`. */
+      callId?: string;
+      /** Short digest of the call's exact arguments; equal digests mean identical calls. */
+      argsKey?: string;
+    }
+  | {
+      /**
+       * A tool call finished. Only the watchdog reads it (never stored or shown), so `text` is a
+       * bounded excerpt of the output, not the full output.
+       */
+      kind: 'tool_result';
+      callId?: string;
+      isError: boolean;
+      text: string;
+    }
   | { kind: 'context'; tokens: number }
   | {
       /** A message snapshot, or cumulative conversation usage when callId is absent. */

@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
 import type { TaskView } from '@harnessboard/shared';
 import { AgentTeam } from '../src/components/AgentTeam';
-import '../src/i18n';
+import i18n from '../src/i18n';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const task = {
@@ -200,4 +200,38 @@ it('shows branch ownership and integration evidence for development work', async
   expect(inspector.textContent).toContain('/tmp/work-feature');
   expect(inspector.textContent).toContain('src/transfer/, test/transfer.test.ts');
   expect(inspector.textContent).toContain('abc123');
+});
+
+async function inspectWork(extra: Record<string, unknown>) {
+  await act(async () =>
+    root.render(
+      <AgentTeam task={{ ...task, work: [{ ...task.work![0]!, ...extra }] }} events={[]} />,
+    ),
+  );
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[data-agent-id="worker"]')!.click(),
+  );
+  return container.querySelector('.agent-inspector')!.textContent;
+}
+
+it('shows the expected time and the actual run time of a job', async () => {
+  const text = await inspectWork({ expectedMinutes: 10, runMs: 725_000 });
+  expect(text).toContain('Expected time10m 0s');
+  expect(text).toContain('Actual run time12m 5s');
+});
+
+it('says so when a job has no recorded estimate or run time', async () => {
+  const text = await inspectWork({});
+  expect(text).toContain('Expected timenot recorded');
+});
+
+it('labels the estimate and run time in Traditional Chinese', async () => {
+  await i18n.changeLanguage('zh-TW');
+  try {
+    const text = await inspectWork({ expectedMinutes: 10, runMs: 725_000 });
+    expect(text).toContain('預估時間10m 0s');
+    expect(text).toContain('實際執行時間12m 5s');
+  } finally {
+    await i18n.changeLanguage('en');
+  }
 });
