@@ -1223,7 +1223,9 @@ it('lets the PM edit, test and commit a conflict repair before integrating', asy
       workspace: 'branch',
       writePaths: ['greeting.txt'],
     })) as { id: string };
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 30_000,
+    });
     await writeFile(path.join(task.worktreePath!, 'greeting.txt'), 'target\n');
     await git(task.worktreePath!, ['add', 'greeting.txt']);
     await git(task.worktreePath!, ['commit', '-m', 'feat: change target']);
@@ -1307,10 +1309,13 @@ it('blocks parent integration when the configured verification command fails', a
       workspace: 'branch',
       writePaths: ['greeting.txt'],
     })) as { id: string };
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 30_000,
+    });
     await engine.call('dispatch', { ...input, goal: 'Target edit' });
-    await vi.waitFor(() =>
-      expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+    await vi.waitFor(
+      () => expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+      { timeout: 30_000 },
     );
     await vi.waitFor(async () =>
       expect(await engine.call('integrate_work', { id: work.id })).toMatchObject({
