@@ -10,8 +10,13 @@ const workflow = load(
 const android = workflow.jobs.android;
 
 describe('CI workflow', () => {
-  it('runs only when a v* tag is pushed', () => {
-    expect(workflow.on).toEqual({ push: { tags: ['v*'] } });
+  it('runs checks on branch and version tag pushes', () => {
+    expect(workflow.on).toEqual({ push: { branches: ['**'], tags: ['v*'] } });
+  });
+
+  it('builds release artifacts only for version tags', () => {
+    expect(workflow.jobs.desktop.if).toBe("startsWith(github.ref, 'refs/tags/v')");
+    expect(android.if).toBe("startsWith(github.ref, 'refs/tags/v')");
   });
 
   it('builds the Android app on ubuntu after the tests pass', () => {
