@@ -44,6 +44,7 @@ import { pmTools } from './pm-tools.js';
 import { assertTaskRepository, dirtyFingerprint, validBaseline } from './workspace-check.js';
 import { dispatchCost } from './dispatch-cost.js';
 import { Secretary } from './pm-secretary.js';
+import { EventCoalescer } from './pm-coalesce.js';
 import { MAX_EXPECTED_MINUTES, Watchdog } from './watchdog.js';
 import type { WatchdogAlert, WatchdogTiming } from './watchdog.js';
 
@@ -196,12 +197,14 @@ export class PmWorkflow {
   private questionCreated = false;
   private readonly secretary: Secretary;
   private readonly watchdog: Watchdog;
+  private readonly coalescer: EventCoalescer;
 
   constructor(
     private readonly host: PmHost,
     private readonly task: Task,
     private readonly signal: AbortSignal,
   ) {
+    this.coalescer = new EventCoalescer(host.config.pmCoalescing, () => this.notify('state'));
     this.watchdog = new Watchdog(host.config.pmWatchdog, (alert) => this.watchdogAlert(alert));
     this.secretary = new Secretary(host, task.id, signal, (question, message) => {
       const work = this.work(question.id);
@@ -331,6 +334,7 @@ export class PmWorkflow {
       await Promise.allSettled([...this.jobs]);
       // After the jobs: each one records its own run time as it stops; this catches any leftover.
       this.watchdog.clear();
+      this.coalescer.clear();
       await bridge.close();
       this.signal.removeEventListener('abort', cancel);
       if (this.signal.aborted && !['paused_safety', 'waiting_quota'].includes(this.latest.status))
@@ -350,12 +354,20 @@ export class PmWorkflow {
   private async coordinate(server: SessionMcpServer): Promise<void> {
     const secretary = this.secretary.state;
     if (!this.pmPending) {
-      if (!secretary || secretary.status === 'failed') return;
+      if (!secretary || secretary.status === 'failed') {
+        this.coalescer.clear();
+        return;
+      }
+      // With several workers running, hold routine events briefly so one batch reads them all.
+      const running = this.works.filter((w) => w.status === 'running').length;
+      if (!this.coalescer.ready(running, this.secretary.pending())) return;
       const escalate = await this.secretary.handle();
       if (!escalate && !this.pmPending) return;
     }
     if (this.signal.aborted) return;
     this.pmPending = false;
+    // The PM turn below reads the held events (see `turn`), so no batch has to wait for them.
+    this.coalescer.clear();
     await this.turn(server);
   }
 
@@ -1697,6 +1709,18 @@ export class PmWorkflow {
       )
         messages.push(event.data);
     }
+    // A PM turn moves the secretary's cursor past worker results it has not batched yet;
+    // show them here so a user message or watchdog alert never hides them.
+    const held =
+      secretary && secretary.status !== 'failed'
+        ? this.secretary.unbatched().map((w) => ({
+            id: w.id,
+            status: w.status,
+            summary: w.summary && w.summary.length > 600 ? w.summary.slice(0, 550) : w.summary,
+            evidence: w.evidence,
+          }))
+        : [];
+    if (held.length) messages.push({ workerResultsNotYetReviewedBySecretary: held });
     const batches = updates.filter((event) => event.kind === 'pm_secretary_batch_end');
     if (batches.length)
       messages.push({
