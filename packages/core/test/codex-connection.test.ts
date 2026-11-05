@@ -371,6 +371,42 @@ describe('Codex approval transport', () => {
     ).toMatchObject([{ suggestedRules: ['Bash(node report.js)'] }]);
   });
 
+  it('reports a failed command as an error result with its output', () => {
+    const { emit } = connect();
+    expect(
+      emit('item/completed', {
+        threadId: 'thread',
+        item: {
+          id: 'cmd_1',
+          type: 'commandExecution',
+          command: 'pnpm test',
+          exitCode: 127,
+          aggregatedOutput: 'pnpm: command not found',
+        },
+      }),
+    ).toEqual([
+      { kind: 'tool_result', callId: 'cmd_1', isError: true, text: 'pnpm: command not found' },
+    ]);
+  });
+
+  it('gives a started command its id and an argument digest', () => {
+    const { emit } = connect();
+    expect(
+      emit('item/started', {
+        threadId: 'thread',
+        item: { id: 'cmd_1', type: 'commandExecution', command: 'pnpm test' },
+      }),
+    ).toEqual([
+      {
+        kind: 'tool_use',
+        name: 'Bash',
+        summary: 'pnpm test',
+        callId: 'cmd_1',
+        argsKey: expect.any(String),
+      },
+    ]);
+  });
+
   it('uses the completed final message and cumulative usage as the turn result', () => {
     const { emit } = connect();
     emit('item/completed', {

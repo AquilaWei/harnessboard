@@ -13,6 +13,13 @@ const fields = (properties: Record<string, unknown>, required: string[] = []) =>
 });
 const string = { type: 'string' };
 const id = { id: string };
+const expectedMinutes = {
+  type: 'number',
+  exclusiveMinimum: 0,
+  maximum: 10080,
+  description:
+    'Provide this whenever you can estimate it: expected run time in minutes (greater than 0, at most 10080). The watchdog alerts you at 1.5x this (30 min when omitted) if the worker is still running; it only notifies and never stops the worker.',
+};
 export const PM_TOOLS = [
   {
     name: 'edit_work',
@@ -24,6 +31,7 @@ export const PM_TOOLS = [
         acceptance: string,
         scope: string,
         writePaths: { type: 'array', items: string, minItems: 1 },
+        expectedMinutes,
         plan: {
           type: 'object',
           properties: {
@@ -139,6 +147,7 @@ export const PM_TOOLS = [
           description:
             'Required for branch development: explicit owned files or directories (trailing /), no globs. Sibling ownership must not overlap. Agree interfaces in goal and acceptance.',
         },
+        expectedMinutes,
         workspace: {
           enum: ['branch', 'shared'],
           description:
@@ -166,8 +175,9 @@ export const PM_TOOLS = [
   },
   {
     name: 'continue_work',
-    description: 'Continue the same worker conversation with incremental instructions.',
-    inputSchema: fields({ ...id, message: string }, ['id', 'message']),
+    description:
+      'Continue the same worker conversation with incremental instructions. Provide expectedMinutes with a new estimate when you can: it restarts the watchdog deadline. On a worker that is still running only the estimate is updated; the message is not delivered.',
+    inputSchema: fields({ ...id, message: string, expectedMinutes }, ['id', 'message']),
   },
   {
     name: 'cancel_work',

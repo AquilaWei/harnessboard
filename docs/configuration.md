@@ -73,6 +73,37 @@ Real-device acceptance still needs a live Claude/Codex spike and resume, plus br
 paired-phone notifications with their notification permissions enabled. Automated tests
 use fake agents and do not consume paid tokens.
 
+## PM watchdog and event coalescing
+
+These tune the [PM workflow](pm-workflow.md) and go in the user `config.json`. Both groups
+are merged key by key, so you can set only the keys you want to change.
+
+```json
+{
+  "pmWatchdog": {
+    "deadlineMultiplier": 1.5,
+    "defaultMinutes": 30,
+    "idleMinutes": 15,
+    "repeatedCallLimit": 3,
+    "environmentRepeatLimit": 2
+  },
+  "pmCoalescing": { "maxDelaySeconds": 20, "thresholdCap": 3 }
+}
+```
+
+| Key                                 | Default | Meaning                                                                     |
+| ----------------------------------- | ------- | --------------------------------------------------------------------------- |
+| `pmWatchdog.deadlineMultiplier`     | 1.5     | Deadline = the PM's `expectedMinutes` × this (above 0, at most 100).        |
+| `pmWatchdog.defaultMinutes`         | 30      | Estimate used when the PM gave none (above 0, at most 10080).               |
+| `pmWatchdog.idleMinutes`            | 15      | Minutes without any transport event before an idle alert (at most 10080).   |
+| `pmWatchdog.repeatedCallLimit`      | 3       | Identical failed tool calls in a row that pause the worker (whole number).  |
+| `pmWatchdog.environmentRepeatLimit` | 2       | Same environment error in a row that pauses the worker (whole number).      |
+| `pmCoalescing.maxDelaySeconds`      | 20      | Longest an event waits for others; `0` turns coalescing off (at most 3600). |
+| `pmCoalescing.thresholdCap`         | 3       | A batch starts at min(running workers, this) waiting events (whole number). |
+
+Invalid values (negative, non-numeric, out of range) stop loading with a message naming the
+group. Changes apply to tasks started after a server restart.
+
 ## Quota pause level
 
 When a platform's 5-hour usage reaches its pause level, no session of that platform starts

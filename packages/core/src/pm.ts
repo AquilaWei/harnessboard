@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
+  AgentEvent,
   PmAcceptance,
   PmConfig,
   PmQuestion,
@@ -43,11 +44,20 @@ import { pmTools } from './pm-tools.js';
 import { assertTaskRepository, dirtyFingerprint, validBaseline } from './workspace-check.js';
 import { dispatchCost } from './dispatch-cost.js';
 import { Secretary } from './pm-secretary.js';
+import { EventCoalescer } from './pm-coalesce.js';
+import { MAX_EXPECTED_MINUTES, Watchdog } from './watchdog.js';
+import type { WatchdogAlert, WatchdogTiming } from './watchdog.js';
+
+type RepeatedFailure = Extract<WatchdogAlert, { reason: 'repeated_failure' }>;
 
 interface WorkerTurn {
   yielded: boolean;
   askPm: boolean;
   delegated: boolean;
+  /** Ends only this CLI turn; the watchdog uses it to pause a worker without cancelling it. */
+  abort: AbortController;
+  /** Set when the watchdog paused the turn after repeated failures. */
+  paused: RepeatedFailure | null;
 }
 interface WorkerObservation {
   headBefore: string | null;
@@ -55,6 +65,7 @@ interface WorkerObservation {
   dirtyBefore: string | null;
   writerAtStart: boolean;
   marker: number;
+  timing: WatchdogTiming | null;
 }
 
 export interface PmSessionPlan extends SessionPlan {
@@ -62,6 +73,10 @@ export interface PmSessionPlan extends SessionPlan {
   pmEffort: string | null;
   mcpServers?: Record<string, SessionMcpServer>;
   toolsOnly?: boolean;
+  /** Every transport event of this session, for the watchdog. Not persisted. */
+  onEvent?: (event: AgentEvent) => void;
+  /** The agent started (`true`) or stopped waiting for a permission answer. */
+  onPermission?: (waiting: boolean) => void;
   /** Secretary batches run outside the repository to avoid project auto-loaded context. */
   cwd?: string;
 }
@@ -181,12 +196,16 @@ export class PmWorkflow {
   private pmPending = true;
   private questionCreated = false;
   private readonly secretary: Secretary;
+  private readonly watchdog: Watchdog;
+  private readonly coalescer: EventCoalescer;
 
   constructor(
     private readonly host: PmHost,
     private readonly task: Task,
     private readonly signal: AbortSignal,
   ) {
+    this.coalescer = new EventCoalescer(host.config.pmCoalescing, () => this.notify('state'));
+    this.watchdog = new Watchdog(host.config.pmWatchdog, (alert) => this.watchdogAlert(alert));
     this.secretary = new Secretary(host, task.id, signal, (question, message) => {
       const work = this.work(question.id);
       if (
@@ -313,6 +332,9 @@ export class PmWorkflow {
       this.current = false;
       cancel();
       await Promise.allSettled([...this.jobs]);
+      // After the jobs: each one records its own run time as it stops; this catches any leftover.
+      this.watchdog.clear();
+      this.coalescer.clear();
       await bridge.close();
       this.signal.removeEventListener('abort', cancel);
       if (this.signal.aborted && !['paused_safety', 'waiting_quota'].includes(this.latest.status))
@@ -332,12 +354,20 @@ export class PmWorkflow {
   private async coordinate(server: SessionMcpServer): Promise<void> {
     const secretary = this.secretary.state;
     if (!this.pmPending) {
-      if (!secretary || secretary.status === 'failed') return;
+      if (!secretary || secretary.status === 'failed') {
+        this.coalescer.clear();
+        return;
+      }
+      // With several workers running, hold routine events briefly so one batch reads them all.
+      const running = this.works.filter((w) => w.status === 'running').length;
+      if (!this.coalescer.ready(running, this.secretary.pending())) return;
       const escalate = await this.secretary.handle();
       if (!escalate && !this.pmPending) return;
     }
     if (this.signal.aborted) return;
     this.pmPending = false;
+    // The PM turn below reads the held events (see `turn`), so no batch has to wait for them.
+    this.coalescer.clear();
     await this.turn(server);
   }
 
@@ -599,6 +629,7 @@ export class PmWorkflow {
     caller: string | null,
     selfEdit = false,
   ): Promise<unknown> {
+    const expected = this.expectedMinutes(input);
     const agentId = selfEdit ? this.latest.pm!.agentId : this.text(input, 'agentId');
     const model = selfEdit ? this.latest.pm!.model : (input.model ?? null);
     const allowed =
@@ -666,6 +697,7 @@ export class PmWorkflow {
       since: null,
       head: null,
       execution: 'managed',
+      ...(expected !== undefined ? { expectedMinutes: expected } : {}),
       ...(selfEdit ? { executor: 'pm' as const } : {}),
       workspace,
       ...(writePaths ? { writePaths } : {}),
@@ -682,6 +714,30 @@ export class PmWorkflow {
       reason: 'Waiting for execution capacity and workspace ownership.',
       workId: work.id,
     };
+  }
+
+  /** Optional caller estimate for the watchdog deadline; invalid values fail loudly. */
+  private expectedMinutes(input: Record<string, unknown>): number | undefined {
+    const value = input.expectedMinutes;
+    if (value === undefined || value === null) return undefined;
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      value <= 0 ||
+      value > MAX_EXPECTED_MINUTES
+    )
+      throw new Error(
+        `expectedMinutes must be a number greater than 0 and at most ${MAX_EXPECTED_MINUTES}`,
+      );
+    return value;
+  }
+
+  /** A new estimate starts the deadline budget over, so the old remaining time is dropped. */
+  private estimated(work: PmWork, expected: number | undefined): PmWork {
+    if (expected === undefined) return work;
+    const next = { ...work, expectedMinutes: expected };
+    delete next.deadlineRemainingMs;
+    return next;
   }
 
   private dispatchPlan(value: unknown, caller: string | null) {
@@ -1014,9 +1070,20 @@ export class PmWorkflow {
     return this.integrate({ id: work.id }, work.parentWorkId ?? null);
   }
 
-  private continue(input: Record<string, unknown>, caller: string | null): PmWork {
+  private continue(
+    input: Record<string, unknown>,
+    caller: string | null,
+  ): PmWork & { estimateUpdated?: true; messageDelivered?: false } {
     const work = this.work(this.text(input, 'id'));
     this.assertVisible(work, caller);
+    const expected = this.expectedMinutes(input);
+    // A running job cannot take a message mid-turn, but its estimate can be extended.
+    if (expected !== undefined && work.status === 'running' && this.processes.has(work.id)) {
+      this.watchdog.rearm(work.id, expected);
+      this.record({ ...work, expectedMinutes: expected });
+      // Say outright that the message was dropped, so the PM does not assume the worker saw it.
+      return { ...this.work(work.id), estimateUpdated: true, messageDelivered: false };
+    }
     if (
       !(work.executor === 'pm'
         ? work.agentId === this.latest.pm!.agentId && work.model === this.latest.pm!.model
@@ -1038,11 +1105,16 @@ export class PmWorkflow {
         message,
       });
       this.replies.set(work.id, message);
-      this.record({
-        ...work,
-        status: 'awaiting_children',
-        activity: 'PM supplied direction; waiting for child work to finish.',
-      });
+      this.record(
+        this.estimated(
+          {
+            ...work,
+            status: 'awaiting_children',
+            activity: 'PM supplied direction; waiting for child work to finish.',
+          },
+          expected,
+        ),
+      );
       this.notify('state');
       return this.work(work.id);
     }
@@ -1051,7 +1123,7 @@ export class PmWorkflow {
     if (active(work) || this.controllers.has(work.id))
       throw new Error('Worker is already active or still finishing');
     this.cancelled.delete(work.id);
-    const next = { ...work, status: 'queued' as const };
+    const next = this.estimated({ ...work, status: 'queued' as const }, expected);
     const message = this.text(input, 'message');
     if (!caller)
       this.host.store.appendEvent(this.task.id, this.pmSessionId, 'pm_worker_direction', {
@@ -1128,7 +1200,13 @@ export class PmWorkflow {
         if (signal.aborted) break;
         const cwd = this.directory(work);
         this.processes.set(work.id, { access: work.access, cwd });
-        const turn = { yielded: false, askPm: false, delegated: false };
+        const turn: WorkerTurn = {
+          yielded: false,
+          askPm: false,
+          delegated: false,
+          abort: new AbortController(),
+          paused: null,
+        };
         this.turns.set(work.id, turn);
         try {
           if (this.host.blocked(work.agentId))
@@ -1196,6 +1274,16 @@ export class PmWorkflow {
               work.agentId,
               null,
             );
+          const workId = work.id;
+          this.watchdog.start(workId, {
+            ...(work.expectedMinutes !== undefined
+              ? { expectedMinutes: work.expectedMinutes }
+              : {}),
+            ...(work.deadlineRemainingMs !== undefined
+              ? { deadlineRemainingMs: work.deadlineRemainingMs }
+              : {}),
+            runMs: work.runMs ?? 0,
+          });
           const outcome = await this.host.run(
             { ...this.latest, worktreePath: cwd },
             {
@@ -1208,14 +1296,19 @@ export class PmWorkflow {
               pmModel: work.model,
               pmEffort: work.effort,
               ...(bridge ? { mcpServers: { harnessboard: bridge.server } } : {}),
+              onEvent: (event) => this.watchdog.event(workId, event),
+              onPermission: (waiting) =>
+                waiting ? this.watchdog.pause(workId) : this.watchdog.resume(workId),
             },
             id,
-            signal,
+            AbortSignal.any([signal, turn.abort.signal]),
           );
+          const timing = this.watchdog.stop(workId);
           this.turns.delete(work.id);
           this.host.store.endSession(id, outcome.reason);
           if (
             !(await this.finishWorkerTurn(work, outcome, turn, signal, {
+              timing,
               headBefore,
               statusBefore,
               dirtyBefore,
@@ -1225,6 +1318,9 @@ export class PmWorkflow {
           )
             return;
         } finally {
+          // Normally stopped after the run; this covers a run that threw.
+          const left = this.watchdog.stop(work.id);
+          if (left) this.record({ ...this.work(work.id), ...left });
           this.processes.delete(work.id);
           this.turns.delete(work.id);
           this.notify('state');
@@ -1314,13 +1410,13 @@ export class PmWorkflow {
     signal: AbortSignal,
     observation: WorkerObservation,
   ): Promise<boolean> {
-    const { headBefore, statusBefore, dirtyBefore, writerAtStart, marker } = observation;
+    const { headBefore, statusBefore, dirtyBefore, writerAtStart, marker, timing } = observation;
     const cwd = this.directory(work);
     const head = await optionalHeadCommit(cwd);
     const children = this.works.filter((w) => w.parentWorkId === work.id);
     const waiting = turn.yielded || turn.askPm || turn.delegated || children.some(active);
     let failure =
-      outcome.reason === 'completed' || (outcome.reason === 'handoff' && waiting)
+      outcome.reason === 'completed' || (outcome.reason === 'handoff' && waiting) || turn.paused
         ? null
         : `Worker ended: ${outcome.reason}. ${outcome.detail ?? ''}`;
     if (work.access === 'edit' && !failure && !waiting) {
@@ -1368,8 +1464,10 @@ export class PmWorkflow {
       ...this.work(work.id),
       head,
       evidence,
-      summary:
-        (failure ?? outcome.finalText).length > 2400
+      ...(timing ?? {}),
+      summary: turn.paused
+        ? this.watchdogMessage(turn.paused, this.work(work.id))
+        : (failure ?? outcome.finalText).length > 2400
           ? (failure ?? outcome.finalText).slice(0, 2300) +
             '\n[Truncated; full report: ' +
             evidence +
@@ -1388,10 +1486,53 @@ export class PmWorkflow {
                 : 'completed',
     };
     this.record(work);
-    if (['completed', 'failed', 'stopped', 'cancelled', 'awaiting_pm'].includes(work.status))
+    if (turn.paused && work.status === 'awaiting_pm') this.reportWatchdog(work, turn.paused);
+    else if (['completed', 'failed', 'stopped', 'cancelled', 'awaiting_pm'].includes(work.status))
       this.workerUpdate(work);
     if (failure) this.cancelDescendants(work.id);
     return !failure && !signal.aborted && waiting;
+  }
+
+  private watchdogAlert(alert: WatchdogAlert): void {
+    const work = this.works.find((w) => w.id === alert.workId);
+    const turn = this.turns.get(alert.workId);
+    if (!work || work.status !== 'running' || !turn) return;
+    if (alert.reason === 'repeated_failure') {
+      if (turn.paused) return;
+      // Pausing ends only this CLI turn; the PM is told once the pause is durable.
+      turn.paused = alert;
+      turn.askPm = true;
+      turn.abort.abort();
+      return;
+    }
+    this.reportWatchdog(work, alert);
+  }
+
+  private watchdogMessage(alert: WatchdogAlert, work: PmWork): string {
+    const minutes = (ms: number) => Math.round(ms / 60_000);
+    switch (alert.reason) {
+      case 'deadline':
+        return `Watchdog: worker passed its deadline (estimate ${alert.expectedMinutes} min, running ${minutes(alert.runMs)} min). It is still running. Inspect it, then continue_work with a new expectedMinutes or cancel_work.`;
+      case 'idle':
+        return `Watchdog: worker produced no events for ${alert.idleMinutes} min (running ${minutes(work.runMs ?? 0)} min in total). It may be stuck; inspect it before deciding.`;
+      case 'repeated_failure':
+        return alert.kind === 'environment'
+          ? `Watchdog paused the worker: the same environment error occurred ${alert.count} times in a row (${alert.tool}: ${alert.summary.slice(0, 120)}). Fix the environment, then continue_work.`
+          : `Watchdog paused the worker: the identical failed call (${alert.tool}: ${alert.summary.slice(0, 120)}) ran ${alert.count} times in a row. Give new direction with continue_work.`;
+    }
+  }
+
+  /** Records a watchdog alert and wakes the PM directly: it is never delayed by the secretary. */
+  private reportWatchdog(work: PmWork, alert: WatchdogAlert): void {
+    const message = this.watchdogMessage(alert, work);
+    this.host.store.appendEvent(this.task.id, work.sessionId, 'watchdog', {
+      expectedMinutes: work.expectedMinutes ?? null,
+      runMs: work.runMs ?? null,
+      ...alert,
+      message,
+    });
+    this.record({ ...this.work(work.id), activity: message });
+    this.notify('decision');
   }
 
   /** All execution results pass through the secretary; user messages still wake the PM directly. */
@@ -1431,6 +1572,8 @@ export class PmWorkflow {
       worktreePath: w.worktreePath,
       baseCommit: w.baseCommit,
       writePaths: w.writePaths,
+      expectedMinutes: w.expectedMinutes,
+      runMs: w.runMs,
       integratedHead: w.integratedHead,
       integratedInto: w.integratedInto,
       updatedAt: w.updatedAt,
@@ -1552,6 +1695,7 @@ export class PmWorkflow {
         'pm_progress',
         'pm_secretary_escalation',
         'pm_secretary_batch_end',
+        'watchdog',
       ],
       before?.id ?? 0,
     );
@@ -1569,6 +1713,18 @@ export class PmWorkflow {
       )
         messages.push(event.data);
     }
+    // A PM turn moves the secretary's cursor past worker results it has not batched yet;
+    // show them here so a user message or watchdog alert never hides them.
+    const held =
+      secretary && secretary.status !== 'failed'
+        ? this.secretary.unbatched().map((w) => ({
+            id: w.id,
+            status: w.status,
+            summary: w.summary && w.summary.length > 600 ? w.summary.slice(0, 550) : w.summary,
+            evidence: w.evidence,
+          }))
+        : [];
+    if (held.length) messages.push({ workerResultsNotYetReviewedBySecretary: held });
     const batches = updates.filter((event) => event.kind === 'pm_secretary_batch_end');
     if (batches.length)
       messages.push({

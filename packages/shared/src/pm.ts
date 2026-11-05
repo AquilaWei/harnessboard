@@ -83,6 +83,15 @@ export interface PmWork {
   reportedModel?: string | null;
   reviewStage?: 'secretary' | 'pm';
   activity?: string | null;
+  /** The caller's estimate of the run time in minutes; the watchdog deadline derives from it. */
+  expectedMinutes?: number;
+  /** Actual time the worker spent running, in milliseconds, excluding waits; sums all turns. */
+  runMs?: number;
+  /**
+   * Deadline budget left in milliseconds. Absent: not started yet; `null`: the deadline was
+   * already reported and stays quiet until a new estimate arrives.
+   */
+  deadlineRemainingMs?: number | null;
   updatedAt?: number;
   observedHead?: string | null;
   id: string;

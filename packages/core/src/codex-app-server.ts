@@ -3,6 +3,7 @@ import type { AgentEvent, RunUsage } from '@harnessboard/shared';
 import { estimateCodexCost } from '@harnessboard/shared';
 import type { AgentConnection, PermissionReply, SessionSpec } from './agent.js';
 import { riskOf } from './risk.js';
+import { argsKey, excerpt } from './tool-events.js';
 
 type Fields = Record<string, unknown>;
 type PermissionEvent = Extract<AgentEvent, { kind: 'permission_request' }>;
@@ -396,8 +397,38 @@ function isConfirmation(question: Fields): boolean {
 }
 
 function toolEvents(item: Fields, completed: boolean): AgentEvent[] {
+  const callId = typeof item.id === 'string' ? { callId: item.id } : {};
+  if (item.type === 'commandExecution' && completed) {
+    return [
+      {
+        kind: 'tool_result',
+        ...callId,
+        isError:
+          item.status === 'failed' || (typeof item.exitCode === 'number' && item.exitCode !== 0),
+        text: excerpt(item.aggregatedOutput),
+      },
+    ];
+  }
+  if (item.type === 'mcpToolCall' && completed) {
+    return [
+      {
+        kind: 'tool_result',
+        ...callId,
+        isError: item.status === 'failed' || item.error != null,
+        text: excerpt(fields(item.error).message),
+      },
+    ];
+  }
   if (item.type === 'commandExecution' && !completed) {
-    return [{ kind: 'tool_use', name: 'Bash', summary: string(item.command) }];
+    return [
+      {
+        kind: 'tool_use',
+        name: 'Bash',
+        summary: string(item.command),
+        ...callId,
+        argsKey: argsKey(item.command),
+      },
+    ];
   }
   if (item.type === 'fileChange' && completed) {
     const changes = Array.isArray(item.changes) ? item.changes : [];
@@ -411,7 +442,13 @@ function toolEvents(item: Fields, completed: boolean): AgentEvent[] {
   }
   if (item.type === 'mcpToolCall' && !completed) {
     return [
-      { kind: 'tool_use', name: 'MCP', summary: `${string(item.server)} ${string(item.tool)}` },
+      {
+        kind: 'tool_use',
+        name: 'MCP',
+        summary: `${string(item.server)} ${string(item.tool)}`,
+        ...callId,
+        argsKey: argsKey([item.server, item.tool, item.arguments]),
+      },
     ];
   }
   if (item.type === 'webSearch' && !completed)

@@ -262,6 +262,65 @@ describe('androidAppFingerprints', () => {
   });
 });
 
+describe('PM watchdog and coalescing settings', () => {
+  const load = (patch: object) => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify(patch));
+    return loadConfig({ env: {}, configFile: file });
+  };
+
+  it('defaults the watchdog to 1.5x, 30 min, 15 min idle, 3 identical calls, 2 environment errors', () => {
+    expect(loadConfig({ env: {}, configFile: missing }).pmWatchdog).toEqual({
+      deadlineMultiplier: 1.5,
+      defaultMinutes: 30,
+      idleMinutes: 15,
+      repeatedCallLimit: 3,
+      environmentRepeatLimit: 2,
+    });
+  });
+
+  it('defaults coalescing to a 20 second delay and a threshold cap of 3', () => {
+    expect(loadConfig({ env: {}, configFile: missing }).pmCoalescing).toEqual({
+      maxDelaySeconds: 20,
+      thresholdCap: 3,
+    });
+  });
+
+  it('keeps the other watchdog defaults when the file sets one key', () => {
+    expect(load({ pmWatchdog: { idleMinutes: 5 } }).pmWatchdog).toMatchObject({
+      idleMinutes: 5,
+      defaultMinutes: 30,
+    });
+  });
+
+  it('accepts 0 seconds to turn coalescing off', () => {
+    expect(load({ pmCoalescing: { maxDelaySeconds: 0 } }).pmCoalescing.maxDelaySeconds).toBe(0);
+  });
+
+  it.each([
+    { deadlineMultiplier: 0 },
+    { deadlineMultiplier: -1 },
+    { defaultMinutes: '30' },
+    { idleMinutes: Number.NaN },
+    { idleMinutes: 20000 },
+    { repeatedCallLimit: 0 },
+    { repeatedCallLimit: 2.5 },
+    { environmentRepeatLimit: -2 },
+  ])('rejects the watchdog setting %j', (pmWatchdog) => {
+    expect(() => load({ pmWatchdog })).toThrow(/pmWatchdog/);
+  });
+
+  it.each([
+    { maxDelaySeconds: -1 },
+    { maxDelaySeconds: '20' },
+    { maxDelaySeconds: 4000 },
+    { thresholdCap: 0 },
+    { thresholdCap: 1.5 },
+  ])('rejects the coalescing setting %j', (pmCoalescing) => {
+    expect(() => load({ pmCoalescing })).toThrow(/pmCoalescing/);
+  });
+});
+
 describe('loadProjectConfig', () => {
   it('returns an empty object when the repo has no .harnessboard.json', () => {
     expect(loadProjectConfig(tempDir('proj'))).toEqual({});

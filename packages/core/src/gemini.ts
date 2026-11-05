@@ -10,6 +10,7 @@ import type {
   SessionAccess,
   SessionSpec,
 } from './agent.js';
+import { argsKey, excerpt } from './tool-events.js';
 
 /**
  * Drives `gemini --output-format stream-json` with the prompt on stdin. Event names and fields follow
@@ -153,7 +154,22 @@ export class GeminiAdapter implements AgentAdapter {
         case 'tool_use':
           return [
             ...flush(),
-            { kind: 'tool_use', name: msg.tool_name ?? '?', summary: summarize(msg.parameters) },
+            {
+              kind: 'tool_use',
+              name: msg.tool_name ?? '?',
+              summary: summarize(msg.parameters),
+              ...(msg.tool_id ? { callId: msg.tool_id } : {}),
+              argsKey: argsKey(msg.parameters),
+            },
+          ];
+        case 'tool_result':
+          return [
+            {
+              kind: 'tool_result',
+              ...(msg.tool_id ? { callId: msg.tool_id } : {}),
+              isError: msg.status === 'error',
+              text: excerpt(msg.error?.message ?? msg.output),
+            },
           ];
         case 'error':
           if (msg.severity === 'error' && msg.message) lastError = msg.message;
@@ -176,7 +192,7 @@ export class GeminiAdapter implements AgentAdapter {
           return events;
         }
         default:
-          return []; // tool results are not part of the log
+          return []; // other lines are not part of the log
       }
     };
   }
@@ -255,6 +271,8 @@ interface GeminiLine {
   role?: string;
   content?: string;
   tool_name?: string;
+  tool_id?: string;
+  output?: string;
   parameters?: Record<string, unknown>;
   severity?: string;
   message?: string;

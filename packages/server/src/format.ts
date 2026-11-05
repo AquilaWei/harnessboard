@@ -7,9 +7,10 @@ import type {
   PermissionRequest,
   SpecChangeProposal,
   TaskAgents,
+  PmWork,
   TaskView,
 } from '@harnessboard/shared';
-import { roleEffort, roleModel } from '@harnessboard/shared';
+import { formatDuration, roleEffort, roleModel } from '@harnessboard/shared';
 import { t } from './i18n.js';
 
 const STATUS_WIDTH = 13;
@@ -136,4 +137,18 @@ export function createEventFormatter(
         return null;
     }
   };
+}
+
+/** One `hb show` line per managed job: the PM's estimate next to the time actually spent. */
+export function formatWorkLine(work: PmWork): string {
+  return t('workLine', {
+    id: work.id.slice(0, 8),
+    status: work.status,
+    expected:
+      work.expectedMinutes === undefined
+        ? t('workNone')
+        : formatDuration(work.expectedMinutes * 60_000),
+    actual: work.runMs === undefined ? t('workNone') : formatDuration(work.runMs),
+    goal: work.goal.replace(/\s+/g, ' ').slice(0, 60),
+  });
 }
