@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-11-05
+
+- 正式版：Watchdog 卡住偵測與秘書事件合併已通過驗收，納入本次 MINOR 版本。
+- 彙整 0.2.x 各本機測試版的變更，詳見下方各版本紀錄。
+
 ## 0.2.25 - 2026-11-05
 
 - PM 可替 `dispatch`、`edit_work`、`continue_work` 提供預估時間（`expectedMinutes`）；Team 面板與 `hb show` 會顯示預估時間與實際執行時間。
