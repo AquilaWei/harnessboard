@@ -8,6 +8,7 @@ import type { PmHost } from './pm.js';
 import type { Store } from './store.js';
 import { pmTools } from './pm-tools.js';
 import { readGuidelines } from './guidelines.js';
+import type { PendingEvents } from './pm-coalesce.js';
 
 /** Durable appointment and status; secrets and CLI capabilities are never persisted. */
 export function pmSecretary(store: Store, taskId: number): PmSecretary | null {
@@ -157,16 +158,44 @@ export class Secretary {
     return state;
   }
 
+  /** Events up to this id were already given to a batch or seen by a PM turn. */
+  private cursor(): number {
+    const store = this.host.store;
+    const last = store.lastEvent(this.taskId, 'pm_secretary_batch_end');
+    return Math.max(
+      (last?.data as { through: number } | undefined)?.through ?? 0,
+      store.lastEvent(this.taskId, 'pm_turn')?.id ?? 0,
+    );
+  }
+
+  /** Worker results no batch or PM turn has taken yet, oldest first. */
+  unbatched(): PmWork[] {
+    return this.host.store
+      .eventsOfKinds(this.taskId, ['pm_worker_update'], this.cursor())
+      .map((e) => e.data as PmWork);
+  }
+
+  /** What a batch started now would take; read-only, so the coalescer can decide when. */
+  pending(): PendingEvents {
+    const updates = this.host.store.eventsOfKinds(this.taskId, ['pm_worker_update'], this.cursor());
+    const permissions = this.host.permissions(this.taskId);
+    const times = [...updates.map((e) => e.ts), ...permissions.map((p) => p.ts)];
+    return {
+      count: updates.length + permissions.length,
+      oldestTs: times.length ? Math.min(...times) : null,
+      urgent: updates.some((e) =>
+        ['failed', 'stopped', 'cancelled'].includes((e.data as PmWork).status),
+      ),
+      highRisk: permissions.some((p) => p.risk !== null),
+    };
+  }
+
   /** Returns true only when the PM must make a decision. Concurrent events remain pending. */
   async handle(): Promise<boolean> {
     const state = this.state;
     if (!state || state.status === 'failed' || this.signal.aborted) return true;
     const store = this.host.store;
-    const last = store.lastEvent(this.taskId, 'pm_secretary_batch_end');
-    const since = Math.max(
-      (last?.data as { through: number } | undefined)?.through ?? 0,
-      store.lastEvent(this.taskId, 'pm_turn')?.id ?? 0,
-    );
+    const since = this.cursor();
     const progress = store
       .eventsOfKinds(this.taskId, ['pm_progress'], since)
       .filter((event) => (event.data as { workId?: string | null }).workId !== null);

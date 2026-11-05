@@ -7,6 +7,7 @@ import {
   formatModel,
   formatSpecChange,
   formatTaskAgents,
+  formatWorkLine,
 } from '../src/format.js';
 
 // The CLI picks its language from the environment when i18n is first imported.
@@ -245,5 +246,23 @@ describe('formatModel', () => {
         defaultEffort: 'medium',
       })[1],
     ).toBe('  efforts: low, medium (default medium)');
+  });
+});
+
+describe('formatWorkLine', () => {
+  const work = { id: '1234567890abcdef', status: 'running', goal: 'Build\nthe thing' };
+
+  it('shows the estimate and the actual run time', () => {
+    expect(
+      formatWorkLine({ ...work, expectedMinutes: 10, runMs: 725_000 } as Parameters<
+        typeof formatWorkLine
+      >[0]),
+    ).toBe('work 12345678 running: expected 10m 0s, ran 12m 5s — Build the thing');
+  });
+
+  it('says none when nothing was recorded', () => {
+    expect(formatWorkLine(work as Parameters<typeof formatWorkLine>[0])).toBe(
+      'work 12345678 running: expected none, ran none — Build the thing',
+    );
   });
 });

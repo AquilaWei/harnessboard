@@ -45,7 +45,76 @@ describe('ClaudeCodeAdapter.parseLine', () => {
       type: 'assistant',
       message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'npm test' } }] },
     };
-    expect(parse(line)).toEqual([{ kind: 'tool_use', name: 'Bash', summary: 'npm test' }]);
+    expect(parse(line)).toEqual([
+      { kind: 'tool_use', name: 'Bash', summary: 'npm test', argsKey: expect.any(String) },
+    ]);
+  });
+
+  it('gives a tool call its id and a digest of its exact arguments', () => {
+    const call = (command: string) =>
+      parse({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command } }],
+        },
+      });
+    const [a] = call('npm test') as { argsKey: string; callId: string }[];
+    const [b] = call('npm test -u') as { argsKey: string }[];
+    expect(a!.callId).toBe('toolu_1');
+    expect(a!.argsKey).not.toBe(b!.argsKey);
+  });
+
+  it('reports a failed tool result with its bounded text', () => {
+    const line = {
+      type: 'user',
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu_1',
+            is_error: true,
+            content: [{ type: 'text', text: 'bash: pnpm: command not found' }],
+          },
+        ],
+      },
+    };
+    expect(parse(line)).toEqual([
+      {
+        kind: 'tool_result',
+        callId: 'toolu_1',
+        isError: true,
+        text: 'bash: pnpm: command not found',
+      },
+    ]);
+  });
+
+  it('reports a successful string tool result as not an error', () => {
+    const line = {
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_2', content: 'ok' }] },
+    };
+    expect(parse(line)).toEqual([
+      { kind: 'tool_result', callId: 'toolu_2', isError: false, text: 'ok' },
+    ]);
+  });
+
+  it('keeps only the last 2000 characters of a long tool result', () => {
+    const line = {
+      type: 'user',
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 't',
+            is_error: true,
+            content: `${'a'.repeat(3000)}END`,
+          },
+        ],
+      },
+    };
+    const [event] = parse(line) as { text: string }[];
+    expect(event!.text).toHaveLength(2000);
+    expect(event!.text.endsWith('END')).toBe(true);
   });
 
   it('converts quota reset time from seconds to milliseconds', () => {

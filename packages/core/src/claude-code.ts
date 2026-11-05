@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { AgentEvent, ModelInfo, QuotaInfo, RunUsage } from '@harnessboard/shared';
 import type { AgentAdapter, AgentCapabilities, PermissionReply, SessionSpec } from './agent.js';
 import { readClaudeModels } from './models.js';
+import { argsKey, excerpt } from './tool-events.js';
 
 type PermissionRequestEvent = Extract<AgentEvent, { kind: 'permission_request' }>;
 
@@ -124,6 +125,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
         return parseSystem(msg);
       case 'assistant':
         return parseAssistant(msg);
+      case 'user':
+        return parseToolResults(msg);
       case 'rate_limit_event':
         return [{ kind: 'quota', quota: parseQuota(msg.rate_limit_info) }];
       case 'result':
@@ -191,6 +194,10 @@ function parseControlRequest(msg: Record<string, unknown>): AgentEvent[] {
 
 interface ContentBlock {
   type: string;
+  id?: string;
+  tool_use_id?: string;
+  is_error?: boolean;
+  content?: unknown;
   text?: string;
   name?: string;
   input?: Record<string, unknown>;
@@ -213,6 +220,8 @@ function parseAssistant(msg: Record<string, unknown>): AgentEvent[] {
         kind: 'tool_use',
         name: block.name ?? '?',
         summary: summarizeToolInput(block.input),
+        ...(block.id ? { callId: block.id } : {}),
+        argsKey: argsKey(block.input),
       });
     }
   }
@@ -255,6 +264,26 @@ export function contextTokens(usage: Usage): number {
     (usage.cache_read_input_tokens ?? 0) +
     (usage.cache_creation_input_tokens ?? 0)
   );
+}
+
+/** Tool results arrive as `user` messages; the watchdog reads them, the log does not. */
+function parseToolResults(msg: Record<string, unknown>): AgentEvent[] {
+  const content = (msg.message as { content?: unknown } | undefined)?.content;
+  if (!Array.isArray(content)) return [];
+  return (content as ContentBlock[])
+    .filter((block) => block.type === 'tool_result')
+    .map((block) => ({
+      kind: 'tool_result' as const,
+      ...(block.tool_use_id ? { callId: block.tool_use_id } : {}),
+      isError: block.is_error === true,
+      text: excerpt(
+        Array.isArray(block.content)
+          ? (block.content as { text?: unknown }[])
+              .map((part) => (typeof part.text === 'string' ? part.text : ''))
+              .join('\n')
+          : block.content,
+      ),
+    }));
 }
 
 function summarizeToolInput(input: Record<string, unknown> | undefined): string {

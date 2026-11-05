@@ -26,6 +26,7 @@ import {
   createEventFormatter,
   formatFeature,
   formatModel,
+  formatWorkLine,
   formatSpecChange,
   formatTaskAgents,
   formatTaskRow,
@@ -272,6 +273,7 @@ program
       );
     }
     console.log(`  ${usageLine(task.usage)}`);
+    for (const work of task.work ?? []) console.log(`  ${formatWorkLine(work)}`);
     for (const s of task.sessions) {
       const who = `${s.role}/${s.agentId}`.padEnd(22);
       console.log(
