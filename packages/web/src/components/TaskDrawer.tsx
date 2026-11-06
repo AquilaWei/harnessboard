@@ -231,7 +231,6 @@ export function TaskDrawer({
               {task.mode === 'loop' && task.sessionCount > 0 && !task.plan && (
                 <FeatureProgress loop={task.loop} />
               )}
-              <p className="hint">{t('safety.monitoringLimit')}</p>
               <div className="actions">
                 {task.workspace === 'worktree' && task.worktreePath && (
                   <CacheCleanupButton key={task.id} taskId={task.id} onError={onError} />

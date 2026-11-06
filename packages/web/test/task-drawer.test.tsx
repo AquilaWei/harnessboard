@@ -98,6 +98,15 @@ const renderDrawer = async (detail: TaskDetail, initialTab: DrawerTab = 'timelin
 const tabLabels = () =>
   [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
 
+describe('TaskDrawer status box', () => {
+  it('when the status box renders expect no monitoring hint in it', async () => {
+    await renderDrawer(task({}));
+    expect(container.querySelector('.status-box')?.textContent).not.toContain(
+      'Protection acts when usage is reported',
+    );
+  });
+});
+
 describe('TaskDrawer tabs', () => {
   it('when the panel opens expect no Log tab', async () => {
     await renderDrawer(task({}));
