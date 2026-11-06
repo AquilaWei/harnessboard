@@ -425,11 +425,9 @@ export class Harness {
    */
   answerPermission(id: number, decision: PermissionDecision): Task {
     const task = this.requireTask(id);
-    if (task.workflow === 'pm')
-      throw new Error(
-        'PM permissions require internal review; answer the PM user question instead',
-      );
     const pending = this.permissions.get(id)?.get(decision.requestId);
+    if (task.workflow === 'pm' && pending?.request.forwardNote === undefined)
+      throw new Error('PM permissions require internal review unless forwarded to the user');
     if (!pending)
       throw new Error(`task ${id} has no pending permission request ${decision.requestId}`);
     const allow = decision.behavior === 'allow';
@@ -451,6 +449,7 @@ export class Harness {
       ...(rules.length > 0 ? { scope } : {}),
       message,
       auto: false,
+      ...(task.workflow === 'pm' ? { actor: 'user' as const } : {}),
     });
     return this.requireTask(id);
   }
@@ -513,6 +512,20 @@ export class Harness {
    */
   async start(): Promise<void> {
     for (const task of this.store.listTasks()) {
+      const resolved = new Set(
+        this.store.eventsOfKind(task.id, 'pm_permission_user').map((event) => {
+          const { requestId, sessionId, ts } = event.data as PermissionRequest;
+          return JSON.stringify([requestId, sessionId, ts]);
+        }),
+      );
+      for (const event of this.store.eventsOfKind(task.id, 'pm_permission_forwarded')) {
+        const request = event.data as PermissionRequest;
+        if (!resolved.has(JSON.stringify([request.requestId, request.sessionId, request.ts])))
+          this.permissionUserEvent(task.id, request, {
+            invalidated: true,
+            message: 'The server restarted.',
+          });
+      }
       if (task.status === 'paused_safety') {
         const unfinished = this.store
           .listSessions(task.id)
@@ -2184,11 +2197,19 @@ export class Harness {
                 }
               },
               status: (id, status) => {
-                this.setStatus(id, status);
+                this.setStatus(
+                  id,
+                  status === 'running' &&
+                    this.permissionRequests(id).some((p) => p.forwardNote !== undefined)
+                    ? 'awaiting_permission'
+                    : status,
+                );
               },
               blocked: (agentId) => this.agentBlocked(agentId, Date.now()),
               quota: (agentId) => this.quotas.get(this.config.agents[agentId]!.provider) ?? null,
               permissions: (id) => this.permissionRequests(id),
+              forwardPermission: (id, requestId, sessionId, ts, message) =>
+                this.forwardPermission(id, requestId, sessionId, ts, message),
               answer: (id, requestId, behavior, reason, actor = 'pm') =>
                 this.answerPmPermission(id, requestId, behavior, reason, actor),
               notice: (id, message) => this.notice(id, message),
@@ -2622,6 +2643,54 @@ export class Harness {
     });
   }
 
+  /** Marks a pending PM request as user-owned; exact session and time prevent stale approval. */
+  private forwardPermission(
+    id: number,
+    requestId: string,
+    sessionId: string,
+    ts: number,
+    message: string,
+  ): void {
+    const pending = this.permissions.get(id)?.get(requestId);
+    if (
+      this.requireTask(id).workflow !== 'pm' ||
+      !pending ||
+      pending.request.sessionId !== sessionId ||
+      pending.request.ts !== ts
+    )
+      throw new Error('Permission request is expired or not pending');
+    if (pending.request.forwardNote !== undefined)
+      throw new Error('Permission request is already awaiting the user');
+    if (!message.trim()) throw new Error('A PM reason, impact and recommendation are required');
+    this.store.appendEvent(id, sessionId, 'pm_permission_forwarded', {
+      requestId,
+      sessionId,
+      ts,
+      message,
+    });
+    pending.request = { ...pending.request, forwardNote: message.trim() };
+    this.setStatus(id, 'awaiting_permission');
+  }
+
+  private permissionUserEvent(
+    taskId: number,
+    request: Pick<PermissionRequest, 'requestId' | 'sessionId' | 'ts'>,
+    outcome: {
+      behavior?: 'allow' | 'deny';
+      message?: string | null;
+      invalidated?: boolean;
+    },
+  ): void {
+    this.store.appendEvent(taskId, request.sessionId, 'pm_permission_user', {
+      requestId: request.requestId,
+      sessionId: request.sessionId,
+      ts: request.ts,
+      ...outcome,
+    });
+    this.pms.get(taskId)?.notify('decision');
+    this.emit({ type: 'task', taskId, status: this.requireTask(taskId).status });
+  }
+
   private answerPmPermission(
     id: number,
     requestId: string,
@@ -2631,6 +2700,8 @@ export class Harness {
   ): void {
     const pending = this.permissions.get(id)?.get(requestId);
     if (!pending) throw new Error('Permission request is expired or not pending');
+    if (pending.request.forwardNote !== undefined)
+      throw new Error('Permission request is awaiting the user; PM and secretary cannot answer it');
     if (behavior === 'allow') {
       const current = this.requireTask(id);
       const rule = {
@@ -2666,7 +2737,7 @@ export class Harness {
           queued.request,
           this.requireTask(id).permission.approvalRules ?? [],
         );
-        if (rule)
+        if (rule && queued.request.forwardNote === undefined)
           this.settlePermission(id, queued, {
             behavior: 'allow',
             rules: [],
@@ -2688,6 +2759,11 @@ export class Harness {
       throw new Error('Permission request is expired or already answered');
     waiting.delete(pending.request.requestId);
     this.recordDecision(taskId, pending.request, outcome);
+    if (pending.request.forwardNote !== undefined)
+      this.permissionUserEvent(taskId, pending.request, {
+        behavior: outcome.behavior,
+        message: outcome.message,
+      });
     const reply: PermissionReply =
       outcome.behavior === 'allow'
         ? { behavior: 'allow' }
@@ -2700,7 +2776,15 @@ export class Harness {
     } else {
       pending.resolve(reply);
     }
-    if (waiting?.size === 0 && this.running.has(taskId) && !pmQuestion(this.store, taskId)) {
+    const userWaiting = [...(waiting?.values() ?? [])].some(
+      (p) => p.request.forwardNote !== undefined,
+    );
+    const pm = this.requireTask(taskId).workflow === 'pm';
+    if (
+      (pm ? !userWaiting : waiting?.size === 0) &&
+      this.running.has(taskId) &&
+      !pmQuestion(this.store, taskId)
+    ) {
       this.setStatus(taskId, this.held.has(taskId) ? 'queued' : 'running');
     }
   }
@@ -2732,6 +2816,11 @@ export class Harness {
     for (const [id, pending] of waiting ?? []) {
       if (pending.request.sessionId !== sessionId) continue;
       waiting!.delete(id);
+      if (pending.request.forwardNote !== undefined)
+        this.permissionUserEvent(taskId, pending.request, {
+          invalidated: true,
+          message: 'The agent session ended.',
+        });
       this.recordDecision(taskId, pending.request, {
         behavior: 'deny',
         rules: [],
@@ -2740,6 +2829,13 @@ export class Harness {
       });
       pending.resolve({ behavior: 'deny', message: 'The agent session ended.' });
     }
+    const task = this.requireTask(taskId);
+    if (
+      task.workflow === 'pm' &&
+      task.status === 'awaiting_permission' &&
+      !this.permissionRequests(taskId).some((request) => request.forwardNote !== undefined)
+    )
+      this.setStatus(taskId, pmQuestion(this.store, taskId) ? 'awaiting_approval' : 'running');
     const held = this.held.get(taskId);
     if (held) {
       for (const reply of held.replies.filter((r) => r.pending.request.sessionId === sessionId))
@@ -2756,6 +2852,11 @@ export class Harness {
     const waiting = this.permissions.get(taskId);
     this.permissions.delete(taskId);
     for (const pending of [...held, ...(waiting?.values() ?? [])]) {
+      if (waiting?.has(pending.request.requestId) && pending.request.forwardNote !== undefined)
+        this.permissionUserEvent(taskId, pending.request, {
+          invalidated: true,
+          message: 'The task was stopped.',
+        });
       pending.resolve({ behavior: 'deny', message: 'The task was stopped.' });
     }
   }

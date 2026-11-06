@@ -220,6 +220,15 @@ export const PM_TOOLS = [
     inputSchema: fields({ message: string }, ['message']),
   },
   {
+    name: 'forward_permission',
+    description:
+      'PM only: forward a live worker permission to the user for a direct Allow/Deny decision. Explain the reason, impact and recommendation. Does not consume the ask_user slot.',
+    inputSchema: fields(
+      { requestId: string, sessionId: string, ts: { type: 'number' }, message: string },
+      ['requestId', 'sessionId', 'ts', 'message'],
+    ),
+  },
+  {
     name: 'permission',
     description:
       'Allow once or deny a currently pending worker permission. Never grants permanent rules.',
@@ -304,6 +313,7 @@ export async function pmTools(
                 'propose_spec',
                 'ask_user',
                 'permission',
+                'forward_permission',
                 'accept',
                 'appoint_secretary',
                 'resolve_integration',

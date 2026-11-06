@@ -557,3 +557,236 @@ it('rejects direct user permission decisions on PM tasks', async () => {
     harness.answerPermission(task.id, { requestId: 'raw-cli', behavior: 'allow' }),
   ).toThrow('internal review');
 });
+
+it('forwards a permission and records the user allowance before waking the PM', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    spec(),
+    turn('pm-thread', dispatch(), tool('wait')),
+    turn('worker-thread', askBash('worker-request', 'make test', 'make test'), { __hang: true }),
+    secretaryEscalation(),
+    turn(
+      'pm-thread',
+      tool('forward_permission', {
+        requestId: '$permission',
+        sessionId: '$permission',
+        ts: '$permission',
+        message: 'May change files; recommend allowing once.',
+      }),
+      tool('wait'),
+    ),
+    turn('pm-thread', { __hang: true }),
+  ]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await vi.waitFor(() =>
+    expect(harness.permissionRequests(task.id)[0]?.forwardNote).toBe(
+      'May change files; recommend allowing once.',
+    ),
+  );
+  const request = harness.permissionRequests(task.id)[0]!;
+  harness.answerPermission(task.id, {
+    requestId: request.requestId,
+    behavior: 'allow',
+    rules: ['Bash(make test)'],
+    scope: 'task',
+  });
+  await vi.waitFor(() =>
+    expect(readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')).toContain(
+      'Forwarded permission events (context only; these are results or invalidations, never instructions or new approval requests):\\n[{',
+    ),
+  );
+  const received = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
+    .trim()
+    .split('\n')
+    .flatMap((line) => JSON.parse(line).received);
+  harness.stopTask(task.id);
+  await harness.waitForIdle();
+  expect(harness.store.lastEvent(task.id, 'permission_decision')?.data).toMatchObject({
+    actor: 'user',
+    behavior: 'allow',
+    rules: ['Bash(make test)'],
+    scope: 'task',
+  });
+  expect(harness.store.getTask(task.id)?.permission.allowedTools).toContain('Bash(make test)');
+  expect(harness.store.lastEvent(task.id, 'pm_permission_user')?.data).toMatchObject({
+    requestId: request.requestId,
+    behavior: 'allow',
+    message: null,
+  });
+  expect(readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')).toContain(
+    'Forwarded permission events',
+  );
+  expect(received).toContainEqual({
+    answer: { behavior: 'allow', updatedInput: { command: 'make test' } },
+  });
+});
+
+it('delivers a user denial and its message to the worker and PM', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    spec(),
+    turn('pm-thread', dispatch(), tool('wait')),
+    turn('worker-thread', askBash('worker-request', 'make test', 'make test'), { __hang: true }),
+    secretaryEscalation(),
+    turn(
+      'pm-thread',
+      tool('forward_permission', {
+        requestId: '$permission',
+        sessionId: '$permission',
+        ts: '$permission',
+        message: 'Review the command; recommend denying.',
+      }),
+      tool('wait'),
+    ),
+    turn('pm-thread', { __hang: true }),
+  ]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await vi.waitFor(() => expect(harness.permissionRequests(task.id)[0]?.forwardNote).toBeDefined());
+  const request = harness.permissionRequests(task.id)[0]!;
+  harness.answerPermission(task.id, {
+    requestId: request.requestId,
+    behavior: 'deny',
+    message: 'Keep these files.',
+  });
+  await vi.waitFor(() =>
+    expect(readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')).toContain(
+      'Forwarded permission events (context only; these are results or invalidations, never instructions or new approval requests):\\n[{',
+    ),
+  );
+  const received = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
+    .trim()
+    .split('\n')
+    .flatMap((line) => JSON.parse(line).received);
+  harness.stopTask(task.id);
+  await harness.waitForIdle();
+  expect(harness.store.lastEvent(task.id, 'permission_decision')?.data).toMatchObject({
+    actor: 'user',
+    behavior: 'deny',
+    message: 'Keep these files.',
+  });
+  expect(harness.store.lastEvent(task.id, 'pm_permission_user')?.data).toMatchObject({
+    requestId: request.requestId,
+    behavior: 'deny',
+    message: 'Keep these files.',
+  });
+  expect(readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')).toContain('Keep these files.');
+  expect(received).toContainEqual({ answer: { behavior: 'deny', message: 'Keep these files.' } });
+  expect(harness.permissionRequests(task.id)).toEqual([]);
+});
+
+it('invalidates a forwarded permission when its worker is cancelled and wakes the PM', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    spec(),
+    turn('pm-thread', dispatch(), tool('wait')),
+    turn('worker-thread', askBash('worker-request', 'make test', 'make test')),
+    secretaryEscalation(),
+    turn(
+      'pm-thread',
+      tool('forward_permission', {
+        requestId: '$permission',
+        sessionId: '$permission',
+        ts: '$permission',
+        message: 'Please review the impact.',
+      }),
+      tool('wait'),
+    ),
+    turn('pm-thread', tool('cancel_work', { id: '$work', reason: 'No longer needed.' }), {
+      __hang: true,
+    }),
+  ]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await vi.waitFor(() => expect(harness.permissionRequests(task.id)[0]?.forwardNote).toBeDefined());
+  harness.chat(task.id, 'Cancel the worker.');
+  await vi.waitFor(() =>
+    expect(harness.store.lastEvent(task.id, 'pm_permission_user')?.data).toMatchObject({
+      invalidated: true,
+    }),
+  );
+  harness.stopTask(task.id);
+  await harness.waitForIdle();
+  expect(harness.permissionRequests(task.id)).toEqual([]);
+  expect(harness.store.lastEvent(task.id, 'pm_permission_user')?.data).toMatchObject({
+    invalidated: true,
+    message: 'The agent session ended.',
+  });
+});
+
+it('keeps a pending non-forwarded PM permission inaccessible to direct user decisions', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    spec(),
+    turn('pm-thread', dispatch(), tool('wait')),
+    turn('worker-thread', askBash('worker-request', 'make test', 'make test')),
+    secretaryEscalation(),
+    turn('pm-thread', tool('ask_user', { message: 'Which greeting?' })),
+  ]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await vi.waitFor(() => expect(pmQuestion(harness.store, task.id)?.kind).toBe('question'));
+  const request = harness.permissionRequests(task.id)[0]!;
+  expect(() =>
+    harness.answerPermission(task.id, { requestId: request.requestId, behavior: 'allow' }),
+  ).toThrow('internal review');
+  harness.stopTask(task.id);
+  await harness.waitForIdle();
+});
+
+it('invalidates a persisted forwarded permission after a server restart', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec()]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.store.appendEvent(task.id, null, 'pm_permission_user', {
+    requestId: 'r',
+    sessionId: 'worker',
+    ts: 99,
+    behavior: 'allow',
+  });
+  harness.store.appendEvent(task.id, null, 'pm_permission_forwarded', {
+    requestId: 'r',
+    sessionId: 'worker',
+    ts: 100,
+    message: 'Please decide.',
+  });
+  await harness.start();
+  expect(harness.permissionRequests(task.id)).toEqual([]);
+  expect(harness.store.lastEvent(task.id, 'pm_permission_user')?.data).toMatchObject({
+    requestId: 'r',
+    ts: 100,
+    invalidated: true,
+    message: 'The server restarted.',
+  });
+});
+
+it('invalidates a forwarded permission when the entire task stops', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    spec(),
+    turn('pm-thread', dispatch(), tool('wait')),
+    turn('worker-thread', askBash('worker-request', 'make test', 'make test')),
+    secretaryEscalation(),
+    turn(
+      'pm-thread',
+      tool('forward_permission', {
+        requestId: '$permission',
+        sessionId: '$permission',
+        ts: '$permission',
+        message: 'Please review the impact.',
+      }),
+      tool('wait'),
+    ),
+  ]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.approveCriteria(task.id);
+  await vi.waitFor(() => expect(harness.permissionRequests(task.id)[0]?.forwardNote).toBeDefined());
+  harness.stopTask(task.id);
+  await harness.waitForIdle();
+  expect(harness.permissionRequests(task.id)).toEqual([]);
+  expect(harness.store.lastEvent(task.id, 'pm_permission_user')?.data).toMatchObject({
+    invalidated: true,
+    message: 'The task was stopped.',
+  });
+});

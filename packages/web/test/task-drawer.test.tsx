@@ -442,3 +442,29 @@ describe('TaskCard', () => {
     expect(container.querySelector('.card .description')?.textContent).toContain('Final detail.');
   });
 });
+
+it('renders the PM note and permission controls for a forwarded PM permission', async () => {
+  await renderDrawer(
+    task({
+      workflow: 'pm',
+      status: 'awaiting_permission',
+      permissionRequests: [
+        {
+          requestId: 'r',
+          sessionId: 'worker',
+          ts: 100,
+          toolName: 'Bash',
+          summary: 'make test',
+          risk: null,
+          suggestedRules: [],
+          forwardNote: 'This may update files. Recommend allowing once.',
+        },
+      ],
+    }),
+  );
+  expect(container.querySelector('.permission')?.textContent).toContain(
+    'This may update files. Recommend allowing once.',
+  );
+  expect(button('Allow once')).toBeDefined();
+  expect(button('Deny')).toBeDefined();
+});

@@ -232,6 +232,7 @@ export const en = {
     files: { label: 'Files: mkdir, chmod +x', warn: '' },
   },
   permission: {
+    forwardNote: 'PM recommendation: {{note}}',
     title: 'Claude wants to use {{tool}}',
     rules: 'Rule to add to the task',
     rulesHint: 'Suggested by Claude; edit it to allow more or less. One rule per line.',
@@ -993,6 +994,7 @@ export const zhTW: typeof en = {
     files: { label: '檔案：mkdir、chmod +x', warn: '' },
   },
   permission: {
+    forwardNote: 'PM 說明與建議：{{note}}',
     title: 'Claude 想使用 {{tool}}',
     rules: '要加進任務的規則',
     rulesHint: '這是 Claude 建議的規則，可以修改範圍。一行一條。',

@@ -2,25 +2,42 @@
 import { NOTIFY_STATUSES } from '@harnessboard/shared';
 import type { TaskStatus, TaskView } from '@harnessboard/shared';
 import type { DrawerTab } from './components/TaskDrawer';
-import { currentNotifyMode, disablePush, enablePush } from './push';
+import { currentNotifyMode, disablePush, enablePush, forwardedPermissions } from './push';
 import type { NotifyMode } from './push';
 
 const STORAGE_KEY = 'harnessboard.notify';
 
+export type WaitingSnapshot = TaskStatus | { status: TaskStatus; forwarded: string[] };
+
+/** Retains live request identities as well as status for the next board refresh. */
+export function waitingSnapshot(task: TaskView): WaitingSnapshot {
+  return { status: task.status, forwarded: forwardedPermissions(task) };
+}
+
 /**
  * Tasks that have just started waiting for you: their status is one of the notifying ones
- * and was different (or the task unknown) at `prev`. `prev` is `null` on the first load,
+ * and was different (or the task unknown) at `prev`, or it has a new forwarded request. `prev` is `null` on the first load,
  * which notifies nothing, so opening the board does not replay old waits.
  */
-export function newlyWaiting(prev: Map<number, TaskStatus> | null, tasks: TaskView[]): TaskView[] {
+export function newlyWaiting(
+  prev: Map<number, WaitingSnapshot> | null,
+  tasks: TaskView[],
+): TaskView[] {
   if (prev === null) return [];
-  return tasks.filter(
-    (task) => NOTIFY_STATUSES.has(task.status) && prev.get(task.id) !== task.status,
-  );
+  return tasks.filter((task) => {
+    const previous = prev.get(task.id);
+    const status = typeof previous === 'string' ? previous : previous?.status;
+    const forwarded = typeof previous === 'object' ? previous.forwarded : [];
+    return (
+      forwardedPermissions(task).some((id) => !forwarded.includes(id)) ||
+      (NOTIFY_STATUSES.has(task.status) && status !== task.status)
+    );
+  });
 }
 
 /** The panel tab that shows what a waiting task needs from you. */
 export function openTab(task: TaskView): DrawerTab {
+  if (task.permissionRequests?.length) return 'timeline';
   if (task.workflow === 'pm' && task.pmQuestion?.kind === 'question') return 'chat';
   switch (task.status) {
     case 'review':

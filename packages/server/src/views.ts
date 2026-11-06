@@ -206,7 +206,8 @@ export function taskView(task: Task, harness: Harness): TaskView {
     specChange: harness.specChange(task.id),
     specRevisionPending: harness.pendingSpecRevision(task.id) !== null,
     merge: harness.lastMerge(task.id),
-    permissionRequests: task.workflow === 'pm' ? [] : harness.permissionRequests(task.id),
+    permissionRequests:
+      task.workflow === 'pm' ? permissions.filter((p) => p.forwardNote !== undefined) : permissions,
     usage: taskUsage(task.id, store, sessions, harness.activity(task.id) !== null),
     lastNotice:
       (store.lastEvent(task.id, 'notice')?.data as { message?: string } | undefined)?.message ??

@@ -272,6 +272,25 @@ describe('PushNotifier', () => {
   });
   afterEach(() => store.close());
 
+  it('pushes additional forwarded requests while already awaiting permission and skips removals', async () => {
+    const sender = new FakeSender();
+    let forwarded: string[] = [];
+    const notifier = new PushNotifier(
+      store,
+      sender,
+      () => keys,
+      () => forwarded,
+    );
+    forwarded = ['request-a'];
+    await notifier.handle({ type: 'task', taskId: 1, status: 'awaiting_permission' });
+    forwarded = ['request-a', 'request-b'];
+    await notifier.handle({ type: 'task', taskId: 1, status: 'awaiting_permission' });
+    await notifier.handle({ type: 'task', taskId: 1, status: 'awaiting_permission' });
+    forwarded = ['request-b'];
+    await notifier.handle({ type: 'task', taskId: 1, status: 'awaiting_permission' });
+    expect(sender.sent).toHaveLength(4);
+  });
+
   it('pushes once to each subscribed device when a task enters review', async () => {
     const sender = new FakeSender();
     await new PushNotifier(store, sender, () => keys).handle({
