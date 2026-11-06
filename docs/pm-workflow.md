@@ -223,7 +223,7 @@ for supervision. Cancelling a job cancels its descendants and retains files and 
 A parent cannot complete with unfinished children, and final acceptance checks the entire tree.
 
 Explicit existing tool rules still apply. Other worker permission requests go to the PM,
-which can approve and persist the exact task operation, deny it with a reason, or ask you when the
+which can approve and persist the exact task operation, deny it with a reason, or use `forward_permission` when the
 impact or authorization is unclear. It cannot add permanent global rules through its
 permission tool. User decisions and PM decisions are separately attributed in history.
 Platform and operating-system restrictions still apply. Gemini currently cannot pause for
@@ -326,14 +326,16 @@ PM tasks also accept existing folders without Git or commits. These tasks run in
 
 ## 使用者溝通與授權
 
-執行訊息固定由 Worker → 秘書 → PM → 使用者傳遞。只有 PM 的 `ask_user`
+執行訊息固定由 Worker → 秘書 → PM → 使用者傳遞。PM 的 `ask_user` 與 `forward_permission`
 會建立使用者待辦；worker 用 `ask_pm`，秘書只能引用已核准指示回覆或升級給 PM。
 秘書失敗或不可用時由 PM 接手。PM 等待回答期間仍以事件喚醒處理其他已核准工作，
 不輪詢；新增問題會被拒絕，原問題保持不變，PM 必須保留其餘決策直到原問題回答。
 
-PM 任務的底層 CLI 請求只供內部審查，事件紀錄保留稽核用途。使用者可操作清單不含
-這些請求，一般授權 API 也拒絕直接批准。使用者回答只交回 PM，由 PM 重查請求是否
-仍待決，再決定回覆 worker；回答本身不批准任何 CLI 請求。一般非 PM 任務沿用原流程。
+PM 任務未轉交的底層 CLI 請求只供內部審查。PM 不確定權限決策時應使用
+`forward_permission`，附上原因、影響與建議，不用 `ask_user`。轉交後使用者可在
+任務面板直接允許一次、允許並新增任務或全域規則，或拒絕並附訊息；決策記為使用者，
+PM 和秘書都不能再代答。轉交不占用一般問題的未回答名額；停止或重啟會使請求失效。
+一般文字回答仍只作 PM 背景資訊，不自動批准任何 CLI 請求。
 團隊面板分別呈現等待秘書審查、等待 PM 決策及 PM 等待使用者回答，其他工作可同時執行。
 重啟不恢復舊 CLI 授權，舊 worker 標記中斷，由 PM 明確續派；歷史事件不改寫。
 
@@ -362,6 +364,18 @@ including across workers and restarts; queued requests are checked again after a
 Arguments, targets, edit contents and additional privileges must match exactly. Historical
 allow-once decisions are not converted into reusable rules. Denials and expired requests
 never create allow rules, and storage failure leaves the worker waiting.
+
+When authorization is uncertain, the PM uses `forward_permission` with the current
+`requestId`, `sessionId`, `ts`, and a `message` explaining reason, impact and recommendation.
+Only these forwarded requests appear in the PM task's Allow/Deny UI, including its needs-you
+indicator and browser/phone notifications. They do not consume the single unanswered
+`ask_user` slot. Neither the PM nor the secretary may answer them or automatically release
+them using a new exact approval rule. The user can allow once, add task/global tool rules,
+or deny with a message, just as in a normal task. Global rules remain unavailable to PM tools.
+The worker receives the decision, history attributes it to the user, and the PM wakes with
+its result (request ID, allow/deny and denial message) as context only. Worker/task stop or
+server restart removes the request and records an invalidation event for the PM; stale or
+mismatched request/session/time identities cannot be forwarded or approved.
 
 Details → tool rules shows these records and lets you revoke them. Incomplete previews,
 Codex directory/file grants without full edit evidence, and adb operations require fresh

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it } from 'vitest';
 import type { TaskMode, TaskStatus, TaskView } from '@harnessboard/shared';
-import { newlyWaiting, openTab } from '../src/notify';
+import { newlyWaiting, openTab, waitingSnapshot } from '../src/notify';
 
 const task = (id: number, status: TaskStatus, mode: TaskMode = 'single') =>
   ({ id, status, mode }) as TaskView;
@@ -89,4 +89,43 @@ it('opens PM questions in the reply conversation', () => {
       pmQuestion: { kind: 'question', message: 'Install tool?' },
     }),
   ).toBe('chat');
+});
+
+it('notifies for a new forwarded request while a PM already waits and ignores removals', () => {
+  const first = {
+    ...task(1, 'awaiting_permission'),
+    workflow: 'pm' as const,
+    permissionRequests: [
+      {
+        requestId: 'a',
+        sessionId: 'worker',
+        ts: 100,
+        toolName: 'Bash',
+        summary: 'test',
+        risk: null,
+        suggestedRules: [],
+        forwardNote: 'Review this.',
+      },
+    ],
+  };
+  const next = {
+    ...first,
+    permissionRequests: [
+      ...first.permissionRequests,
+      { ...first.permissionRequests[0]!, requestId: 'b' },
+    ],
+  };
+  expect(newlyWaiting(new Map([[1, waitingSnapshot(first)]]), [next])).toEqual([next]);
+  expect(newlyWaiting(new Map([[1, waitingSnapshot(next)]]), [first])).toEqual([]);
+});
+
+it('opens forwarded permissions above the timeline even with an unanswered PM question', () => {
+  expect(
+    openTab({
+      ...task(1, 'awaiting_approval'),
+      workflow: 'pm',
+      pmQuestion: { kind: 'question' },
+      permissionRequests: [{ forwardNote: 'Review this.' }],
+    } as TaskView),
+  ).toBe('timeline');
 });

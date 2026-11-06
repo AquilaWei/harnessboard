@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { HarnessStatus, Settings, TaskStatus, TaskView } from '@harnessboard/shared';
+import type { HarnessStatus, Settings, TaskView } from '@harnessboard/shared';
 import {
   api,
   isLocked,
@@ -25,7 +25,8 @@ import type { DrawerTab } from './components/TaskDrawer';
 import { descriptionText } from './components/Description';
 import { tileStage, type StageTiling } from './layout';
 import { useLiveEvents, useThrottled } from './live';
-import { newlyWaiting, notificationsEnabled, openTab } from './notify';
+import { newlyWaiting, notificationsEnabled, openTab, waitingSnapshot } from './notify';
+import type { WaitingSnapshot } from './notify';
 import { checkPasskey, passkeysAvailable } from './passkey';
 import { pairCodeFromHash } from './phone';
 import { currentNotifyMode, taskFromHash, taskFromMessage } from './push';
@@ -115,11 +116,11 @@ export function App() {
   );
 
   // Statuses at the previous load; `null` until the first one, which notifies nothing.
-  const lastStatuses = useRef<Map<number, TaskStatus> | null>(null);
+  const lastStatuses = useRef<Map<number, WaitingSnapshot> | null>(null);
   const notifyWaiting = useRef((_: TaskView[]) => {});
   notifyWaiting.current = (nextTasks: TaskView[]) => {
     const waiting = newlyWaiting(lastStatuses.current, nextTasks);
-    lastStatuses.current = new Map(nextTasks.map((task) => [task.id, task.status]));
+    lastStatuses.current = new Map(nextTasks.map((task) => [task.id, waitingSnapshot(task)]));
     // While you are looking at the board the card itself tells you.
     const looking = document.visibilityState === 'visible' && document.hasFocus();
     // A board opened remotely is notified by push instead, which also reaches a closed board.

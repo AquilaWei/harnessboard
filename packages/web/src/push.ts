@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { api } from './api';
+import type { TaskView } from '@harnessboard/shared';
+
+/** Live forwarded identities, so a second request can notify while the PM already waits. */
+export function forwardedPermissions(task: TaskView): string[] {
+  return (task.permissionRequests ?? [])
+    .filter((p) => p.forwardNote !== undefined)
+    .map((p) => JSON.stringify([p.requestId, p.sessionId, p.ts]));
+}
 
 /**
  * How this board notifies you that a task needs you:

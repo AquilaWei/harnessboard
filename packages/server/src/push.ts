@@ -121,14 +121,19 @@ export function isGone(err: unknown): boolean {
 export class PushNotifier {
   /** Last status seen per task, so only a change into a notify status pushes. */
   private readonly statuses = new Map<number, string>();
+  private readonly forwarded = new Map<number, string[]>();
 
   /** `keys` is only called when there is a phone to push to. */
   constructor(
     private readonly store: Store,
     private readonly sender: PushSender,
     private readonly keys: () => VapidKeys,
+    private readonly forwardedRequests: (taskId: number) => string[] = () => [],
   ) {
-    for (const task of store.listTasks()) this.statuses.set(task.id, task.status);
+    for (const task of store.listTasks()) {
+      this.statuses.set(task.id, task.status);
+      this.forwarded.set(task.id, this.forwardedRequests(task.id));
+    }
   }
 
   /**
@@ -136,15 +141,26 @@ export class PushNotifier {
    * naming the devices whose send failed. A phone whose subscription is gone has it removed.
    */
   async handle(event: HarnessEvent): Promise<void> {
-    if (event.type === 'deleted') this.statuses.delete(event.taskId);
+    if (event.type === 'deleted') {
+      this.statuses.delete(event.taskId);
+      this.forwarded.delete(event.taskId);
+    }
     if (event.type !== 'task') return;
     const previous = this.statuses.get(event.taskId);
     this.statuses.set(event.taskId, event.status);
-    if (event.status === previous || !isNotifyStatus(event.status)) return;
+    const forwarded = this.forwardedRequests(event.taskId);
+    const prior = this.forwarded.get(event.taskId) ?? [];
+    this.forwarded.set(event.taskId, forwarded);
+    const newRequest = forwarded.some((id) => !prior.includes(id));
+    if (!newRequest && (event.status === previous || !isNotifyStatus(event.status))) return;
     const task = this.store.getTask(event.taskId);
     const targets = this.store.listPushSubscriptions();
     if (!task || targets.length === 0) return;
-    const payload: PushPayload = { taskId: task.id, title: task.title, status: event.status };
+    const payload: PushPayload = {
+      taskId: task.id,
+      title: task.title,
+      status: newRequest ? 'awaiting_permission' : (event.status as TaskStatus),
+    };
     const json = JSON.stringify(payload);
     const keys = this.keys();
     const results = await Promise.allSettled(

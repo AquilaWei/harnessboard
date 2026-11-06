@@ -202,7 +202,12 @@ export function createApi(
   const vapidKeys = () => (vapid ??= loadVapidKeys(harness.config.dataDir));
   app.get('/push/key', (c) => c.json({ publicKey: vapidKeys().publicKey } satisfies PushKey));
   // The listener is never removed: the API lives as long as the harness.
-  const notifier = new PushNotifier(harness.store, pushSender, vapidKeys);
+  const notifier = new PushNotifier(harness.store, pushSender, vapidKeys, (id) =>
+    harness
+      .permissionRequests(id)
+      .filter((p) => p.forwardNote !== undefined)
+      .map((p) => JSON.stringify([p.requestId, p.sessionId, p.ts])),
+  );
   harness.subscribe((event) => {
     // Only the short reason is logged: the error object can hold a phone's push address.
     notifier

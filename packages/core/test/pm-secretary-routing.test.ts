@@ -887,3 +887,24 @@ it('lets the PM take over a failed secretary while preserving the unanswered que
   expect(host.answer).toHaveBeenCalledWith(task.id, 'r1', 'deny', 'Outside approved scope.');
   expect(store.eventsOfKind(task.id, 'pm_question')).toHaveLength(1);
 });
+
+it('rejects a secretary decision when a live batch permission was forwarded to the user', async () => {
+  const assistant = secretary();
+  pending = [permission];
+  host.run = vi.fn(async (_task, plan) => {
+    pending = [{ ...permission, forwardNote: 'User must decide.' }];
+    await expect(
+      rpc(plan, 'permission', {
+        requestId: 'r1',
+        sessionId: 'worker-session',
+        ts: 100,
+        behavior: 'allow',
+        reason: 'Run tests',
+      }),
+    ).rejects.toThrow('awaiting the user');
+    await rpc(plan, 'escalate_pm', { message: 'The permission now awaits the user.' });
+    return completed;
+  });
+  expect(await assistant.handle()).toBe(true);
+  expect(host.answer).not.toHaveBeenCalled();
+});

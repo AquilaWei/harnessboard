@@ -178,7 +178,9 @@ export class Secretary {
   /** What a batch started now would take; read-only, so the coalescer can decide when. */
   pending(): PendingEvents {
     const updates = this.host.store.eventsOfKinds(this.taskId, ['pm_worker_update'], this.cursor());
-    const permissions = this.host.permissions(this.taskId);
+    const permissions = this.host
+      .permissions(this.taskId)
+      .filter((p) => p.forwardNote === undefined);
     const times = [...updates.map((e) => e.ts), ...permissions.map((p) => p.ts)];
     return {
       count: updates.length + permissions.length,
@@ -199,7 +201,10 @@ export class Secretary {
     const progress = store
       .eventsOfKinds(this.taskId, ['pm_progress'], since)
       .filter((event) => (event.data as { workId?: string | null }).workId !== null);
-    const permissions = this.host.permissions(this.taskId).map((p) => ({ ...p }));
+    const permissions = this.host
+      .permissions(this.taskId)
+      .filter((p) => p.forwardNote === undefined)
+      .map((p) => ({ ...p }));
     const updates = store.eventsOfKinds(this.taskId, ['pm_worker_update'], since);
     // Status messages are already durable UI events; only decisions buy a model call.
     if (!permissions.length && !updates.length) return false;
@@ -445,6 +450,8 @@ export class Secretary {
             p.requestId === input.requestId && p.sessionId === input.sessionId && p.ts === input.ts,
         );
       if (!request || !current) throw new Error('Permission is expired or outside this batch');
+      if (current.forwardNote !== undefined)
+        throw new Error('Permission request is awaiting the user; secretary cannot answer it');
       if (input.behavior !== 'allow' && input.behavior !== 'deny')
         throw new Error('Choose allow or deny');
       if (current.risk !== null) throw new Error('This permission requires the PM');
