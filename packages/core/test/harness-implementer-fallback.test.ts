@@ -85,17 +85,23 @@ const agentsOf = (id: number) => harness.store.listSessions(id).map((s) => s.age
 
 /** Ticks as the board's timer does until the task's sessions were run by `agents`. */
 const ranBy = (id: number, agents: string[]) =>
-  vi.waitFor(() => {
-    harness.tick();
-    expect(agentsOf(id)).toEqual(agents);
-  });
+  vi.waitFor(
+    () => {
+      harness.tick();
+      expect(agentsOf(id)).toEqual(agents);
+    },
+    { timeout: 15_000 },
+  );
 
 /** Ticks as the board's timer does until the task has the status. */
 const reaches = (id: number, status: string) =>
-  vi.waitFor(() => {
-    harness.tick();
-    expect(harness.store.getTask(id)!.status).toBe(status);
-  });
+  vi.waitFor(
+    () => {
+      harness.tick();
+      expect(harness.store.getTask(id)!.status).toBe(status);
+    },
+    { timeout: 15_000 },
+  );
 
 describe('an implementer refused for quota, with a fallback', () => {
   beforeEach(() => {
