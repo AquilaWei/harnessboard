@@ -66,6 +66,9 @@ function Request({
       <div className="permission-head">
         <strong>{t('permission.title', { tool: request.toolName })}</strong>
       </div>
+      {request.forwardNote !== undefined && (
+        <p className="hint">{t('permission.forwardNote', { note: request.forwardNote })}</p>
+      )}
       <pre className="permission-command">{request.summary || request.toolName}</pre>
       {request.risk && (
         <p className="hint warn-text">⚠ {t('permission.risky', { reason: request.risk })}</p>

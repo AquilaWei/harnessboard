@@ -83,3 +83,22 @@ it('reports every missing dispatch field before invoking a worker', async () => 
     await bridge.close();
   }
 });
+
+it.each([
+  { caller: false, visible: true },
+  { caller: true, visible: false },
+  { caller: 'secretary' as const, visible: false },
+])('exposes forward_permission only to the PM: $caller', async ({ caller, visible }) => {
+  const bridge = await pmTools(tempDir('bridge'), async () => ({}), caller);
+  try {
+    const response = await fetch(bridge.server.env.HB_PM_ENDPOINT!, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + bridge.server.env.HB_PM_CAPABILITY },
+      body: JSON.stringify({ method: 'tools/list' }),
+    });
+    const result = (await response.json()) as { tools: { name: string }[] };
+    expect(result.tools.some((tool) => tool.name === 'forward_permission')).toBe(visible);
+  } finally {
+    await bridge.close();
+  }
+});

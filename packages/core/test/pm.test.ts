@@ -1495,3 +1495,86 @@ it('reserves only five configured execution slots across concurrent read-only di
   });
   expect(peak).toBe(5);
 });
+
+it('forwards a live permission without consuming the unanswered question slot', async () => {
+  const forward = vi.fn();
+  Object.assign(host, { forwardPermission: forward });
+  host.permissions = () => [
+    {
+      requestId: 'r',
+      sessionId: 'worker',
+      ts: 100,
+      toolName: 'Bash',
+      summary: 'test',
+      risk: null,
+      suggestedRules: [],
+    },
+  ];
+  await pmTurn(async () => {
+    await engine.call('forward_permission', {
+      requestId: 'r',
+      sessionId: 'worker',
+      ts: 100,
+      message: 'Requires a user decision; this changes files. Recommend allowing once.',
+    });
+    await engine.call('ask_user', { message: 'Which greeting should we use?' });
+  });
+  expect(forward).toHaveBeenCalledWith(
+    task.id,
+    'r',
+    'worker',
+    100,
+    'Requires a user decision; this changes files. Recommend allowing once.',
+  );
+  expect(pmQuestion(store, task.id)?.message).toBe('Which greeting should we use?');
+});
+
+it.each([
+  { requestId: 'unknown', sessionId: 'worker', ts: 100 },
+  { requestId: 'r', sessionId: 'old-worker', ts: 100 },
+  { requestId: 'r', sessionId: 'worker', ts: 99 },
+])('rejects forwarding a stale permission identity %j', async (identity) => {
+  host.permissions = () => [
+    {
+      requestId: 'r',
+      sessionId: 'worker',
+      ts: 100,
+      toolName: 'Bash',
+      summary: 'test',
+      risk: null,
+      suggestedRules: [],
+    },
+  ];
+  await pmTurn(async () => {
+    await expect(
+      engine.call('forward_permission', { ...identity, message: 'Please decide.' }),
+    ).rejects.toThrow('expired');
+  });
+});
+
+it('rejects a PM decision on a permission forwarded to the user', async () => {
+  host.permissions = () => [
+    {
+      requestId: 'r',
+      sessionId: 'worker',
+      ts: 100,
+      toolName: 'Bash',
+      summary: 'test',
+      risk: null,
+      suggestedRules: [],
+      forwardNote: 'Please decide.',
+    },
+  ];
+  await pmTurn(async () => {
+    await expect(
+      engine.call('permission', {
+        requestId: 'r',
+        sessionId: 'worker',
+        ts: 100,
+        behavior: 'allow',
+        reason: 'Proceed',
+      }),
+    ).rejects.toThrow('awaiting the user');
+  });
+  expect(host.answer).not.toHaveBeenCalled();
+});

@@ -190,3 +190,29 @@ it('shows an unanswered PM question alongside a running worker', () => {
   expect(view.pmState?.status).toBe('awaiting_approval');
   expect(view.work?.[0]?.status).toBe('running');
 });
+
+it('lists only forwarded PM permissions with the PM note', () => {
+  const forwarded = {
+    requestId: 'forwarded',
+    sessionId: 'worker-new',
+    ts: 100,
+    toolName: 'Bash',
+    summary: 'make test',
+    risk: null,
+    suggestedRules: [],
+    forwardNote: 'Changes files; recommend allowing once.',
+  };
+  harness.permissionRequests = () => [
+    {
+      requestId: 'internal',
+      sessionId: 'worker-old',
+      ts: 99,
+      toolName: 'Bash',
+      summary: 'make build',
+      risk: null,
+      suggestedRules: [],
+    },
+    forwarded,
+  ];
+  expect(taskView(task, harness).permissionRequests).toEqual([forwarded]);
+});

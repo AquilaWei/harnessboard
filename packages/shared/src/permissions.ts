@@ -97,6 +97,8 @@ export interface TaskApprovalRule {
 
 /** A tool use waiting for the user's answer, as shown on the board. */
 export interface PermissionRequest {
+  /** PM reason, impact and recommendation; present only while awaiting the user. */
+  forwardNote?: string;
   requestId: string;
   sessionId: string;
   toolName: string;

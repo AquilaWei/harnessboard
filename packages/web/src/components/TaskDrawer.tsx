@@ -336,7 +336,7 @@ export function TaskDrawer({
                 <span className="card-id">#{task.id}</span>
               </div>
               {/* What needs you comes first; the description says where the task stands. */}
-              {task.workflow !== 'pm' && task.permissionRequests.length > 0 && (
+              {task.permissionRequests.length > 0 && (
                 <PermissionPrompt
                   taskId={task.id}
                   requests={task.permissionRequests}
