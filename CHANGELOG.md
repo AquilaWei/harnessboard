@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-11-05
+
+- Clarified the English and Traditional Chinese quick starts and task workflow.
+- Branch pushes now run the CI checks without creating release artifacts.
+
 ## 0.3.0 - 2026-11-05
 
 - 正式版：Watchdog 卡住偵測與秘書事件合併已通過驗收，納入本次 MINOR 版本。
