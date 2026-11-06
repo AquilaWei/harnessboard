@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // @vitest-environment happy-dom
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -24,7 +24,11 @@ const card = (id: number, title: string, status: TaskView['status']) =>
     permissionRequests: [],
   }) as unknown as TaskView;
 
-const tasks = [card(1, 'Fix the login', 'review'), card(2, 'Answer me', 'awaiting_permission')];
+const tasks = [
+  card(1, 'Fix the login', 'review'),
+  card(2, 'Answer me', 'awaiting_permission'),
+  card(3, 'Finished', 'done'),
+];
 
 /** A window as wide as `phone` says: `matchMedia` answers the board's phone-width query. */
 const width = (phone: boolean) =>
@@ -37,23 +41,33 @@ const width = (phone: boolean) =>
 let root: Root;
 let container: HTMLElement;
 
+const onTile = vi.fn();
+
+function InteractiveBoard({ phoneTab }: { phoneTab: PhoneTab }) {
+  const [stage, setStage] = useState<import('../src/board').Stage | null>(null);
+  return (
+    <Board
+      tasks={tasks}
+      phoneTab={phoneTab}
+      tiledStage={stage}
+      onTile={(next, ids) => {
+        onTile(next, ids);
+        setStage(stage === next ? null : next);
+      }}
+      onPhoneTab={() => {}}
+      onOpen={() => {}}
+      onAction={() => {}}
+      onInvalidMove={() => {}}
+      onNewTask={() => {}}
+    />
+  );
+}
+
 const render = async (phoneTab: PhoneTab) => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
-  await act(async () =>
-    root.render(
-      <Board
-        tasks={tasks}
-        phoneTab={phoneTab}
-        onPhoneTab={() => {}}
-        onOpen={() => {}}
-        onAction={() => {}}
-        onInvalidMove={() => {}}
-        onNewTask={() => {}}
-      />,
-    ),
-  );
+  await act(async () => root.render(<InteractiveBoard phoneTab={phoneTab} />));
 };
 
 afterEach(() => {
@@ -67,7 +81,7 @@ describe('Board at phone width', () => {
     width(true);
     await render('waiting');
     const tabs = [...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
-    expect(tabs).toEqual(['Waiting for you 1', 'Pending 0', 'In progress 0', 'Review 1', 'Done 0']);
+    expect(tabs).toEqual(['Waiting for you 1', 'Pending 0', 'In progress 0', 'Review 1', 'Done 1']);
   });
 
   it('shows only the tasks of the chosen tab', async () => {
@@ -85,4 +99,61 @@ describe('Board at desktop width', () => {
     expect(container.querySelectorAll('section.stage')).toHaveLength(5);
     expect(container.querySelector('[role="tab"]')).toBeNull();
   });
+});
+
+it('tiles the attention stage when its header is clicked', async () => {
+  width(false);
+  await render('waiting');
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('#stage-attention h2 button')!.click(),
+  );
+  expect(onTile).toHaveBeenCalledWith('attention', [2, 1]);
+});
+
+it('keeps draft and done headers non-clickable', async () => {
+  width(false);
+  await render('waiting');
+  expect(container.querySelector('#stage-draft h2 button, #stage-done h2 button')).toBeNull();
+});
+
+it('expands the done stack on desktop hover', async () => {
+  width(false);
+  await render('waiting');
+  await act(async () =>
+    container
+      .querySelector('#stage-done')!
+      .dispatchEvent(new MouseEvent('mouseover', { bubbles: true })),
+  );
+  expect(container.querySelector('#stage-done .done-stack')!.classList.contains('expanded')).toBe(
+    true,
+  );
+});
+
+it('expands the done stack on keyboard focus', async () => {
+  width(false);
+  await render('waiting');
+  await act(async () =>
+    container
+      .querySelector('#stage-done')!
+      .dispatchEvent(new FocusEvent('focusin', { bubbles: true })),
+  );
+  expect(container.querySelector('#stage-done .done-stack')!.classList.contains('expanded')).toBe(
+    true,
+  );
+});
+
+it('toggles the phone done stack on tap', async () => {
+  width(true);
+  await render('done');
+  await act(async () => container.querySelector<HTMLButtonElement>('.done-stack-toggle')!.click());
+  expect(container.querySelector('.done-stack-toggle')!.getAttribute('aria-expanded')).toBe('true');
+});
+
+it('toggles a tiled header off on its second click', async () => {
+  width(false);
+  await render('waiting');
+  const button = container.querySelector<HTMLButtonElement>('#stage-attention h2 button')!;
+  await act(async () => button.click());
+  await act(async () => button.click());
+  expect(button.getAttribute('aria-pressed')).toBe('false');
 });

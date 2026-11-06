@@ -1,3 +1,4 @@
+import { gridRects, type Rect } from './layout';
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -44,6 +45,7 @@ export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [version, setVersion] = useState<string | null>(null);
   const [windows, setWindows] = useState<{ id: number; tab: DrawerTab }[]>([]);
+  const [tiling, setTiling] = useState<{ stage: Stage; rects: Record<number, Rect> } | null>(null);
   const setSelected = (value: { id: number; tab: DrawerTab }) =>
     setWindows((current) => [...current.filter((w) => w.id !== value.id), value]);
   const [dialog, setDialog] = useState<'new' | 'settings' | null>(null);
@@ -240,6 +242,17 @@ export function App() {
         onAttention={jumpToAttention}
       />
       <Board
+        tiledStage={tiling?.stage}
+        onTile={(stage, ids) => {
+          if (tiling?.stage === stage) {
+            setWindows([]);
+            setTiling(null);
+            return;
+          }
+          const { rects } = gridRects(ids.length, { width: innerWidth, height: innerHeight });
+          setWindows(ids.slice(0, rects.length).map((id) => ({ id, tab: 'timeline' })));
+          setTiling({ stage, rects: Object.fromEntries(rects.map((rect, i) => [ids[i], rect])) });
+        }}
         tasks={tasks}
         phoneTab={phoneTab}
         onPhoneTab={setPhoneTab}
@@ -253,6 +266,8 @@ export function App() {
       />
       <TaskWindows
         windows={windows}
+        tiledRects={tiling?.rects}
+        onRects={(rects) => setTiling((current) => (current ? { ...current, rects } : null))}
         onFocus={(id) =>
           setWindows((items) => [
             ...items.filter((w) => w.id !== id),

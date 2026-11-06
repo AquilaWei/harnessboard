@@ -4,12 +4,15 @@ import { useTranslation } from 'react-i18next';
 import type { TaskView } from '@harnessboard/shared';
 import { PHONE_TABS, STAGES, dropAction, groupByPhoneTab, stageOfTask } from '../board';
 import type { PhoneTab, Stage, TaskAction } from '../board';
+import { gridRects } from '../layout';
 import { usePhoneWidth } from '../media';
 import type { DrawerTab } from './TaskDrawer';
 import { TaskCard } from './TaskCard';
 
 interface Props {
   tasks: TaskView[];
+  tiledStage?: Stage | null | undefined;
+  onTile?: (stage: Stage, ids: number[]) => void;
   /** The one tab shown at phone width; kept by the caller so the header can switch it. */
   phoneTab: PhoneTab;
   onPhoneTab: (tab: PhoneTab) => void;
@@ -26,8 +29,18 @@ export function Board(props: Props) {
 }
 
 /** Five stages that fit one screen; cards carry their own buttons, dragging is optional. */
-function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onReorder, onNewTask }: Props) {
+function StageBoard({
+  tasks,
+  onOpen,
+  onAction,
+  onInvalidMove,
+  onReorder,
+  onNewTask,
+  onTile,
+  tiledStage,
+}: Props) {
   const { t } = useTranslation();
+  const [doneExpanded, setDoneExpanded] = useState(false);
   const [dragged, setDragged] = useState<TaskView | null>(null);
   const [over, setOver] = useState<Stage | null>(null);
 
@@ -60,6 +73,12 @@ function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onReorder, onNewTa
             className={`stage stage-${stage} ${items.length > 0 ? 'has-items' : ''} ${over === stage && droppable ? 'drop-ok' : ''} ${
               dragged && !droppable && stageOfTask(dragged) !== stage ? 'drop-no' : ''
             }`}
+            onMouseEnter={() => stage === 'done' && setDoneExpanded(true)}
+            onMouseLeave={() => stage === 'done' && setDoneExpanded(false)}
+            onFocusCapture={() => stage === 'done' && setDoneExpanded(true)}
+            onBlurCapture={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget)) setDoneExpanded(false);
+            }}
             aria-label={t(`stage.${stage}`)}
             onDragOver={(e) => {
               e.preventDefault();
@@ -72,7 +91,35 @@ function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onReorder, onNewTa
             }}
           >
             <h2 className="stage-head">
-              <span>{t(`stage.${stage}`)}</span>
+              {stage !== 'draft' && stage !== 'done' ? (
+                <button
+                  type="button"
+                  aria-pressed={tiledStage === stage}
+                  aria-label={t(
+                    tiledStage === stage ? 'boardLayout.collapseAll' : 'boardLayout.tileAll',
+                    { stage: t(`stage.${stage}`) },
+                  )}
+                  onClick={() =>
+                    onTile?.(
+                      stage,
+                      items.map((task) => task.id),
+                    )
+                  }
+                >
+                  {t(`stage.${stage}`)}
+                </button>
+              ) : (
+                <span>{t(`stage.${stage}`)}</span>
+              )}
+              {tiledStage === stage &&
+                gridRects(items.length, { width: innerWidth, height: innerHeight }).hidden > 0 && (
+                  <small>
+                    {t('boardLayout.moreHidden', {
+                      count: gridRects(items.length, { width: innerWidth, height: innerHeight })
+                        .hidden,
+                    })}
+                  </small>
+                )}
               <span className="count">{items.length}</span>
             </h2>
             {items.length === 0 && (
@@ -85,28 +132,35 @@ function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onReorder, onNewTa
                 )}
               </div>
             )}
-            {items.map((task, index) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                dragging={dragged?.id === task.id}
-                onOpen={(tab) => onOpen(task.id, tab)}
-                onAction={(action) => onAction(task, action)}
-                onReorderDrop={
-                  stage === 'pending' && task.status === 'pending' && dragged?.id !== task.id
-                    ? (beforeId) => {
-                        if (dragged) onReorder?.(dragged, beforeId);
-                      }
-                    : undefined
-                }
-                afterId={items[index + 1]?.id ?? null}
-                onDragStart={() => setDragged(task)}
-                onDragEnd={() => {
-                  setDragged(null);
-                  setOver(null);
-                }}
-              />
-            ))}
+            <div
+              className={stage === 'done' ? `done-stack ${doneExpanded ? 'expanded' : ''}` : ''}
+              aria-label={
+                stage === 'done' ? t('boardLayout.doneStack', { count: items.length }) : undefined
+              }
+            >
+              {items.map((task, index) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  dragging={dragged?.id === task.id}
+                  onOpen={(tab) => onOpen(task.id, tab)}
+                  onAction={(action) => onAction(task, action)}
+                  onReorderDrop={
+                    stage === 'pending' && task.status === 'pending' && dragged?.id !== task.id
+                      ? (beforeId) => {
+                          if (dragged) onReorder?.(dragged, beforeId);
+                        }
+                      : undefined
+                  }
+                  afterId={items[index + 1]?.id ?? null}
+                  onDragStart={() => setDragged(task)}
+                  onDragEnd={() => {
+                    setDragged(null);
+                    setOver(null);
+                  }}
+                />
+              ))}
+            </div>
           </section>
         );
       })}
@@ -117,6 +171,7 @@ function StageBoard({ tasks, onOpen, onAction, onInvalidMove, onReorder, onNewTa
 /** One tab at a time, since only one column fits; phones have no drag and drop. */
 function PhoneBoard({ tasks, phoneTab, onPhoneTab, onOpen, onAction, onNewTask }: Props) {
   const { t } = useTranslation();
+  const [doneExpanded, setDoneExpanded] = useState(false);
   const groups = groupByPhoneTab(tasks);
   // Newest first, as in the stages.
   const items = phoneTab === 'pending' ? groups[phoneTab] : [...groups[phoneTab]].reverse();
@@ -152,18 +207,30 @@ function PhoneBoard({ tasks, phoneTab, onPhoneTab, onOpen, onAction, onNewTask }
             )}
           </div>
         )}
-        {items.map((task) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            dragging={false}
-            onOpen={(tab) => onOpen(task.id, tab)}
-            onAction={(action) => onAction(task, action)}
-            afterId={null}
-            onDragStart={() => {}}
-            onDragEnd={() => {}}
-          />
-        ))}
+        {phoneTab === 'done' && (
+          <button
+            type="button"
+            className="done-stack-toggle"
+            aria-expanded={doneExpanded}
+            onClick={() => setDoneExpanded(!doneExpanded)}
+          >
+            {t('boardLayout.doneStackTap', { count: items.length })}
+          </button>
+        )}
+        <div className={phoneTab === 'done' ? `done-stack ${doneExpanded ? 'expanded' : ''}` : ''}>
+          {items.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              dragging={false}
+              onOpen={(tab) => onOpen(task.id, tab)}
+              onAction={(action) => onAction(task, action)}
+              afterId={null}
+              onDragStart={() => {}}
+              onDragEnd={() => {}}
+            />
+          ))}
+        </div>
       </section>
     </main>
   );
