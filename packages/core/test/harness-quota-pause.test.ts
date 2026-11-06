@@ -75,12 +75,31 @@ async function runningCodexTask(usedPercent: number) {
     implementer: 'codex',
     queue: true,
   });
-  await vi.waitFor(() => expect(harness.store.listSessions(task.id)).toHaveLength(1));
+  await vi.waitFor(
+    () => {
+      expect(harness.store.listSessions(task.id)).toHaveLength(1);
+      expect(['running', 'waiting_quota']).toContain(harness.store.getTask(task.id)!.status);
+    },
+    { timeout: 15_000 },
+  );
   return task;
 }
 
 /** The next tick is due to read Codex's usage again. */
-const tickAfterAMinute = () => harness.tick(Date.now() + 61_000);
+async function tickAfterAMinute(): Promise<void> {
+  const readQuotas = harness['readQuotas'].bind(harness);
+  let read: Promise<void> | undefined;
+  harness['readQuotas'] = (now) => (read = readQuotas(now));
+  harness.tick(Date.now() + 61_000);
+  expect(read).toBeDefined();
+  await read;
+}
+
+async function waitForQuotaPause(id: number): Promise<void> {
+  await vi.waitFor(() => expect(harness.store.getTask(id)!.status).toBe('waiting_quota'), {
+    timeout: 15_000,
+  });
+}
 
 it('pauses when quota changes while a recorded session is still being prepared', async () => {
   const run = harness['runOne'].bind(harness);
@@ -90,21 +109,23 @@ it('pauses when quota changes while a recorded session is still being prepared',
     return run(...args);
   };
   const task = await runningCodexTask(50);
-  await vi.waitFor(() => expect(harness.store.getTask(task.id)!.status).toBe('waiting_quota'));
+  await waitForQuotaPause(task.id);
+  expect(harness.store.getTask(task.id)!.status).toBe('waiting_quota');
 });
 
 describe('a running Codex session whose usage reaches the pause level', () => {
   it('pauses the task for quota', async () => {
     const task = await runningCodexTask(50);
     codexUsage(95);
-    tickAfterAMinute();
-    await vi.waitFor(() => expect(harness.store.getTask(task.id)!.status).toBe('waiting_quota'));
+    await tickAfterAMinute();
+    await waitForQuotaPause(task.id);
+    expect(harness.store.getTask(task.id)!.status).toBe('waiting_quota');
   });
 
   it('ends the session as cut off by quota, so it continues the same conversation', async () => {
     const task = await runningCodexTask(50);
     codexUsage(95);
-    tickAfterAMinute();
+    await tickAfterAMinute();
     await harness.waitForIdle([task.id]);
     expect(harness.store.listSessions(task.id).map((s) => s.endReason)).toEqual(['quota']);
   });
@@ -114,8 +135,7 @@ describe('a running Codex session below the pause level', () => {
   it('keeps running', async () => {
     const task = await runningCodexTask(50);
     codexUsage(60);
-    tickAfterAMinute();
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await tickAfterAMinute();
     expect(harness.store.getTask(task.id)!.status).toBe('running');
   });
 });
@@ -132,7 +152,8 @@ describe('a running Claude session that reports usage past the pause level', () 
       confirmPlan: false,
       queue: true,
     });
-    await vi.waitFor(() => expect(harness.store.getTask(task.id)!.status).toBe('waiting_quota'));
+    await waitForQuotaPause(task.id);
+    expect(harness.store.getTask(task.id)!.status).toBe('waiting_quota');
   });
 });
 
