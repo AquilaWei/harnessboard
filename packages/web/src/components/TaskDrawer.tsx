@@ -194,7 +194,18 @@ export function TaskDrawer({
                 </span>
                 <span className="card-id">#{task.id}</span>
               </div>
-              <Description task={task} />
+              {/* What needs you comes first; the description says where the task stands. */}
+              {task.workflow !== 'pm' && task.permissionRequests.length > 0 && (
+                <PermissionPrompt
+                  taskId={task.id}
+                  requests={task.permissionRequests}
+                  onAnswered={() => void loadTask()}
+                  onError={onError}
+                />
+              )}
+              {task.pmQuestion && (s === 'running' || s === 'awaiting_approval') && (
+                <Markdown className="reply" text={task.pmQuestion.message} />
+              )}
               {s === 'review' && task.workflow === 'pm' && task.pmAcceptance && (
                 <details className="status-review" open>
                   <summary>{t('pm.accepted')}</summary>
@@ -219,19 +230,12 @@ export function TaskDrawer({
                   <Markdown className="reply" text={review.findings} />
                 </details>
               )}
-              {(s === 'review' || s === 'done') && <UsageLine usage={task.usage} />}
-              {task.workflow !== 'pm' && task.permissionRequests.length > 0 && (
-                <PermissionPrompt
-                  taskId={task.id}
-                  requests={task.permissionRequests}
-                  onAnswered={() => void loadTask()}
-                  onError={onError}
-                />
-              )}
+              <Description task={task} />
               {/* A proposed plan is shown on the Plan tab; progress starts after approval. */}
               {task.mode === 'loop' && task.sessionCount > 0 && !task.plan && (
                 <FeatureProgress loop={task.loop} />
               )}
+              {(s === 'review' || s === 'done') && <UsageLine usage={task.usage} />}
               <div className="actions">
                 {task.workspace === 'worktree' && task.worktreePath && (
                   <CacheCleanupButton key={task.id} taskId={task.id} onError={onError} />

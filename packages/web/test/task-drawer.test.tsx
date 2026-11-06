@@ -136,6 +136,63 @@ describe('TaskDrawer status box', () => {
       'Protection acts when usage is reported',
     );
   });
+
+  it('when a tool use awaits permission expect the request above the description', async () => {
+    await renderDrawer(
+      task({
+        status: 'awaiting_permission',
+        permissionRequests: [
+          {
+            requestId: 'r1',
+            sessionId: 's1',
+            toolName: 'Bash',
+            summary: 'pnpm run build',
+            suggestedRules: [],
+            risk: null,
+            ts: 0,
+          },
+        ],
+      }),
+    );
+    const request = container.querySelector('.status-box .permission')!;
+    const description = container.querySelector('.status-box .description')!;
+    expect(request.compareDocumentPosition(description)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('when a review has findings expect them above the description', async () => {
+    await renderDrawer(
+      task({
+        status: 'review',
+        lastReview: {
+          agentId: 'codex',
+          verdict: 'changes',
+          round: 1,
+          findings: '- Fix the redirect',
+        } as TaskDetail['lastReview'],
+      }),
+    );
+    const findings = container.querySelector('.status-box .status-review')!;
+    const description = container.querySelector('.status-box .description')!;
+    expect(findings.compareDocumentPosition(description)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it('when the PM asks a question expect the question above the description', async () => {
+    await renderDrawer(
+      task({
+        workflow: 'pm',
+        status: 'awaiting_approval',
+        pmQuestion: { kind: 'question', message: 'Which branch should it use?' },
+      }),
+    );
+    const question = container.querySelector('.status-box .reply')!;
+    const description = container.querySelector('.status-box .description')!;
+    expect(question.textContent).toBe('Which branch should it use?');
+    expect(question.compareDocumentPosition(description)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
 });
 
 describe('TaskDrawer tabs', () => {
