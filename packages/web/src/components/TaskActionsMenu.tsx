@@ -25,6 +25,8 @@ interface Props {
 export function TaskActionsMenu({ items, children }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  // The list is placed by the viewport, not the header: the header scrolls and would clip it.
+  const [anchor, setAnchor] = useState({ top: 0, right: 0 });
   const wrap = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
@@ -36,6 +38,10 @@ export function TaskActionsMenu({ items, children }: Props) {
     const onPress = (e: Event) => {
       if (!wrap.current?.contains(e.target as Node)) setOpen(false);
     };
+    // A scroll moves the trigger away from the list, so the list closes; scrolling the list itself does not.
+    const onScroll = (e: Event) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       // Runs before the panel's own Escape handler on window, which skips events already handled.
@@ -45,9 +51,11 @@ export function TaskActionsMenu({ items, children }: Props) {
     };
     document.addEventListener('pointerdown', onPress);
     document.addEventListener('keydown', onKey);
+    document.addEventListener('scroll', onScroll, true);
     return () => {
       document.removeEventListener('pointerdown', onPress);
       document.removeEventListener('keydown', onKey);
+      document.removeEventListener('scroll', onScroll, true);
     };
   }, [open]);
 
@@ -65,12 +73,18 @@ export function TaskActionsMenu({ items, children }: Props) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen((isOpen) => !isOpen)}
+        onClick={() => {
+          if (!open) {
+            const box = trigger.current!.getBoundingClientRect();
+            setAnchor({ top: box.bottom + 4, right: window.innerWidth - box.right });
+          }
+          setOpen(!open);
+        }}
       >
         ⋯ {t('actions.more')}
       </button>
       {open && (
-        <div className="task-menu-pop">
+        <div className="task-menu-pop" style={{ top: anchor.top, right: anchor.right }}>
           <div role="menu" id={menuId} aria-label={t('actions.more')}>
             {items.map((item) => (
               <button

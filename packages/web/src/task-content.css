@@ -17,16 +17,13 @@
   border-radius: 4px;
 }
 
-/* The More menu sits in the actions row; its list opens over the content below. */
+/* The More menu sits in the actions row. Its list is fixed to the viewport, set from the trigger. */
 .task-menu {
-  position: relative;
   display: inline-flex;
 }
 
 .task-menu-pop {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
+  position: fixed;
   z-index: 20;
   display: flex;
   flex-direction: column;
