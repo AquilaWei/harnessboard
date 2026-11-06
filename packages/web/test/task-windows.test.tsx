@@ -21,3 +21,12 @@ it('renders every task with only the last window active', () => {
   expect(markup).toContain('data-active="false">1');
   expect(markup).toContain('data-active="true">3');
 });
+
+it('provides handles for every edge and corner', () => {
+  const markup = renderToStaticMarkup(
+    <TaskWindows windows={[{ id: 1, tab: 'timeline' }]} onFocus={vi.fn()}>
+      {() => <span>Task</span>}
+    </TaskWindows>,
+  );
+  expect(markup.match(/data-edge=/g)).toHaveLength(8);
+});

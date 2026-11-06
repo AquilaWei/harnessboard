@@ -490,3 +490,33 @@ describe('notifications after pairing again', () => {
     expect([pushCalls, notificationsEnabled()]).toEqual([['POST /api/push/subscribe'], true]);
   });
 });
+
+it('retile windows to fill the viewport after a desktop resize', async () => {
+  status = 'running';
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+  vi.stubGlobal('innerWidth', 960);
+  vi.stubGlobal('innerHeight', 720);
+  await reopen();
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('#stage-active h2 button')!.click(),
+  );
+  vi.stubGlobal('innerWidth', 1280);
+  vi.stubGlobal('innerHeight', 960);
+  await act(async () => window.dispatchEvent(new Event('resize')));
+  const frame = container.querySelector<HTMLElement>('.task-window')!;
+  expect({
+    left: frame.style.left,
+    top: frame.style.top,
+    width: frame.style.width,
+    height: frame.style.height,
+  }).toEqual({
+    left: '0px',
+    top: '0px',
+    width: '1280px',
+    height: '960px',
+  });
+});

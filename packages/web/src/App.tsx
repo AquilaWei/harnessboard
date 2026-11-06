@@ -23,6 +23,7 @@ import { TaskWindows } from './components/TaskWindows';
 import { TaskDrawer } from './components/TaskDrawer';
 import type { DrawerTab } from './components/TaskDrawer';
 import { descriptionText } from './components/Description';
+import { tileStage, type StageTiling } from './layout';
 import { useLiveEvents, useThrottled } from './live';
 import { newlyWaiting, notificationsEnabled, openTab } from './notify';
 import { checkPasskey, passkeysAvailable } from './passkey';
@@ -44,6 +45,25 @@ export function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [version, setVersion] = useState<string | null>(null);
   const [windows, setWindows] = useState<{ id: number; tab: DrawerTab }[]>([]);
+  const [tiling, setTiling] = useState<StageTiling | null>(null);
+  useEffect(() => {
+    const resize = () => {
+      if (!tiling) return;
+      const ids = tiling.ids.filter(
+        (id) => tiling.rects[id] && windows.some((item) => item.id === id),
+      );
+      const next = ids.length
+        ? tileStage(null, tiling.stage, ids, { width: innerWidth, height: innerHeight })
+        : null;
+      setTiling(next);
+      // Detached windows keep their own geometry; only still-tiled windows are fit-limited.
+      setWindows((items) =>
+        items.filter((item) => !ids.includes(item.id) || next?.ids.includes(item.id)),
+      );
+    };
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, [tiling, windows]);
   const setSelected = (value: { id: number; tab: DrawerTab }) =>
     setWindows((current) => [...current.filter((w) => w.id !== value.id), value]);
   const [dialog, setDialog] = useState<'new' | 'settings' | null>(null);
@@ -240,6 +260,14 @@ export function App() {
         onAttention={jumpToAttention}
       />
       <Board
+        tiledStage={tiling?.stage}
+        onTile={(stage, ids) => {
+          if (!ids.length) return;
+          const next = tileStage(tiling, stage, ids, { width: innerWidth, height: innerHeight });
+          if (next === tiling) return;
+          setWindows(next ? next.ids.map((id) => ({ id, tab: 'timeline' })) : []);
+          setTiling(next);
+        }}
         tasks={tasks}
         phoneTab={phoneTab}
         onPhoneTab={setPhoneTab}
@@ -253,6 +281,8 @@ export function App() {
       />
       <TaskWindows
         windows={windows}
+        tiledRects={tiling?.rects}
+        onRects={(rects) => setTiling((current) => (current ? { ...current, rects } : null))}
         onFocus={(id) =>
           setWindows((items) => [
             ...items.filter((w) => w.id !== id),

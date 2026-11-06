@@ -2305,3 +2305,99 @@ th {
 .task-snap-preview.right {
   right: 0;
 }
+
+.stage-head button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.done-stack {
+  position: relative;
+  max-height: 180px;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+  padding-bottom: 12px;
+}
+.done-stack:not(.expanded) > :nth-child(n + 2) {
+  visibility: hidden;
+}
+.done-stack:not(.expanded)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  border: 1px solid var(--border);
+  box-shadow: 0 -5px 0 var(--border);
+  pointer-events: none;
+}
+.done-stack.expanded {
+  max-height: 10000px;
+}
+.task-resize {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+}
+.resize-n,
+.resize-s {
+  left: 10px;
+  right: 10px;
+  width: auto;
+  cursor: ns-resize;
+}
+.resize-n {
+  top: -4px;
+  bottom: auto;
+}
+.resize-s {
+  bottom: -4px;
+}
+.resize-e,
+.resize-w {
+  top: 10px;
+  bottom: 10px;
+  height: auto;
+  cursor: ew-resize;
+}
+.resize-e {
+  right: -4px;
+}
+.resize-w {
+  left: -4px;
+  right: auto;
+}
+.resize-ne,
+.resize-nw {
+  top: -4px;
+  bottom: auto;
+}
+.resize-ne,
+.resize-se {
+  right: -4px;
+}
+.resize-nw,
+.resize-sw {
+  left: -4px;
+  right: auto;
+}
+.resize-se,
+.resize-sw {
+  bottom: -4px;
+}
+.resize-ne,
+.resize-sw {
+  cursor: nesw-resize;
+}
+.resize-nw,
+.resize-se {
+  cursor: nwse-resize;
+}
+@media (prefers-reduced-motion: reduce) {
+  .done-stack {
+    transition: none;
+  }
+}
