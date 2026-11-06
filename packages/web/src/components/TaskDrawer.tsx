@@ -23,7 +23,6 @@ import { Details } from './Details';
 import { UsageLine } from './UsageSummary';
 import { DiffView } from './DiffView';
 import { FeatureList } from './FeatureList';
-import { LogView } from './LogView';
 import { NotesView } from './NotesView';
 import { FeatureProgress } from './Meter';
 import { PermissionPrompt } from './PermissionPrompt';
@@ -59,7 +58,8 @@ export function TaskDrawer({
   const [events, setEvents] = useState<StoredEvent[]>([]);
   const [diff, setDiff] = useState<WorktreeDiff | null>(null);
   const [commits, setCommits] = useState<CommitInfo[] | null>(null);
-  const [tab, setTab] = useState<DrawerTab>(initialTab);
+  // A window opened on the hidden Log tab falls back to the timeline.
+  const [tab, setTab] = useState<DrawerTab>(initialTab === 'log' ? 'timeline' : initialTab);
   const lastId = useRef(0);
   const openedTask = useRef<number | null>(null);
 
@@ -144,16 +144,16 @@ export function TaskDrawer({
 
   const s = task?.status;
   const hasCriteria = task?.mode === 'single' && (task.confirmPlan || task.acceptance);
+  // The event log is kept for debugging but not offered as a tab.
   const tabs: DrawerTab[] = [
     'timeline',
     ...(task?.workflow === 'pm' ? (['team'] as const) : []),
     ...(task?.mode === 'loop' ? (['features'] as const) : []),
     ...(hasCriteria ? (['criteria'] as const) : []),
-    ...(task?.latestSessionId && task.workflow !== 'pm' ? (['notes'] as const) : []),
+    'changes',
     // A chat continues the task's conversation, so there must be one.
     ...(task?.latestSessionId ? (['chat'] as const) : []),
-    'changes',
-    'log',
+    ...(task?.latestSessionId && task.workflow !== 'pm' ? (['notes'] as const) : []),
     'details',
   ];
   // Where a proposal waiting for approval is read and approved.
@@ -394,7 +394,6 @@ export function TaskDrawer({
               <DiffView diff={diff} />
             </>
           )}
-          {tab === 'log' && <LogView events={events} window={task?.context?.window ?? 1_000_000} />}
           {tab === 'details' && task && (
             <Details task={task} onSaved={() => void loadTask()} onError={onError} />
           )}
