@@ -19,6 +19,8 @@ export function Details({ task, onSaved, onError }: Props) {
   const { t } = useTranslation();
   return (
     <>
+      {/* The safety limit is a setting of this task, so it is read here rather than in the status. */}
+      <p className="hint">{t('safety.monitoringLimit')}</p>
       <ModelUsage usage={task.usage} />
       <details className="agent-settings">
         <summary>

@@ -113,24 +113,31 @@ const renderDrawer = async (detail: TaskDetail) => {
 const button = (label: string) =>
   [...container.querySelectorAll('button')].find((b) => b.textContent === label);
 
+/** Opens the More menu, where the secondary actions wait. */
+const openMore = () => act(async () => button('⋯ More')!.click());
+
 describe('TaskDrawer spec change action', () => {
-  it('offers Change the spec for a task in review with a spec file', async () => {
+  it('offers Change the spec in More for a task in review with a spec file', async () => {
     await renderDrawer(task({}));
+    await openMore();
     expect(button('Change the spec')).toBeDefined();
   });
 
   it('offers no Change the spec before the spec file is written', async () => {
     await renderDrawer(task({ specFile: null }));
+    await openMore();
     expect(button('Change the spec')).toBeUndefined();
   });
 
   it('offers no Change the spec for a done task', async () => {
     await renderDrawer(task({ status: 'done' }));
+    await openMore();
     expect(button('Change the spec')).toBeUndefined();
   });
 
   it('opens the criteria tab with the request form', async () => {
     await renderDrawer(task({}));
+    await openMore();
     await act(async () => button('Change the spec')!.click());
     expect(button('Ask for the change')).toBeDefined();
   });

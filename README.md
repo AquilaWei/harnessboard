@@ -2,7 +2,7 @@
 
 Harnessboard coordinates AI coding agents on a local task board so you can review their work before merging it.
 
-![version](https://img.shields.io/badge/version-0.3.1-blue) ![license](https://img.shields.io/badge/license-Apache--2.0-green) ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
+![version](https://img.shields.io/badge/version-0.3.3-blue) ![license](https://img.shields.io/badge/license-Apache--2.0-green) ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
 **English** · [繁體中文](README.zh-TW.md)
 

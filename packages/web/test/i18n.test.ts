@@ -27,4 +27,20 @@ describe('translations', () => {
   it('have the same keys in English and zh-TW', () => {
     expect(keyPaths(zhTW)).toEqual(keyPaths(en));
   });
+
+  it('give the More menu an English label', () => {
+    expect(en.actions.more).toBe('More');
+  });
+
+  it('give the More menu a zh-TW label', () => {
+    expect(zhTW.actions.more).toBe('更多');
+  });
+
+  it('give the board layout hidden-count hint an English wording', () => {
+    expect(en.boardLayout.moreHidden).toBe('+{{count}} more');
+  });
+
+  it('give the board layout hidden-count hint a zh-TW wording', () => {
+    expect(zhTW.boardLayout.moreHidden).toBe('另有 {{count}} 個');
+  });
 });

@@ -41,6 +41,19 @@ it('shows one row per model with total tokens and estimated cost', async () => {
   }
 });
 
+it('when task details render expect the monitoring limit hint', async () => {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<Details task={task} onSaved={vi.fn()} onError={vi.fn()} />));
+    expect(container.querySelector('.hint')?.textContent).toBe(
+      'Protection acts when usage is reported. Usage that has not been reported cannot be monitored. Already consumed tokens cannot be recovered.',
+    );
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it('omits allowed tool rules from task details', async () => {
   const container = document.createElement('div');
   const root = createRoot(container);

@@ -195,6 +195,9 @@ export const en = {
     chat: 'Chat',
     copied: 'Copied',
     close: 'Close',
+    more: 'More',
+    expand: 'Show more',
+    collapse: 'Show less',
   },
   models: {
     profile: 'Profile default ({{model}})',
@@ -761,6 +764,13 @@ export const en = {
     save: 'Save',
     saved: 'Saved',
   },
+  boardLayout: {
+    tileAll: 'Open all {{stage}} tasks side by side',
+    collapseAll: 'Close tiled tasks',
+    moreHidden: '+{{count}} more',
+    doneStack: '{{count}} done — hover to expand',
+    doneStackTap: '{{count}} done — tap to expand',
+  },
 };
 
 export const zhTW: typeof en = {
@@ -949,6 +959,9 @@ export const zhTW: typeof en = {
     chat: '對話',
     copied: '已複製',
     close: '關閉',
+    more: '更多',
+    expand: '展開',
+    collapse: '收起',
   },
   models: {
     profile: '設定檔預設（{{model}}）',
@@ -1489,6 +1502,13 @@ export const zhTW: typeof en = {
     addAgent: '加入',
     save: '儲存',
     saved: '已儲存',
+  },
+  boardLayout: {
+    tileAll: '並排展開「{{stage}}」所有任務',
+    collapseAll: '收起並排的任務',
+    moreHidden: '另有 {{count}} 個',
+    doneStack: '已完成 {{count}} 個，滑過展開',
+    doneStackTap: '已完成 {{count}} 個，點一下展開',
   },
 };
 
