@@ -436,7 +436,10 @@ describe('a chat stopped by the user', () => {
   it('returns the task to the status it had', async () => {
     const task = await finishedTask();
     harness.chat(task.id, 'Rename it');
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await vi.waitFor(
+      () => expect(harness.store.listSessions(task.id)[0]?.contextTokens).toBe(10_000),
+      { timeout: 15_000 },
+    );
     harness.stopTask(task.id);
     await harness.waitForIdle();
     expect(status(task.id)).toBe('review');

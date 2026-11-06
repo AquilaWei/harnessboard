@@ -262,7 +262,14 @@ async function revisedBeforeDesign() {
   harness.approveCriteria(task.id);
   await harness.waitForIdle();
   harness.tick(); // the designer starts and hangs
-  await new Promise((r) => setTimeout(r, 300));
+  await vi.waitFor(
+    () => {
+      harness.tick();
+      const session = harness.store.listSessions(task.id).find((s) => s.role === 'designer');
+      expect(session?.contextTokens).toBe(10_000);
+    },
+    { timeout: 15_000 },
+  );
   harness.stopTask(task.id);
   await harness.waitForIdle();
   harness.requestSpecRevision(task.id, 'Say hello instead');

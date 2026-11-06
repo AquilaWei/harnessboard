@@ -3,7 +3,7 @@ import { createHistoricalTask } from './helpers.js';
 // Single tasks that agree on acceptance criteria with the user first, with the fake agent CLI.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import {
@@ -259,7 +259,7 @@ describe('a session cut off after approval', () => {
     scenario(
       session(PROPOSAL),
       specFile,
-      [[init(), assistantText('x', 10_000), { __hang: true }]],
+      [[init(), assistantText('x', 11_000), { __hang: true }]],
       session('done'),
     ),
   );
@@ -269,7 +269,13 @@ describe('a session cut off after approval', () => {
     harness.approveCriteria(task.id);
     await harness.waitForIdle();
     harness.tick(); // the implementer starts and hangs
-    await new Promise((r) => setTimeout(r, 300));
+    await vi.waitFor(
+      () => {
+        harness.tick();
+        expect(harness.store.listSessions(task.id).at(-1)?.contextTokens).toBe(11_000);
+      },
+      { timeout: 15_000 },
+    );
     harness.stopTask(task.id);
     await harness.waitForIdle();
     harness.queueTask(task.id);
