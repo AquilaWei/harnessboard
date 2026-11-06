@@ -283,15 +283,21 @@ it('releases its task slot when an escalated question outlives the last worker',
     }
     return outcome;
   };
-  const timer = setTimeout(() => controller.abort(), 1000);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await engine.run();
+    await Promise.race([
+      engine.run(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('PM did not release the task slot')), 30_000);
+      }),
+    ]);
   } finally {
     clearTimeout(timer);
+    controller.abort();
   }
   expect(store.getTask(task.id)?.status).toBe('awaiting_approval');
   expect(pmWork(store, task.id)[0]?.status).toBe('completed');
-}, 3000);
+}, 60_000);
 
 it('reports PM acceptance for user review without marking the task done', async () => {
   const { headCommit } = await import('../src/worktree.js');
