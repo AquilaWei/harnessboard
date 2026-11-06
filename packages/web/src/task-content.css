@@ -78,3 +78,11 @@
   width: 100%;
   justify-content: flex-start;
 }
+
+/* A board card shows two lines of the status; the full sentence is in the task panel. */
+.card .description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}

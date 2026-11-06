@@ -6,6 +6,7 @@ import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DrawerTab } from '../src/components/TaskDrawer';
 import type { TaskDetail } from '@harnessboard/shared';
+import { TaskCard } from '../src/components/TaskCard';
 import { TaskDrawer } from '../src/components/TaskDrawer';
 import '../src/i18n';
 
@@ -405,5 +406,39 @@ describe('TaskDrawer More menu', () => {
       document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     });
     expect(container.querySelector('[role="menu"]')).toBeNull();
+  });
+});
+
+describe('TaskCard', () => {
+  const renderCard = async (detail: TaskDetail) => {
+    await act(async () =>
+      root.render(
+        <TaskCard
+          task={detail}
+          onOpen={() => {}}
+          onAction={() => {}}
+          onDragStart={() => {}}
+          onDragEnd={() => {}}
+          dragging={false}
+        />,
+      ),
+    );
+  };
+
+  it('when a pending card renders expect Start as its only button', async () => {
+    await renderCard(task({ status: 'pending', latestSessionId: null }));
+    expect([...container.querySelectorAll('.card-foot button')].map((b) => b.textContent)).toEqual([
+      'Start',
+    ]);
+  });
+
+  it('when a card has a long description expect no Show more toggle', async () => {
+    await renderCard(task({ status: 'failed', lastNotice: longReason }));
+    expect(button('Show more')).toBeUndefined();
+  });
+
+  it('when a card has a long description expect the full sentence still in the card', async () => {
+    await renderCard(task({ status: 'failed', lastNotice: longReason }));
+    expect(container.querySelector('.card .description')?.textContent).toContain('Final detail.');
   });
 });
