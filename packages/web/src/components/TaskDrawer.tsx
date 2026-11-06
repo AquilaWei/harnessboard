@@ -30,10 +30,17 @@ import { PlanReview } from './PlanReview';
 import { AgentTeam } from './AgentTeam';
 import { CacheCleanupButton } from './CacheCleanupButton';
 import { Timeline } from './Timeline';
+import { TaskActionsMenu } from './TaskActionsMenu';
+import type { MenuItem } from './TaskActionsMenu';
 import '../task-content.css';
 
 export type DrawerTab =
   'team' | 'timeline' | 'notes' | 'chat' | 'criteria' | 'changes' | 'log' | 'features' | 'details';
+
+/** A button in the status box: `primary` is the status's main action, `danger` a stop. */
+interface PanelAction extends MenuItem {
+  primary?: boolean;
+}
 
 interface Props {
   active?: boolean;
@@ -167,6 +174,140 @@ export function TaskDrawer({
   // Why a task in Review stopped, so it is read before deciding.
   const review = task ? openReview(task) : null;
 
+  // Each status keeps one or two main actions visible; the rest wait in the More menu.
+  const mergeOp = task?.operations?.merge.visible ? task.operations.merge : null;
+  const completeOp = task?.operations?.complete.visible ? task.operations.complete : null;
+  const proposalOpen =
+    s === 'awaiting_approval' &&
+    (task?.workflow !== 'pm' || task.pmQuestion?.kind === 'spec') &&
+    tab !== proposalTab;
+  /** The status's own main action; `null` for a status that has none. */
+  const statusLead = (detail: TaskDetail): PanelAction | null => {
+    switch (detail.status) {
+      case 'backlog':
+        return {
+          key: 'plan',
+          label: t('actions.plan'),
+          primary: true,
+          onSelect: () => act('plan'),
+        };
+      case 'pending':
+        return {
+          key: 'start',
+          label: t('actions.start'),
+          primary: true,
+          onSelect: () => act('queue'),
+        };
+      case 'queued':
+      case 'running':
+      case 'waiting_quota':
+      case 'awaiting_permission':
+        return { key: 'stop', label: t('actions.stop'), danger: true, onSelect: () => act('stop') };
+      case 'awaiting_approval':
+        return proposalOpen
+          ? {
+              key: 'proposal',
+              label: t(detail.mode === 'loop' ? 'actions.approvePlan' : 'actions.approveCriteria'),
+              primary: true,
+              onSelect: () => setTab(proposalTab),
+            }
+          : null;
+      case 'review':
+        return tab === 'changes'
+          ? null
+          : { key: 'changes', label: t('tabs.changes'), onSelect: () => setTab('changes') };
+      case 'failed':
+      case 'stopped':
+        return {
+          key: 'retry',
+          label: t('actions.retry'),
+          primary: true,
+          onSelect: () => act('queue'),
+        };
+      case 'paused_safety':
+        return {
+          key: 'resume',
+          label: t('actions.resume'),
+          primary: true,
+          onSelect: () => act('queue'),
+        };
+      case 'done':
+        return {
+          key: 'reopen',
+          label: t('actions.reopenPending'),
+          primary: true,
+          onSelect: () => act('pend'),
+        };
+      default:
+        return null;
+    }
+  };
+  const showCache = !!task && task.workspace === 'worktree' && !!task.worktreePath;
+  // A running task must be stopped first, so its agent is not left orphaned.
+  const showDelete = !!task && !task.activity && s !== 'running' && s !== 'awaiting_permission';
+  const main: PanelAction[] = [];
+  const more: MenuItem[] = [];
+  if (task) {
+    if (mergeOp) {
+      main.push({
+        key: 'merge',
+        label: merging ? t('merge.merging') : t('merge.action', { base: task.baseRef }),
+        disabled: merging || !mergeOp.enabled,
+        title: mergeOp.reason ?? undefined,
+        primary: true,
+        onSelect: () => void merge(),
+      });
+    }
+    const lead = statusLead(task);
+    if (lead) main.push(lead);
+    if (completeOp) {
+      const complete: MenuItem = {
+        key: 'complete',
+        label: t(task.branch ? 'actions.markDoneOnly' : 'actions.markDone'),
+        disabled: !completeOp.enabled,
+        title: completeOp.reason ?? undefined,
+        onSelect: () => act('complete'),
+      };
+      // Mark done is a main action when the status has none of its own, and when a review
+      // has no merge to offer, since accepting the work is then the decision.
+      if (main.length === 0 || (s === 'review' && !mergeOp))
+        main.push({ ...complete, primary: true });
+      else more.push(complete);
+    }
+    if (s === 'review') {
+      more.push({
+        key: 'sendBack',
+        label: t(`actions.${sendBackKey(task)}`),
+        onSelect: () => act('queue'),
+      });
+    }
+    if (s === 'pending') {
+      more.push({
+        key: 'stop',
+        label: t('actions.stop'),
+        danger: true,
+        onSelect: () => act('stop'),
+      });
+    }
+    if (s === 'stopped' || s === 'failed' || s === 'review') {
+      more.push({ key: 'pend', label: t('actions.pend'), onSelect: () => act('pend') });
+    }
+    if (['pending', 'stopped', 'failed', 'review', 'done'].includes(s ?? '')) {
+      more.push({
+        key: 'draft',
+        label: t(s === 'done' ? 'actions.reopenDraft' : 'actions.toDraft'),
+        onSelect: () => act('draft'),
+      });
+    }
+    if (canChangeSpec(task) && tab !== 'criteria') {
+      more.push({
+        key: 'spec',
+        label: t('actions.changeSpec'),
+        onSelect: () => setTab('criteria'),
+      });
+    }
+  }
+
   return (
     <>
       <aside className="drawer" role="dialog" aria-modal={false} aria-label={task?.title ?? ''}>
@@ -237,116 +378,35 @@ export function TaskDrawer({
               )}
               {(s === 'review' || s === 'done') && <UsageLine usage={task.usage} />}
               <div className="actions">
-                {task.workspace === 'worktree' && task.worktreePath && (
-                  <CacheCleanupButton key={task.id} taskId={task.id} onError={onError} />
-                )}
-                {task.operations?.merge.visible && (
+                {main.map((action) => (
                   <button
+                    key={action.key}
                     type="button"
-                    className="btn primary"
-                    disabled={merging || !task.operations.merge.enabled}
-                    title={task.operations.merge.reason ?? undefined}
-                    onClick={() => void merge()}
+                    className={`btn${action.danger ? ' danger' : action.primary ? ' primary' : ''}`}
+                    disabled={action.disabled}
+                    title={action.title}
+                    onClick={action.onSelect}
                   >
-                    {merging ? t('merge.merging') : t('merge.action', { base: task.baseRef })}
+                    {action.label}
                   </button>
-                )}
-                {task.operations?.complete.visible && (
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={!task.operations.complete.enabled}
-                    title={task.operations.complete.reason ?? undefined}
-                    onClick={() => act('complete')}
-                  >
-                    {t(task.branch ? 'actions.markDoneOnly' : 'actions.markDone')}
-                  </button>
-                )}
-                {task.operations?.merge.visible && task.operations.merge.reason && (
-                  <p className="hint">{task.operations.merge.reason}</p>
-                )}
-                {task.operations?.complete.visible && task.operations.complete.reason && (
-                  <p className="hint">{task.operations.complete.reason}</p>
-                )}
-                {s === 'review' && tab !== 'changes' && (
-                  <button type="button" className="btn" onClick={() => setTab('changes')}>
-                    {t('tabs.changes')}
-                  </button>
-                )}
-                {s === 'review' && (
-                  <button type="button" className="btn" onClick={() => act('queue')}>
-                    {t(`actions.${sendBackKey(task)}`)}
-                  </button>
-                )}
-                {s === 'awaiting_approval' &&
-                  (task.workflow !== 'pm' || task.pmQuestion?.kind === 'spec') &&
-                  tab !== proposalTab && (
-                    <button
-                      type="button"
-                      className="btn primary"
-                      onClick={() => setTab(proposalTab)}
-                    >
-                      {t(task.mode === 'loop' ? 'actions.approvePlan' : 'actions.approveCriteria')}
-                    </button>
-                  )}
-                {s === 'backlog' && (
-                  <>
-                    <button type="button" className="btn primary" onClick={() => act('plan')}>
-                      {t('actions.plan')}
-                    </button>
-                  </>
-                )}
-                {s === 'pending' && (
-                  <button type="button" className="btn primary" onClick={() => act('queue')}>
-                    {t('actions.start')}
-                  </button>
-                )}
-                {(s === 'stopped' || s === 'failed' || s === 'review') && (
-                  <button type="button" className="btn" onClick={() => act('pend')}>
-                    {t('actions.pend')}
-                  </button>
-                )}
-                {s === 'done' && (
-                  <button type="button" className="btn" onClick={() => act('pend')}>
-                    {t('actions.reopenPending')}
-                  </button>
-                )}
-                {(s === 'pending' ||
-                  s === 'stopped' ||
-                  s === 'failed' ||
-                  s === 'review' ||
-                  s === 'done') && (
-                  <button type="button" className="btn" onClick={() => act('draft')}>
-                    {t(s === 'done' ? 'actions.reopenDraft' : 'actions.toDraft')}
-                  </button>
-                )}
-                {(s === 'failed' || s === 'stopped' || s === 'paused_safety') && (
-                  <button type="button" className="btn primary" onClick={() => act('queue')}>
-                    {t(s === 'paused_safety' ? 'actions.resume' : 'actions.retry')}
-                  </button>
-                )}
-                {(s === 'running' ||
-                  s === 'awaiting_permission' ||
-                  s === 'queued' ||
-                  s === 'pending' ||
-                  s === 'waiting_quota') && (
-                  <button type="button" className="btn danger" onClick={() => act('stop')}>
-                    {t('actions.stop')}
-                  </button>
-                )}
-                {canChangeSpec(task) && tab !== 'criteria' && (
-                  <button type="button" className="btn ghost" onClick={() => setTab('criteria')}>
-                    {t('actions.changeSpec')}
-                  </button>
-                )}
+                ))}
+                {mergeOp?.reason && <p className="hint">{mergeOp.reason}</p>}
+                {completeOp?.reason && <p className="hint">{completeOp.reason}</p>}
                 {task.latestSessionId && tab !== 'chat' && (
                   <button type="button" className="btn ghost" onClick={() => setTab('chat')}>
                     {t('actions.chat')}
                   </button>
                 )}
-                {/* A running task must be stopped first, so its agent is not left orphaned. */}
-                {!task.activity && s !== 'running' && s !== 'awaiting_permission' && (
-                  <DeleteTask task={task} onDeleted={onClose} onMessage={onError} />
+                {(more.length > 0 || showCache || showDelete) && (
+                  <TaskActionsMenu items={more}>
+                    {showCache && (
+                      <CacheCleanupButton key={task.id} taskId={task.id} onError={onError} />
+                    )}
+                    {/* A running task must be stopped first, so its agent is not left orphaned. */}
+                    {showDelete && (
+                      <DeleteTask task={task} onDeleted={onClose} onMessage={onError} />
+                    )}
+                  </TaskActionsMenu>
                 )}
               </div>
             </div>
