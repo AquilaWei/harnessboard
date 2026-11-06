@@ -1,277 +1,66 @@
 # Harnessboard
 
-New tasks start with one PM: agree the direction and specification once, then let it
-coordinate workers, decide permissions and review architecture and functionality.
-Existing tasks keep their original workflow. [PM workflow and limits](docs/pm-workflow.md).
+Harnessboard coordinates AI coding agents on a local task board so you can review their work before merging it.
 
-Worker execution messages pass through a secretary first. Dispatch automatically appoints
-an available permitted local model if the PM has not selected one; include a lightweight
-model in the permitted pool. The secretary summarizes routine progress and quotes approved
-instructions for simple questions. Anything uncertain goes to the PM, who communicates
-directly with the original worker. Decisions and final review stay with the PM; the Team
-panel shows secretary usage separately. Each batch includes the relevant worker’s initial
-assignment and recorded PM follow-up instructions, so routine checks use the actual
-delegated scope. While the PM waits for your answer, approved work and internal permission
-review continue. Only PM questions create user actions; raw CLI requests remain internal.
-
-![version](https://img.shields.io/badge/version-0.3.1-blue)
-![license](https://img.shields.io/badge/license-Apache--2.0-green)
-![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
+![version](https://img.shields.io/badge/version-0.3.2-blue) ![license](https://img.shields.io/badge/license-Apache--2.0-green) ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
 **English** · [繁體中文](README.zh-TW.md)
 
-**Harnessboard lets you hand coding jobs to Claude Code and review the results like pull
-requests.** You write a task in plain words. An AI agent does it in its own copy of your
-project, and you read the diff and decide whether to merge. Several tasks can run side by
-side, and none of them touches your files until you say so.
+![Harnessboard task board](docs/images/board-overview.png)
 
-![The Harnessboard board with four columns: Draft, In progress, Needs you, Done](docs/images/board-overview.png)
+```mermaid
+flowchart LR
+  A[Describe a task] --> B[Agree on a specification with the PM]
+  B --> C[PM coordinates workers and reviews results]
+  C --> D[Review the diff and decide whether to merge]
+```
 
-> [!NOTE]
-> **Early development (0.0.x).** The runner, the `hb` command, the web board and Loop mode
-> work. Windows and macOS have not been tested on real machines yet.
+- **One PM** coordinates work, permissions and review; independent workers can use separate branches.
+- **Local board** shows progress, questions, usage and results. Your review controls the merge.
+- **Agents:** Claude Code and Codex can act as PMs; Gemini and Docker profiles can work on tasks. See [configuration](docs/configuration.md) and [PM workflow](docs/pm-workflow.md).
 
-**On this page:** [Words you will see](#words-you-will-see) ·
-[Before you start](#before-you-start) · [Install](#install) · [Your first task](#your-first-task) ·
-[How a task flows](#how-a-task-flows) · [Everyday commands](#everyday-commands) ·
-[Go further](#go-further)
+## Quick start
 
-## Why use it
+Allow about three minutes to get started, plus dependency download and build time. You need **Git**, **Node.js 22.13+**, Corepack, and a supported agent CLI such as [Claude Code](https://docs.claude.com/en/docs/claude-code), installed and signed in.
 
-- **Correct a project folder:** before a PM task's first specification approval, open **Details → Project folder**. Stop an active discussion first. Saving preserves files and history, returns the task to Draft and uses a fresh agent session when you discuss the specification in the new folder. Existing worktrees are retained; files are not moved.
-- **Plan before delegating:** every new worker requires a recorded benefit, context/integration cost, reason to prefer a new conversation and completed prerequisite jobs. Editing workers default to private branches/worktrees with explicit path ownership, so independent features can run in parallel; shared directories require an explicit choice. Continue the same worker for sequential work. Inspect the plan in the team panel.
-- **Token spike protection:** tasks pause and notify you when reported consumption exceeds 100,000 tokens within 60 seconds, including cache reads/writes. Change the rule in Settings; resume manually to restart monitoring. [Reporting limits and configuration](docs/configuration.md#token-spike-protection).
-- **Safe by default:** every task works in its own git branch and folder, so a bad result
-  costs you nothing.
-- **Small contexts:** PM and workers retain their conversations. Unchanged specifications
-  and rules are not resent; fixes reuse the worker's context.
-- **One PM:** the PM communicates with you, delegates code and tests, judges permissions,
-  and inspects architecture, functionality and verification evidence before acceptance.
-- **Quota-aware:** it watches your Claude and Codex usage, pauses work near the limit, even
-  in the middle of a session, and continues after the reset.
-- **No API key:** it drives the `claude` program you already signed in to.
-- **Your choice of model and effort:** pick each role's model and how deeply it reasons
-  (for example Opus at high effort for the builder, a quick level for the reviewer).
-
-## Words you will see
-
-| Word                  | Meaning                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------- |
-| **Agent**             | An AI coding tool Harnessboard runs for you: Claude Code (also Codex and Gemini CLI). |
-| **Task**              | One job you describe, for example "Fix the flaky date test".                          |
-| **Worktree / branch** | A separate folder and git branch for one task, so tasks never collide.                |
-| **Context**           | How much the agent can keep in mind at once; the board shows it as a bar.             |
-| **Handoff**           | A note the agent writes when its context is full, so the next session can carry on.   |
-| **Quota**             | The usage limit of your Claude plan; it resets every 5 hours.                         |
-| **Needs you**         | The board column for tasks waiting for your answer, review or permission.             |
-
-## Before you start
-
-| You need                   | Check with         | Where to get it                                                                                    |
-| -------------------------- | ------------------ | -------------------------------------------------------------------------------------------------- |
-| **Node.js 22.13 or newer** | `node -v`          | [nodejs.org](https://nodejs.org) (the version is also in `.nvmrc`)                                 |
-| **Git**                    | `git --version`    | [git-scm.com](https://git-scm.com) (on Windows, install Git for Windows)                           |
-| **Claude Code, signed in** | `claude --version` | [Claude Code docs](https://docs.claude.com/en/docs/claude-code), then run `claude` once to sign in |
-
-You need a Claude subscription that Claude Code can use. **No API key is involved.**
-Linux, macOS and Windows are supported.
-
-Codex profiles use `codex app-server` (checked with CLI 0.162.0). Sandbox approval
-requests appear on the board, and the Git preset lets approved commits stay in the task's
-worktree. See [agent permissions](docs/configuration.md#config-files-agents-and-permissions).
-
-Task summaries include Codex cost estimates in USD at standard short-context API prices,
-with separate input, cache and output rates. These are comparisons, not subscription charges.
-Older records with a known model and token counts are estimated when read; records that
-only identify the model as `codex`, or have no verified price, stay unpriced. See
-[usage estimates](docs/configuration.md#usage-estimates) for the pricing basis and limitations.
-
-## Install
-
-No prebuilt installers are published at the moment, so you build it once from the source:
+**1. Install and build** in a Bash-compatible terminal:
 
 ```bash
 git clone https://github.com/AquilaWei/harnessboard.git
 cd harnessboard
-corepack enable          # gives you the pnpm version this project pins
-pnpm install
-pnpm build               # takes a minute
-```
-
-Then give the command a short name (put the line in your shell's startup file to keep it):
-
-```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
 alias hb="node $PWD/packages/server/dist/cli.js"
-hb --version             # prints the version, for example 0.2.8
 ```
 
-<details>
-<summary>Windows (PowerShell) and other notes</summary>
-
-- Run `corepack enable` in an administrator PowerShell once; the other lines do not need it.
-- Instead of `alias`, use `function hb { node C:\path\to\harnessboard\packages\server\dist\cli.js @args }`.
-- Prefer a window with an icon? The [desktop app](docs/desktop-app.md) can be built too.
-
-</details>
-
-## Your first task
-
-Practise on a throwaway project, so nothing you care about is touched.
-
-**1. Start the server** and leave it running in its own terminal:
+**2. Start the board** and leave it running:
 
 ```bash
-hb serve
+hb serve &
 ```
 
-You should see `Harnessboard … is running at http://127.0.0.1:4317`. Open that address in
-your browser: this is the board.
+Open [http://127.0.0.1:4317](http://127.0.0.1:4317). Keep using the same terminal for the following commands.
 
-**2. Make a small practice project** in a second terminal. Harnessboard needs a git
-repository with at least one commit:
+**3. Create a first task** in a disposable Git repository (Git must have a configured author):
 
 ```bash
 mkdir hello && cd hello
 git init -b main
 echo "# Hello" > README.md
-git add . && git commit -m "init"
+git add README.md && git commit -m "init"
+hb add "Add a Usage section to README.md" --criteria "- README.md has a Usage section"
+hb ls
 ```
 
-**3. Queue a task.** `--criteria` says what "done" means; without it the agent first
-discusses that with you ([why](docs/workflow.md)).
+Open the task on the board to follow the PM conversation and approve its specification. When it is done, use `hb diff <id>` to review and `hb merge <id>` to merge. See [CLI reference](docs/cli.md) and [workflow](docs/workflow.md) for details.
 
-```bash
-hb add "Add a short section about how to run this project to README.md" \
-  --criteria "- README.md has a Usage section"
-```
+## Learn more
 
-**4. Watch it work.** The task appears on the board, and in the terminal:
-
-```bash
-hb ls                    # one line per task: number, state, context used, title
-hb logs 1 -f             # follow what the agent does (Ctrl+C to stop following)
-```
-
-**5. Inspect the accepted result** when the PM marks the task `done`:
-
-```bash
-hb diff 1                # exactly what the agent changed
-hb merge 1               # happy? bring it into main. Not happy? hb chat 1 "please also …"
-```
-
-The task's folder and branch are removed after the merge, and the task moves to **Done**.
-
-<details>
-<summary>Something went wrong?</summary>
-
-- **`claude: command not found` / agent does not start:** run `claude --version`; if it fails,
-  install and sign in to Claude Code first.
-- **The server will not start because the port is taken:** another `hb serve` may be running.
-  Use `hb --port 4400 serve` and add the same `--port 4400` to your other `hb` commands.
-- **"not a git repository" or "no commits yet":** run step 2 again in the project folder.
-- **Task says `Paused for quota`:** your Claude usage limit was reached. It resumes by itself
-  after the reset shown in the header.
-
-</details>
-
-## How a task flows
-
-```mermaid
-flowchart LR
-  U[Agree direction with PM] --> A[Approve specification once]
-  A --> W[PM delegates implementation and tests]
-  W --> R[PM reviews architecture and functionality]
-  R -->|fixes| W
-  R -->|accepted| D[Done]
-  D --> M[You choose whether to merge]
-```
-
-The PM asks you when scope, authorization or an execution problem cannot be resolved.
-PM and workers decide when delegation saves time or tokens; small tasks need no extra
-agents. Independent features use private branches/worktrees with explicit, non-overlapping
-file ownership, interface contracts and acceptance tests. Parents integrate and verify
-delivery; shared workspaces remain available for coupled edits and special build/install
-jobs, with writes queued per directory. Local Claude Code and Codex workers can delegate managed subagents; Gemini and
-Docker workers remain leaves. **Agent team** shows the reporting tree, live activity and
-per-agent model/token details on desktop and phone. Same-platform and cross-platform
-workers use managed CLI sessions. PM currently supports local Claude Code
-and Codex; Gemini and Docker profiles are worker options. See [PM workflow](docs/pm-workflow.md)
-for configuration, permissions, context reuse and legacy task conversion.
-
-## Everyday commands
-
-Run them from any folder with `hb`; tasks belong to the repository you run `hb add` in.
-
-| Command                            | What it does                                     |
-| ---------------------------------- | ------------------------------------------------ |
-| `hb add "<what to do>"`            | Queue a task                                     |
-| `hb ls` / `hb show <id>`           | List tasks / show one with its sessions and cost |
-| `hb logs <id> [-f]`                | Print or follow the agent's log                  |
-| `hb diff <id>`                     | See what the task changed                        |
-| `hb chat <id> "<message>"`         | Talk to the task's agent                         |
-| `hb merge <id>`                    | Merge a reviewed task into its base branch       |
-| `hb stop <id>` / `hb resume <id>`  | Stop a task / queue it again                     |
-| `hb discuss <id>` / `hb pend <id>` | Plan a draft's spec / line it up to start later  |
-| `hb open <id>`                     | Continue the task's conversation in Claude Code  |
-| `hb delete <id>`                   | Remove a task that is not running                |
-
-**Optional local AI.** With [LocalAICLI](docs/configuration.md#config-files-agents-and-permissions)
-installed and `localAi.enabled` set, a maintainer can refresh the Codex price table from the
-official page with a local model. It shows a diff and writes only after you confirm:
-
-```bash
-hb pricing refresh            # extract prices with gpt-oss-20b, show the diff, ask y/N
-```
-
-Every command and flag is in [docs/cli.md](docs/cli.md); `hb --help` lists them too.
-
-## Go further
-
-| Topic                                                 | Read                                                                           |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Acceptance criteria, designer, tester, reviewer       | [docs/workflow.md](docs/workflow.md)                                           |
-| Goals too big for one session (Loop mode)             | [docs/loop-mode.md](docs/loop-mode.md)                                         |
-| Everything the web board can do                       | [docs/web-board.md](docs/web-board.md)                                         |
-| Use it from your phone (Tailscale) or the Android app | [docs/phone-access.md](docs/phone-access.md)                                   |
-| A desktop app instead of a terminal                   | [docs/desktop-app.md](docs/desktop-app.md)                                     |
-| Settings, models, reasoning effort, permissions       | [docs/configuration.md](docs/configuration.md)                                 |
-| Build, test and contribute                            | [docs/development.md](docs/development.md), [CONTRIBUTING.md](CONTRIBUTING.md) |
-| How it is built                                       | [docs/architecture.md](docs/architecture.md)                                   |
-
-The detailed pages are English only. What changed in each version is in
-[CHANGELOG.md](CHANGELOG.md).
+- [Configuration, agents and permissions](docs/configuration.md) · [PM workflow](docs/pm-workflow.md) · [Web board](docs/web-board.md)
+- [Desktop app](docs/desktop-app.md) · [Phone and Android access](docs/phone-access.md) · [Loop mode](docs/loop-mode.md)
+- [Development and tests](docs/development.md) · [Contributing](CONTRIBUTING.md) · [Architecture](docs/architecture.md) · [Changelog](CHANGELOG.md)
 
 ## License
 
-[Apache-2.0](LICENSE). Harnessboard is an independent project and is not affiliated with
-Anthropic. The licenses of the packages bundled in the web board are in
-[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
-
-PM tasks also accept existing folders without Git or commits. These tasks run in the selected folder; Harnessboard creates an empty local bookkeeping commit without staging files. After specification approval, PM arranges project setup, ignore rules and project commits according to the configured coding standards. Remote repository creation still requires explicit authorization.
-
-### Task cache cleanup
-
-Completed tasks automatically clean rebuildable caches in the background, including a
-startup sweep of older completed tasks. Use **Clean caches** in a task to preview paths
-and estimated sizes before removing them, including idle tasks awaiting confirmation.
-
-Only Harness-managed worktrees qualify. Caches need a matching project manifest and
-Git ignore rules: Rust `target/`, Node `node_modules/`, and Python `.venv/`.
-Candidates containing tracked files, symbolic links, or nested Git workspaces are skipped.
-Delivery directories (`dist/`, `build/`, reports and artifacts), branches, source code,
-history, and original project folders are retained. Sizes are logical file bytes;
-actual disk space recovered may differ. Failures appear in task notices and leave the
-task completed. Stop running tasks first; cleanup reserves the task against starting,
-chatting, merging, and deletion until it finishes.
-
-```sh
-hb cleanup 19             # preview candidates and estimated bytes
-hb cleanup 19 --execute   # discover again and remove eligible caches
-```
-
-API: `GET /api/tasks/:id/cleanup` previews; `POST /api/tasks/:id/cleanup` executes.
-Neither endpoint accepts deletion paths. Dependencies may need reinstalling when reopening a task.
-
-Desktop task panels can be opened together as floating windows. Drag the title bar to move a panel, drag its bottom-right corner to resize, or drag to either screen edge to snap to half the page. Layouts last until the page is refreshed.
-
-PM can implement approved changes with `edit_work` in a managed private branch using its own model; the coordinator stays read-only. See [PM workflow](docs/pm-workflow.md).
+[Apache-2.0](LICENSE). Harnessboard is independent of Anthropic. See [third-party notices](THIRD-PARTY-NOTICES.md).
