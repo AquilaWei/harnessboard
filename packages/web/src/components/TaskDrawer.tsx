@@ -30,6 +30,7 @@ import { PlanReview } from './PlanReview';
 import { AgentTeam } from './AgentTeam';
 import { CacheCleanupButton } from './CacheCleanupButton';
 import { Timeline } from './Timeline';
+import '../task-content.css';
 
 export type DrawerTab =
   'team' | 'timeline' | 'notes' | 'chat' | 'criteria' | 'changes' | 'log' | 'features' | 'details';

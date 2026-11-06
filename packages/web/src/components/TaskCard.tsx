@@ -97,7 +97,7 @@ export function TaskCard({
           )}
         </span>
       </button>
-      <Description task={task} />
+      <Description task={task} collapsible={false} />
       {task.status === 'running' && task.activity?.phase !== 'verifying' && (
         <ContextMeter context={task.context} />
       )}

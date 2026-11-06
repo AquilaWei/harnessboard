@@ -98,6 +98,37 @@ const renderDrawer = async (detail: TaskDetail, initialTab: DrawerTab = 'timelin
 const tabLabels = () =>
   [...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent);
 
+const button = (label: string) =>
+  [...container.querySelectorAll('button')].find((b) => b.textContent === label);
+
+// The failure reason is shown in the status sentence, so a long one makes a long description.
+const longReason =
+  'The verify command failed again after the reviewer asked for changes. '.repeat(3) +
+  'Final detail.';
+
+describe('TaskDrawer description', () => {
+  it('when the description is long expect its end folded away', async () => {
+    await renderDrawer(task({ status: 'failed', lastNotice: longReason }));
+    expect(container.querySelector('.description')?.textContent).not.toContain('Final detail.');
+  });
+
+  it('when the description is long expect a Show more button', async () => {
+    await renderDrawer(task({ status: 'failed', lastNotice: longReason }));
+    expect(button('Show more')).toBeDefined();
+  });
+
+  it('when Show more is pressed expect the whole description', async () => {
+    await renderDrawer(task({ status: 'failed', lastNotice: longReason }));
+    await act(async () => button('Show more')!.click());
+    expect(container.querySelector('.description')?.textContent).toContain('Final detail.');
+  });
+
+  it('when the description is short expect no Show more button', async () => {
+    await renderDrawer(task({ status: 'running' }));
+    expect(button('Show more')).toBeUndefined();
+  });
+});
+
 describe('TaskDrawer status box', () => {
   it('when the status box renders expect no monitoring hint in it', async () => {
     await renderDrawer(task({}));
