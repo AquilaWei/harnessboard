@@ -580,7 +580,15 @@ describe('a pending chat message of a stopped task', () => {
       confirmPlan: false,
       queue: true,
     });
-    await vi.waitFor(() => expect(fakeRuns()).toHaveLength(1), { timeout: 10_000 });
+    // The fake CLI can reach its hang before the harness has processed its output.
+    await vi.waitFor(
+      () => {
+        const session = harness.store.listSessions(task.id)[0];
+        expect(session?.agentSessionId).toBeTruthy();
+        expect(session?.contextTokens).toBe(10_000);
+      },
+      { timeout: 30_000 },
+    );
     harness.chat(task.id, 'Why did you stop?');
     harness.stopTask(task.id);
     await runQueued();

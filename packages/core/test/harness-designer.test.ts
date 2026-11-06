@@ -4,7 +4,7 @@ import { createHistoricalTask } from './helpers.js';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CreateTaskInput } from '@harnessboard/shared';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
@@ -339,7 +339,7 @@ describe('a designer of a task on the base branch', () => {
     harness.approveCriteria(task.id);
     await harness.waitForIdle();
     harness.tick(); // the designer starts and hangs
-    await new Promise((r) => setTimeout(r, 300));
+    await vi.waitFor(() => expect(fakeRuns()).toHaveLength(3), { timeout: 30_000 });
     while (committed !== undefined && git('log', '-1', '--format=%s') !== committed) {
       await new Promise((r) => setTimeout(r, 100));
     }

@@ -131,8 +131,13 @@ describe('an implementer refused without usage figures', () => {
   it('goes on with the fallback', async () => {
     open();
     claudeSessions([init(), errorResult(429)]);
+    codexScenario({ text: 'done' });
     const { id } = await task();
-    await ranBy(id, ['claude', 'codex']);
+    await harness.waitForIdle([id]);
+    expect(harness.store.getTask(id)!.status).toBe('queued');
+    harness.tick();
+    await harness.waitForIdle([id]);
+    expect(agentsOf(id)).toEqual(['claude', 'codex']);
   });
 });
 

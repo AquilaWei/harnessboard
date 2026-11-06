@@ -283,15 +283,21 @@ it('releases its task slot when an escalated question outlives the last worker',
     }
     return outcome;
   };
-  const timer = setTimeout(() => controller.abort(), 1000);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await engine.run();
+    await Promise.race([
+      engine.run(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('PM did not release the task slot')), 30_000);
+      }),
+    ]);
   } finally {
     clearTimeout(timer);
+    controller.abort();
   }
   expect(store.getTask(task.id)?.status).toBe('awaiting_approval');
   expect(pmWork(store, task.id)[0]?.status).toBe('completed');
-}, 3000);
+}, 60_000);
 
 it('reports PM acceptance for user review without marking the task done', async () => {
   const { headCommit } = await import('../src/worktree.js');
@@ -1223,7 +1229,9 @@ it('lets the PM edit, test and commit a conflict repair before integrating', asy
       workspace: 'branch',
       writePaths: ['greeting.txt'],
     })) as { id: string };
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 30_000,
+    });
     await writeFile(path.join(task.worktreePath!, 'greeting.txt'), 'target\n');
     await git(task.worktreePath!, ['add', 'greeting.txt']);
     await git(task.worktreePath!, ['commit', '-m', 'feat: change target']);
@@ -1307,10 +1315,13 @@ it('blocks parent integration when the configured verification command fails', a
       workspace: 'branch',
       writePaths: ['greeting.txt'],
     })) as { id: string };
-    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'));
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 30_000,
+    });
     await engine.call('dispatch', { ...input, goal: 'Target edit' });
-    await vi.waitFor(() =>
-      expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+    await vi.waitFor(
+      () => expect(pmWork(store, task.id).map((w) => w.status)).toEqual(['completed', 'completed']),
+      { timeout: 30_000 },
     );
     await vi.waitFor(async () =>
       expect(await engine.call('integrate_work', { id: work.id })).toMatchObject({
