@@ -65,6 +65,10 @@ function StageBoard({
         if (stage === 'pending')
           items.sort((a, b) => (a.queueOrder ?? a.id) - (b.queueOrder ?? b.id) || a.id - b.id);
         else items.reverse();
+        const hidden =
+          tiledStage === stage
+            ? gridRects(items.length, { width: innerWidth, height: innerHeight }).hidden
+            : 0;
         const droppable = dragged !== null && dropAction(dragged, stage) !== null;
         return (
           <section
@@ -100,6 +104,7 @@ function StageBoard({
                     { stage: t(`stage.${stage}`) },
                   )}
                   onClick={() =>
+                    items.length > 0 &&
                     onTile?.(
                       stage,
                       items.map((task) => task.id),
@@ -111,15 +116,7 @@ function StageBoard({
               ) : (
                 <span>{t(`stage.${stage}`)}</span>
               )}
-              {tiledStage === stage &&
-                gridRects(items.length, { width: innerWidth, height: innerHeight }).hidden > 0 && (
-                  <small>
-                    {t('boardLayout.moreHidden', {
-                      count: gridRects(items.length, { width: innerWidth, height: innerHeight })
-                        .hidden,
-                    })}
-                  </small>
-                )}
+              {hidden > 0 && <small>{t('boardLayout.moreHidden', { count: hidden })}</small>}
               <span className="count">{items.length}</span>
             </h2>
             {items.length === 0 && (
@@ -134,6 +131,7 @@ function StageBoard({
             )}
             <div
               className={stage === 'done' ? `done-stack ${doneExpanded ? 'expanded' : ''}` : ''}
+              role={stage === 'done' ? 'group' : undefined}
               aria-label={
                 stage === 'done' ? t('boardLayout.doneStack', { count: items.length }) : undefined
               }

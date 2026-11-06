@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { Stage } from './board';
+
 export type Rect = { x: number; y: number; width: number; height: number };
 export type Viewport = { width: number; height: number };
 export type SnapTarget =
@@ -57,4 +59,27 @@ export function resizeSplitter(
     { ...first, [size]: first[size] + change },
     { ...second, [axis]: second[axis] + change, [size]: second[size] - change },
   ];
+}
+
+export type StageTiling = { stage: Stage; ids: number[]; rects: Record<number, Rect> };
+
+/**
+ * Returns the complete replacement window set for a stage, or null to toggle it off.
+ * Empty stages preserve the current layout; tasks that do not fit are omitted.
+ */
+export function tileStage(
+  current: StageTiling | null,
+  stage: Stage,
+  ids: number[],
+  viewport: Viewport,
+): StageTiling | null {
+  if (ids.length === 0) return current;
+  if (current?.stage === stage) return null;
+  const { rects } = gridRects(ids.length, viewport);
+  if (rects.length === 0) return current;
+  return {
+    stage,
+    ids: ids.slice(0, rects.length),
+    rects: Object.fromEntries(rects.map((rect, index) => [ids[index], rect])),
+  };
 }
