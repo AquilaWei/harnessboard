@@ -1447,8 +1447,10 @@ export class Harness {
     const text = optionalText(message, 'message')?.trim();
     if (!text) throw new Error('message is empty');
     if (task.workflow === 'pm') {
-      this.store.appendEvent(id, null, 'pm_user', { text });
+      // planFeedback records the pm_user event itself; recording it here too would show the
+      // message twice in the chat.
       if (pmQuestion(this.store, id)?.kind === 'spec') return this.planFeedback(id, text);
+      this.store.appendEvent(id, null, 'pm_user', { text });
       this.store.appendEvent(id, null, 'pm_answered', { text });
       const pm = this.pms.get(id);
       if (pm) {
