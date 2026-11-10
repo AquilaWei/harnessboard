@@ -265,6 +265,31 @@ it('resumes the PM for feedback without resending unchanged task rules', async (
   expect(runs[1].received[0]).not.toContain('sole user-facing coordinator');
 });
 
+it('records a chat reply to a PM specification as one user message', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec(), spec()]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.chat(task.id, 'Use a short greeting.');
+  await harness.waitForIdle();
+  expect(harness.store.eventsOfKind(task.id, 'pm_user').map((event) => event.data)).toEqual([
+    { text: 'Use a short greeting.' },
+  ]);
+});
+
+it('records a chat reply to an ordinary PM question as one user message', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
+    turn('pm-thread', tool('ask_user', { message: 'Which greeting?' })),
+    spec(),
+  ]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.chat(task.id, 'Say hello.');
+  await harness.waitForIdle();
+  expect(harness.store.eventsOfKind(task.id, 'pm_user').map((event) => event.data)).toEqual([
+    { text: 'Say hello.' },
+  ]);
+});
+
 it('routes ordinary follow-up questions to the PM without approving a specification', async () => {
   process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [
     turn('pm-thread', tool('ask_user', { message: 'Which greeting?' })),
