@@ -2200,6 +2200,7 @@ export class Harness {
             {
               store: this.store,
               config: this.config,
+              localAi: this.localAi,
               run: async (current, plan, sessionId, signal) => {
                 const adapter = this.adapterFor(plan.agentId);
                 await adapter.ensureReady?.();

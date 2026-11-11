@@ -8,6 +8,7 @@ import { ClaudeCodeAdapter } from '../src/claude-code.js';
 import { runSession } from '../src/runner.js';
 import { DISPATCH_PLAN, FAKE_CLAUDE, init, result, writeScenario } from './helpers.js';
 import { git } from '../src/worktree.js';
+import { LocalAiService } from '../src/localai.js';
 import { Store } from '../src/store.js';
 import { PmWorkflow, pmWork, pmQuestion, validatePm } from '../src/pm.js';
 import type { PmHost } from '../src/pm.js';
@@ -243,7 +244,7 @@ it('upgrades a pre-PM database with all tasks remaining legacy', () => {
   initial.close();
   const db = new DatabaseSync(file);
   db.exec(
-    'ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm; DROP INDEX events_session_kind; DROP INDEX events_task_kind; PRAGMA user_version = 13;',
+    'ALTER TABLE tasks DROP COLUMN workflow; ALTER TABLE tasks DROP COLUMN pm; ALTER TABLE tasks DROP COLUMN english_title; ALTER TABLE tasks DROP COLUMN branch_slug; DROP INDEX events_session_kind; DROP INDEX events_task_kind; PRAGMA user_version = 13;',
   );
   db.close();
   const upgraded = new Store(file);
@@ -1577,4 +1578,43 @@ it('rejects a PM decision on a permission forwarded to the user', async () => {
     ).rejects.toThrow('awaiting the user');
   });
   expect(host.answer).not.toHaveBeenCalled();
+});
+
+it('uses a validated local commit draft and returns the changelog without writing it', async () => {
+  const { writeFile, readdir } = await import('node:fs/promises');
+  host.localAi = new LocalAiService(host.config.localAi);
+  const draft = vi.spyOn(host.localAi, 'request').mockResolvedValue({
+    status: 'ok',
+    answer: '{"commit":"feat: add greeting","changelog":"- Greeting is available"}',
+    reasoning: '',
+  });
+  host.run = async (_task, plan) => {
+    await writeFile(path.join(plan.cwd!, 'greeting.txt'), 'hello');
+    await git(plan.cwd!, ['add', 'greeting.txt']);
+    await git(plan.cwd!, ['commit', '-m', 'feat: implement greeting']);
+    return outcome;
+  };
+  await pmTurn(async () => {
+    const work = (await engine.call('dispatch', {
+      ...input,
+      workspace: 'branch',
+      writePaths: ['greeting.txt'],
+    })) as { id: string };
+    await vi.waitFor(() => expect(pmWork(store, task.id)[0]?.status).toBe('completed'), {
+      timeout: 10_000,
+    });
+    expect(await engine.call('integrate_work', { id: work.id })).toMatchObject({
+      integrated: true,
+      changelogDraft: '- Greeting is available',
+    });
+    expect((await git(task.worktreePath!, ['log', '-1', '--format=%s'])).trim()).toBe(
+      'feat: add greeting',
+    );
+    expect(draft).toHaveBeenCalledWith(
+      'commit',
+      expect.stringContaining('"files":["greeting.txt"]'),
+      expect.objectContaining({ timeoutMs: 6_000 }),
+    );
+    expect(await readdir(task.worktreePath!)).not.toContain('CHANGELOG.md');
+  });
 });

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { defaultConfig } from '../src/config.js';
 import { Harness } from '../src/harness.js';
 import { LocalAiService } from '../src/localai.js';
-import { draftSlug } from '../src/localai-drafts.js';
+import { draftCommit, draftSlug } from '../src/localai-drafts.js';
 import { FAKE_CLAUDE, makeRepo, tempDir } from './helpers.js';
 
 let dir: string;
@@ -127,4 +127,32 @@ it('does not request a translation for an existing ASCII slug', async () => {
     await harness.shutdown();
     harness.store.close();
   }
+});
+
+it('accepts a valid integration message and changelog bullet', async () => {
+  expect(
+    await draftCommit(
+      ai('{"commit":"feat: improve login","changelog":"- Login is easier"}'),
+      'Improve login',
+      ['login.ts'],
+    ),
+  ).toEqual({ commit: 'feat: improve login', changelogDraft: '- Login is easier' });
+});
+
+it.each([
+  '{"commit":"revert: improve login","changelog":"- Login is easier"}',
+  '{"commit":"feat: 改善登入","changelog":"- Login is easier"}',
+  '{"commit":"feat: improve\\nlogin","changelog":"- Login is easier"}',
+  '{"commit":"feat: improve login","changelog":"Not a bullet"}',
+  'not JSON',
+])('falls back for an invalid integration draft: %s', async (answer) => {
+  expect(await draftCommit(ai(answer), 'Improve login', ['login.ts'])).toBeNull();
+});
+
+it('falls back on integration draft timeout', async () => {
+  expect(await draftCommit(ai('{}', true), 'Improve login', ['login.ts'], 30)).toBeNull();
+});
+
+it('falls back when integration drafts are disabled', async () => {
+  expect(await draftCommit(ai('{}', false, false), 'Improve login', ['login.ts'])).toBeNull();
 });
