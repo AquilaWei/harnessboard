@@ -620,6 +620,7 @@ export class Harness {
     for (const controller of this.running.values()) controller.abort();
     await this.waitForIdle(ids);
     await this.cleanupQueue;
+    await this.pricing.close();
   }
 
   subscribe(listener: (event: HarnessEvent) => void): () => void {
@@ -2497,9 +2498,9 @@ export class Harness {
       adapter,
       initialUsage: provider === 'gemini' ? null : (previous?.usage ?? null),
       onUsage: (usage) => {
-        latestUsage = this.pricing.usage(usage, provider, (message) =>
-          this.notice(task.id, message, sessionId),
-        );
+        latestUsage = this.pricing.usage(usage, provider, (message) => {
+          if (this.store.getTask(task.id)) this.notice(task.id, message, sessionId);
+        });
       },
       spec: {
         cwd: reviewScratchDir ?? (plan as PmSessionPlan).cwd ?? task.worktreePath!,
@@ -2590,9 +2591,9 @@ export class Harness {
     });
     this.quotaStops.delete(sessionId);
     if (outcome.usage)
-      outcome.usage = this.pricing.usage(outcome.usage, provider, (message) =>
-        this.notice(task.id, message, sessionId),
-      );
+      outcome.usage = this.pricing.usage(outcome.usage, provider, (message) => {
+        if (this.store.getTask(task.id)) this.notice(task.id, message, sessionId);
+      });
     const record: UsageRecord = {
       role: plan.role,
       agentId: plan.agentId,

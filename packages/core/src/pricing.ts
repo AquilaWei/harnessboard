@@ -27,12 +27,15 @@ interface PriceFile {
 /** File loading lives in core; shared estimators remain pure. Failed refreshes never affect estimation. */
 export class PricingService {
   private data: PriceFile;
+  private readonly controller = new AbortController();
   private readonly jobs = new Set<Promise<void>>();
   constructor(
     private readonly ai: LocalAiService,
     readonly file = path.join(path.dirname(userConfigFile()), 'prices.json'),
     private readonly loadPage = async (url: string) => {
-      const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      const response = await fetch(url, {
+        signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(30_000)]),
+      });
       if (!response.ok) throw new Error(`pricing page answered HTTP ${response.status}`);
       return response.text();
     },
@@ -93,7 +96,7 @@ export class PricingService {
   }
 
   private schedule(provider: PricingProvider, event: (message: string) => void): void {
-    if (this.ai.unavailableReason()) return;
+    if (this.controller.signal.aborted || this.ai.unavailableReason()) return;
     const now = this.now();
     const last = this.data.attempts[provider];
     if (last !== undefined && now - last < 86_400_000) return;
@@ -109,6 +112,7 @@ export class PricingService {
         event(`Refreshed ${provider} prices from the official pricing page`);
       })
       .catch((error: unknown) => {
+        if (this.controller.signal.aborted) return;
         event(
           `Could not refresh ${provider} prices: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -122,6 +126,12 @@ export class PricingService {
     await Promise.all(this.jobs);
   }
 
+  /** Aborts optional background work before its event sink (the store) closes. */
+  async close(): Promise<void> {
+    this.controller.abort();
+    await this.waitForIdle();
+  }
+
   /** Server-only preview: callers cannot supply prompts, pages or extracted rates. */
   async preview(provider: PricingProvider): Promise<PricingPreview> {
     const unavailable = this.ai.unavailableReason();
@@ -133,6 +143,7 @@ export class PricingService {
     if (!text) throw new Error('the page has no price text');
     const result = await this.ai.request('pricing', buildPrompt(text, provider), {
       timeoutMs: 300_000,
+      signal: this.controller.signal,
     });
     if (result.status !== 'ok') throw new Error(result.reason);
     const prices = parseExtraction(result.answer, this.table(provider), provider);

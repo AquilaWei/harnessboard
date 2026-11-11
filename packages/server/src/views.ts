@@ -112,7 +112,9 @@ export function taskView(task: Task, harness: Harness): TaskView {
                   true,
                   (model, tokens, reported) =>
                     harness.pricing.modelCost(model, tokens, reported, (message) =>
-                      harness.store.appendEvent(task.id, null, 'pricing', { message }),
+                      harness.store.getTask(task.id)
+                        ? harness.store.appendEvent(task.id, null, 'pricing', { message })
+                        : undefined,
                     ),
                 ),
               }
@@ -153,7 +155,9 @@ export function taskView(task: Task, harness: Harness): TaskView {
               true,
               (model, tokens, reported) =>
                 harness.pricing.modelCost(model, tokens, reported, (message) =>
-                  harness.store.appendEvent(task.id, null, 'pricing', { message }),
+                  harness.store.getTask(task.id)
+                    ? harness.store.appendEvent(task.id, null, 'pricing', { message })
+                    : undefined,
                 ),
             ),
           })),
@@ -193,7 +197,9 @@ export function taskView(task: Task, harness: Harness): TaskView {
             true,
             (model, tokens, reported) =>
               harness.pricing.modelCost(model, tokens, reported, (message) =>
-                harness.store.appendEvent(task.id, null, 'pricing', { message }),
+                harness.store.getTask(task.id)
+                  ? harness.store.appendEvent(task.id, null, 'pricing', { message })
+                  : undefined,
               ),
           ),
           pmAcceptanceCurrent: harness.pmAcceptanceCurrent(task.id),
@@ -230,7 +236,9 @@ export function taskView(task: Task, harness: Harness): TaskView {
       false,
       (model, tokens, reported) =>
         harness.pricing.modelCost(model, tokens, reported, (message) =>
-          harness.store.appendEvent(task.id, null, 'pricing', { message }),
+          harness.store.getTask(task.id)
+            ? harness.store.appendEvent(task.id, null, 'pricing', { message })
+            : undefined,
         ),
     ),
     lastNotice:

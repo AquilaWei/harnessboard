@@ -149,3 +149,15 @@ it('replaces transport Codex estimates with user override rates', () => {
     ).costUsd,
   ).toBe(7);
 });
+
+it('cancels a background refresh before its event sink closes', async () => {
+  const requested = vi.spyOn(ai, 'request');
+  writeFileSync(path.join(dir, 'scenario.json'), JSON.stringify({ hang: true }));
+  const event = vi.fn();
+  const service = new PricingService(ai, file(), page);
+  service.estimate('codex', 'gpt-99-test', tokens, event);
+  await vi.waitFor(() => expect(requested).toHaveBeenCalled());
+  await service.close();
+  expect(event).not.toHaveBeenCalled();
+  expect(ai.status().running).toBeNull();
+});
