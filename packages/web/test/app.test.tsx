@@ -72,6 +72,22 @@ const server = (url: string) => {
   if (url === '/api/tasks') return Response.json([{ ...task, title, status, ...fields }]);
   // The task panel's event and timeline lists, empty; its other reads stay null (loading).
   if (/^\/api\/tasks\/1\/(events|timeline)\b/.test(url)) return Response.json([]);
+  if (url === '/api/status')
+    return Response.json({
+      localAi: {
+        state: 'idle',
+        command: '/usr/bin/localai',
+        models: {},
+        running: null,
+        queued: 0,
+        lastError: null,
+      },
+      running: [],
+      quotas: {},
+      quotaPaused: [],
+      maxConcurrent: 1,
+      configFile: null,
+    });
   if (url === '/api/version') return Response.json({ version: '0.0.0' });
   return Response.json(null);
 };
@@ -519,4 +535,25 @@ it('retile windows to fill the viewport after a desktop resize', async () => {
     width: '1280px',
     height: '960px',
   });
+});
+
+it('updates the Header immediately from a localAi live event', async () => {
+  expect(container.textContent).toContain('Local AI: Idle');
+  await act(async () =>
+    streams.at(-1)!.emit(
+      'localAi',
+      JSON.stringify({
+        type: 'localAi',
+        localAi: {
+          state: 'running',
+          command: '/usr/bin/localai',
+          models: { slug: 'mellum2.1' },
+          running: { useCase: 'slug', model: 'mellum2.1', startedAt: 0 },
+          queued: 3,
+          lastError: null,
+        },
+      }),
+    ),
+  );
+  expect(container.textContent).toContain('Local AI: Running · slug · mellum2.1 · Queued: 3');
 });

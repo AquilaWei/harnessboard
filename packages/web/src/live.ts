@@ -32,7 +32,7 @@ export function useLiveEvents(onEvent: (event: HarnessEvent) => void): void {
       source?.close();
       const current = new EventSource(eventsUrl());
       source = current;
-      for (const type of ['agent', 'task', 'deleted', 'harness', 'quota'])
+      for (const type of ['agent', 'task', 'deleted', 'harness', 'quota', 'localAi'])
         current.addEventListener(type, listener);
       current.addEventListener('error', () => {
         if (current.readyState !== CLOSED) return;

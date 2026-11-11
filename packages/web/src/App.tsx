@@ -192,6 +192,10 @@ export function App() {
 
   const refresh = useThrottled(() => void load(), 500);
   useLiveEvents((event) => {
+    if (event.type === 'localAi') {
+      setStatus((current) => current && { ...current, localAi: event.localAi });
+      return;
+    }
     // Deleted elsewhere (e.g. `hb delete`): close its panel, which could no longer load.
     if (event.type === 'deleted') setWindows((items) => items.filter((w) => w.id !== event.taskId));
     refresh();

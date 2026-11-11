@@ -2401,3 +2401,15 @@ th {
     transition: none;
   }
 }
+
+.local-ai-details {
+  overflow-wrap: anywhere;
+}
+.local-ai-details dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.local-ai-details dd {
+  margin: 0;
+}
