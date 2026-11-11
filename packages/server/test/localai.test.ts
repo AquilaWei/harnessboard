@@ -81,10 +81,10 @@ describe('server local AI foundation', () => {
     const reader = response.body!.getReader();
     await reader.read(); // Initial ping means the live subscription is installed.
     try {
-      const pending = request({ useCase: 'pricing', prompt: 'hello', timeoutMs: 10_000 });
+      const pending = harness.localAi.request('pricing', 'hello', { timeoutMs: 10_000 });
       const event = await reader.read();
       expect(new TextDecoder().decode(event.value)).toContain('event: localAi');
-      expect(await (await pending).json()).toEqual({
+      expect(await pending).toEqual({
         status: 'ok',
         answer: 'answer',
         reasoning: '',
@@ -106,31 +106,54 @@ describe('server local AI foundation', () => {
     }
   });
 
-  it('shares the server queue across concurrent HTTP requests', async () => {
-    const events = vi.fn();
-    const unsubscribe = harness.subscribe(events);
-    const responses = await Promise.all([
-      request({ useCase: 'pricing', prompt: 'first', timeoutMs: 10_000 }),
-      request({ useCase: 'slug', prompt: 'second', timeoutMs: 10_000 }),
-    ]);
-    expect(await responses[0]!.json()).toMatchObject({ status: 'ok' });
-    expect(await responses[1]!.json()).toMatchObject({ status: 'ok' });
-    expect(events).toHaveBeenCalledWith({
-      type: 'localAi',
-      localAi: expect.objectContaining({
-        queued: 1,
-        running: expect.objectContaining({ useCase: 'pricing' }),
-      }),
-    });
-    unsubscribe();
+  it('does not expose arbitrary local AI prompts over HTTP', async () => {
+    expect((await request({ useCase: 'pricing', prompt: 'hello', timeoutMs: 100 })).status).toBe(
+      404,
+    );
   });
 
-  it.each([
-    { useCase: 'unknown', prompt: 'x', timeoutMs: 100 },
-    { useCase: 'pricing', prompt: 1, timeoutMs: 100 },
-    { useCase: 'pricing', prompt: 'x', timeoutMs: 0 },
-    { useCase: 'pricing', prompt: 'x', timeoutMs: 2_147_483_648 },
-  ])('rejects an invalid request: %j', async (body) => {
-    expect((await request(body)).status).toBe(400);
+  it('applies only a server-held pricing preview', async () => {
+    const preview = {
+      provider: 'codex' as const,
+      prices: { 'gpt-99-test': { input: 2, cachedInput: 0.2, cacheWrite: 2, output: 10 } },
+      diff: 'NEW MODEL',
+    };
+    vi.spyOn(harness.pricing, 'preview').mockResolvedValue(preview);
+    const apply = vi.spyOn(harness.pricing, 'apply').mockImplementation(() => {});
+    const response = await app.request('/api/pricing/preview', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ provider: 'codex' }),
+    });
+    const value = (await response.json()) as { id: string; diff: string };
+    expect(value.diff).toBe('NEW MODEL');
+    const written = await app.request('/api/pricing/apply', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ id: value.id, prices: { forged: 1 } }),
+    });
+    expect(written.status).toBe(200);
+    expect(apply).toHaveBeenCalledWith(preview);
+    expect(
+      (
+        await app.request('/api/pricing/apply', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ id: value.id }),
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it('rejects unknown pricing providers', async () => {
+    expect(
+      (
+        await app.request('/api/pricing/preview', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ provider: 'unknown' }),
+        })
+      ).status,
+    ).toBe(400);
   });
 });

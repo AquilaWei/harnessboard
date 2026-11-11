@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { pmWork, pmQuestion, pmSecretary } from '@harnessboard/core';
+import type { PricingService } from '@harnessboard/core';
 import type { PmAcceptance } from '@harnessboard/shared';
 import {
   contextPct,
@@ -109,6 +110,12 @@ export function taskView(task: Task, harness: Harness): TaskView {
                   secretary.status === 'running' && harness.activity(task.id) !== null,
                   Date.now(),
                   true,
+                  (model, tokens, reported) =>
+                    harness.pricing.modelCost(model, tokens, reported, (message) =>
+                      harness.store.getTask(task.id)
+                        ? harness.store.appendEvent(task.id, null, 'pricing', { message })
+                        : undefined,
+                    ),
                 ),
               }
             : null,
@@ -146,6 +153,12 @@ export function taskView(task: Task, harness: Harness): TaskView {
               ].includes(work.status),
               Date.now(),
               true,
+              (model, tokens, reported) =>
+                harness.pricing.modelCost(model, tokens, reported, (message) =>
+                  harness.store.getTask(task.id)
+                    ? harness.store.appendEvent(task.id, null, 'pricing', { message })
+                    : undefined,
+                ),
             ),
           })),
           pmState: {
@@ -182,6 +195,12 @@ export function taskView(task: Task, harness: Harness): TaskView {
             harness.activity(task.id) !== null,
             Date.now(),
             true,
+            (model, tokens, reported) =>
+              harness.pricing.modelCost(model, tokens, reported, (message) =>
+                harness.store.getTask(task.id)
+                  ? harness.store.appendEvent(task.id, null, 'pricing', { message })
+                  : undefined,
+              ),
           ),
           pmAcceptanceCurrent: harness.pmAcceptanceCurrent(task.id),
           pmQuestion: pmQuestion(store, task.id),
@@ -208,7 +227,20 @@ export function taskView(task: Task, harness: Harness): TaskView {
     merge: harness.lastMerge(task.id),
     permissionRequests:
       task.workflow === 'pm' ? permissions.filter((p) => p.forwardNote !== undefined) : permissions,
-    usage: taskUsage(task.id, store, sessions, harness.activity(task.id) !== null),
+    usage: taskUsage(
+      task.id,
+      store,
+      sessions,
+      harness.activity(task.id) !== null,
+      Date.now(),
+      false,
+      (model, tokens, reported) =>
+        harness.pricing.modelCost(model, tokens, reported, (message) =>
+          harness.store.getTask(task.id)
+            ? harness.store.appendEvent(task.id, null, 'pricing', { message })
+            : undefined,
+        ),
+    ),
     lastNotice:
       (store.lastEvent(task.id, 'notice')?.data as { message?: string } | undefined)?.message ??
       null,
@@ -229,30 +261,71 @@ export function taskUsage(
   running: boolean,
   now = Date.now(),
   onlySessions = false,
+  modelCost: PricingService['modelCost'] = (model, tokens, reported) =>
+    reported ?? estimateCodexCost(model, tokens),
 ): TaskUsage {
   const records = store
     .eventsOfKind(taskId, 'usage')
     .filter((event) => !onlySessions || sessions.some((session) => session.id === event.sessionId));
   const latest = new Map<string, ModelTotals>();
   const banked: ModelTotals = {};
+  const latestCosts = new Map<string, number | null>();
+  const bankedCosts: number[] = [];
+  const reportedModels = new WeakSet<ModelTotals>();
+  const estimate: PricingService['modelCost'] = (model, tokens, reported) =>
+    modelCost(model, tokens, reported);
   let agentMs = 0;
   for (const event of records) {
     const record = event.data as UsageRecord;
     agentMs += record.durationMs;
     if (!record.usage) continue;
+    const reported =
+      record.usage.costUsd !== null &&
+      Object.keys(record.usage.models).some((model) => model.startsWith('claude-'));
+    if (reported) reportedModels.add(record.usage.models);
+    const prices = Object.entries(record.usage.models).map(([model, tokens]) =>
+      reported ? tokens.costUsd : estimate(model, tokens, tokens.costUsd),
+    );
+    const knownPrices = prices.filter((price): price is number => price !== null);
+    const totalCost = reported
+      ? record.usage.costUsd
+      : knownPrices.length
+        ? knownPrices.reduce((sum, price) => sum + price, 0)
+        : null;
     if (record.cumulative === false) {
-      addModels(banked, record.usage.models);
+      addModels(
+        banked,
+        record.usage.models,
+        reported ? (_model, _tokens, cost) => cost : modelCost,
+      );
+      if (totalCost !== null) bankedCosts.push(totalCost);
       continue;
     }
     const key = event.sessionId ?? '';
     const before = latest.get(key);
-    if (before && totalTokens(record.usage.models) < totalTokens(before)) addModels(banked, before);
+    if (before && totalTokens(record.usage.models) < totalTokens(before)) {
+      addModels(
+        banked,
+        before,
+        reportedModels.has(before) ? (_model, _tokens, cost) => cost : modelCost,
+      );
+      const prior = latestCosts.get(key);
+      if (prior != null) bankedCosts.push(prior);
+    }
     latest.set(key, record.usage.models);
+    latestCosts.set(key, totalCost);
   }
   const byModel: ModelTotals = { ...banked };
-  for (const models of latest.values()) addModels(byModel, models);
+  for (const models of latest.values())
+    addModels(
+      byModel,
+      models,
+      reportedModels.has(models) ? (_model, _tokens, cost) => cost : modelCost,
+    );
   const counted = Object.values(byModel);
-  const costs = counted.map((m) => m.costUsd).filter((c): c is number => c !== null);
+  const costs = [...bankedCosts, ...latestCosts.values()].filter(
+    (cost): cost is number => cost !== null,
+  );
   const ends = sessions.map((s) => s.endedAt ?? 0).concat(records.map((e) => e.ts));
   return {
     runs: records.length,
@@ -265,10 +338,14 @@ export function taskUsage(
   };
 }
 
-function addModels(into: ModelTotals, models: ModelTotals): void {
+function addModels(
+  into: ModelTotals,
+  models: ModelTotals,
+  modelCost: PricingService['modelCost'],
+): void {
   for (const [model, m] of Object.entries(models)) {
     const sum = into[model] ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: null };
-    const costUsd = m.costUsd ?? estimateCodexCost(model, m);
+    const costUsd = modelCost(model, m, m.costUsd);
     into[model] = {
       ...sumTokens([sum, m]),
       costUsd:

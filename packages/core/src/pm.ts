@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+import { draftCommit } from './localai-drafts.js';
+import type { LocalAiService } from './localai.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -38,6 +40,7 @@ import {
   porcelainStatus,
   resolveCommit,
   startMerge,
+  spanPaths,
 } from './worktree.js';
 import { runVerify } from './loop.js';
 import { pmTools } from './pm-tools.js';
@@ -82,6 +85,8 @@ export interface PmSessionPlan extends SessionPlan {
 }
 
 export interface PmHost {
+  /** The server-owned queue; absent in hosts without optional local helpers. */
+  localAi?: LocalAiService;
   store: Store;
   config: HarnessConfig;
   run(
@@ -969,6 +974,7 @@ export class PmWorkflow {
       const violation = await this.ownershipFailure(work);
       if (violation) throw new Error(violation);
       let to = from;
+      let changelogDraft: string | undefined;
       if (!(await isMergedInto(target, delivered, from))) {
         const merged = await mergeTree(target, from, delivered);
         if ('conflicts' in merged)
@@ -979,11 +985,22 @@ export class PmWorkflow {
             instruction:
               'PM: use resolve_integration with verification and reason to repair this branch exclusively, then retry integration. A parent worker should continue the same child.',
           };
+        const draft = this.host.localAi
+          ? await draftCommit(
+              this.host.localAi,
+              work.goal,
+              await spanPaths(target, {
+                from: await mergeBase(target, delivered),
+                to: delivered,
+              }),
+            )
+          : null;
+        changelogDraft = draft?.changelogDraft;
         to = await commitTree(
           target,
           merged.tree,
           [from, delivered],
-          `feat: integrate delegated work ${work.id}`,
+          draft?.commit ?? `feat: integrate delegated work ${work.id}`,
         );
         const branch = await currentRef(target);
         if (branch === from) throw new Error('Integration requires a checked-out target branch');
@@ -997,6 +1014,7 @@ export class PmWorkflow {
       return {
         integrated: true,
         head: to,
+        ...(changelogDraft ? { changelogDraft } : {}),
         instruction: 'Inspect and test the combined result before delivery or acceptance.',
       };
     } finally {
