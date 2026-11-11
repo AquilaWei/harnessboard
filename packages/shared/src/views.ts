@@ -143,7 +143,19 @@ export interface PasskeySession {
   session: string;
 }
 
+/** Server-wide optional local AI helper; timestamps are Unix milliseconds. */
+export interface LocalAiStatus {
+  state: 'disabled' | 'missing' | 'idle' | 'running';
+  /** Resolved binary path, null when missing or disabled. */
+  command: string | null;
+  models: Record<string, string>;
+  running: { useCase: string; model: string; startedAt: number } | null;
+  queued: number;
+  lastError: { useCase: string; message: string; at: number } | null;
+}
+
 export interface HarnessStatus {
+  localAi: LocalAiStatus;
   running: number[];
   /** Latest quota snapshot per provider that has reported one. */
   quotas: Partial<Record<AgentProvider, QuotaInfo>>;

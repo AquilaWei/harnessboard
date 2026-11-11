@@ -108,6 +108,23 @@ export function createApi(
   app.onError((err, c) => c.json({ error: err.message }, 400));
 
   app.get('/status', (c) => c.json(harness.status()));
+
+  app.post('/local-ai/request', async (c) => {
+    const { useCase, prompt, timeoutMs } = await c.req.json();
+    if (
+      !['pricing', 'slug', 'commit'].includes(useCase) ||
+      typeof prompt !== 'string' ||
+      typeof timeoutMs !== 'number' ||
+      !Number.isFinite(timeoutMs) ||
+      timeoutMs <= 0 ||
+      timeoutMs > 2_147_483_647
+    ) {
+      return c.json({ error: 'invalid local AI request' }, 400);
+    }
+    return c.json(
+      await harness.localAi.request(useCase, prompt, { timeoutMs, signal: c.req.raw.signal }),
+    );
+  });
   // The server's version: with the desktop app attached to an `hb serve`, this is that server's.
   app.get('/version', (c) => c.json({ version: pkg.version } satisfies VersionInfo));
 

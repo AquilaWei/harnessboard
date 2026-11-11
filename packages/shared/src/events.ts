@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import type { LocalAiStatus } from './views.js';
 import type { RunUsage } from './usage.js';
 import type { AgentProvider } from './agents.js';
 
@@ -87,4 +88,5 @@ export type HarnessEvent =
   | { type: 'deleted'; taskId: number }
   | { type: 'harness'; taskId: number; message: string }
   /** A provider's usage, read from the CLI's own records rather than from a session. */
-  | { type: 'quota'; provider: AgentProvider; quota: QuotaInfo };
+  | { type: 'quota'; provider: AgentProvider; quota: QuotaInfo }
+  | { type: 'localAi'; localAi: LocalAiStatus };
