@@ -33,7 +33,7 @@ Every `hb` command and flag, and how merging, working on the base branch and del
 | `hb move <id> [--before <id>]`                                                        | Reorder a task in Pending; without `--before`, put it last           |
 | `hb diff <id>` / `hb open <id>` / `hb done <id>`                                      | Review, take over interactively, finish                              |
 | `hb chat <id> <message>` / `hb chat <id> --cancel`                                    | Write to the task's agent; drop pending ones                         |
-| `hb pricing refresh [--file <html>] [--table <json>] [--yes]`                         | Update the Codex price table with local AI (below)                   |
+| `hb pricing refresh [--provider codex\|claude] [--yes]`                               | Update your Codex or Claude prices with local AI (below)             |
 | `hb commits <id>`                                                                     | List the commits on the task branch                                  |
 | `hb merge <id>`                                                                       | Merge a reviewed task into its base (below)                          |
 | `hb delete <id>`                                                                      | Delete a task that is not running (below)                            |
@@ -109,26 +109,31 @@ its worktree folder, including edits that were not committed. The branch is kept
 committed work can still be merged; remove it with `git branch -D` when you no longer need
 it. Stop a running task first.
 
-## Updating the Codex price table
+## Updating price tables
 
-`hb pricing refresh` is a maintainer command for a checkout of this repository. It reads the
-official [pricing page](https://developers.openai.com/api/docs/pricing) (or a saved copy with
-`--file page.html`), asks local AI to extract the prices, checks the answer strictly and shows
-what would change. It needs [local AI](configuration.md#config-files-agents-and-permissions)
-enabled in your config.
+`hb pricing refresh` updates the prices used for cost estimates. It asks the running server
+(start `hb serve` first), which reads the provider's official pricing page, asks local AI to
+extract the prices, checks the answer strictly and returns what would change. It needs
+[local AI](configuration.md#config-files-agents-and-permissions) enabled in your config.
+Harnessboard also does this automatically, at most once a day per provider, when it meets a
+model without a price ([usage estimates](configuration.md#usage-estimates)).
 
 ```bash
-hb pricing refresh                       # fetch the page, show the diff, ask y/N
-hb pricing refresh --file pricing.html   # use a saved page instead of the network
-hb pricing refresh --yes                 # write without asking
+hb pricing refresh                     # Codex prices: show the diff, ask y/N
+hb pricing refresh --provider claude   # Claude prices from the Claude pricing page
+hb pricing refresh --yes               # write without asking
 ```
 
+- **Providers:** `codex` (default, [OpenAI pricing](https://developers.openai.com/api/docs/pricing))
+  and `claude` ([Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing)).
 - **Strict checks:** valid JSON with only the expected fields, finite numbers from 0 to 1000 USD
-  per million tokens, cached input no higher than input, and model ids that are already known
-  or look like `gpt-…` / `codex-…`. Any violation rejects the whole answer and nothing is written.
+  per million tokens, cached input no higher than input, and model ids in the provider's format
+  (`gpt-…` / `codex-…` or `claude-…`). Any violation rejects the whole answer and nothing is
+  written.
 - **Diff first:** changed prices are shown as `~`, new models as `+ NEW MODEL`. Models the page
   no longer lists keep their current prices.
-- **Writes only on confirmation:** `y` at the prompt or `--yes`. The file is
-  `packages/shared/src/codex-prices.json` (or `--table <json>`); commit it yourself.
-- **Without local AI** (disabled, or the `localai` binary is missing) it prints why, exits
-  with a non-zero code and changes nothing.
+- **Writes only on confirmation:** `y` at the prompt or `--yes`, within 15 minutes of the
+  preview. The prices go to your `prices.json` next to the config file, which takes precedence
+  over the bundled tables; the repository is not changed.
+- **Without local AI** (disabled, or the `localai` binary is missing) or without a running
+  server it prints why, exits with a non-zero code and changes nothing.
