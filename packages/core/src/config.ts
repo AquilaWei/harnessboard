@@ -158,7 +158,11 @@ export function defaultConfig(env: Env = process.env): HarnessConfig {
     // TODO: docs/plans/android-app.md "After the release key exists" - add the release key's
     // public fingerprint once the user has created the key; CI prints it with each signed APK.
     androidAppFingerprints: [],
-    localAi: { enabled: false, command: null, models: { pricing: 'gpt-oss-20b' } },
+    localAi: {
+      enabled: false,
+      command: null,
+      models: { pricing: 'gpt-oss-20b', slug: 'mellum2.1', commit: 'lfm2.5' },
+    },
     pmWatchdog: { ...WATCHDOG_DEFAULTS },
     pmCoalescing: { maxDelaySeconds: 20, thresholdCap: 3 },
   };

@@ -21,6 +21,8 @@ import type {
   TimelineEntry,
   WorktreeDiff,
 } from '@harnessboard/shared';
+import type { LocalAiResult, LocalAiUseCase } from '@harnessboard/core';
+import type { HarnessStatus } from '@harnessboard/shared';
 import { CLIENT_HEADER } from './access.js';
 
 export class ServerUnavailableError extends Error {}
@@ -29,7 +31,13 @@ export class ServerUnavailableError extends Error {}
 export class ApiClient {
   constructor(private readonly base: string) {}
 
-  status = () => this.get<Record<string, unknown>>('/status');
+  status = () => this.get<HarnessStatus>('/status');
+  localAiRequest = (useCase: LocalAiUseCase, prompt: string, options: { timeoutMs: number }) =>
+    this.post<LocalAiResult>('/local-ai/request', {
+      useCase,
+      prompt,
+      timeoutMs: options.timeoutMs,
+    });
   agents = () => this.get<AgentInfo[]>('/agents');
   timeline = (id: number) => this.get<TimelineEntry[]>(`/tasks/${id}/timeline`);
   plan = (id: number) => this.get<PlanView>(`/tasks/${id}/plan`);

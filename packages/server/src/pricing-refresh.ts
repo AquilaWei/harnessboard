@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { writeFileSync } from 'node:fs';
-import type { LocalAi } from '@harnessboard/core';
+import type { LocalAiService } from '@harnessboard/core';
 import type { CodexPrice, CodexPriceTable } from '@harnessboard/shared';
 
 /** The page `hb pricing refresh` reads; the same one codex-pricing.ts cites. */
@@ -156,7 +156,7 @@ export type RefreshOutcome =
   | { status: 'written'; changes: number };
 
 export interface RefreshOptions {
-  ai: LocalAi;
+  ai: Pick<LocalAiService, 'request' | 'unavailableReason'>;
   /** The table on disk; it is read as the current prices and rewritten on confirmation. */
   table: CodexPriceTable;
   tableFile: string;
@@ -180,8 +180,7 @@ export async function refreshPrices(options: RefreshOptions): Promise<RefreshOut
   if (unavailable) return { status: 'unavailable', message: unavailable };
   const text = reduceHtml(await options.loadHtml());
   if (text === '') return { status: 'rejected', message: 'the page has no price text' };
-  const result = await ai.run('pricing', {
-    prompt: buildPrompt(text),
+  const result = await ai.request('pricing', buildPrompt(text), {
     timeoutMs: REQUEST_TIMEOUT_MS,
   });
   if (result.status !== 'ok') {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import spawn from 'cross-spawn';
 import { Argument, Command } from 'commander';
-import { LocalAi, createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
+import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import {
   APP_NAME,
@@ -527,8 +527,18 @@ pricing
     if (!existsSync(tableFile)) {
       throw new Error(`price table ${tableFile} not found; run in a checkout or pass --table`);
     }
+    const api = client();
+    const { localAi } = await api.status();
     const outcome = await refreshPrices({
-      ai: new LocalAi(config().localAi),
+      ai: {
+        unavailableReason: () =>
+          localAi.state === 'disabled'
+            ? 'local AI is disabled (set localAi.enabled in the config)'
+            : localAi.state === 'missing'
+              ? 'local AI binary was not found'
+              : null,
+        request: (useCase, prompt, options) => api.localAiRequest(useCase, prompt, options),
+      },
       table: JSON.parse(readFileSync(tableFile, 'utf8')) as CodexPriceTable,
       tableFile,
       loadHtml: async () => {

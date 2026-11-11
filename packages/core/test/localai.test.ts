@@ -34,7 +34,7 @@ function localAi(scenario: unknown, overrides: Partial<LocalAiConfig> = {}): Loc
   return new LocalAi({
     enabled: true,
     command: FAKE_LOCALAI,
-    models: { pricing: 'gpt-oss-20b' },
+    models: { pricing: 'gpt-oss-20b', slug: 'mellum2.1', commit: 'lfm2.5' },
     ...overrides,
   });
 }
@@ -85,7 +85,10 @@ describe('LocalAi.run', () => {
   });
 
   it('uses the model configured for the use case', async () => {
-    const ai = localAi({ lines: [START, USAGE, DONE] }, { models: { pricing: 'mellum2.1' } });
+    const ai = localAi(
+      { lines: [START, USAGE, DONE] },
+      { models: { pricing: 'mellum2.1', slug: 'mellum2.1', commit: 'lfm2.5' } },
+    );
     await ai.run('pricing', request);
     expect(logged()[0]?.args).toEqual(['run', '--json', '--model', 'mellum2.1']);
   });
@@ -238,7 +241,7 @@ describe('localAi config', () => {
     expect(loadConfig({ env: {}, configFile: missing() }).localAi).toEqual({
       enabled: false,
       command: null,
-      models: { pricing: 'gpt-oss-20b' },
+      models: { pricing: 'gpt-oss-20b', slug: 'mellum2.1', commit: 'lfm2.5' },
     });
   });
 
@@ -248,7 +251,7 @@ describe('localAi config', () => {
     expect(loadConfig({ env: {}, configFile: file }).localAi).toEqual({
       enabled: true,
       command: null,
-      models: { pricing: 'gpt-oss-20b' },
+      models: { pricing: 'gpt-oss-20b', slug: 'mellum2.1', commit: 'lfm2.5' },
     });
   });
 
@@ -257,6 +260,26 @@ describe('localAi config', () => {
     writeFileSync(file, JSON.stringify({ localAi: { models: { pricing: '' } } }));
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
       'config localAi.models.pricing must be a model name',
+    );
+  });
+});
+
+describe('additional local AI model config', () => {
+  it('merges a slug override with the other model defaults', () => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ localAi: { models: { slug: 'custom-slug' } } }));
+    expect(loadConfig({ env: {}, configFile: file }).localAi.models).toEqual({
+      pricing: 'gpt-oss-20b',
+      slug: 'custom-slug',
+      commit: 'lfm2.5',
+    });
+  });
+
+  it.each(['slug', 'commit'])('rejects an empty %s model', (useCase) => {
+    const file = path.join(tempDir('cfg'), 'config.json');
+    writeFileSync(file, JSON.stringify({ localAi: { models: { [useCase]: ' ' } } }));
+    expect(() => loadConfig({ env: {}, configFile: file })).toThrow(
+      `config localAi.models.${useCase} must be a model name`,
     );
   });
 });

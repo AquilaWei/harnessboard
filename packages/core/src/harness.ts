@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { LocalAiService } from './localai.js';
 import { cleanTaskCaches } from './cache-cleanup.js';
 import { PmWorkflow, pmQuestion, pmWork, validatePm } from './pm.js';
 import type { PmSessionPlan } from './pm.js';
@@ -215,6 +216,7 @@ export class Harness {
   /** Merges in progress by task id, so no `base` task starts in the folder they change. */
   private readonly merging = new Map<number, { repo: string; base: string }>();
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
+  readonly localAi: LocalAiService;
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   /** Running sessions the pause level stops, by session id, with the platform they use. */
   private readonly quotaStops = new Map<string, { provider: AgentProvider; stop: () => void }>();
@@ -238,6 +240,9 @@ export class Harness {
     readonly store: Store,
     options: HarnessOptions = {},
   ) {
+    this.localAi = new LocalAiService(config.localAi, (localAi) =>
+      this.emit({ type: 'localAi', localAi }),
+    );
     this.settingsFile = options.settingsFile ?? null;
     this.adapterFactory = options.adapterFactory ?? createAdapter;
     this.detectCommands = options.detectCommands ?? DEFAULT_COMMANDS;
@@ -1988,6 +1993,7 @@ export class Harness {
     return {
       running: [...this.running.keys()],
       quotas: Object.fromEntries(this.quotas),
+      localAi: this.localAi.status(),
       quotaPaused: AGENT_PROVIDERS.filter((p) => this.quotaBlocked(p, Date.now())),
       maxConcurrent: this.config.maxConcurrent,
       configFile: this.settingsFile,
