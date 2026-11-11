@@ -510,7 +510,9 @@ program
     console.log(JSON.stringify(result, null, 2));
   });
 
-const pricing = program.command('pricing').description('maintain the Codex price table');
+const pricing = program
+  .command('pricing')
+  .description('update Codex and Claude price tables with local AI');
 
 pricing
   .command('refresh')
