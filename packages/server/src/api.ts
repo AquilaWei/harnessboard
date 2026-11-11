@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+import { randomUUID } from 'node:crypto';
+import { PRICING_PROVIDERS } from '@harnessboard/shared';
+import type { PricingPreview, PricingProvider } from '@harnessboard/shared';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { setCookie } from 'hono/cookie';
@@ -109,21 +112,25 @@ export function createApi(
 
   app.get('/status', (c) => c.json(harness.status()));
 
-  app.post('/local-ai/request', async (c) => {
-    const { useCase, prompt, timeoutMs } = await c.req.json();
-    if (
-      !['pricing', 'slug', 'commit'].includes(useCase) ||
-      typeof prompt !== 'string' ||
-      typeof timeoutMs !== 'number' ||
-      !Number.isFinite(timeoutMs) ||
-      timeoutMs <= 0 ||
-      timeoutMs > 2_147_483_647
-    ) {
-      return c.json({ error: 'invalid local AI request' }, 400);
-    }
-    return c.json(
-      await harness.localAi.request(useCase, prompt, { timeoutMs, signal: c.req.raw.signal }),
-    );
+  const previews = new Map<string, { preview: PricingPreview; expires: number }>();
+  app.post('/pricing/preview', async (c) => {
+    const { provider = 'codex' } = await c.req.json();
+    if (!Object.hasOwn(PRICING_PROVIDERS, provider))
+      return c.json({ error: 'unknown pricing provider' }, 400);
+    const preview = await harness.pricing.preview(provider as PricingProvider);
+    for (const [id, value] of previews) if (value.expires < now()) previews.delete(id);
+    const id = randomUUID();
+    previews.set(id, { preview, expires: now() + 15 * 60_000 });
+    return c.json({ id, ...preview });
+  });
+  app.post('/pricing/apply', async (c) => {
+    const { id } = await c.req.json();
+    const value = previews.get(id);
+    if (!value || value.expires < now())
+      return c.json({ error: 'preview expired; preview again' }, 400);
+    harness.pricing.apply(value.preview);
+    previews.delete(id);
+    return c.json({ written: true, file: harness.pricing.file });
   });
   // The server's version: with the desktop app attached to an `hb serve`, this is that server's.
   app.get('/version', (c) => c.json({ version: pkg.version } satisfies VersionInfo));

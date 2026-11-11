@@ -1,0 +1,8 @@
+{
+  "checked": "2026-11-11",
+  "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+  "prices": {
+    "claude-opus-5-5": { "input": 4, "cachedInput": 0.2, "cacheWrite": 5, "output": 20 },
+    "claude-sonnet-4-6": { "input": 3, "cachedInput": 0.3, "cacheWrite": 3.75, "output": 15 }
+  }
+}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Store } from '@harnessboard/core';
 import { taskUsage } from '../src/views.js';
 
@@ -238,4 +238,21 @@ describe('taskUsage', () => {
     expect(usage().costUsd).toBeCloseTo(2.02);
     expect(usage().byModel.codex?.costUsd).toBeNull();
   });
+});
+
+it('uses Claude reported total cost without asking for estimated model prices', () => {
+  store.appendEvent(id, 's1', 'usage', {
+    ...run(100, 0, 0, 0),
+    usage: {
+      costUsd: 9,
+      models: {
+        'claude-unknown': { input: 1000, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: null },
+      },
+    },
+  });
+  const estimator = vi.fn(() => 123);
+  expect(
+    taskUsage(id, store, store.listSessions(id), false, Date.now(), false, estimator).costUsd,
+  ).toBe(9);
+  expect(estimator).not.toHaveBeenCalled();
 });

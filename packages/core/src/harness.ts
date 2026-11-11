@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { PricingService } from './pricing.js';
 import { LocalAiService } from './localai.js';
 import { cleanTaskCaches } from './cache-cleanup.js';
 import { PmWorkflow, pmQuestion, pmWork, validatePm } from './pm.js';
@@ -217,6 +218,7 @@ export class Harness {
   private readonly merging = new Map<number, { repo: string; base: string }>();
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
   readonly localAi: LocalAiService;
+  readonly pricing: PricingService;
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   /** Running sessions the pause level stops, by session id, with the platform they use. */
   private readonly quotaStops = new Map<string, { provider: AgentProvider; stop: () => void }>();
@@ -242,6 +244,12 @@ export class Harness {
   ) {
     this.localAi = new LocalAiService(config.localAi, (localAi) =>
       this.emit({ type: 'localAi', localAi }),
+    );
+    this.pricing = new PricingService(
+      this.localAi,
+      options.settingsFile
+        ? path.join(path.dirname(options.settingsFile), 'prices.json')
+        : undefined,
     );
     this.settingsFile = options.settingsFile ?? null;
     this.adapterFactory = options.adapterFactory ?? createAdapter;
@@ -2481,7 +2489,9 @@ export class Harness {
       adapter,
       initialUsage: provider === 'gemini' ? null : (previous?.usage ?? null),
       onUsage: (usage) => {
-        latestUsage = usage;
+        latestUsage = this.pricing.usage(usage, provider, (message) =>
+          this.notice(task.id, message, sessionId),
+        );
       },
       spec: {
         cwd: reviewScratchDir ?? (plan as PmSessionPlan).cwd ?? task.worktreePath!,
@@ -2571,6 +2581,10 @@ export class Harness {
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
     this.quotaStops.delete(sessionId);
+    if (outcome.usage)
+      outcome.usage = this.pricing.usage(outcome.usage, provider, (message) =>
+        this.notice(task.id, message, sessionId),
+      );
     const record: UsageRecord = {
       role: plan.role,
       agentId: plan.agentId,
