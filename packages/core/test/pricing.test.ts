@@ -116,6 +116,66 @@ it('estimates Claude tokens using its own provider table', () => {
   expect(service.modelCost('claude-sonnet-4-6', tokens, null)).toBe(3);
 });
 
+it('persists estimated Claude model costs and their total when no total is reported', () => {
+  const service = new PricingService(ai, file(), page);
+  expect(
+    service.usage(
+      { costUsd: null, models: { 'claude-sonnet-4-6': { ...tokens, costUsd: null } } },
+      'claude-code',
+      vi.fn(),
+    ),
+  ).toEqual({
+    costUsd: 3,
+    models: { 'claude-sonnet-4-6': { ...tokens, costUsd: 3 } },
+  });
+  expect(page).not.toHaveBeenCalled();
+});
+
+it('preserves a reported Claude total and model costs without refreshing unknown models', () => {
+  const service = new PricingService(ai, file(), page);
+  const usage = {
+    costUsd: 0,
+    models: { 'claude-unknown-model': { ...tokens, costUsd: null } },
+  };
+  expect(service.usage(usage, 'claude-code', vi.fn())).toBe(usage);
+  expect(page).not.toHaveBeenCalled();
+});
+
+it('keeps an incomplete Claude total null and schedules only one refresh', async () => {
+  vi.spyOn(ai, 'request').mockResolvedValue({
+    status: 'ok',
+    answer: JSON.stringify({ models: { 'claude-future': rate } }),
+    reasoning: '',
+  });
+  const service = new PricingService(ai, file(), page);
+  const usage = {
+    costUsd: null,
+    models: {
+      'claude-sonnet-4-6': { ...tokens, costUsd: null },
+      'claude-future': { ...tokens, costUsd: null },
+    },
+  };
+  const result = service.usage(usage, 'claude-code', vi.fn());
+  service.usage(usage, 'claude-code', vi.fn());
+  await service.waitForIdle();
+  expect(result).toEqual({
+    costUsd: null,
+    models: {
+      'claude-sonnet-4-6': { ...tokens, costUsd: 3 },
+      'claude-future': { ...tokens, costUsd: null },
+    },
+  });
+  expect(page).toHaveBeenCalledTimes(1);
+});
+
+it('uses the officially listed Opus 5.5 cache read rate of $0.20 per million tokens', () => {
+  // https://platform.claude.com/docs/en/about-claude/pricing: Opus 5.5 uses a 0.05x cache hit multiplier.
+  const service = new PricingService(ai, file(), page);
+  expect(
+    service.modelCost('claude-opus-5-5', { ...tokens, input: 0, cacheRead: 1_000_000 }, null),
+  ).toBe(0.2);
+});
+
 it('validates Claude model IDs instead of accepting another provider', async () => {
   const service = new PricingService(ai, file(), page);
   await expect(service.preview('claude')).rejects.toThrow('unknown or invalid model id');

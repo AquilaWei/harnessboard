@@ -76,7 +76,7 @@ export class PricingService {
     return this.estimate(provider, model, tokens, event);
   }
 
-  /** Reprices Codex transport estimates before persistence; reported Claude totals are preserved. */
+  /** Persists fallback estimates; reported Claude totals win and incomplete Claude totals stay unknown. */
   usage(usage: RunUsage, provider: string, event: (message: string) => void): RunUsage {
     if (provider === 'claude-code' && usage.costUsd !== null) return usage;
     const models = Object.fromEntries(
@@ -88,10 +88,12 @@ export class PricingService {
         },
       ]),
     );
-    if (provider !== 'codex') return usage; // Keep Claude's absent costs distinguishable from reported costs.
+    if (provider !== 'codex' && provider !== 'claude-code') return usage;
     const costs = Object.values(models).flatMap((model) =>
       model.costUsd === null ? [] : [model.costUsd],
     );
+    if (provider === 'claude-code' && costs.length !== Object.keys(models).length)
+      return { models, costUsd: null };
     return { models, costUsd: costs.length ? costs.reduce((sum, cost) => sum + cost, 0) : null };
   }
 
