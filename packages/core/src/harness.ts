@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { draftSlug } from './localai-drafts.js';
 import { PricingService } from './pricing.js';
 import { LocalAiService } from './localai.js';
 import { cleanTaskCaches } from './cache-cleanup.js';
@@ -718,10 +719,14 @@ export class Harness {
       agents.implementerFallback = null;
     }
     this.checkProfiles(agents);
+    const title = input.title ?? firstLine(input.prompt);
+    const translation =
+      branchName(0, title) === 'hb/0' ? await draftSlug(this.localAi, title) : null;
     const task = this.store.createTask({
+      ...(translation ?? {}),
       workflow,
       pm,
-      title: input.title ?? firstLine(input.prompt),
+      title,
       prompt: input.prompt,
       repoPath,
       baseRef: bootstrap
@@ -2307,7 +2312,9 @@ export class Harness {
     // Retain old discussion worktrees, including when the user switches back to a folder.
     const relocation = this.store.lastEvent(task.id, 'repository_changed');
     const suffix = relocation ? `-r${relocation.id}` : '';
-    const branch = branchName(task.id, task.title) + suffix;
+    const branch =
+      (task.branchSlug ? `hb/${task.id}-${task.branchSlug}` : branchName(task.id, task.title)) +
+      suffix;
     const dir = worktreePath(this.config.dataDir, task.repoPath, task.id) + suffix;
     await addWorktree(task.repoPath, dir, branch, task.baseRef);
     return this.store.updateTask(task.id, { branch, worktreePath: dir });
