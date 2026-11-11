@@ -3,6 +3,18 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 
 export const en = {
+  localAi: {
+    title: 'Local AI',
+    disabled: 'Disabled',
+    missing: 'Binary missing',
+    idle: 'Idle',
+    running: 'Running',
+    queued: 'Queued: {{count}}',
+    command: 'Command',
+    notFound: 'not found',
+    models: 'Models',
+    lastError: 'Last error',
+  },
   repository: {
     title: 'Project folder',
     hint: 'Correct the folder before approving the specification. Saving returns the task to Draft; discuss the specification again in the new folder. Existing files and discussion history are preserved.',
@@ -775,6 +787,18 @@ export const en = {
 };
 
 export const zhTW: typeof en = {
+  localAi: {
+    title: '本地 AI',
+    disabled: '停用',
+    missing: '找不到程式',
+    idle: '閒置',
+    running: '執行中',
+    queued: '排隊：{{count}}',
+    command: '程式路徑',
+    notFound: '找不到程式',
+    models: '模型',
+    lastError: '最近一次錯誤',
+  },
   repository: {
     title: '專案路徑',
     hint: '規格核准前可更正路徑。儲存後回到草稿，請在新目錄重新討論規格。原有檔案與討論紀錄都會保留。',

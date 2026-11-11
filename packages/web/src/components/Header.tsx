@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AGENT_PROVIDERS, quotaPauseLevel } from '@harnessboard/shared';
 import type { AgentProvider, HarnessStatus, QuotaInfo, Settings } from '@harnessboard/shared';
 import { windowAt } from '../quota';
+import { LocalAiButton } from './LocalAiButton';
 import { QuotaMeter } from './Meter';
 
 interface Props {
@@ -61,6 +62,7 @@ export function Header({
             pauseAt={settings ? quotaPauseLevel(settings, provider) : 0.95}
           />
         ))}
+        {status?.localAi && <LocalAiButton status={status.localAi} />}
       </div>
       <div className="header-actions">
         <button type="button" className="btn" onClick={onSettings} disabled={!settings}>
