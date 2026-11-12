@@ -89,6 +89,10 @@ export interface Task {
   pm?: PmConfig | null;
   id: number;
   title: string;
+  /** Optional local translation for display; never replaces the original title. */
+  englishTitle?: string;
+  /** Validated ASCII slug retained for worktree creation after a restart. */
+  branchSlug?: string;
   prompt: string;
   /** Absolute path of the repository the task works on. */
   repoPath: string;

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-import { existsSync, readFileSync } from 'node:fs';
-import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import spawn from 'cross-spawn';
-import { Argument, Command } from 'commander';
-import { LocalAi, createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
+import { Argument, Command, Option } from 'commander';
+import { createAdapter, loadConfig, userConfigFile } from '@harnessboard/core';
 import type { HarnessConfig } from '@harnessboard/core';
 import {
   APP_NAME,
@@ -15,7 +13,7 @@ import {
   presetRules,
 } from '@harnessboard/shared';
 import type {
-  CodexPriceTable,
+  PricingProvider,
   PermissionRequest,
   PlanQuestion,
   TaskUsage,
@@ -33,8 +31,9 @@ import {
   formatTokens,
 } from './format.js';
 import { t } from './i18n.js';
+import { refreshPricing } from './pricing-refresh.js';
 import { openTarget } from './open.js';
-import { PRICING_URL, refreshPrices } from './pricing-refresh.js';
+
 import { printUnconfigured, runServer } from './run.js';
 import {
   agentsUpdate,
@@ -511,53 +510,26 @@ program
     console.log(JSON.stringify(result, null, 2));
   });
 
-const pricing = program.command('pricing').description('maintain the Codex price table');
+const pricing = program
+  .command('pricing')
+  .description('update Codex and Claude price tables with local AI');
 
 pricing
   .command('refresh')
-  .description('update the Codex price table from the official pricing page with local AI')
-  .option('--file <html>', 'read this saved HTML page instead of fetching the official one')
-  .option(
-    '--table <json>',
-    'price table to update (default: packages/shared/src/codex-prices.json in this checkout)',
+  .description('update user prices from official pricing pages with local AI')
+  .addOption(
+    new Option('--provider <provider>', 'price provider')
+      .choices(['codex', 'claude'])
+      .default('codex'),
   )
   .option('--yes', 'write the changes without asking')
-  .action(async (options: { file?: string; table?: string; yes?: boolean }) => {
-    const tableFile = path.resolve(options.table ?? 'packages/shared/src/codex-prices.json');
-    if (!existsSync(tableFile)) {
-      throw new Error(`price table ${tableFile} not found; run in a checkout or pass --table`);
-    }
-    const outcome = await refreshPrices({
-      ai: new LocalAi(config().localAi),
-      table: JSON.parse(readFileSync(tableFile, 'utf8')) as CodexPriceTable,
-      tableFile,
-      loadHtml: async () => {
-        if (options.file) return readFileSync(options.file, 'utf8');
-        const response = await fetch(PRICING_URL, { signal: AbortSignal.timeout(30_000) });
-        if (!response.ok) throw new Error(`${PRICING_URL} answered HTTP ${response.status}`);
-        return response.text();
-      },
-      confirm: options.yes ? async () => true : confirmOnTerminal,
-      print: (text) => console.log(text),
-      today: new Date().toISOString().slice(0, 10),
-    });
-    switch (outcome.status) {
-      case 'written':
-        console.log(`Updated ${outcome.changes} price(s) in ${tableFile}.`);
-        return;
-      case 'unchanged':
-        console.log('Prices are already up to date.');
-        return;
-      case 'declined':
-        console.log('Nothing written.');
-        return;
-      case 'unavailable':
-        throw new Error(`Local AI is unavailable: ${outcome.message}. Nothing was changed.`);
-      default:
-        throw new Error(
-          `Price refresh ${outcome.status}: ${outcome.message}. Nothing was changed.`,
-        );
-    }
+  .action(async (options: { provider: PricingProvider; yes?: boolean }) => {
+    await refreshPricing(
+      client(),
+      options.provider,
+      options.yes ? async () => true : confirmOnTerminal,
+      console.log,
+    );
   });
 
 program

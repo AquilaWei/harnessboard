@@ -35,6 +35,7 @@ beforeEach(() => {
   harness = {
     store,
     config: defaultConfig({}),
+    pricing: { modelCost: (_model: string, _tokens: unknown, reported: number | null) => reported },
     activity: () => null,
     taskOperations: () => undefined,
     permissionRequests: () => [],

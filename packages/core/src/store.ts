@@ -24,6 +24,8 @@ export interface NewTask {
   workflow?: Task['workflow'];
   pm?: Task['pm'];
   title: string;
+  englishTitle?: string;
+  branchSlug?: string;
   prompt: string;
   repoPath: string;
   baseRef: string;
@@ -113,6 +115,8 @@ const MIGRATIONS = [
   // Task views query each session's latest result/activity; avoid a full log scan per session.
   `CREATE INDEX events_session_kind ON events(session_id, kind, id);
    CREATE INDEX events_task_kind ON events(task_id, kind, id);`,
+  `ALTER TABLE tasks ADD COLUMN english_title TEXT;
+   ALTER TABLE tasks ADD COLUMN branch_slug TEXT;`,
 ];
 
 /** A device's Web Push subscription, with the device it reaches. */
@@ -188,7 +192,13 @@ export class Store {
       );
     return this.updateTask(
       Number(result.lastInsertRowid),
-      { workflow: input.workflow ?? 'legacy', pm: input.pm ?? null },
+      {
+        workflow: input.workflow ?? 'legacy',
+        pm: input.pm ?? null,
+        ...(input.englishTitle
+          ? { englishTitle: input.englishTitle, branchSlug: input.branchSlug! }
+          : {}),
+      },
       now,
     );
   }
@@ -207,6 +217,8 @@ export class Store {
     fields: Partial<
       Pick<
         Task,
+        | 'englishTitle'
+        | 'branchSlug'
         | 'repoPath'
         | 'baseRef'
         | 'workspace'
@@ -233,6 +245,8 @@ export class Store {
     now = Date.now(),
   ): Task {
     const columns: Record<string, string> = {
+      englishTitle: 'english_title',
+      branchSlug: 'branch_slug',
       repoPath: 'repo_path',
       baseRef: 'base_ref',
       workspace: 'workspace',
@@ -603,6 +617,8 @@ function toTask(row: Row): Task {
     pm: row.pm == null ? null : JSON.parse(String(row.pm)),
     id: Number(row.id),
     title: String(row.title),
+    ...(row.english_title == null ? {} : { englishTitle: String(row.english_title) }),
+    ...(row.branch_slug == null ? {} : { branchSlug: String(row.branch_slug) }),
     prompt: String(row.prompt),
     repoPath: String(row.repo_path),
     baseRef: String(row.base_ref),

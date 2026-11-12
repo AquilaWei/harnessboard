@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import { accessSync, constants, statSync } from 'node:fs';
 import path from 'node:path';
+import type { LocalAiStatus } from '@harnessboard/shared';
 import { createInterface } from 'node:readline';
 import spawn from 'cross-spawn';
 import treeKill from 'tree-kill';
 
 /** What local AI is used for; each use case picks its own model in the config. */
-export type LocalAiUseCase = 'pricing';
+export type LocalAiUseCase = 'pricing' | 'slug' | 'commit';
 
 export interface LocalAiConfig {
   /** Off by default: local AI is an optional helper. */
@@ -193,6 +194,81 @@ export class LocalAi {
   }
 }
 
+/**
+ * Server-owned queue shared by every local AI use case. Timeouts apply to execution,
+ * after earlier requests finish; all execution failures are values for caller fallback.
+ */
+export class LocalAiService {
+  private readonly ai: LocalAi;
+  private queue: Promise<void> = Promise.resolve();
+  private queued = 0;
+  private running: LocalAiStatus['running'] = null;
+  private lastError: LocalAiStatus['lastError'] = null;
+
+  constructor(
+    private readonly config: LocalAiConfig,
+    private readonly onChange: (status: LocalAiStatus) => void = () => {},
+  ) {
+    this.ai = new LocalAi(config);
+  }
+
+  /** Independent snapshot; reading status never starts a model. */
+  status(): LocalAiStatus {
+    const command = this.config.enabled ? findExecutable(this.ai.command, process.env) : null;
+    return {
+      state: !this.config.enabled
+        ? 'disabled'
+        : !command
+          ? 'missing'
+          : this.running
+            ? 'running'
+            : 'idle',
+      command,
+      models: { ...this.config.models },
+      running: this.running ? { ...this.running } : null,
+      queued: this.queued,
+      lastError: this.lastError ? { ...this.lastError } : null,
+    };
+  }
+
+  /** Availability preflight lets callers avoid fetching input for a disabled helper. */
+  unavailableReason(): string | null {
+    return this.ai.unavailableReason();
+  }
+
+  /** FIFO execution; cancellation, malformed streams and missing binaries never reject. */
+  request(
+    useCase: LocalAiUseCase,
+    prompt: string,
+    options: Omit<LocalAiRequest, 'prompt'>,
+  ): Promise<LocalAiResult> {
+    this.queued++;
+    this.onChange(this.status());
+    const result = this.queue.then(async (): Promise<LocalAiResult> => {
+      this.queued--;
+      this.running = { useCase, model: this.config.models[useCase], startedAt: Date.now() };
+      this.onChange(this.status());
+      let outcome: LocalAiResult;
+      try {
+        outcome = await this.ai.run(useCase, { ...options, prompt });
+      } catch (error) {
+        outcome = {
+          status: 'failed',
+          reason: error instanceof Error ? error.message : String(error),
+        };
+      }
+      if (outcome.status !== 'ok') {
+        this.lastError = { useCase, message: outcome.reason, at: Date.now() };
+      }
+      this.running = null;
+      this.onChange(this.status());
+      return outcome;
+    });
+    this.queue = result.then(() => {});
+    return result;
+  }
+}
+
 /** Spawns one process, feeds the prompt and resolves after the process has exited. */
 function execute(command: string, args: string[], request: LocalAiRequest): Promise<LocalAiResult> {
   return new Promise((resolve) => {
@@ -248,7 +324,7 @@ function execute(command: string, args: string[], request: LocalAiRequest): Prom
 }
 
 /** Finds an executable like a shell would, without running it; honours PATHEXT on Windows. */
-function findExecutable(command: string, env: NodeJS.ProcessEnv): boolean {
+function findExecutable(command: string, env: NodeJS.ProcessEnv): string | null {
   const extensions =
     process.platform === 'win32' ? ['', ...(env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';')] : [''];
   const candidates =
@@ -258,7 +334,12 @@ function findExecutable(command: string, env: NodeJS.ProcessEnv): boolean {
           .split(path.delimiter)
           .filter(Boolean)
           .map((dir) => path.join(dir, command));
-  return candidates.some((base) => extensions.some((ext) => isExecutable(base + ext)));
+  for (const base of candidates) {
+    for (const ext of extensions) {
+      if (isExecutable(base + ext)) return path.resolve(base + ext);
+    }
+  }
+  return null;
 }
 
 function isExecutable(file: string): boolean {

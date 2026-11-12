@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LocalAi } from '@harnessboard/core';
+import { LocalAiService } from '@harnessboard/core';
 import type { CodexPriceTable } from '@harnessboard/shared';
 import { reduceHtml, refreshPrices } from '../src/pricing-refresh.js';
 
@@ -33,7 +33,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 /** A fake localai whose model answers `answer`. */
-function fakeAi(answer: string, command = FAKE_LOCALAI): LocalAi {
+function fakeAi(answer: string, command = FAKE_LOCALAI): LocalAiService {
   const file = path.join(dir, 'scenario.json');
   const id = 'a'.repeat(32);
   const event = (type: string, data: unknown) => ({ version: 1, request_id: id, type, data });
@@ -49,10 +49,14 @@ function fakeAi(answer: string, command = FAKE_LOCALAI): LocalAi {
     }),
   );
   vi.stubEnv('FAKE_LOCALAI_SCENARIO', file);
-  return new LocalAi({ enabled: true, command, models: { pricing: 'gpt-oss-20b' } });
+  return new LocalAiService({
+    enabled: true,
+    command,
+    models: { pricing: 'gpt-oss-20b', slug: 'mellum2.1', commit: 'lfm2.5' },
+  });
 }
 
-async function refresh(ai: LocalAi, confirm: boolean) {
+async function refresh(ai: LocalAiService, confirm: boolean) {
   const printed: string[] = [];
   const loadHtml = vi.fn(async () => HTML);
   const outcome = await refreshPrices({

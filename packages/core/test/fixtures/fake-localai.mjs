@@ -7,6 +7,7 @@
 // with `version: 1` and a fixed `request_id` filled in unless the object sets them.
 // `hang: true` keeps the process alive after the lines until it is killed.
 // `pidFile` receives the process id at start so a test can check the process was reaped.
+// `delayMs` delays completion; FAKE_LOCALAI_LIFECYCLE records start/end with the prompt.
 // FAKE_LOCALAI_LOG: file that receives one JSON line per run with the args and the stdin text.
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
@@ -23,6 +24,14 @@ if (process.env.FAKE_LOCALAI_LOG) {
   );
 }
 
+const lifecycle = (event) => {
+  if (process.env.FAKE_LOCALAI_LIFECYCLE) {
+    appendFileSync(process.env.FAKE_LOCALAI_LIFECYCLE, JSON.stringify({ event, stdin }) + '\n');
+  }
+};
+lifecycle('start');
+if (scenario.delayMs) await new Promise((resolve) => setTimeout(resolve, scenario.delayMs));
+
 for (const line of scenario.lines ?? []) {
   const text =
     typeof line === 'string'
@@ -33,4 +42,7 @@ for (const line of scenario.lines ?? []) {
 if (scenario.stderr) process.stderr.write(scenario.stderr + '\n');
 if (scenario.hang)
   setInterval(() => {}, 1000); // keeps the event loop alive until killed
-else process.exit(scenario.exitCode ?? 0);
+else {
+  lifecycle('end');
+  process.exit(scenario.exitCode ?? 0);
+}

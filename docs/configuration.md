@@ -156,8 +156,23 @@ against [OpenAI API pricing](https://developers.openai.com/api/docs/pricing) and
 linked model pages. The table covers GPT-6.1 Sol, GPT-6 Sol/Astra/Luna, GPT-5.6
 Sol/Terra/Luna, GPT-5.5, GPT-5/5.1/5.2/5.3 Codex and `codex-mini-latest`.
 Prices are standard short-context rates; estimates exclude long-context premiums,
-Fast/Ultrafast processing, regional surcharges and separate tool fees. The price table is
-updated with the application, without fetching prices during a task.
+Fast/Ultrafast processing, regional surcharges and separate tool fees.
+
+Claude runs use the `costUSD` Claude Code reports. When a Claude model reports no cost,
+Harnessboard estimates it from a bundled Claude price table the same way.
+
+**Your own prices:** prices are looked up first in `prices.json` next to your config file
+(`~/.config/harnessboard/prices.json` on Linux, or in `HARNESSBOARD_HOME`), then in the
+bundled tables. Harnessboard writes this file; entries that fail validation are ignored.
+It is updated in two ways:
+
+- **Automatically:** when an estimate meets a model that has no price and
+  [local AI](#config-files-agents-and-permissions) is enabled, Harnessboard refreshes that
+  provider's prices (Codex or Claude) from the official pricing page in the background. Each
+  provider is tried at most once every 24 hours, failed attempts included. The estimate
+  itself never waits: it stays blank until the refresh succeeds, and later estimates use the
+  new prices at once. Success and failure are recorded as events.
+- **By hand:** `hb pricing refresh` ([CLI reference](cli.md#updating-price-tables)).
 
 Input, cached input, cache writes and output are counted separately. Output already
 includes reasoning tokens. Models before GPT-5.6 use the regular input rate for cache
@@ -184,25 +199,41 @@ environment < CLI flags.
   `verifyCommand`.
 
 **Local AI (optional):** Harnessboard can ask a local model through
-`localai run --json` (LocalAICLI) for small helper jobs (today: `hb pricing refresh`).
-It is off by default and never required: when it is disabled or the binary is missing, the
-feature reports "unavailable" and every other flow works as before.
+`localai run --json` (LocalAICLI) for small helper jobs. It is off by default and never
+required: when it is disabled, the binary is missing, a request times out or the answer fails
+validation, every flow works exactly as without it.
 
 ```json
 {
   "localAi": {
     "enabled": true,
     "command": "/opt/localai/bin/localai",
-    "models": { "pricing": "gpt-oss-20b" }
+    "models": { "pricing": "gpt-oss-20b", "slug": "mellum2.1", "commit": "lfm2.5" }
   }
 }
 ```
 
 - `enabled`: `false` by default.
 - `command`: path of the `localai` binary; `null` (default) looks `localai` up on your PATH.
-- `models`: the model each use case runs. `pricing` is the only use case so far.
-- Requests run one at a time, with a timeout; the plan for further uses is in
-  [docs/plans/local-ai.md](plans/local-ai.md).
+- `models`: the model each use case runs. The defaults are shown above; set only the ones you
+  want to change.
+  - `pricing`: extracts prices from the official pricing pages (automatic refresh above and
+    `hb pricing refresh`).
+  - `slug`: when a task title has no usable ASCII slug (a Chinese title, for example), drafts
+    an English title (at most 80 characters) and a branch slug matching `^[a-z0-9-]{1,30}$`.
+    The branch becomes `hb/<id>-<slug>`; the task keeps its original title. The request has a
+    short timeout (6 s, queue wait included) so task creation is never held up; without an
+    answer the branch is `hb/<id>` as before.
+  - `commit`: drafts the integration commit message for delegated work from its goal and
+    file list. It is used only if it is English and matches
+    `^(feat|fix|docs|style|refactor|perf|test|chore): [^\n]{1,72}$`; otherwise the usual
+    `feat: integrate delegated work <id>` message is kept. A CHANGELOG bullet draft is
+    attached to the integration result only and never written to a file.
+- All local AI requests go through one queue in the server and run one at a time.
+- **Status chip:** the **Local AI** chip next to the quota in the board header shows
+  Disabled / Binary missing / Idle / Running (use case, model and queue length). Open it to
+  see the model of each use case and the last error.
+- The design notes are in [docs/plans/local-ai.md](plans/local-ai.md).
 
 **Agent profiles:** each profile names an agent CLI and how to run it. `claude` always exists.
 Harnessboard looks for the `claude`, `codex` and `gemini` commands on your PATH and points out any that

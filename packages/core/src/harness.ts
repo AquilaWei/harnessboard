@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+import { draftSlug } from './localai-drafts.js';
+import { PricingService } from './pricing.js';
+import { LocalAiService } from './localai.js';
 import { cleanTaskCaches } from './cache-cleanup.js';
 import { PmWorkflow, pmQuestion, pmWork, validatePm } from './pm.js';
 import type { PmSessionPlan } from './pm.js';
@@ -215,6 +218,8 @@ export class Harness {
   /** Merges in progress by task id, so no `base` task starts in the folder they change. */
   private readonly merging = new Map<number, { repo: string; base: string }>();
   private readonly listeners = new Set<(event: HarnessEvent) => void>();
+  readonly localAi: LocalAiService;
+  readonly pricing: PricingService;
   private readonly quotas = new Map<AgentProvider, QuotaInfo>();
   /** Running sessions the pause level stops, by session id, with the platform they use. */
   private readonly quotaStops = new Map<string, { provider: AgentProvider; stop: () => void }>();
@@ -238,6 +243,15 @@ export class Harness {
     readonly store: Store,
     options: HarnessOptions = {},
   ) {
+    this.localAi = new LocalAiService(config.localAi, (localAi) =>
+      this.emit({ type: 'localAi', localAi }),
+    );
+    this.pricing = new PricingService(
+      this.localAi,
+      options.settingsFile
+        ? path.join(path.dirname(options.settingsFile), 'prices.json')
+        : undefined,
+    );
     this.settingsFile = options.settingsFile ?? null;
     this.adapterFactory = options.adapterFactory ?? createAdapter;
     this.detectCommands = options.detectCommands ?? DEFAULT_COMMANDS;
@@ -606,6 +620,7 @@ export class Harness {
     for (const controller of this.running.values()) controller.abort();
     await this.waitForIdle(ids);
     await this.cleanupQueue;
+    await this.pricing.close();
   }
 
   subscribe(listener: (event: HarnessEvent) => void): () => void {
@@ -705,10 +720,14 @@ export class Harness {
       agents.implementerFallback = null;
     }
     this.checkProfiles(agents);
+    const title = input.title ?? firstLine(input.prompt);
+    const translation =
+      branchName(0, title) === 'hb/0' ? await draftSlug(this.localAi, title) : null;
     const task = this.store.createTask({
+      ...(translation ?? {}),
       workflow,
       pm,
-      title: input.title ?? firstLine(input.prompt),
+      title,
       prompt: input.prompt,
       repoPath,
       baseRef: bootstrap
@@ -1988,6 +2007,7 @@ export class Harness {
     return {
       running: [...this.running.keys()],
       quotas: Object.fromEntries(this.quotas),
+      localAi: this.localAi.status(),
       quotaPaused: AGENT_PROVIDERS.filter((p) => this.quotaBlocked(p, Date.now())),
       maxConcurrent: this.config.maxConcurrent,
       configFile: this.settingsFile,
@@ -2181,6 +2201,7 @@ export class Harness {
             {
               store: this.store,
               config: this.config,
+              localAi: this.localAi,
               run: async (current, plan, sessionId, signal) => {
                 const adapter = this.adapterFor(plan.agentId);
                 await adapter.ensureReady?.();
@@ -2293,7 +2314,9 @@ export class Harness {
     // Retain old discussion worktrees, including when the user switches back to a folder.
     const relocation = this.store.lastEvent(task.id, 'repository_changed');
     const suffix = relocation ? `-r${relocation.id}` : '';
-    const branch = branchName(task.id, task.title) + suffix;
+    const branch =
+      (task.branchSlug ? `hb/${task.id}-${task.branchSlug}` : branchName(task.id, task.title)) +
+      suffix;
     const dir = worktreePath(this.config.dataDir, task.repoPath, task.id) + suffix;
     await addWorktree(task.repoPath, dir, branch, task.baseRef);
     return this.store.updateTask(task.id, { branch, worktreePath: dir });
@@ -2475,7 +2498,9 @@ export class Harness {
       adapter,
       initialUsage: provider === 'gemini' ? null : (previous?.usage ?? null),
       onUsage: (usage) => {
-        latestUsage = usage;
+        latestUsage = this.pricing.usage(usage, provider, (message) => {
+          if (this.store.getTask(task.id)) this.notice(task.id, message, sessionId);
+        });
       },
       spec: {
         cwd: reviewScratchDir ?? (plan as PmSessionPlan).cwd ?? task.worktreePath!,
@@ -2565,6 +2590,10 @@ export class Harness {
       onStderr: (line) => this.store.appendEvent(task.id, sessionId, 'stderr', { line }),
     });
     this.quotaStops.delete(sessionId);
+    if (outcome.usage)
+      outcome.usage = this.pricing.usage(outcome.usage, provider, (message) => {
+        if (this.store.getTask(task.id)) this.notice(task.id, message, sessionId);
+      });
     const record: UsageRecord = {
       role: plan.role,
       agentId: plan.agentId,

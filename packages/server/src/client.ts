@@ -21,6 +21,8 @@ import type {
   TimelineEntry,
   WorktreeDiff,
 } from '@harnessboard/shared';
+
+import type { PricingPreview, PricingProvider, HarnessStatus } from '@harnessboard/shared';
 import { CLIENT_HEADER } from './access.js';
 
 export class ServerUnavailableError extends Error {}
@@ -29,7 +31,11 @@ export class ServerUnavailableError extends Error {}
 export class ApiClient {
   constructor(private readonly base: string) {}
 
-  status = () => this.get<Record<string, unknown>>('/status');
+  status = () => this.get<HarnessStatus>('/status');
+  pricingPreview = (provider: PricingProvider) =>
+    this.post<PricingPreview & { id: string }>('/pricing/preview', { provider });
+  pricingApply = (id: string) =>
+    this.post<{ written: true; file: string }>('/pricing/apply', { id });
   agents = () => this.get<AgentInfo[]>('/agents');
   timeline = (id: number) => this.get<TimelineEntry[]>(`/tasks/${id}/timeline`);
   plan = (id: number) => this.get<PlanView>(`/tasks/${id}/plan`);
