@@ -2,7 +2,7 @@
 
 Harnessboard coordinates AI coding agents on a local task board so you can review their work before merging it.
 
-![version](https://img.shields.io/badge/version-0.3.7-blue) ![license](https://img.shields.io/badge/license-Apache--2.0-green) ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
+![version](https://img.shields.io/badge/version-0.3.9-blue) ![license](https://img.shields.io/badge/license-Apache--2.0-green) ![node](https://img.shields.io/badge/node-%E2%89%A5%2022.13-brightgreen)
 
 **English** · [繁體中文](README.zh-TW.md)
 
@@ -64,3 +64,7 @@ Open the task on the board to follow the PM conversation and approve its specifi
 ## License
 
 [Apache-2.0](LICENSE). Harnessboard is independent of Anthropic. See [third-party notices](THIRD-PARTY-NOTICES.md).
+
+Local AI is optional: use the header to select a registered LocalAICLI model and ask about
+Harnessboard or task progress. All helpers share a service that unloads after five idle minutes.
+See [local AI configuration](docs/configuration.md).
