@@ -1,14 +1,15 @@
 # Local AI helpers
 
-What a local model (through LocalAICLI, `localai run --json`) can do
+What a local model (through an owned LocalAICLI `localai serve` process) can do
 for Harnessboard, in priority order. Local AI is an **optional helper**: it is off by default,
 a missing binary means "unavailable", and no Harnessboard flow may fail because of it.
 
 ## Constraints that shape every item
 
-- `localai run --json --model NAME` handles **one request per process** and has **no tool
-  calls**. Output is NDJSON v1 (start, delta\*, usage, then one done or error). Requests are
-  run one at a time so models do not compete for RAM or ports.
+- Harnessboard starts `localai serve --model NAME` on demand and uses its loopback HTTP
+  completion interface with no tool calls. All requests share one FIFO queue. A service
+  remains loaded between requests and stops after five minutes with no active or queued
+  work. Shutdown reaps the owned process tree; no remote mode is enabled.
 - Decode speed from the LocalAICLI reports: about **50 tok/s** for mellum2.1, about **47** for
   lfm2.5 and about **23** for gpt-oss-20b.
 - Vulkan prompt processing is slow (about **100–200 tok/s**), so **keep inputs short**: a
@@ -19,8 +20,13 @@ a missing binary means "unavailable", and no Harnessboard flow may fail because 
 ## Built
 
 All requests go through one queue in the server and run one at a time. The board header shows
-a **Local AI** status chip (Disabled / Binary missing / Idle / Running with use case, model and
-queue length; expanded: the model of each use case and the last error).
+a **Local AI** status chip with selected model, loading/unloaded/idle/running/error state,
+work description and queue length. The panel offers registered model selection, questions,
+and a separate loaded-model indicator. Paths and legacy defaults are under Details.
+
+The selected global model is persisted and applies to every use case. Until the first
+selection, legacy purpose defaults below remain effective; questions use `lfm2.5`. A model
+change waits for active work to finish before unloading the old service.
 
 ### 1. Price-table refresh (Codex and Claude)
 
@@ -71,9 +77,21 @@ queue length; expanded: the model of each use case and the last error).
 - **Risks:** summaries that describe implementation instead of user effect, wrong type
   (`feat` vs `fix`), invented details. The CHANGELOG bullet is a draft only; the author edits it.
 
+### 4. Read-only Harnessboard questions
+
+The server supplies built-in operation help and a bounded snapshot of the latest 50 tasks
+(IDs, titles, short goals, states and update times). Answers carry snapshot timestamps and
+task references. No logs or repository files are loaded; questions never dispatch tools or
+change tasks. Missing details must be acknowledged. Follow-up history stays in page memory
+through unloads, and clears on refresh. The server validates question/history sizes and
+keeps errors isolated from the rest of the board.
+
+The model list, selection and question routes use the existing API access middleware.
+See [configuration](../configuration.md) for limits and recovery instructions.
+
 ## Documented only (not built yet)
 
-### 4. Draft en→zh-TW i18n strings
+### 5. Draft en→zh-TW i18n strings
 
 - **Approach:** translate new English UI strings into zh-TW as a draft for the existing
   catalogs; a human reviews every string before it is committed.
@@ -88,6 +106,6 @@ queue length; expanded: the model of each use case and the last error).
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Permission approval     | A wrong "allow" runs unreviewed commands. It needs reliable judgment and structured tool context; a small local model's error rate is unacceptable. |
 | Risk classification     | Safety decisions must be deterministic and auditable; a probabilistic model's false negatives are unsafe.                                           |
-| PM secretary            | It needs tool calls (task status, dispatch, answers); `localai` has none, and one request per process cannot hold a session.                        |
+| PM secretary            | It needs tool calls (task status, dispatch, answers); this read-only helper deliberately exposes no tools or authority to dispatch work.            |
 | Acceptance              | Verifying that work meets the criteria needs the repository and test results (tools) and strong reasoning; a missed defect ships.                   |
 | Main-flow summarisation | Long inputs hit the slow Vulkan prompt processing (minutes), and summaries sit on the critical path and are trusted by the PM and user.             |

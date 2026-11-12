@@ -621,6 +621,15 @@ export class Harness {
     await this.waitForIdle(ids);
     await this.cleanupQueue;
     await this.pricing.close();
+    await this.localAi.close();
+  }
+
+  /** Persist only a registered model; legacy per-purpose defaults remain intact. */
+  async selectLocalAiModel(model: string): Promise<void> {
+    if (!(await this.localAi.models()).includes(model)) throw new Error('Model is not registered');
+    const localAi = { ...this.config.localAi, selectedModel: model };
+    if (this.settingsFile) saveUserConfig({ localAi }, this.settingsFile);
+    this.localAi.selectModel(model);
   }
 
   subscribe(listener: (event: HarnessEvent) => void): () => void {

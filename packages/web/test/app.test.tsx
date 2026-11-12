@@ -538,7 +538,7 @@ it('retile windows to fill the viewport after a desktop resize', async () => {
 });
 
 it('updates the Header immediately from a localAi live event', async () => {
-  expect(container.textContent).toContain('Local AI: Idle');
+  expect(container.textContent).toContain('Local AI: lfm2.5 · Idle');
   await act(async () =>
     streams.at(-1)!.emit(
       'localAi',
@@ -555,5 +555,7 @@ it('updates the Header immediately from a localAi live event', async () => {
       }),
     ),
   );
-  expect(container.textContent).toContain('Local AI: Running · slug · mellum2.1 · Queued: 3');
+  expect(container.textContent).toContain(
+    'Local AI: mellum2.1 · Running · Naming a branch · mellum2.1 · Queued: 3',
+  );
 });

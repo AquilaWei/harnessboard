@@ -21,6 +21,7 @@ const TABLE: CodexPriceTable = {
   },
 };
 
+const services: LocalAiService[] = [];
 let dir: string;
 let tableFile: string;
 
@@ -30,7 +31,10 @@ beforeEach(() => {
   writeFileSync(tableFile, JSON.stringify(TABLE, null, 2) + '\n');
   vi.stubEnv('FAKE_LOCALAI_LOG', path.join(dir, 'log.jsonl'));
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(async () => {
+  await Promise.all(services.splice(0).map((service) => service.close()));
+  vi.unstubAllEnvs();
+});
 
 /** A fake localai whose model answers `answer`. */
 function fakeAi(answer: string, command = FAKE_LOCALAI): LocalAiService {
@@ -49,11 +53,13 @@ function fakeAi(answer: string, command = FAKE_LOCALAI): LocalAiService {
     }),
   );
   vi.stubEnv('FAKE_LOCALAI_SCENARIO', file);
-  return new LocalAiService({
+  const service = new LocalAiService({
     enabled: true,
     command,
     models: { pricing: 'gpt-oss-20b', slug: 'mellum2.1', commit: 'lfm2.5' },
   });
+  services.push(service);
+  return service;
 }
 
 async function refresh(ai: LocalAiService, confirm: boolean) {

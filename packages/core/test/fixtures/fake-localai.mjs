@@ -14,6 +14,38 @@ import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 const scenario = JSON.parse(readFileSync(process.env.FAKE_LOCALAI_SCENARIO, 'utf8'));
 if (scenario.pidFile) writeFileSync(scenario.pidFile, String(process.pid));
 
+if (process.argv[2] === 'models') {
+  console.log(JSON.stringify({ models: [{ name: 'lfm2.5' }, { name: 'other' }] }));
+  process.exit(0);
+}
+if (process.argv[2] === 'serve') {
+  const { createServer } = await import('node:http');
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const stdin = JSON.parse(body).messages[0].content;
+    if (scenario.hang) return;
+    if (process.env.FAKE_LOCALAI_LOG)
+      appendFileSync(
+        process.env.FAKE_LOCALAI_LOG,
+        JSON.stringify({ args: process.argv.slice(2), stdin }) + '\n',
+      );
+    if (scenario.delayMs) await new Promise((resolve) => setTimeout(resolve, scenario.delayMs));
+    const text =
+      scenario.lines
+        ?.filter((line) => line?.data?.channel === 'answer')
+        .map((line) => line.data.text)
+        .join('') ?? '';
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ choices: [{ message: { content: text } }] }));
+  });
+  server.listen(0, '127.0.0.1', () =>
+    console.log(JSON.stringify({ event: 'ready', host: '127.0.0.1', port: server.address().port })),
+  );
+  process.on('SIGTERM', () => process.exit(0));
+  await new Promise(() => {});
+}
+
 let stdin = '';
 process.stdin.setEncoding('utf8');
 for await (const chunk of process.stdin) stdin += chunk;

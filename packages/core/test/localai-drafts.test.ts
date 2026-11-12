@@ -9,12 +9,16 @@ import { LocalAiService } from '../src/localai.js';
 import { draftCommit, draftSlug } from '../src/localai-drafts.js';
 import { FAKE_CLAUDE, makeRepo, tempDir } from './helpers.js';
 
+const services: LocalAiService[] = [];
 let dir: string;
 const binary = fileURLToPath(new URL('./fixtures/fake-localai.mjs', import.meta.url));
 beforeEach(() => {
   dir = tempDir('localai-drafts');
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(async () => {
+  await Promise.all(services.splice(0).map((service) => service.close()));
+  vi.unstubAllEnvs();
+});
 
 function ai(answer: string, hang = false, enabled = true): LocalAiService {
   const file = path.join(dir, 'scenario.json');
@@ -31,11 +35,13 @@ function ai(answer: string, hang = false, enabled = true): LocalAiService {
     }),
   );
   vi.stubEnv('FAKE_LOCALAI_SCENARIO', file);
-  return new LocalAiService({
+  const service = new LocalAiService({
     enabled,
     command: binary,
     models: { pricing: 'p', slug: 's', commit: 'c' },
   });
+  services.push(service);
+  return service;
 }
 
 it('accepts a valid English title and ASCII slug', async () => {

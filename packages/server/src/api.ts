@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { localAiChatContext } from './localai-chat.js';
 import { randomUUID } from 'node:crypto';
 import { PRICING_PROVIDERS } from '@harnessboard/shared';
 import type { PricingPreview, PricingProvider } from '@harnessboard/shared';
@@ -111,6 +112,22 @@ export function createApi(
   app.onError((err, c) => c.json({ error: err.message }, 400));
 
   app.get('/status', (c) => c.json(harness.status()));
+
+  app.get('/local-ai/models', async (c) => c.json({ models: await harness.localAi.models() }));
+  app.put('/local-ai/model', async (c) => {
+    const { model } = await c.req.json();
+    if (typeof model !== 'string') return c.json({ error: 'Model must be a registered name' }, 400);
+    await harness.selectLocalAiModel(model);
+    return c.json(harness.localAi.status());
+  });
+  app.post('/local-ai/chat', async (c) => {
+    const { question, history = [], mode } = await c.req.json();
+    if (mode !== undefined && mode !== 'compact')
+      return c.json({ error: 'Unknown chat mode' }, 400);
+    const { prompt, snapshotAt, taskIds } = localAiChatContext(harness, question, history, mode);
+    const result = await harness.localAi.request('chat', prompt, { timeoutMs: 180000 });
+    return c.json({ ...result, snapshotAt, taskIds });
+  });
 
   const previews = new Map<string, { preview: PricingPreview; expires: number }>();
   app.post('/pricing/preview', async (c) => {

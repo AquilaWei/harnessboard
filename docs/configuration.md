@@ -199,7 +199,7 @@ environment < CLI flags.
   `verifyCommand`.
 
 **Local AI (optional):** Harnessboard can ask a local model through
-`localai run --json` (LocalAICLI) for small helper jobs. It is off by default and never
+`localai serve` (LocalAICLI) for small helper jobs. It is off by default and never
 required: when it is disabled, the binary is missing, a request times out or the answer fails
 validation, every flow works exactly as without it.
 
@@ -208,6 +208,7 @@ validation, every flow works exactly as without it.
   "localAi": {
     "enabled": true,
     "command": "/opt/localai/bin/localai",
+    "selectedModel": null,
     "models": { "pricing": "gpt-oss-20b", "slug": "mellum2.1", "commit": "lfm2.5" }
   }
 }
@@ -229,10 +230,31 @@ validation, every flow works exactly as without it.
     `^(feat|fix|docs|style|refactor|perf|test|chore): [^\n]{1,72}$`; otherwise the usual
     `feat: integrate delegated work <id>` message is kept. A CHANGELOG bullet draft is
     attached to the integration result only and never written to a file.
-- All local AI requests go through one queue in the server and run one at a time.
+- `selectedModel`: the global registered model selected from the header. It applies to questions,
+  pricing, branch naming and commit drafts and is saved for the next launch. Before the first
+  selection, existing purpose models remain effective; questions default to `lfm2.5`.
+- All local AI requests share one sequential queue and an owned `localai serve` process.
+  The first request loads the model; later requests reuse it. After **five minutes with no
+  active or queued work**, Harnessboard stops the service and releases model memory.
+  Questions automatically reload it. A model change waits for active work to finish,
+  then unloads the old model; the panel distinguishes selected and loaded models.
+  Shutdown reaps the service. Unexpected exits show an error; the next request retries.
+  LocalAICLI remote mode is never enabled.
+- **Questions:** the panel answers operation and progress questions using built-in help and
+  a bounded snapshot of up to 50 task IDs, titles, brief goals, states and update times, with a snapshot
+  timestamp. It cannot change tasks or execute commands, and reads no logs or repository.
+  Follow-ups stay in page memory across model unloads, and clear on page refresh.
+  Answers support Markdown. Clear context removes the conversation; Compact context replaces
+  the bounded recent conversation with a model-generated summary for follow-up questions.
+  Compaction preserves the original conversation if it fails; review summaries for lost details. Each question
+  is limited to 4000 characters; the latest 12 messages (up to 16000 characters) form context.
+  Missing information must be acknowledged. Task snapshot IDs/time accompany each answer.
+  Disabled AI, missing binaries, load errors and timeouts leave the rest of the board usable;
+  check the displayed error, fix configuration and retry.
 - **Status chip:** the **Local AI** chip next to the quota in the board header shows
-  Disabled / Binary missing / Idle / Running (use case, model and queue length). Open it to
-  see the model of each use case and the last error.
+  Disabled / Binary missing / Not loaded / Loading / Idle / Running / Error, with model,
+  work description and queue length. Open it to select a registered model, ask questions,
+  or inspect errors. Binary paths and legacy purpose defaults are under Details.
 - The design notes are in [docs/plans/local-ai.md](plans/local-ai.md).
 
 **Agent profiles:** each profile names an agent CLI and how to run it. `claude` always exists.

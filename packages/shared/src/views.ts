@@ -145,9 +145,12 @@ export interface PasskeySession {
 
 /** Server-wide optional local AI helper; timestamps are Unix milliseconds. */
 export interface LocalAiStatus {
-  state: 'disabled' | 'missing' | 'idle' | 'running';
+  state: 'disabled' | 'missing' | 'idle' | 'running' | 'loading' | 'unloaded' | 'error';
   /** Resolved binary path, null when missing or disabled. */
   command: string | null;
+  selectedModel?: string | null;
+  loadedModel?: string | null;
+  servicePid?: number | null;
   models: Record<string, string>;
   running: { useCase: string; model: string; startedAt: number } | null;
   queued: number;

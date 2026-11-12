@@ -2404,6 +2404,9 @@ th {
 
 .local-ai-details {
   overflow-wrap: anywhere;
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 120px));
+  overflow-y: auto;
 }
 .local-ai-details dl > div {
   display: flex;
@@ -2412,4 +2415,24 @@ th {
 }
 .local-ai-details dd {
   margin: 0;
+}
+.local-ai-details select,
+.local-ai-details textarea {
+  width: 100%;
+}
+.local-ai-conversation {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.local-ai-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+}
+.local-ai-question {
+  white-space: pre-wrap;
+}
+.local-ai-conversation .markdown {
+  overflow-wrap: anywhere;
 }

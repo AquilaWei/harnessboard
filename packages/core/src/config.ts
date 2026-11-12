@@ -67,7 +67,7 @@ export interface HarnessConfig {
    * `/.well-known/assetlinks.json`. Empty means no app is verified.
    */
   androidAppFingerprints: string[];
-  /** Optional local model helper (`localai run --json`); off unless enabled. */
+  /** Optional shared local model service (`localai serve`); off unless enabled. */
   localAi: LocalAiConfig;
   /** PM workflow: when a running worker counts as stuck. No model is involved. */
   pmWatchdog: WatchdogSettings;
@@ -429,6 +429,11 @@ function validateLocalAi(localAi: LocalAiConfig): void {
   if (localAi.command !== null && (typeof localAi.command !== 'string' || localAi.command === '')) {
     throw new Error('config localAi.command must be a binary path or null');
   }
+  if (
+    localAi.selectedModel != null &&
+    (typeof localAi.selectedModel !== 'string' || !localAi.selectedModel.trim())
+  )
+    throw new Error('config localAi.selectedModel must be a model name or null');
   for (const [useCase, model] of Object.entries(localAi.models ?? {})) {
     if (typeof model !== 'string' || model.trim() === '') {
       throw new Error(`config localAi.models.${useCase} must be a model name`);

@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { LocalAiServer } from './localai-server.js';
 import { accessSync, constants, statSync } from 'node:fs';
 import path from 'node:path';
 import type { LocalAiStatus } from '@harnessboard/shared';
@@ -7,14 +10,15 @@ import spawn from 'cross-spawn';
 import treeKill from 'tree-kill';
 
 /** What local AI is used for; each use case picks its own model in the config. */
-export type LocalAiUseCase = 'pricing' | 'slug' | 'commit';
+export type LocalAiUseCase = 'pricing' | 'slug' | 'commit' | 'chat';
 
 export interface LocalAiConfig {
   /** Off by default: local AI is an optional helper. */
   enabled: boolean;
   /** Path of the `localai` binary; `null` looks `localai` up on PATH. */
   command: string | null;
-  models: Record<LocalAiUseCase, string>;
+  selectedModel?: string | null;
+  models: Record<Exclude<LocalAiUseCase, 'chat'>, string>;
 }
 
 /**
@@ -189,7 +193,8 @@ export class LocalAi {
     const unavailable = this.unavailableReason();
     if (unavailable) return { status: 'unavailable', reason: unavailable };
     if (request.signal?.aborted) return { status: 'failed', reason: 'cancelled' };
-    const model = this.config.models[useCase];
+    const model =
+      this.config.selectedModel ?? (useCase === 'chat' ? 'lfm2.5' : this.config.models[useCase]);
     return execute(this.command, ['run', '--json', '--model', model], request);
   }
 }
@@ -203,6 +208,14 @@ export class LocalAiService {
   private queue: Promise<void> = Promise.resolve();
   private queued = 0;
   private running: LocalAiStatus['running'] = null;
+  private readonly server = new LocalAiServer((error) => {
+    if (error) this.lastError = { useCase: 'chat', message: error, at: Date.now() };
+    this.onChange(this.status());
+  });
+  private idleTimer: ReturnType<typeof setTimeout> | undefined;
+  private loading = false;
+  private closed = false;
+  private active: AbortController | null = null;
   private lastError: LocalAiStatus['lastError'] = null;
 
   constructor(
@@ -220,15 +233,60 @@ export class LocalAiService {
         ? 'disabled'
         : !command
           ? 'missing'
-          : this.running
-            ? 'running'
-            : 'idle',
+          : this.loading
+            ? 'loading'
+            : this.running
+              ? 'running'
+              : this.lastError
+                ? 'error'
+                : this.server.model
+                  ? 'idle'
+                  : 'unloaded',
+      selectedModel: this.config.selectedModel ?? null,
+      loadedModel: this.server.model,
+      servicePid: this.server.pid,
       command,
       models: { ...this.config.models },
       running: this.running ? { ...this.running } : null,
       queued: this.queued,
       lastError: this.lastError ? { ...this.lastError } : null,
     };
+  }
+
+  /** Reads registered names without loading a model. Fails when the CLI cannot list them. */
+  async models(): Promise<string[]> {
+    const reason = this.unavailableReason();
+    if (reason) throw new Error(reason);
+    const { stdout } = await promisify(execFile)(this.ai.command, ['models', 'list'], {
+      timeout: 10000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    const data = JSON.parse(stdout) as { models: { name: string }[] };
+    if (!Array.isArray(data.models) || data.models.some((m) => typeof m.name !== 'string'))
+      throw new Error('Invalid model registry');
+    return data.models.map((m) => m.name);
+  }
+
+  /** Changes future work; the current request retains its model. */
+  selectModel(model: string): void {
+    this.config.selectedModel = model;
+    if (!this.running) {
+      this.queue = this.queue.then(async () => {
+        if (this.server.model && this.server.model !== this.config.selectedModel)
+          await this.server.stop();
+        this.onChange(this.status());
+      });
+    }
+    this.onChange(this.status());
+  }
+
+  /** Cancels owned work and reaps the owned service during application shutdown. */
+  async close(): Promise<void> {
+    this.closed = true;
+    clearTimeout(this.idleTimer);
+    this.active?.abort();
+    await this.server.stop();
+    await this.queue;
   }
 
   /** Availability preflight lets callers avoid fetching input for a disabled helper. */
@@ -242,16 +300,50 @@ export class LocalAiService {
     prompt: string,
     options: Omit<LocalAiRequest, 'prompt'>,
   ): Promise<LocalAiResult> {
+    clearTimeout(this.idleTimer);
     this.queued++;
     this.onChange(this.status());
     const result = this.queue.then(async (): Promise<LocalAiResult> => {
       this.queued--;
-      this.running = { useCase, model: this.config.models[useCase], startedAt: Date.now() };
+      this.running = {
+        useCase,
+        model:
+          this.config.selectedModel ??
+          (useCase === 'chat' ? 'lfm2.5' : this.config.models[useCase]),
+        startedAt: Date.now(),
+      };
       this.onChange(this.status());
       let outcome: LocalAiResult;
       try {
-        outcome = await this.ai.run(useCase, { ...options, prompt });
+        const unavailable = this.unavailableReason();
+        if (unavailable) outcome = { status: 'unavailable', reason: unavailable };
+        else if (this.closed || options.signal?.aborted)
+          outcome = { status: 'failed', reason: 'cancelled' };
+        else {
+          const controller = new AbortController();
+          this.active = controller;
+          const signal = options.signal
+            ? AbortSignal.any([options.signal, controller.signal])
+            : controller.signal;
+          const timer = setTimeout(
+            () => controller.abort(new Error(`timed out after ${options.timeoutMs} ms`)),
+            options.timeoutMs,
+          );
+          try {
+            this.loading = this.server.model !== this.running.model;
+            this.onChange(this.status());
+            await this.server.start(this.ai.command, this.running.model, signal);
+            this.loading = false;
+            this.lastError = null;
+            this.onChange(this.status());
+            outcome = { status: 'ok', ...(await this.server.generate(prompt, signal)) };
+          } finally {
+            clearTimeout(timer);
+            this.active = null;
+          }
+        }
       } catch (error) {
+        await this.server.stop();
         outcome = {
           status: 'failed',
           reason: error instanceof Error ? error.message : String(error),
@@ -260,7 +352,20 @@ export class LocalAiService {
       if (outcome.status !== 'ok') {
         this.lastError = { useCase, message: outcome.reason, at: Date.now() };
       }
+      this.loading = false;
       this.running = null;
+      if (
+        this.server.model &&
+        this.config.selectedModel &&
+        this.server.model !== this.config.selectedModel
+      )
+        await this.server.stop();
+      if (!this.queued && !this.closed) {
+        this.idleTimer = setTimeout(() => {
+          void this.server.stop().then(() => this.onChange(this.status()));
+        }, 5 * 60_000);
+        this.idleTimer.unref();
+      }
       this.onChange(this.status());
       return outcome;
     });

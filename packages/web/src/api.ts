@@ -199,6 +199,16 @@ function send<T>(method: string, path: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
+  localAiModels: () => request<{ models: string[] }>('/local-ai/models'),
+  selectLocalAiModel: (model: string) => send<unknown>('PUT', '/local-ai/model', { model }),
+  localAiChat: (question: string, history: { role: string; content: string }[], mode?: 'compact') =>
+    send<{
+      status: string;
+      answer?: string;
+      reason?: string;
+      snapshotAt: string;
+      taskIds: number[];
+    }>('POST', '/local-ai/chat', { question, history, ...(mode ? { mode } : {}) }),
   setRepository: (id: number, repo: string) =>
     send<unknown>('PUT', `/tasks/${id}/repository`, { repo }),
   setPm: (id: number, pm: import('@harnessboard/shared').PmConfig) =>

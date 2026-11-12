@@ -432,3 +432,16 @@ describe('quota pause levels per platform', () => {
     expect(() => loadConfig({ env: {}, configFile: file })).toThrow(/unknown platform "openai"/);
   });
 });
+
+it('keeps legacy local AI purpose models without introducing a global selection', () => {
+  const configFile = path.join(tempDir('cfg'), 'config.json');
+  writeFileSync(
+    configFile,
+    JSON.stringify({ localAi: { enabled: true, models: { slug: 'legacy' } } }),
+  );
+  expect(loadConfig({ configFile, env: {} }).localAi).toEqual({
+    enabled: true,
+    command: null,
+    models: { slug: 'legacy', pricing: 'gpt-oss-20b', commit: 'lfm2.5' },
+  });
+});
