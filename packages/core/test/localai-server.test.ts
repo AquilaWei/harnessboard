@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { LocalAiService } from '../src/localai.js';
+import { loadFailure } from '../src/localai-server.js';
 import { tempDir } from './helpers.js';
 
 let ai: LocalAiService;
@@ -60,4 +61,14 @@ it('does not launch any service when disabled', async () => {
     status: 'unavailable',
   });
   expect(existsSync(path.join(dir, 'pid'))).toBe(false);
+});
+it('tells the user how to fix a memory preflight block', () => {
+  expect(
+    loadFailure('gpt-oss', 'error: memory preflight blocked; close workloads or reduce context\n'),
+  ).toBe(
+    'Not enough free memory to load gpt-oss: close other programs or select a smaller model, then retry (LocalAICLI: error: memory preflight blocked; close workloads or reduce context)',
+  );
+});
+it('keeps LocalAICLI wording for other load failures', () => {
+  expect(loadFailure('gpt-oss', 'bad gguf\n')).toBe('LocalAICLI failed to load: bad gguf');
 });

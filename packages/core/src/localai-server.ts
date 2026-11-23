@@ -5,6 +5,17 @@ import spawn from 'cross-spawn';
 import treeKill from 'tree-kill';
 import type { ChildProcess } from 'node:child_process';
 
+/**
+ * Explains a failed load. The memory preflight is the common, fixable case, so it gets an
+ * actionable message; anything else keeps LocalAICLI's own words.
+ */
+export function loadFailure(model: string, stderr: string): string {
+  const text = stderr.trim();
+  if (/memory preflight blocked/i.test(text))
+    return `Not enough free memory to load ${model}: close other programs or select a smaller model, then retry (LocalAICLI: ${text})`;
+  return `LocalAICLI failed to load: ${text}`;
+}
+
 /** Owns only the LocalAICLI process it starts; never attaches to an existing service. */
 export class LocalAiServer {
   private child: ChildProcess | null = null;
@@ -63,7 +74,7 @@ export class LocalAiServer {
           this.model = null;
           this.changed(`LocalAICLI service exited: ${stderr}`);
         }
-        if (!ready) reject(new Error(`LocalAICLI failed to load: ${stderr}`));
+        if (!ready) reject(new Error(loadFailure(model, stderr)));
       });
       createInterface({ input: child.stdout! }).on('line', (line) => {
         try {
