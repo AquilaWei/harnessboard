@@ -155,6 +155,15 @@ it('fails after one corrective turn instead of inventing a user question', async
   expect(store.lastEvent(task.id, 'pm_question')).toBeUndefined();
 });
 
+it('reports the last PM reply in the failure notice so a denied tool is visible', async () => {
+  host.run = vi.fn(async () => ({ ...outcome, finalText: 'propose_spec was denied by policy' }));
+  await engine.run();
+  expect(host.notice).toHaveBeenCalledWith(
+    task.id,
+    expect.stringContaining('Last PM reply: propose_spec was denied by policy'),
+  );
+});
+
 it('refuses models outside the task model pool', async () => {
   await pmTurn(async () => {
     await expect(engine.call('dispatch', { ...input, model: 'unapproved' })).rejects.toThrow(

@@ -334,9 +334,17 @@ export class PmWorkflow {
           this.pmPending = true;
           continue;
         }
+        // The PM's own words usually name the cause (e.g. a denied tool), so show them.
+        const last = (
+          this.host.store.lastEvent(this.task.id, 'pm_reply')?.data as
+            { text?: unknown } | undefined
+        )?.text;
         this.host.notice(
           this.task.id,
-          'PM coordination failed: no worker is running and the PM did not dispatch, ask a concrete question, or accept after one corrective turn.',
+          'PM coordination failed: no worker is running and the PM did not dispatch, ask a concrete question, or accept after one corrective turn.' +
+            (typeof last === 'string' && last.trim()
+              ? ` Last PM reply: ${last.trim().slice(0, 500)}`
+              : ''),
         );
         this.host.status(this.task.id, 'failed');
         break;
