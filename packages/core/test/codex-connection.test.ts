@@ -102,6 +102,26 @@ describe('Codex approval transport', () => {
     });
   });
 
+  it('pre-approves harnessboard MCP tools because a read-only PM session cannot be asked', () => {
+    const { messages } = connect({
+      access: 'readOnly',
+      mcpServers: { harnessboard: { command: 'node', args: ['bridge.mjs'], env: {} } },
+    });
+    expect(messages[2]!.params).toMatchObject({
+      approvalPolicy: 'never',
+      config: { mcp_servers: { harnessboard: { default_tools_approval_mode: 'approve' } } },
+    });
+  });
+
+  it('does not pre-approve MCP servers other than the harnessboard bridge', () => {
+    const { messages } = connect({
+      mcpServers: { other: { command: 'node', args: ['other.mjs'], env: {} } },
+    });
+    const config = (messages[2]!.params as { config: { mcp_servers: Record<string, object> } })
+      .config;
+    expect(config.mcp_servers.other).not.toHaveProperty('default_tools_approval_mode');
+  });
+
   it('sends the effort with turn/start', () => {
     const { messages } = connect({ effort: 'xhigh' });
     expect(messages[3]!.params).toMatchObject({ effort: 'xhigh' });

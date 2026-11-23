@@ -48,7 +48,15 @@ export function codexConnection(spec: SessionSpec, write: (data: string) => void
             ? {
                 config: {
                   mcp_servers: Object.fromEntries(
-                    Object.entries(spec.mcpServers).map(([name, server]) => [name, server]),
+                    Object.entries(spec.mcpServers).map(([name, server]) => [
+                      name,
+                      // A read-only PM session runs with approval policy `never`: Codex then
+                      // declines unapproved MCP tools without ever asking, so the harness's own
+                      // bridge (which checks the caller's capability itself) is pre-approved.
+                      name === 'harnessboard'
+                        ? { ...server, default_tools_approval_mode: 'approve' }
+                        : server,
+                    ]),
                   ),
                 },
               }
