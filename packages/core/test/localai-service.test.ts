@@ -113,3 +113,34 @@ it('recovers from a failed model load', async () => {
   expect(ai.status()).toMatchObject({ state: 'error', loadedModel: null });
   expect(await ai.request('chat', 'two', { timeoutMs: 10000 })).toMatchObject({ status: 'ok' });
 });
+it('does not abort a model load that outlasts the request timeout', async () => {
+  start.mockImplementationOnce(async function (
+    this: LocalAiServer,
+    _command: string,
+    model: string,
+    signal: AbortSignal,
+  ) {
+    await new Promise((resolve) => setTimeout(resolve, 20000));
+    signal.throwIfAborted();
+    this.model = model;
+  });
+  const first = ai.request('slug', 'one', { timeoutMs: 6000 });
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(await first).toMatchObject({ status: 'ok' });
+  expect(ai.status().loadedModel).toBe('slug');
+});
+it('keeps the loaded model when the caller cancels before generation', async () => {
+  const controller = new AbortController();
+  generate.mockImplementationOnce(async (_prompt: string, signal: AbortSignal) => {
+    controller.abort();
+    signal.throwIfAborted();
+    return { answer: '', reasoning: '' };
+  });
+  expect(
+    await ai.request('slug', 'one', { timeoutMs: 6000, signal: controller.signal }),
+  ).toMatchObject({
+    status: 'failed',
+  });
+  expect(stop).not.toHaveBeenCalled();
+  expect(ai.status().loadedModel).toBe('slug');
+});

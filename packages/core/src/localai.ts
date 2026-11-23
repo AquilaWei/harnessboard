@@ -39,6 +39,8 @@ export interface LocalAiRequest {
   signal?: AbortSignal;
 }
 
+/** Upper bound for loading a model; independent of any request's generation timeout. */
+const MODEL_LOAD_TIMEOUT_MS = 180_000;
 const PROTOCOL_VERSION = 1;
 const REQUEST_ID = /^[0-9a-f]{32}$/;
 
@@ -320,22 +322,36 @@ export class LocalAiService {
         else if (this.closed || options.signal?.aborted)
           outcome = { status: 'failed', reason: 'cancelled' };
         else {
-          const controller = new AbortController();
-          this.active = controller;
-          const signal = options.signal
-            ? AbortSignal.any([options.signal, controller.signal])
-            : controller.signal;
-          const timer = setTimeout(
-            () => controller.abort(new Error(`timed out after ${options.timeoutMs} ms`)),
-            options.timeoutMs,
+          // Loading a model takes far longer than a short caller deadline (cold start is
+          // ~20 s+). Aborting it at that deadline would kill the load every time, so the model
+          // would never become ready; the load only honours its own limit and close().
+          const loader = new AbortController();
+          this.active = loader;
+          const loadTimer = setTimeout(
+            () => loader.abort(new Error(`model did not load within ${MODEL_LOAD_TIMEOUT_MS} ms`)),
+            MODEL_LOAD_TIMEOUT_MS,
           );
           try {
             this.loading = this.server.model !== this.running.model;
             this.onChange(this.status());
-            await this.server.start(this.ai.command, this.running.model, signal);
-            this.loading = false;
-            this.lastError = null;
-            this.onChange(this.status());
+            await this.server.start(this.ai.command, this.running.model, loader.signal);
+          } finally {
+            clearTimeout(loadTimer);
+          }
+          this.loading = false;
+          this.lastError = null;
+          this.onChange(this.status());
+          // The caller's timeout and signal apply to generation only.
+          const generation = new AbortController();
+          this.active = generation;
+          const signal = options.signal
+            ? AbortSignal.any([options.signal, generation.signal])
+            : generation.signal;
+          const timer = setTimeout(
+            () => generation.abort(new Error(`timed out after ${options.timeoutMs} ms`)),
+            options.timeoutMs,
+          );
+          try {
             outcome = { status: 'ok', ...(await this.server.generate(prompt, signal)) };
           } finally {
             clearTimeout(timer);
@@ -343,7 +359,9 @@ export class LocalAiService {
           }
         }
       } catch (error) {
-        await this.server.stop();
+        // A caller that gave up keeps the loaded model warm for its next attempt; any other
+        // failure (load error, hung or timed-out generation) restarts the service.
+        if (!options.signal?.aborted || !this.server.model) await this.server.stop();
         outcome = {
           status: 'failed',
           reason: error instanceof Error ? error.message : String(error),
