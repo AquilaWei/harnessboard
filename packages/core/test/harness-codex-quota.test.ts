@@ -96,6 +96,17 @@ describe('a Codex session that hits the usage limit', () => {
   });
 });
 
+describe('a Codex refusal that its usage reading does not show yet', () => {
+  it('keeps another Codex task from starting until the reading resets', async () => {
+    codexUsage(80, IN_AN_HOUR_SEC);
+    await createCodexTask(true);
+    await harness.waitForIdle();
+    const second = await createCodexTask(true);
+    await harness.waitForIdle();
+    expect(harness.store.listSessions(second.id)).toEqual([]);
+  });
+});
+
 describe('a lower pause level for Codex alone', () => {
   it('keeps a queued Codex task from starting at a usage under the shared level', async () => {
     harness.config.quotaPauseByProvider = { codex: 0.5 };

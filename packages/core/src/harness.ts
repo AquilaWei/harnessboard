@@ -2171,17 +2171,25 @@ export class Harness {
   }
 
   /**
-   * Records a refusal that came without usage figures, so the platform counts as out of
-   * quota (and a fallback implementer takes over) until the retry interval has passed.
+   * Records a refusal whose usage figures do not show it, so the platform counts as out of
+   * quota (and a fallback implementer takes over) until the reading's reset, or the retry
+   * interval when it has none still ahead. A reading taken before the refusal (Codex writes
+   * one per model call) still says requests are allowed, and a PM task would otherwise be
+   * started again at once, only to be refused again.
    */
-  private refusedQuota(provider: AgentProvider): QuotaInfo {
+  private refusedQuota(provider: AgentProvider, reading: QuotaInfo | null): QuotaInfo {
+    const now = Date.now();
     const quota: QuotaInfo = {
-      status: 'rejected',
       fiveHourUtilization: null,
       sevenDayUtilization: null,
       fiveHourResetsAt: null,
       sevenDayResetsAt: null,
-      resetsAt: Date.now() + this.config.quotaRetryMinutes * 60_000,
+      ...reading,
+      status: 'rejected',
+      resetsAt:
+        reading?.resetsAt && reading.resetsAt > now
+          ? reading.resetsAt
+          : now + this.config.quotaRetryMinutes * 60_000,
     };
     this.quotas.set(provider, quota);
     this.emit({ type: 'quota', provider, quota });
@@ -2617,7 +2625,11 @@ export class Harness {
     }
     // Codex reports no usage while it runs, so its records say when the limit resets.
     if (outcome.reason === 'quota' && !outcome.quota) {
-      const quota = (await this.readQuota(provider, adapter)) ?? this.refusedQuota(provider);
+      const reading = await this.readQuota(provider, adapter);
+      const quota =
+        reading && this.quotaBlocked(provider, Date.now())
+          ? reading
+          : this.refusedQuota(provider, reading);
       return { ...outcome, quota };
     }
     return outcome;
