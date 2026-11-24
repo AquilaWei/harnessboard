@@ -292,6 +292,40 @@ it('continues in a new PM conversation when the resumed one runs out of context'
   expect(harness.store.getTask(task.id)!.status).toBe('awaiting_approval');
 });
 
+it('starts a new PM conversation when compaction left it above the compact threshold', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec(), spec()]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  const pm = harness.store.listSessions(task.id).find((s) => s.role === 'pm')!;
+  harness.store.appendEvent(task.id, pm.id, 'compacted', {});
+  // 40% of the fake CLI's 100k window, above the default 30% compact threshold.
+  harness.store.appendEvent(task.id, pm.id, 'context', { kind: 'context', tokens: 40_000 });
+  harness.planFeedback(task.id, 'Use a short greeting.');
+  await harness.waitForIdle();
+  const runs = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(runs[1].args).not.toContain('--resume');
+  expect(runs[1].received[0]).toContain('sole user-facing coordinator');
+});
+
+it('resumes the PM conversation when compaction brought it below the compact threshold', async () => {
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec(), spec()]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  const pm = harness.store.listSessions(task.id).find((s) => s.role === 'pm')!;
+  harness.store.appendEvent(task.id, pm.id, 'compacted', {});
+  harness.store.appendEvent(task.id, pm.id, 'context', { kind: 'context', tokens: 20_000 });
+  harness.planFeedback(task.id, 'Use a short greeting.');
+  await harness.waitForIdle();
+  const runs = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(runs[1].args).toContain('--resume');
+});
+
 it('records a chat reply to a PM specification as one user message', async () => {
   process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec(), spec()]);
   const task = await harness.createTask({ prompt: 'Add greeting', repo });

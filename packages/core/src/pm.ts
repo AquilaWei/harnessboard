@@ -17,7 +17,14 @@ import type {
   Session,
   QuotaInfo,
 } from '@harnessboard/shared';
-import { DEFAULT_PM_WORKERS, MAX_PM_WORKERS, isEffortId, isModelId } from '@harnessboard/shared';
+import {
+  DEFAULT_PM_WORKERS,
+  MAX_PM_WORKERS,
+  contextPct,
+  isEffortId,
+  isModelId,
+  resolveThresholds,
+} from '@harnessboard/shared';
 import type { HarnessConfig } from './config.js';
 import type { SessionPlan } from './workflow.js';
 import type { SessionOutcome } from './runner.js';
@@ -1664,6 +1671,36 @@ export class PmWorkflow {
     return acceptance;
   }
 
+  /**
+   * Why a PM conversation can no longer be resumed, or `null` when it can. A conversation
+   * the CLI refused as too long fails on every resume. One still at or above the compaction
+   * threshold right after a compaction cannot be shrunk any further (Codex keeps earlier user
+   * messages verbatim, and every PM turn sends a large brief), so it would grow until even
+   * compaction overflows.
+   */
+  private exhausted(session: Session): string | null {
+    if (session.endReason === 'context_hard_limit') return 'PM conversation ran out of context';
+    const { compactPct } = resolveThresholds(this.task.contextPolicy);
+    if (compactPct === null || !session.contextWindow) return null;
+    const store = this.host.store;
+    const readings = store
+      .sessionEvents(session.id, 'context')
+      .filter((e) => ((e.data as { tokens?: number }).tokens ?? 0) > 0);
+    const compactions = store.sessionEvents(session.id, 'compacted');
+    // The first model call after a compaction shows what it left. A turn compacts as it ends,
+    // so the latest compaction often has no reading yet; the latest one that has decides.
+    for (let i = compactions.length - 1; i >= 0; i--) {
+      const next = compactions[i + 1]?.id ?? Infinity;
+      const after = readings.find((e) => e.id > compactions[i]!.id && e.id < next);
+      if (!after) continue;
+      const pct = contextPct((after.data as { tokens: number }).tokens, session.contextWindow);
+      return pct >= compactPct
+        ? `PM conversation still at ${pct}% after compaction (compact ${compactPct}%)`
+        : null;
+    }
+    return null;
+  }
+
   private async turn(server: SessionMcpServer): Promise<void> {
     const store = this.host.store;
     const pm = this.latest.pm!;
@@ -1688,17 +1725,19 @@ export class PmWorkflow {
         for (const id of work.sessionIds ?? []) repairSessions.add(id);
       }
     }
-    const previous = store.listSessions(this.task.id).findLast(
-      (s) =>
-        s.role === 'pm' &&
-        !repairSessions.has(s.id) &&
-        s.agentId === pm.agentId &&
-        s.agentSessionId !== null &&
-        // A conversation that no longer fits the context window fails on every resume.
-        s.endReason !== 'context_hard_limit' &&
-        !oldSessions.has(s.id),
-    );
-    const resume = previous ?? null;
+    const previous = store
+      .listSessions(this.task.id)
+      .findLast(
+        (s) =>
+          s.role === 'pm' &&
+          !repairSessions.has(s.id) &&
+          s.agentId === pm.agentId &&
+          s.agentSessionId !== null &&
+          !oldSessions.has(s.id),
+      );
+    const full = previous ? this.exhausted(previous) : null;
+    if (full) this.host.notice(this.task.id, `${full}; continuing in a new PM conversation.`);
+    const resume = previous && !full ? previous : null;
     this.pmSessionId = resume?.id ?? randomUUID();
     if (!resume) store.startSession(this.pmSessionId, this.task.id, 'pm', pm.agentId, null);
     if (this.works.length) this.secretary.ensure(this.pmSessionId);
@@ -1882,12 +1921,8 @@ export class PmWorkflow {
     )
       throw new Error('PM changed the worktree');
     if (outcome.reason === 'context_hard_limit' && resume) {
-      // The resumed conversation is full; the next turn starts a new one with the full brief
-      // and the authoritative work tree. A new conversation that is already full still fails.
-      this.host.notice(
-        this.task.id,
-        'PM conversation ran out of context; continuing in a new PM conversation.',
-      );
+      // The resumed conversation is full; the next turn starts a new one (see `exhausted`)
+      // with the full brief and the authoritative work tree. A new one already full still fails.
       this.pmPending = true;
       this.notify('state'); // run the new turn now, not after the next worker event
     } else if (outcome.reason === 'quota') {
