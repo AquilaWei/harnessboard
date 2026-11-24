@@ -265,6 +265,33 @@ it('resumes the PM for feedback without resending unchanged task rules', async (
   expect(runs[1].received[0]).not.toContain('sole user-facing coordinator');
 });
 
+it('continues in a new PM conversation when the resumed one runs out of context', async () => {
+  const overflow = [
+    [
+      init('pm-thread'),
+      {
+        ...result("Codex ran out of room in the model's context window."),
+        subtype: 'error_during_execution',
+        is_error: true,
+      },
+    ],
+  ];
+  process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec(), overflow, spec()]);
+  const task = await harness.createTask({ prompt: 'Add greeting', repo });
+  await harness.waitForIdle();
+  harness.planFeedback(task.id, 'Use a short greeting.');
+  await harness.waitForIdle();
+  const runs = readFileSync(process.env.FAKE_CLAUDE_LOG!, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(runs).toHaveLength(3);
+  expect(runs[2].args).not.toContain('--resume');
+  expect(runs[2].received[0]).toContain('sole user-facing coordinator');
+  expect(runs[2].received[0]).toContain('Use a short greeting.');
+  expect(harness.store.getTask(task.id)!.status).toBe('awaiting_approval');
+});
+
 it('records a chat reply to a PM specification as one user message', async () => {
   process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec(), spec()]);
   const task = await harness.createTask({ prompt: 'Add greeting', repo });

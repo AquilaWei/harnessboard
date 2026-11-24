@@ -154,7 +154,9 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
   }
   if (final.isError) {
     const limited = final.apiErrorStatus === 429 || isQuotaLimited(quota);
-    return outcome(limited ? 'quota' : 'error', final.text || stderrTail.join(' / ') || null);
+    const detail = final.text || stderrTail.join(' / ') || null;
+    if (!limited && isContextOverflow(detail)) return outcome('context_hard_limit', detail);
+    return outcome(limited ? 'quota' : 'error', detail);
   }
   // A wrap-up reply may report the task finished; then there is nothing to hand off.
   return outcome(wrapSent && !reportsDone(final.text) ? 'handoff' : 'completed');
@@ -320,6 +322,20 @@ export async function runSession(options: RunSessionOptions): Promise<SessionOut
       usage: liveUsage.usage,
     };
   }
+}
+
+/**
+ * True when the CLI refused the turn because the conversation no longer fits the model's
+ * context window, even after its own compaction. Resuming that conversation fails the same
+ * way every time, so callers must continue in a new one.
+ */
+export function isContextOverflow(text: string | null): boolean {
+  return (
+    text !== null &&
+    /ran out of room in the model's context window|context_length_exceeded|prompt is too long/i.test(
+      text,
+    )
+  );
 }
 
 /** True when the agent reported that requests are currently being refused. */

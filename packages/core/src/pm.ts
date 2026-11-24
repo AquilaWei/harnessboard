@@ -1688,16 +1688,16 @@ export class PmWorkflow {
         for (const id of work.sessionIds ?? []) repairSessions.add(id);
       }
     }
-    const previous = store
-      .listSessions(this.task.id)
-      .findLast(
-        (s) =>
-          s.role === 'pm' &&
-          !repairSessions.has(s.id) &&
-          s.agentId === pm.agentId &&
-          s.agentSessionId !== null &&
-          !oldSessions.has(s.id),
-      );
+    const previous = store.listSessions(this.task.id).findLast(
+      (s) =>
+        s.role === 'pm' &&
+        !repairSessions.has(s.id) &&
+        s.agentId === pm.agentId &&
+        s.agentSessionId !== null &&
+        // A conversation that no longer fits the context window fails on every resume.
+        s.endReason !== 'context_hard_limit' &&
+        !oldSessions.has(s.id),
+    );
     const resume = previous ?? null;
     this.pmSessionId = resume?.id ?? randomUUID();
     if (!resume) store.startSession(this.pmSessionId, this.task.id, 'pm', pm.agentId, null);
@@ -1881,7 +1881,16 @@ export class PmWorkflow {
         (await porcelainStatus(this.task.worktreePath!)) !== status)
     )
       throw new Error('PM changed the worktree');
-    if (outcome.reason === 'quota') {
+    if (outcome.reason === 'context_hard_limit' && resume) {
+      // The resumed conversation is full; the next turn starts a new one with the full brief
+      // and the authoritative work tree. A new conversation that is already full still fails.
+      this.host.notice(
+        this.task.id,
+        'PM conversation ran out of context; continuing in a new PM conversation.',
+      );
+      this.pmPending = true;
+      this.notify('state'); // run the new turn now, not after the next worker event
+    } else if (outcome.reason === 'quota') {
       this.paused = true;
       this.host.status(this.task.id, 'waiting_quota');
     } else if (outcome.reason !== 'completed') {
