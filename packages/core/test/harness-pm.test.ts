@@ -326,6 +326,47 @@ it('resumes the PM conversation when compaction brought it below the compact thr
   expect(runs[1].args).toContain('--resume');
 });
 
+it('keeps a quota-waiting PM task waiting while its stopped worker is out of quota', () => {
+  harness.config.agents.codex = { provider: 'codex', command: FAKE_CLAUDE, model: null };
+  const task = harness.store.createTask({
+    title: 'Greeting',
+    prompt: 'Add greeting',
+    repoPath: repo,
+    baseRef: 'main',
+    workspace: 'base',
+    workflow: 'pm',
+    pm: {
+      agentId: 'codex',
+      model: null,
+      effort: null,
+      workers: [{ agentId: 'claude', models: [null] }],
+    },
+    mode: 'single',
+    verifyCommand: null,
+    acceptance: '- greeting works',
+    confirmPlan: true,
+    contextPolicy: {},
+    permission: { allowedTools: [], skipPermissions: false },
+    agents: { implementer: 'claude', reviewer: null, maxReviewRounds: 2 },
+  });
+  harness.store.updateTask(task.id, { status: 'waiting_quota' });
+  harness.store.appendEvent(task.id, null, 'pm_work', {
+    id: 'stopped-claude',
+    agentId: 'claude',
+    status: 'stopped',
+  });
+  (harness as unknown as { quotas: Map<string, unknown> }).quotas.set('claude-code', {
+    status: 'rejected',
+    fiveHourUtilization: 1,
+    sevenDayUtilization: null,
+    fiveHourResetsAt: Date.now() + 3_600_000,
+    sevenDayResetsAt: null,
+    resetsAt: Date.now() + 3_600_000,
+  });
+  harness.tick();
+  expect(harness.store.getTask(task.id)!.status).toBe('waiting_quota');
+});
+
 it('records a chat reply to a PM specification as one user message', async () => {
   process.env.FAKE_CLAUDE_SCENARIO = writeScenario(dir, [spec(), spec()]);
   const task = await harness.createTask({ prompt: 'Add greeting', repo });

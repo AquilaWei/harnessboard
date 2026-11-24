@@ -3,7 +3,7 @@ import { draftSlug } from './localai-drafts.js';
 import { PricingService } from './pricing.js';
 import { LocalAiService } from './localai.js';
 import { cleanTaskCaches } from './cache-cleanup.js';
-import { PmWorkflow, pmQuestion, pmWork, validatePm } from './pm.js';
+import { PmWorkflow, pmQuestion, pmWork, quotaHeld, validatePm } from './pm.js';
 import type { PmSessionPlan } from './pm.js';
 import type { TaskOperations, PmConfig } from '@harnessboard/shared';
 import { spawnSync } from 'node:child_process';
@@ -2041,7 +2041,10 @@ export class Harness {
       if (
         task.workflow === 'pm' &&
         task.status === 'waiting_quota' &&
-        !this.agentBlocked(task.pm!.agentId, now)
+        !this.agentBlocked(task.pm!.agentId, now) &&
+        !quotaHeld(pmWork(this.store, task.id), task.pm!, (agentId) =>
+          this.agentBlocked(agentId, now),
+        ).length
       )
         this.setStatus(task.id, 'queued', { resumeAt: null });
     }

@@ -164,6 +164,55 @@ it('reports the last PM reply in the failure notice so a denied tool is visible'
   );
 });
 
+/** A worker of the given agent that its provider's quota pause stopped. */
+function stoppedWork(agentId: string): void {
+  store.appendEvent(task.id, null, 'pm_work', {
+    ...input,
+    agentId,
+    id: `stopped-${agentId}`,
+    parentSessionId: 'old-pm',
+    sessionId: null,
+    model: null,
+    effort: null,
+    status: 'stopped',
+    summary: null,
+    evidence: null,
+    since: null,
+    head: null,
+    execution: 'managed',
+  });
+}
+
+it('waits for quota instead of failing when stopped work belongs to an out-of-quota worker', async () => {
+  task = store.updateTask(task.id, { pm: { ...pm, agentId: 'codex' } });
+  engine = new PmWorkflow(host, task, controller.signal);
+  stoppedWork('claude');
+  host.blocked = (agentId) => agentId === 'claude';
+  host.run = vi.fn(async () => outcome);
+  await engine.run();
+  expect(store.getTask(task.id)?.status).toBe('waiting_quota');
+});
+
+it('still fails when another permitted worker has quota for the stopped work', async () => {
+  host.config.agents.codex = { provider: 'codex', command: 'codex', model: null };
+  task = store.updateTask(task.id, {
+    pm: {
+      ...pm,
+      agentId: 'codex',
+      workers: [
+        { agentId: 'claude', models: [null] },
+        { agentId: 'codex', models: [null] },
+      ],
+    },
+  });
+  engine = new PmWorkflow(host, task, controller.signal);
+  stoppedWork('claude');
+  host.blocked = (agentId) => agentId === 'claude';
+  host.run = vi.fn(async () => outcome);
+  await engine.run();
+  expect(store.getTask(task.id)?.status).toBe('failed');
+});
+
 it('refuses models outside the task model pool', async () => {
   await pmTurn(async () => {
     await expect(engine.call('dispatch', { ...input, model: 'unapproved' })).rejects.toThrow(

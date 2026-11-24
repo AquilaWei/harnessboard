@@ -151,6 +151,22 @@ export function pmWork(store: Store, id: number): PmWork[] {
   return [...latest.values()];
 }
 
+/**
+ * The agents out of quota that unfinished work (stopped or failed, not cancelled) belongs
+ * to. The PM cannot continue that work until they reset, so a task with nothing else to
+ * do waits for them instead of failing. Empty when no such work remains, or when a
+ * permitted worker still has quota: the PM can hand the work to it instead.
+ */
+export function quotaHeld(
+  works: PmWork[],
+  pm: PmConfig,
+  blocked: (agentId: string) => boolean,
+): string[] {
+  if (pm.workers.some((w) => !blocked(w.agentId))) return [];
+  const unfinished = works.filter((w) => w.status === 'stopped' || w.status === 'failed');
+  return [...new Set(unfinished.map((w) => w.agentId))].filter(blocked);
+}
+
 /** Latest unanswered PM escalation, independent of the PM process lifetime. */
 export function pmQuestion(store: Store, id: number): PmQuestion | null {
   const question = store.lastEvent(id, 'pm_question');
@@ -334,6 +350,16 @@ export class PmWorkflow {
           });
           this.wake = null;
           continue;
+        }
+        // Work stopped by its provider's quota (e.g. the pause level) cannot be continued
+        // yet; tick() queues the task again once these agents and the PM have quota.
+        const held = quotaHeld(this.works, this.latest.pm!, (agentId) =>
+          this.host.blocked(agentId),
+        );
+        if (held.length) {
+          this.host.notice(this.task.id, `Waiting for quota: ${held.join(', ')}`);
+          this.host.status(this.task.id, 'waiting_quota');
+          break;
         }
         if (!this.correctionUsed) {
           this.correctionUsed = true;
